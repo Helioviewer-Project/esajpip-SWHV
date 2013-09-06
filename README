@@ -1,0 +1,20 @@
+ESA JPIP server   
+
+Open source implementation of a JPIP server
+for Linux platforms. Its main goal is to be
+used with the Helioviewer project in order 
+to serve the image data (more than a terabyte
+per day) provided by the NASA's Solar Dynamics 
+Observatory (http://sdo.gsfc.nasa.gov/).
+
+Wiki about the Helioviewer project:
+http://wiki.helioviewer.org/wiki/
+
+Information about JPEG 2000 and JPIP:
+http://www.jpeg.org/jpeg2000/
+
+The compilation and installation instructions
+can be found in the related documentation,
+which is generated with "make doc" (latex and
+doxygen packages are required) and located
+at doc/refman.pdf. 

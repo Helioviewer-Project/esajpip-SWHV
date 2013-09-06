@@ -1,0 +1,556 @@
+\chapter{User guide}
+
+\section{Introduction}
+\label{introduction}
+
+The ESA JPIP server is capable to handle the following types of JPEG2000 image files:
+raw J2C, JP2 and JPX with or without hyperlinks. The codestreams of the images
+must comply with the following requirements:
+
+\begin{itemize}
+\item No tiles partition is allowed.
+\item The progression order must be LRCP, RLCP or RPCL.
+\item PLT markers must be included with the information of all the packets.
+\end{itemize}
+
+If one image does not fit these requirements then it can not be served by this
+server. Moreover, although they are not mandatory, the following requirements
+are strongly recommended:
+
+\begin{itemize}
+\item No tile-parts.
+\item Use the RPCL progression order.
+\item Use an appropriate precinct partition.
+\end{itemize}
+
+The ESA JPIP server does not transcode the images at all, serving them as it. 
+Therefore the last requirement is particularly recommended for big images in
+order to improve the transmission efficiency. For resolution levels bigger 
+than $1024 \times 1024$ precincts of $512 \times 512$ or $256 \times 256$ are
+recommended.
+
+\section{Installation}
+
+In order to install the server it is necessary to get the code (for example,
+from \href{https://code.launchpad.net/esajpip}{Launchpad}) and compile it.
+The code of the server has been specifically written for Linux systems, so it
+has not been tested in any other platform.
+
+For compiling the source code the libraries libproc, log4cpp and libconfig++
+must be installed, for developing, on the system (see Section \ref{libraries} 
+for more details about these used libraries). 
+
+Just by means of one ``make'' the compilation is performed. If ``make doc'' is
+used, this documentation is created automatically mixing this text with the
+source code documentation (\href{http://www.stack.nl/~dimitri/doxygen/}{Doxygen} 
+and LaTeX are required to be installed).
+
+In order to get running the application it is only necessary to modify the
+configuration file as needed (see Section \ref{config}) and to have a caching
+directory with the write permission enabled for the server.
+
+\section{Configuration}
+\label{config}
+
+The configuration of the different parameters of the server is carried out by
+means of the file ``server.cfg'', which must be located in the same directory
+where the server is launched. The structure of this file is:
+
+\begin{itemize}
+	\item Section ``\textit{listen\_at}'':
+		\begin{itemize}
+			\item Field ``\textit{port}'': Port used for listening.
+			\item Field ``\textit{address}'': IP server address used for listening. This
+field can be empty meaning that the server will listen at any address available.
+		\end{itemize}
+
+	\item Section ``\textit{folders}'':
+		\begin{itemize}
+			\item Field ``\textit{images}'': Root of the folder where the images to serve
+are stored.
+			\item	Field ``\textit{caching}'': Root of the folder to store the cache files.
+			\item	Field ``\textit{logging}'': Folder to store the log files.
+		\end{itemize}
+	\item Section ``\textit{connections}'':
+		\begin{itemize}
+			\item Field ``\textit{time\_out}'': It defines the timeout (in seconds) of every connection.
+			\item	Field ``\textit{max\_number}'': The maximum number of simultaneous connections.
+		\end{itemize}
+	\item Section ``\textit{general}'':
+		\begin{itemize}
+			\item Field ``\textit{logging}'': It indicates if the log file is created (1 - Yes, 0 - No).
+			\item	Field ``\textit{cache\_max\_time}'': Expiration time of the cache files, in seconds. If
+this value is less than zero it means that no expiration time is used for the cache files.
+			\item	Field ``\textit{max\_chunk\_size}'': Maximum chunk size used for transmission, in bytes.
+		\end{itemize}
+\end{itemize}
+
+Each time the server opens an image to be served, it creates a little associated cache file,
+if it does not exist yet, with the related indexing information, within the configured
+caching folder.
+
+Here is an example of a configuration file, which is the default one
+included in the Launchpad repository:
+
+\lstinputlisting[numbers=none,xleftmargin=50pt]{../../server.cfg}
+
+
+\section{Commands}
+\label{commands}
+
+The application accepts the following command line parameters:
+
+\begin{itemize}
+	\item \textit{esa\_jpip\_server [start]}: It runs the server application.
+	\item \textit{esa\_jpip\_server status}: It shows some information (memory, num. of connections, etc.) of the current server process.
+		Currently the information shown is:
+		\begin{itemize}
+			\item The available total memory.
+			\item	The memory consumed by the father process.
+			\item	The memory consumed by the child process.
+			\item	The number of connections.
+			\item	The number of iterations (the number of times that the child process has been restarted).
+			\item	The number of threads of the child process.
+			\item	The CPU usage of the child process.
+		\end{itemize}
+	\item \textit{esa\_jpip\_server record [name\_file]}: It shows the same information in columns, being updated every 5 seconds. It accepts a third parameter, a name of a file where to store this information.
+	\item \textit{esa\_jpip\_server stop [child]}: Both processes or only the child process (depending on the second parameter) associated to the current server running are finished. 
+	\item \textit{esa\_jpip\_server debug [child]}: It calls the debugger for the parent or child process depending on the second parameter.
+ 	\item \textit{esa\_jpip\_server clean cache}: It removes all the cache files from the cache root folder which have exceeded the ``cache\_max\_time'' field from the ``server.cfg'' file.
+It also removes the existing ``.backup'' files from the same directory.
+\end{itemize}
+
+
+\chapter{Developer guide}
+
+\section{Introduction}
+
+The idea for the development of this application has been to implement a very
+stable and scalable solution of a JPIP server, specifically designed for Linux
+systems in order to fully profit from its characteristics. No portability
+strategies has been followed.
+
+The language chosen for the development is C++, writing the code following  as
+much as possible the
+\href{http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml}{Google
+style guide}. The code is commented according to the Javadoc format, what
+allows to use the Doxygen tool and generate the documentation of the
+Part \ref{sourcecode} automatically. This documentation includes, if the tool
+\href{http://www.graphviz.org/}{Graphviz} is installed, the collaboration diagrams 
+of all the classes, as well as the call diagrams of all the functions are 
+generated.
+
+No libraries strictly related to the server performance have been used, except
+from the \href{http://www.sgi.com/tech/stl/}{standard STL library} and 
+\href{https://computing.llnl.gov/tutorials/pthreads/}{pthread}. 
+The used libraries (see Section \ref{libraries}) are only related to secondary 
+features of the application. 
+
+For the data/file
+operations the classes of the namespace \hyperlink{namespacedata}{data} 
+are implemented. For example, 
+the class \hyperlink{classdata_1_1BaseFile}{data::BaseFile} is a 
+safe wrapper for the
+FILE related functions; the classes \hyperlink{classdata_1_1InputStream}
+{data::InputStream} and \hyperlink{classdata_1_1OutputStream}
+{data::OutputStream} allow the binary serialization of the classes;
+etc. 
+
+Regarding the IPC and threads management operations the classes of the
+namespace \hyperlink{namespaceipc}{ipc} have been designed. For example,
+the class \hyperlink{classipc_1_1Mutex}{ipc::Mutex} implements the
+logic of a mutex; the class \hyperlink{classipc_1_1RdWrLock}
+{ipc::RdWrLock} implements a reader/writer lock based on the 
+pthread\_rwlock functions; etc.
+
+Working with socket has been easy thanks to the classes of the namespace
+\hyperlink{namespacenet}{net}. For example, the class 
+\hyperlink{classnet_1_1Socket}{net::Socket} offers a powerful interface
+for the socket Linux functions; the class \hyperlink{classnet_1_1SocketStream}
+{net::SocketStream} allows working with sockets as continuous data streams,
+compatible with the stream classes defined in the STL library; etc.
+
+Finally, for working with the HTTP protocol the classes of the namespace
+\hyperlink{namespacehttp}{http} have been implemented. Among others, the
+classes \hyperlink{classhttp_1_1Request}{http::Request} and 
+\hyperlink{classhttp_1_1Response}{http::Response} permit to generate/generate
+HTTP messages, being compatible with the STL streams.
+
+With the help of the library \href{http://log4cpp.sourceforge.net/}{log4cpp}
+a trace system has been designed in order to easy the server logging as well
+as the debugging. The macros ``LOG'' and ``ERROR'' are defined to log
+information and error messages respectively, whilst the macro ``TRACE'' is
+defined to put debugging information in any part of the code. The debugging
+logs can be enabled/disabled by means of the macro ``SHOW\_TRACES''. For
+information see the content of the file \hyperlink{trace_8h}{trace.h}.
+
+Before explaining in detail the server architecture in Section \ref{sec:architecture},
+some concepts of the JPEG2000 standard (Section \ref{sec:jpeg2000}), as well as
+the JPIP protocol (Section \ref{sec:jpip}) are explained, necessary to
+correctly understand the server code.
+
+The classes of the server code related to the JPEG2000 standard are defined in
+the namespace \hyperlink{namespacejpeg2000}{jpeg2000}. The classes for working
+with the JPIP protocol are located within the namespace \hyperlink{namespacejpip}
+{jpip}. Within the text of the following sections, references to some classes
+of these namespaces are given.
+
+\section{The JPEG2000 standard}
+\label{sec:jpeg2000}
+\input{../jpeg2000}
+
+\section{The JPIP protocol}
+\label{sec:jpip}
+\input{../jpip}
+
+\newpage
+
+\section{Server architecture}
+\label{sec:architecture}
+
+\begin{figure}[!b]
+\centering
+\resizebox{0.8\textwidth}{!}{
+\input{../architecture}
+}
+\caption{Server architecture.}
+\label{fig:server}
+\end{figure}
+
+Fig. \ref{fig:server} shows a basic representation of the server architecture. It
+consists of a hybrid model combining both process and thread approaches.
+
+There are two processes, herein after called father and child. The first one
+creates the second one and is who listens for new client connections. When
+a new client connection is accepted by the father process, it sends this
+connection to the child process through a UNIX-domain socket in order
+to be attended. The child process is who provides all the functionality
+to handle the client connections. Each client connection is handled
+in the child process by a dedicated thread.
+
+The father process maintains a vector with all the open connections. When
+a connection is closed by the client, the child process notifies to the
+father process, through the UNIX-domain socket, in order to remove the 
+connection from the vector. 
+
+Since the father does not perform relevant operations, its probability of
+crashing due to an error is low. On the contrary, taking into account
+that the child process is how maintains all the image indexes and attends
+all the client connections, it may fail due to errors or not yet fixed
+bugs. When a process is crashed, all the related threads and connections
+are automatically closed. In the case of the child process, the current
+open connections are not closed because they are shared with the father
+process. This last can detect when the child process is down and launch
+a new child process. This new process, considering that it inherits the
+connections vector of the father process, it is capable to reestablish the
+connections without affecting the clients, that is, the clients do not
+notice when the child process crashes. 
+
+This architecture provides a 
+fault-tolerant and robust approach for the server, as well as it 
+offers a good performance. The multi-threading solution
+implemented in the child process is efficient in terms of memory 
+consumption and fast sharing/locking mechanisms. Having separated
+the client handling code from the father process provides 
+robustness and security. In the source code of the main module
+\hyperlink{esa__jpip__server_8cc}{esa\_jpip\_server.cc} can be
+seen how this server architecture is created.
+
+The configuration of the server is read from the file ``server.cfg''
+(see Section \ref{config} for details). This configuration is parsed
+by the class \hyperlink{classAppConfig}{AppConfig} and shared with both
+the father and child process.
+
+Between the father and child process is maintained a shared memory
+block, carried out by the class \hyperlink{classAppInfo}{AppInfo}. This
+allows to share information between the two processes, as well as to
+provide a mechanism for getting information from other processes, like
+in the case of the commands ``record'' and ``status'' (see Section
+\ref{commands}).
+ 
+The main parts of the child process, shown in Fig. \ref{fig:server}, are
+the File manager, the Index manager and the Client manager, that
+are explained in the following subsections.
+
+Every client connection is handled by a Client manager module, in an
+independent thread. This module manages the communication with the
+client, serving as the JPIP interface with the sub-module Data-bin server. 
+This sub-module contains the code to properly generate the data-bins
+associated to the client requests, implementing as well the client
+cache model.
+
+The Index manager module is the responsible to manage the image indexes stored
+in memory. When client requests to open a certain JPEG2000 image, the related
+Client manager module requests the Index module for the associated 
+indexing information. This module manages the indexing information in memory
+of all the currently open images by all the Client manager modules.
+
+The File manager module is in charge of parsing and extracting the indexing
+information of the image files that are requested by the Index manager module.
+The indexing information of each image is cached by means of little binary
+``.cache'' files in order to avoid to repeat the indexing process when the
+same image is open several times. These cache files are stored in the directory
+specified in the configuration file.
+
+\subsection{File manager}
+
+The code of this module is contained in the class 
+\hyperlink{classjpeg2000_1_1FileManager}{jpeg2000::FileManager}. Its main
+function is to extract the indexing information of the image files.
+
+The supported format files are J2C, JP2 and JPX, with or without 
+hyperlinks. The files must also comply with the limitations specified 
+in Section \ref{introduction}.
+
+The indexing information of an image file is stored in an
+instance of the class \hyperlink{classjpeg2000_1_1ImageInfo}
+{jpeg2000::ImageInfo}. It
+contains mainly a set of \hyperlink{classdata_1_1FileSegment}
+{data::FileSegment} objects (pair of offset and length information
+about a file segment) regarding the main headers, PLT segments,
+metadata segments, etc., of the image.
+
+The class \hyperlink{classjpeg2000_1_1ImageInfo}
+{jpeg2000::ImageInfo} as well as all of its members variables
+can be serialized using the serialization classes defined in
+the namespace \hyperlink{namespacedata}{data}. This makes
+easy load/save indexing information from the ``.cache'' files.
+
+When the Index manager requests to the File manager the
+indexing information of an image file, this last firstly checks
+whether the associated ``.cache'' file exists or not. If it
+exists, it just reads it, using the serialization to an 
+\hyperlink{classjpeg2000_1_1ImageInfo}{jpeg2000::ImageInfo} object
+and returns it. If there is not any cache file yet, it opens
+the image file and parses it, generating the corresponding
+cache file.
+
+The cache files are stored in the directory defined in the configuration
+file, and they are named using the full path of the image
+files, replacing each directory separator '/' by underscores '\_',
+and adding the extension ``.cache''. 
+
+The server does not remove any cache file during its execution. They
+can be removed either manually or by means of the server command
+``clean cache'' using a LRU policy specified in the server configuration
+file (see Section \ref{commands}).
+
+\subsection{Index manager}
+
+The code of this module is contained in the class 
+\hyperlink{classjpeg2000_1_1IndexManager}{jpeg2000::IndexManager}. Its main
+function is to manage the indexes of all the image files opened by the
+server.
+
+The index of each image is built from the indexing information retrieved
+from the file manager module. Notice that the indexing information
+generated by the file manager does not deal with packets, just the main
+parts of the image, like the position of the main header or the
+position of the PLT markers. From this initial information, the index
+manager builds a complete index of all the packets of each image.
+
+Each opened image is represented by an object of the class
+\hyperlink{classjpeg2000_1_1ImageIndex}{jpeg2000::ImageIndex}. All
+of these objects are handled by the index manager using a double linked
+list in memory. 
+
+When a J2C, JP2 or JPX (without hyperlinks) image file is opened, a
+new \hyperlink{classjpeg2000_1_1ImageIndex}{jpeg2000::ImageIndex} is created,
+if it does not already exist, and inserted in the list. When a JPX
+image file with hyperlinks is opened, the index manager handles each
+contained hyperlink independently. In this case a new node is also
+created in the list, but it contains references to all the nodes
+associated to its hyperlinks. Some of them may already exist in the list,
+or they have been created.
+
+Each image node in the list contains a reference count When this
+count value gets zero, the node is removed from the list. The number
+of references is incremented each time a client manager requests
+for the associated image file, or when a JPX file is opened that
+contains a link to that image file. 
+
+When a client manager opens a new channel, it requests to the index 
+manager for the index of the image associated to this new channel.
+The index manager returns a reference of an object of the class
+\hyperlink{classjpeg2000_1_1ImageIndex}{jpeg2000::ImageIndex}. 
+
+The packet index (handled by means of the class 
+\hyperlink{classjpeg2000_1_1PacketIndex}{jpeg2000::PacketIndex}) of
+each image file is created on demand, by resolution level. In order
+to support this feature, the image file must be compressed
+with the progression order RPCL. On the contrary, the packet index
+is fully created at the beginning, when the image file is opened.
+This way of creating the index allows to adjust the memory
+consumption required for the indexes according to the user
+movements through the image.
+
+The modifications (inserting or removing nodes) of the list of indexes 
+are controlled by a mutex lock. However, each index node contains its
+own independent locking mechanism for the modifications of the packet
+index. Multiple threads, associated each one to a client manager,
+can be working with the same image index node. If the packet index
+does not allow to be generated on demand, the main operation of
+all the threads over the packet index is to read. When the RPCL
+progression is used and the packet index can be built on demand,
+any thread can modify it (e.g. accessing to a new resolution
+level). A reader/writer lock mechanism has been chosen for controlling
+the modifications/accesses of the packet indexes, giving priority to
+the read operations (the most common ones) over the write operations.
+
+The class \hyperlink{classjpeg2000_1_1PacketIndex}{jpeg2000::PacketIndex}
+uses internally the class \hyperlink{classdata_1_1vint__vector}
+{data::vint\_vector} to stores the information of each packet. This
+class allows to use vectors of integers where each integer value can
+occupy a number of bytes not necessarily multiple of $2$. For example,
+if an image contains less than $2^{24}$ packets, each packet can
+be represented in the index by just $3$ bytes, instead of the minimal
+standard $4$ bytes. 
+
+The information stored of each packet in the index vector 
+is only the associated file offset. If the image file contains several tile-parts, 
+not recommended, thus dividing the set of packets in not contiguous segments, 
+special markers are included to identify the offset jumps.
+
+
+\subsection{Client manager}
+
+The class \hyperlink{classClientManager}{ClientManager} contains the required
+code to handle a client connection. When a new client connection is established
+by the server, a new instance of this class is created passing a reference
+to the application shared information (\hyperlink{classAppInfo}{AppInfo}), a
+reference of the server configuration information (\hyperlink{classAppConfig}
+{AppConfig}) and a reference to the Index manager (\hyperlink{classjpeg2000_1_1IndexManager}
+{jpeg2000::IndexManager}). A new
+thread is created for this connection which calls the method ``Run''
+of the class.
+
+The function of the code of the class \hyperlink{classClientManager}{ClientManager} 
+is basically to parse the client requests (with the help of the class
+\hyperlink{classjpip_1_1Request}{jpip::Request}) and form the appropriate responses,
+all of them according to the JPIP protocol in HTTP format. It implements a basic
+channel handling mechanism, as well as the interface with the Index manager, in
+order to, when a new image file is requested by the client, get the associated
+index.
+
+Although the standard allows to use several channels over the same connection,
+this implementation does not allow this feature. In practice, the most of the
+applications do not use more than just one channel per connection, like for example
+in the case of the viewer kdu\_show, from the Kakadu library, or JHelioviewer. This
+means that the JPIP concepts of channel and session refer in this implementation
+to the same thing. However, in the same connection, the client can open and
+close several channels as many times as required, but considering that only
+one channel can be opened at the same time.
+
+In order to identify the channel opened by the client, a simple integer number
+is used, which is incremented each time the client opens and closes a channel.
+The target identifier returned by the server, when a channel is opened, and 
+that is commonly used by the JPIP clients to perform local caching, is the
+full path of the associated image file. This avoids the coherence problems
+detected in other server implementations (like in the case of the kdu\_server)
+when using complex hash values.
+
+Taking into account that the child process can be restarted, and the client
+manager might be started over an existing client connection, a mechanism to
+find out the data already sent to the client, but without requesting it,
+has been implemented. Each time all the complete data of a WOI has been
+sent to the client, a little ``.backup'' file is created in the caching
+directory with the content of the client cache model. Therefore, when
+a client manager is started, it checks whether an associated ``.backup''
+exists or not, loading its information as the current content of the
+client cache model if so.
+
+The main flow chart of the code of the client manager module can be observed in
+Fig. \ref{fig:client_manager}. In the processing step of generating a new
+chunk of data is when the data-bin server module is called. 
+
+\begin{figure}
+\centering
+\resizebox{0.9\textwidth}{!}{
+\input{../client_manager}
+}
+\caption{Flow chart of the client manager.}
+\label{fig:client_manager}
+\end{figure}
+
+
+\subsection{Data-bin server}
+
+The code of this module is located at the class \hyperlink{classjpip_1_1DataBinServer}
+{jpip::DataBinServer}. This module manages the data that is served to a client, having
+methods to generate chunks and data-bins, as well as it maintains the client cache
+model.
+
+The client cache model is managed with the help of the class 
+\hyperlink{classjpip_1_1CacheModel}{jpip::CacheModel}. This class can be serialized,
+what make easy saving/loading the ``.backup'' files generated by the client manager.
+
+The data-bin server module uses the methods of the class 
+\hyperlink{classjpip_1_1DataBinWriter}{jpip::DataBinWriter} for generating the
+data-bins that will be sent to the client by the client manager.
+
+Once the client manager receives a WOI request from the client, it is passed to
+the data-bin server, which parses it and prepares the related resources for
+the data-bin generation. For
+instance, when the WOI specifies a set of hyperlinked layers within a JPX file, 
+the data-bin server opens the associated files putting them ready for
+extracting packets. An object of the class \hyperlink{classjpip_1_1WOIComposer}
+{WOIComposer} is also prepared to explore the packets associated to the
+WOI specified in the client request.
+
+For each WOI request the client manager sends JPIP responses encapsulated in
+HTTP messages, and using the chunked transfer encoding. The maximum length
+of each chunk is determined by the value specified within the configuration
+file. The method  ``GenerateChunk'' of the class \hyperlink{classjpip_1_1DataBinServer}
+{jpip::DataBinServer} is able to fill a memory buffer, usually related to
+a chunk data, with data-bins, according to the current client cache model and
+the last passed request. This is the method used by the client manager to
+generate the responses.
+
+The data-bin server generates a new chunk of data-bins considering the data
+already sent, recorded in the client cache model. Therefore, if the first
+$N$ bytes of a precinct data-bin has been already sent to the client, in
+the next chunk generation, these first $N$ bytes of the same precinct are
+not included.
+
+The sequence of data-bins that are included when a new data chunk is generated,
+calling the ``GenerateChunk'' method, is as follows:
+
+\begin{enumerate}
+
+\item All the metadatas
+
+\item For each codestream:
+	\begin{enumerate}
+	\item Main-header
+	\item Tile-header
+	\end{enumerate}
+
+\item For each packet given by the \hyperlink{classjpip_1_1WOIComposer}{WOIComposer}:
+	\begin{enumerate}
+	\item For each codestream: Precinct
+	\end{enumerate}
+
+\end{enumerate}
+
+Notice that, as it has been commented, the chunk generation and data-bin
+inclusion is incremental according to the client cache model and the previous
+sequence. For example, if
+the metadata of an image file occupies $1$ MByte, and the chunk size is $1$ KB,
+more than $1000$ chunks would be required to be generated before being able to
+generate the first chunk with packet data (precinct). 
+
+\section{Libraries}
+\label{libraries}
+
+The application uses the following libraries:
+
+\begin{itemize}
+	\item \textit{Libconfig++}: The libconfig++ library (\href{http://www.hyperrealm.com/libconfig/}{http://www.hyperrealm.com/libconfig/}) is used to read the
+information of the configuration file of the server. The configuration 
+file accepts C-like comments.
+	\item \textit{Libproc}: The general information about the server process is shown thanks to this library (\href{http://packages.debian.org/sid/libproc-dev/}{http://packages.debian.org/sid/libproc-dev/}).
+	\item \textit{Log4cpp}: This library is in charge of flexible logging to file (\href{http://log4cpp.sourceforge.net/}{http://log4cpp.sourceforge.net/}).
+\end{itemize}
+
+
+

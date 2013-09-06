@@ -1,0 +1,322 @@
+
+Part 9 of the JPEG2000 standard is almost
+completely dedicated to the development of systems for
+remote browsing of images. It defines a set of technologies
+(protocols, file formats, architectures, etc.) that allow
+to exploit efficiently all the characteristics of the JPEG2000
+compression system for the development of this
+kind of systems. The technology which Part 9 mainly focuses on is 
+the JPIP protocol (JPeg2000 Interactive Protocol). 
+
+\subsection{Architecture}
+
+The common client/server architecture of a system for remote browsing of
+images that uses the JPIP transmission protocol has the organization
+shown in Fig. \ref{fig:jpip}.
+
+\begin{figure}
+\resizebox{\textwidth}{!}{
+\input{../jpip_fig}
+}
+\caption{Client/server architecture of the JPIP protocol.}
+\label{fig:jpip}
+\end{figure}
+
+As it can be observed in the figure, the client is divided
+into four functional modules. The Browser module consists of
+the interface which the user interacts with in order to
+define the desired WOI. JPIP allows to use multiple parameters
+to define the WOI of the remote image to show in form of 
+restrictions related to the partitions to transmit (number 
+of quality layers, components, etc.). Geometrically,
+JPIP always imposes that the WOIs have to be defined in
+rectangular regions over a certain resolution level.
+
+Once the user has defined the desired WOI, it is sent to the
+``JPIP client'' and ``Decompressor'' modules. The first one is
+the responsible for communicating to the JPIP server 
+in order to send it the WOI using the messages and syntax
+defined by JPIP. When the server receives this information,
+it extracts from the associated image the required data for
+the reconstruction of the WOI, and send it to the client.
+This data is sent encapsulated in data-bins. In JPIP the
+different elements of the data partitions of a JPEG2000 image
+are reordered and encapsulated in data-bins, being the
+transmission units.
+
+As the client receives the data-bins from the server, it stores them
+in a internal cache (``Cache'' module). The client cache is organized 
+in data-bins as well. This cache is continuously used by the ``Decompressor''
+module for generating progressive reconstructions of the WOI, 
+that are passed to the ``Browser'' module to show to the user.
+
+As it can be seen, except the ``Cache'' module which serves as a container,
+the rest of the modules that composes the client work in parallel.
+The Browser is continuously indicating to the JPIP client which
+WOI is wanted by the user. The JPIP client keeps communicating to
+the server for transmitting this WOI and, as it receives the data,
+stores it within the cache. The decompressor generates every time
+reconstructions of the current WOI with the existing data in the cache.
+The modules begin their execution when the user defines the first WOI,
+and they stop when all the data of the current WOI have been received.
+The user can indicate a new WOI whenever, without
+having to wait for the completion of the previous one.
+
+The client cache stores all the data-bins received from the server, for all 
+the WOIs of all the images explored by the user. The server 
+maintains a model of the content of this cache, that allows it to avoid to
+send to the client data that it already has. For instance, let's assume a user, after
+exploring a certain $WOI_A$, requests then a new $WOI_B$ that has an
+overlapping with $WOI_A$. If a server maintains updated the cache model of the
+content of the client cache of the user, when the $WOI_B$ is requested, the
+server only sends the data-bins necessary to reconstruct the part of $WOI_B$
+that is not in common with $WOI_A$. If all the data-bins that allow to
+construct a certain $WOI_i$ are defined by $D(WOI_i)$, we can say that the
+server sends the data-bins $D(WOI_B) - \left( D(WOI_A) \bigcap D(WOI_B) \right)$.
+
+The JPIP protocol was designed to be independent of
+the used base protocol. However, the \href{http://www.ietf.org/rfc/rfc2616.txt}
+{HTTP protocol}
+is mainly used as base protocol, because
+of the similarity of the syntax with JPIP. Moreover,
+when the communication is based on HTTP, the \href{http://en.wikipedia.org/wiki/Chunked_transfer_encoding}
+{chunked transfer encoding} is commonly used. The ESA JPIP server
+always uses this kind of communication.
+
+\subsection{Data-bin partition}
+\label{sec:data-bins}
+
+Data-bins encapsulate different items of the partition
+of a JPEG2000 image. This new partition of data defined
+by JPIP permits to identify and gather the different parts
+of an image for their transmission. In the server code,
+the class \hyperlink{classjpip_1_1DataBinWriter}{jpip::DataBinWriter}
+is the responsible to generate the data-bins for the
+transmission.
+
+When a client/server communication is started, it is defined
+which kind of data-bin stream is going to be used. JPIP
+defines two kinds of streams, JPP, oriented to precincts, and
+JPT, oriented to tiles. The stream type indicates what kind
+of data-bins are used for the data transmission. The most used 
+stream type is JPP and is the only one supported by the ESA 
+JPIP server.
+
+Each data-bin is unequivocally identified by the image or code-stream
+to what belongs, the data-bin type and its identifier. This information
+is included in the header of each data-bin.
+
+The data-bins can be segmented for theirs transmission. A certain
+set of data-bins can be divided into a random number of
+segments, and they can be sent following any order. Each 
+segment of data-bin includes the necessary information for
+its correct identification.
+
+In Table \ref{tab:data-bins} the relation of the
+different types of data-bins defined in JPIP can be observed,
+showing which stream type they belongs and what information
+they contain. Next the main kinds of data-bins are explained:
+
+\begin{table}
+\begin{center}
+\begin{tabular}[]{{l}{l}{l}}
+\textbf{Data-bin} & \textbf{Stream} & \textbf{Contained information} \\
+\hline \hline 
+Precinct 		& JPP 		& All the packets of a precinct. \\\hline
+Precinct extended 	& JPP 		& The same content with additional content. \\\hline
+Tile 			& JPT 		& All the packets and markers of a tile.\\\hline
+Tile extended 		& JPT 		& The same content with additional content. \\\hline
+Tile header 		& JPT 		& The markers of the header of tile. \\\hline
+Header	 		& JPP/JPT 	& The markers of the header of a code-stream. \\\hline
+Meta-data 		& JPP/JPT 	& Meta-data of an image. \\
+\hline \hline
+\end{tabular}
+\caption{List of the data-bins defined by JPIP.}
+\label{tab:data-bins} 
+\end{center}
+\end{table}
+
+\begin{itemize}
+
+\item \textbf{Precinct data-bin:} Contains all the packets of
+a precinct for a resolution $r$, a component $c$ and a tile $t$.
+The packets are ordered within a data-bin for quality layer,
+in increasing order.
+
+Every precinct data-bin is identified by an index $I$ that is obtained
+by means of the following expression:
+
+\begin{equation*}
+I = t + \left( (c + (s \times N_c)) \times N_t \right)
+\end{equation*}
+
+$N_c$ y $N_t$ are the number of components and the number of tiles
+of the image to which the precinct belongs, respectively. The
+index of tile, $t$, as well as the index of component $c$ and
+the value $s$ begin with zero. To every precinct of every tile-component,
+including all the resolutions, an unique number of
+sequence $s$ is assigned. To all the precincts of the lowest resolution
+a number of sequence is assigned that starts with zero to the one
+located in the left-top border, and that continues increasing
+by column and row respectively. In the next resolutions
+a correlative sequence number is assigned to the precincts in the
+same way.
+
+\item \textbf{Tile data-bin:} Contains all the packets and markers associated
+to a tile. It is composed by concatenating all the tile-parts
+associated to a tile, including the markers SOT, SOD and all the
+rest relevant markers. The data-bins of this kind are identified by means
+of an incremental index, beginning with zero for the tile
+located in the top-left border.
+
+\item \textbf{Tile header data-bin:} Contains all the markers associated to 
+a certain tile. It is formed by all the markers of the headers of all the
+tile-parts of a tile, without including neither the SOT nor the SOD markers.
+The identifier of this data-bin has the same numeration that in the case
+of the tile.
+
+\item \textbf{Header data-bin:} Contains the main header of the code-stream,
+from the SOC (included) to the first SOT marker (not included). Neither the
+SOD nor the EOC marker is included either.
+
+\item \textbf{Meta-data bins:} These data-bins appear only if
+the associated image is a file of the JP2 family. The meta data-bins contain 
+a set of boxes of
+the image file. The standard does not define
+how these data-bins must be identified nor within which boxes 
+must be stored, but when a meta data-bin is identified by zero,
+means that it will include all the boxes contained by an image. 
+
+\end{itemize}
+
+\subsection{Sessions and channels}
+
+A request of the client to the server can be either stateful or stateless.
+The stateful requests are carried out within the context of a 
+communication session, which state is maintained by the server.
+The stateless requests do not require any session. The use of 
+sessions improve the performance of the server because, for example,
+when establishing a session with a certain image file, the server
+opens that file and prepares it in order to be transmitted in
+data-bins, so all the requests associated to that same session
+do not provoke that the server makes again that process. The stateless
+requests can be considered as unique sessions that end when the
+server response ends.
+
+Under a session, using stateful requests, the client can open
+multiple channels, being able to perform multiple stateful
+requests associated to the same session simultaneously. This
+is specially useful for applications that show simultaneously
+different regions of interest of the same image. The channels
+can be closed and opened in independently, without affecting
+to the session. To close a session would involve to close all
+the channels opened associated to it.
+
+A set of images is associated to each session. A session
+implies that the server maintains a model of the client
+cache. That model will be only maintained while
+the session remains active. A channel, for a certain session,
+is associated to a certain image and a kind of specific
+data-bin stream (JPP or JPT). The channel is identified
+in a unequivocal way by means of a alphanumeric assigned
+by the server, and which format is completely free. The sessions
+are not identified, since the identifier of the channel
+must be enough to identify the channel as well as the session
+to which belongs.
+
+Many times clients are interested to maintain in the server
+the client cache model between different sessions. The server
+by default does not allow this possibility, beginning a new
+session with a client always with a model of cache empty, although
+the client cache contains initial information. In this case JPIP
+defines a set of messages that allow the client to modify the model 
+that the server of its cache. Therefore, when the client starts
+a new session with a server, it would send a resume of the current
+content of its cache to improve the communication and to avoid
+redundancy, usually by means of a POST message.
+
+The cache models maintained by the servers not only
+allow to avoid the redundancy between messages, but they
+are also used in order to allow the client to perform
+incremental requests and control the stream of data. Clients can 
+indicate in their requests a parameter with the maximum length
+of the server response. Thanks to the cache model of
+the server, the client can perform successive identical requests,
+but varying that parameters, so the server sends as response
+increments of information. Therefore the client has certain
+control and can adapt the stream of information to the available
+bandwidth and delay, but always taking into account that the server
+can modify whenever the related parameter. This way of communication
+is indeed the most common one in the existing implementations of
+JPIP.
+
+\subsection{Messages}
+
+The JPIP requests are formed by means of a ASCII sequence of pairs
+``parameter $=$ value''. This allows that a JPIP request can be encapsulated
+within a GET message of the HTTP protocol, next to the 
+character '?', concatenating all the pairs with the symbol '\&'. It is
+hence formed a typical HTTP request when dynamic objects are referenced
+like CGI.
+
+Some of the available parameters for a JPIP request are the followings:
+
+\begin{itemize}
+
+\item \textbf{``fsiz=$R_{x}$,$R_{y}$'':} Specifies the resolution
+associated to the required region of interest. The server chooses
+the biggest resolution of the image so its dimension $R_{x}' \times R_{y}'$
+satisfies that $R_{x}' \geq R_{x}$ and $R_{y}' \geq R_{y}$. In general
+this parameter includes the resolution of the user screen.
+
+\item \textbf{``roff=$P_{x}$,$P_{y}$'':} Specifies the position of the
+upper left border of the required region of interest within the
+indicated resolution. If this position is not indicated, the
+server assumes the value $(0,0)$.
+
+\item \textbf{``rsiz=$S_{x}$,$S_{y}$'':} Specifies the size
+of the required region of interest. The server cuts this size
+in order to fit it into the real image according to the
+specified resolution.
+
+\item \textbf{``len=number of bytes'':} Client tells with
+this parameter to the server the maximum number of bytes
+that it can include in the response. The server takes into
+account this limit, not only in the response to the
+current request, but in the rest of the next client responses
+within the same session.
+
+\item \textbf{``target=image'':} This parameter identifies the image
+file from which to extract the specified region of interest.
+When the HTTP protocol is used, this parameter is not necessary
+since the name of the image is obtained from the own URL
+specified in the GET message.
+
+\item \textbf{``cnew=protocol'':} When the client wants to open
+a new channel under the same session, it uses this parameter,
+indicating the protocol that must be used for this new channel. The
+types of valid base protocols are ``http'' and ``http-tcp''.
+
+\item \textbf{``cid=channel identifier'':} When the client creates
+a new channel, the server sends the channel identifier, that must
+be included in all the requests associated to that channel.
+
+\item \textbf{``cclose=channel identifier'':} The client may decide
+to close certain channel by means of this parameter, just specifying
+the identifier of that channel.
+
+\item \textbf{``type=stream type'':} When a new channel is created, the
+client indicates what kind of data-bin stream is wanted. The main
+types of data-bin streams are JPP (``jpp-stream'') and JPT
+(``jpt-stream'').
+
+\item \textbf{``model=\ldots'':} How it has been commented previously,
+the client can need to tell to the server the content of its cache
+in order to update the content of the cache model maintained by
+the last one. For example, \texttt{model=Hm,H*,M2,P0:20}
+would tell the server to include in the cache model 
+the main header of the code-stream, the headers of all the tiles,
+the meta data-bin number 2 and the first $20$ bytes
+of the precinct $0$.
+\end{itemize}
+
