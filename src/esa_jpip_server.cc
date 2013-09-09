@@ -14,7 +14,7 @@
 #include "net/socket_stream.h"
 #include "jpeg2000/file_manager.h"
 #include "jpeg2000/index_manager.h"
-
+#include <wait.h>
 
 using namespace std;
 using namespace net;

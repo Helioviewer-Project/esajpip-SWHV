@@ -3,7 +3,6 @@
 #include <sys/time.h>
 #include "event.h"
 
-
 namespace ipc
 {
 

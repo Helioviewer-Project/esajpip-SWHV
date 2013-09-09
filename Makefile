@@ -1,6 +1,6 @@
 DEBUG=YES
-PLATFORM=MAC
-#PLATFORM=LINUX
+#PLATFORM=MAC
+PLATFORM=LINUX
 #PLATFORM=SOLARIS
 
 CXX=g++
@@ -55,15 +55,16 @@ OBJS += base                        \
 		client_manager					
 
 ifeq ($(DEBUG),YES)							
-FLAGS = -g -Wall -fmessage-length=0 -I src
+FLAGS = -g -Wall -fmessage-length=0 -I src -I /root/procps-3.2.8/
 else
 FLAGS = -O2 -Wall -fmessage-length=0 -I src -DNDEBUG
 endif
 
-LIBS = -lpthread -lm -lconfig++ -llog4cpp -lproc
+LIBS = -lpthread -lm -lconfig++ -llog4cpp -lproc-3.2.8
 
 ifeq ($(PLATFORM),LINUX)
 LIBS += -lrt
+FLAGS += -L /root/procps-3.2.8/proc/
 endif
 
 ifeq ($(PLATFORM),SOLARIS)
