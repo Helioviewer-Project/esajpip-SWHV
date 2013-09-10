@@ -1,5 +1,5 @@
 
-project(esajpip CXX)
+project(esajpip)
 
 set(ESAJPIP_TOP esajpip/src)
 aux_source_directory(${ESAJPIP_TOP}/data     DATA_SRCS)
@@ -27,3 +27,4 @@ add_definitions(-D_NO_READPROC -D_NO_FAST_FILE)
 include_before(. ${ESAJPIP_TOP} ${LIBCONFIG}/lib ${LOG4CPP}/include)
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${ALL_SRCS})
 target_link_libraries(esajpip config++ log4cpp)
+install(TARGETS esajpip DESTINATION esajpip)

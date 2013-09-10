@@ -13,4 +13,4 @@ set(LOG4CPP   ${TOP}/log4cpp/log4cpp-1.1)
 
 add_subdirectory(libconfig)
 add_subdirectory(log4cpp)
-add_subdirectory(ej)
+add_subdirectory(esajpip)
