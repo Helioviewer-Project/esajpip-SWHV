@@ -6,6 +6,3 @@ aux_source_directory(${LIBCONFIG}/lib LIBCONFIG_SRCS)
 include_directories(.)
 add_definitions(-DHAVE_CONFIG_H=1)
 add_library(config++ STATIC ${LIBCONFIG_SRCS})
-
-install(TARGETS config++ DESTINATION lib)
-install(FILES ${LIBCONFIG}/lib/libconfig.h++ DESTINATION include)

@@ -1,6 +1,8 @@
 
 cmake_minimum_required(VERSION 2.8)
-set(CMAKE_INSTALL_PREFIX "/swhv/support")
+set(CMAKE_INSTALL_PREFIX "/swhv/esajpip")
+
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 macro(include_before ...)
 	include_directories(BEFORE ${ARGV})
