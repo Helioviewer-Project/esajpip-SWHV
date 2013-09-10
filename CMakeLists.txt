@@ -1,18 +1,13 @@
 
-cmake_minimum_required(VERSION 2.8)
-SET(CMAKE_INSTALL_PREFIX "/swhv/esajpip")
+PROJECT(esajpip)
 
 SET(CMAKE_BUILD_TYPE RelWithDebInfo)
 
-SET(TOP ${CMAKE_SOURCE_DIR})
+SET(LIBCONFIG ${CMAKE_CURRENT_SOURCE_DIR}/libconfig/libconfig-1.4.9)
+SET(LOG4CPP   ${CMAKE_CURRENT_SOURCE_DIR}/log4cpp/log4cpp-1.1)
 
-SET(LIBCONFIG ${TOP}/libconfig/libconfig-1.4.9)
-SET(LOG4CPP   ${TOP}/log4cpp/log4cpp-1.1)
-
-SET(ESAJPIP_LISTEN_PORT 8090)
-SET(ESAJPIP_DIR_IMAGE   "/data/jp2")
-SET(ESAJPIP_DIR_CACHE   "/srv/www/htdocs/helioviewer/cache")
-SET(ESAJPIP_DIR_LOG     "/srv/www/htdocs/helioviewer/log")
+#for LOG4CPP
+ADD_DEFINITIONS(-pthread -DNDEBUG -DLOG4CPP_HAVE_SSTREAM)
 
 ADD_SUBDIRECTORY(libconfig)
 ADD_SUBDIRECTORY(log4cpp)
