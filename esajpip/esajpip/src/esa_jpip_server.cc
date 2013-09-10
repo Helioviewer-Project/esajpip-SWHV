@@ -2,6 +2,8 @@
 #include <sys/prctl.h>
 #endif
 
+#include <sys/wait.h>
+
 #include <signal.h>
 #include "trace.h"
 #include "version.h"

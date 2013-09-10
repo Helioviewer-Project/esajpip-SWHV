@@ -2,10 +2,10 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
-//#include <wait.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #ifndef _NO_DIRENT
 #include <dirent.h>
