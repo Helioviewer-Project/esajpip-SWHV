@@ -1,7 +1,7 @@
 
-INCLUDE_DIRECTORIES(. ${LOG4CPP}/include)
+include_directories(. ${LOG4CPP}/include)
 
-SET(CORE_SRCS
+set(CORE_SRCS
 	src/Appender.cpp
 	src/AppenderSkeleton.cpp
 	src/AppendersFactory.cpp
@@ -49,8 +49,8 @@ SET(CORE_SRCS
 	src/PortabilityImpl.cpp
 	src/AbortAppender.cpp)
 
-FOREACH(SRC ${CORE_SRCS})
-	SET(LOG4CPP_SRCS ${LOG4CPP_SRCS} ${LOG4CPP}/${SRC})
-ENDFOREACH(SRC)
+foreach(SRC ${CORE_SRCS})
+	set(LOG4CPP_SRCS ${LOG4CPP_SRCS} ${LOG4CPP}/${SRC})
+endforeach()
 
-ADD_LIBRARY(log4cpp ${LOG4CPP_SRCS})
+add_library(log4cpp ${LOG4CPP_SRCS})

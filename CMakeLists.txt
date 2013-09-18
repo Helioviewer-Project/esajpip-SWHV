@@ -1,14 +1,14 @@
 
-PROJECT(esajpip)
+project(esajpip)
 
-SET(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
-SET(LIBCONFIG ${CMAKE_CURRENT_SOURCE_DIR}/libconfig/libconfig-1.4.9)
-SET(LOG4CPP   ${CMAKE_CURRENT_SOURCE_DIR}/log4cpp/log4cpp-1.1)
+set(LIBCONFIG ${CMAKE_CURRENT_SOURCE_DIR}/libconfig/libconfig-1.4.9)
+set(LOG4CPP   ${CMAKE_CURRENT_SOURCE_DIR}/log4cpp/log4cpp-1.1)
 
 #for LOG4CPP
-ADD_DEFINITIONS(-pthread -DNDEBUG -DLOG4CPP_HAVE_SSTREAM)
+add_definitions(-pthread -DNDEBUG -DLOG4CPP_HAVE_SSTREAM)
 
-ADD_SUBDIRECTORY(libconfig)
-ADD_SUBDIRECTORY(log4cpp)
-ADD_SUBDIRECTORY(esajpip)
+add_subdirectory(libconfig)
+add_subdirectory(log4cpp)
+add_subdirectory(esajpip)

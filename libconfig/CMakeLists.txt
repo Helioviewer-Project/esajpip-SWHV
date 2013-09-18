@@ -1,6 +1,6 @@
 
-AUX_SOURCE_DIRECTORY(${LIBCONFIG}/lib LIBCONFIG_SRCS)
+aux_source_directory(${LIBCONFIG}/lib LIBCONFIG_SRCS)
 
-INCLUDE_DIRECTORIES(.)
-ADD_DEFINITIONS(-DHAVE_CONFIG_H=1)
-ADD_LIBRARY(config++ STATIC ${LIBCONFIG_SRCS})
+include_directories(.)
+add_definitions(-DHAVE_CONFIG_H=1)
+add_library(config++ STATIC ${LIBCONFIG_SRCS})
