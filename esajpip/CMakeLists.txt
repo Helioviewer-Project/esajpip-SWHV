@@ -38,5 +38,5 @@ include_directories(BEFORE . ${ESAJPIP_TOP} ${LIBCONFIG}/lib ${LOG4CPP}/include)
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${ALL_SRCS})
 
 target_link_libraries(esajpip config++ log4cpp pthread)
-install(TARGETS esajpip DESTINATION esajpip)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION esajpip)
+install(TARGETS esajpip DESTINATION server/esajpip)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
