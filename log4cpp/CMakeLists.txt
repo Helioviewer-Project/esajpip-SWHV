@@ -50,7 +50,7 @@ set(CORE_SRCS
 	src/AbortAppender.cpp)
 
 foreach(SRC ${CORE_SRCS})
-	set(LOG4CPP_SRCS ${LOG4CPP_SRCS} ${LOG4CPP}/${SRC})
+	list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})
 endforeach()
 
 add_library(log4cpp ${LOG4CPP_SRCS})

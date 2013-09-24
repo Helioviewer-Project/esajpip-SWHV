@@ -20,7 +20,7 @@ set(CORE_SRCS
 	client_manager.cc)
 
 foreach(SRC ${CORE_SRCS})
-	set(APP_SRCS ${APP_SRCS} ${ESAJPIP_TOP}/${SRC})
+	list(APPEND APP_SRCS ${ESAJPIP_TOP}/${SRC})
 endforeach()
 
 add_definitions(-D_NO_READPROC -D_NO_FAST_FILE)
