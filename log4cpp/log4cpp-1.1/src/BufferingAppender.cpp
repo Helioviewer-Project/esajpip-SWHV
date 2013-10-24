@@ -15,11 +15,12 @@ namespace log4cpp
    
    void BufferingAppender::_append(const LoggingEvent& event)
    {
-      if (queue_.size() == max_size_)
+      if (queue_.size() == max_size_) {
          if (lossy_)
             queue_.pop_back();
          else
             dump();
+      }
 
       queue_.push_front(event);
       
