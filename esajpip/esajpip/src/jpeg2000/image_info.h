@@ -12,8 +12,6 @@
 
 namespace jpeg2000
 {
-  using namespace std::tr1;
-
 
   /**
    * Contains the indexing information of a JPEG2000 image.
