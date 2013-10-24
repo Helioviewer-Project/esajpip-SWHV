@@ -2,11 +2,7 @@
 #define _IPC_OBJECT_H_
 
 
-#ifndef _USE_BOOST
-	#include <tr1/memory>
-#else
-	#include <boost/tr1/memory.hpp>
-#endif
+#include "tr1_compat.h"
 
 
 namespace ipc
@@ -55,7 +51,7 @@ namespace ipc
     /**
      * Pointer to an IPC object.
      */
-    typedef std::tr1::shared_ptr<IPCObject> Ptr;
+    typedef SHARED_PTR<IPCObject> Ptr;
 
     /**
      * Initializes the internal status to <code>false</code>.

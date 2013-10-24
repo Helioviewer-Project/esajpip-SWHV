@@ -14,11 +14,7 @@
 	#include <stdio_ext.h>
 #endif
 
-#ifndef _USE_BOOST
-	#include <tr1/memory>
-#else
-	#include <boost/tr1/memory.hpp>
-#endif
+#include "tr1_compat.h"
 
 
 namespace data
@@ -115,7 +111,7 @@ namespace data
 	/**
 	 * Safe pointer to this class.
 	 */
-    typedef tr1::shared_ptr< BaseFile<IO> > Ptr;
+    typedef SHARED_PTR< BaseFile<IO> > Ptr;
 
 
     /**

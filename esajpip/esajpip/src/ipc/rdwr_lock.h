@@ -24,7 +24,7 @@ namespace ipc
     /**
      * Pointer to a RdWrLock object.
      */
-    typedef std::tr1::shared_ptr<RdWrLock> Ptr;
+    typedef SHARED_PTR<RdWrLock> Ptr;
 
     /**
      * Initializes the object.

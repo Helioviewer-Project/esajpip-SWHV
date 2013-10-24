@@ -5,11 +5,7 @@
 #include <vector>
 #include <math.h>
 
-#ifndef _USE_BOOST
-	#include <tr1/memory>
-#else
-	#include <boost/tr1/memory.hpp>
-#endif
+#include "tr1_compat.h"
 
 #include "base.h"
 #include "point.h"
@@ -98,7 +94,7 @@ namespace jpeg2000
     /**
      * Pointer to an object of this class.
      */
-    typedef tr1::shared_ptr<CodingParameters> Ptr;
+    typedef SHARED_PTR<CodingParameters> Ptr;
 
     /**
      * All the progression orders defined in the JPEG2000

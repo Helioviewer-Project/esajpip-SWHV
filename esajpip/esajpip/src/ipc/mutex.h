@@ -25,7 +25,7 @@ namespace ipc
     /**
      * Pointer to a Mutex object.
      */
-    typedef std::tr1::shared_ptr<Mutex> Ptr;
+    typedef SHARED_PTR<Mutex> Ptr;
 
     /**
      * Initializes the object without locking the mutex.

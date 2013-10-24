@@ -29,7 +29,7 @@ namespace ipc
     /**
      * Pointer to a Event object.
      */
-    typedef std::tr1::shared_ptr<Event> Ptr;
+    typedef SHARED_PTR<Event> Ptr;
 
     /**
      * Initializes the object desactivated and with automatic reset.
