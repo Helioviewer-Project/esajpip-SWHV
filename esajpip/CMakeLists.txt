@@ -29,6 +29,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	add_definitions(-D_PLATFORM_LINUX)
 endif()
 
+if(APPLE)
+	add_definitions(-std=c++11)
+endif()
+
 if(UNIX AND NOT APPLE)
 	add_definitions(-D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=600)
 	set(CMAKE_EXE_LINKER_FLAGS "-lrt")

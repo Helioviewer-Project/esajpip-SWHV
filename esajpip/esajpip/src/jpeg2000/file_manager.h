@@ -162,7 +162,7 @@ namespace jpeg2000
      */
     bool Init(string root_dir = "./", string cache_dir = "./")
     {
-      if((root_dir.size() <= 0) || (cache_dir.size() < 0)) return false;
+      if((root_dir.size() == 0) || (cache_dir.size() == 0)) return false;
       else {
         root_dir_ = root_dir;
         cache_dir_ = cache_dir;
