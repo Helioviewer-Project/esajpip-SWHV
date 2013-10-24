@@ -229,7 +229,7 @@ namespace jpeg2000
     for (int i = 0; i < 4; i++)
       res = res && file.ReadReverse(&tiling[i]);
     // Get number of components
-    uint16_t num_components;
+    uint16_t num_components = 0;
     res = res && file.ReadReverse(&num_components);
     params->num_components = num_components;
     // To jump to the end of the marker
@@ -245,16 +245,16 @@ namespace jpeg2000
     uint8_t cs_buf;
     res = res && file.Seek(2, SEEK_CUR) && file.ReadReverse(&cs_buf);
     // Get progression order
-    uint8_t progression;
+    uint8_t progression = 0;
     res = res && file.ReadReverse(&progression);
     params->progression = progression;
     // Get number of quality layers
-    uint16_t quality_layers;
+    uint16_t quality_layers = 0;
     // To jump MC
     res = res && file.ReadReverse(&quality_layers) && file.Seek(1, SEEK_CUR);
     params->num_layers = quality_layers;
     // Get transform levels
-    uint8_t transform_levels;
+    uint8_t transform_levels = 0;
     // To jump 4 bytes (ECB2,ECB1,MS,WT)
     res = res && file.ReadReverse(&transform_levels) && file.Seek(4, SEEK_CUR);
     params->num_levels = transform_levels;
@@ -287,7 +287,7 @@ namespace jpeg2000
     // Get offset of the codestream header
     if (index->header.length == 0) index->header.length = file.GetOffset() - 2 - index->header.offset;
     // Get Ltp
-    uint32_t ltp;
+    uint32_t ltp = 0;
     // To jump Lsot, it, itp, ntp
     res = res && file.Seek(4, SEEK_CUR) && file.ReadReverse(&ltp) && file.Seek(2, SEEK_CUR);
     index->packets.push_back(FileSegment(file.GetOffset(), ltp - 12));
@@ -300,7 +300,7 @@ namespace jpeg2000
     // Get PLT offset
     uint64_t PLT_offset = file.GetOffset() + 3;
     // Get Lplt
-    uint16_t lplt;
+    uint16_t lplt = 0;
     res = res && file.ReadReverse(&lplt);
     res = res && file.Seek(lplt - 2, SEEK_CUR);
     // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
@@ -323,17 +323,17 @@ namespace jpeg2000
   {
     bool res = true;
     // Get L, if it is not 0 or 1, then box length is L
-    uint32_t L;
+    uint32_t L = 0;
     res = res && file.ReadReverse(&L);
     *length_box = L - 8;
     // Get T (box type)
-    uint32_t T;
+    uint32_t T = 0;
     res = res && file.ReadReverse(&T);
     *type_box = T;
     // XL indicates the box length
     if (L == 1)
     {
-      uint64_t XL;
+      uint64_t XL = 0;
       res = res && file.ReadReverse(&XL);
       *length_box = XL - 16;
     }
