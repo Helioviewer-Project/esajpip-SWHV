@@ -53,4 +53,5 @@ foreach(SRC ${CORE_SRCS})
 	list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})
 endforeach()
 
+add_definitions(-DHAVE_CONFIG_H -DLOG4CPP_HAVE_SSTREAM)
 add_library(log4cpp ${LOG4CPP_SRCS})
