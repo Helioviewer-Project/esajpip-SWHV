@@ -112,7 +112,7 @@ namespace net
     {
       int flags = 1;
       setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
-      if(bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
+      if(::bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
       if(listen(sid, nstack) != 0) return false;
       return true;
     }
@@ -134,7 +134,7 @@ namespace net
      */
     bool BindTo(const Address& address)
     {
-      return !bind(sid, address.GetSockAddr(), address.GetSize());
+      return !::bind(sid, address.GetSockAddr(), address.GetSize());
     }
 
     /**

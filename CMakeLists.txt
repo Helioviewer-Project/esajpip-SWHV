@@ -6,7 +6,6 @@ set(CMAKE_BUILD_TYPE RelWithDebInfo)
 set(LIBCONFIG ${CMAKE_CURRENT_SOURCE_DIR}/libconfig/libconfig-1.4.9)
 set(LOG4CPP   ${CMAKE_CURRENT_SOURCE_DIR}/log4cpp/log4cpp-1.1)
 
-#for LOG4CPP
 add_definitions(-pthread -DNDEBUG)
 
 add_subdirectory(libconfig)
