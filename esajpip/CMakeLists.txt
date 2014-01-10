@@ -23,7 +23,7 @@ foreach(SRC ${CORE_SRCS})
 	list(APPEND APP_SRCS ${ESAJPIP_TOP}/${SRC})
 endforeach()
 
-add_definitions(-D_NO_READPROC -D_NO_FAST_FILE)
+add_definitions(-D_NO_READPROC -D_NO_FAST_FILE -DNO_COLORS)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	add_definitions(-D_PLATFORM_LINUX)

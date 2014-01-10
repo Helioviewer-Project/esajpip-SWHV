@@ -2,7 +2,7 @@
 #define _JPIP_DATABIN_SERVER_H_
 
 
-#define SHOW_TRACES
+//#define SHOW_TRACES
 
 
 #include <utility>
