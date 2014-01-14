@@ -117,7 +117,7 @@ namespace jpeg2000
     else res = res && file.Seek(last_offset_PLT[ind_codestream], SEEK_SET);
 
     // Get packet length
-    uint8_t buf_packet;
+    uint8_t buf_packet = 0;
     uint8_t length_packet_partial;
     uint8_t partial = 1;
 
@@ -125,7 +125,7 @@ namespace jpeg2000
     while (partial)
     {
       res = res && file.Read(&buf_packet, 1);
-      partial = buf_packet >> 7; // To get if the packet is final or not
+      partial = buf_packet & 128; // To get if the packet is final or not
       length_packet_partial = buf_packet & 127; // To get the packet length
       *length_packet = (*length_packet << 7) | length_packet_partial;
     }

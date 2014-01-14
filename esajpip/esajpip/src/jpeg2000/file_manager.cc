@@ -242,7 +242,7 @@ namespace jpeg2000
   {
     bool res = true;
     // Get CS0 parameter
-    uint8_t cs_buf;
+    uint8_t cs_buf = 0;
     res = res && file.Seek(2, SEEK_CUR) && file.ReadReverse(&cs_buf);
     // Get progression order
     uint8_t progression = 0;

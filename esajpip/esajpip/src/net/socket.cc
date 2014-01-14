@@ -159,6 +159,8 @@ namespace net
       return false;
 
     cmsg = CMSG_FIRSTHDR(&msg);
+	if(!cmsg)
+      return false;
 
     if(cmsg->cmsg_type != SCM_RIGHTS)
       return false;

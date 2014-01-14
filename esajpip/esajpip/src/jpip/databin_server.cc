@@ -188,7 +188,7 @@ namespace jpip
 
     if(*last) cache_model.Pack();
 
-    return data_writer;
+    return true;
   }
 
 }
