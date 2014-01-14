@@ -125,7 +125,7 @@ namespace jpip
     	int cached = cache_model.GetDataBin<DataBinClass::META_DATA>(num_codestream, id);
         int res = 1, seg_cached = cached - offset;
 
-        if((cached != INT_MAX) && (((int)place_holder.length() - seg_cached) >= 0)) {
+        if((cached != INT_MAX) && (((int)place_holder.length() - seg_cached) > 0)) {
         	int free = data_writer.GetFree() - MINIMUM_SPACE - place_holder.length();
 
             if(free <= 0) {
