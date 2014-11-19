@@ -159,6 +159,7 @@ void ClientManager::Run(ClientInfo *client_info)
         else {
           sock_stream
             << http::Response(200)
+            << http::Header::AccessControlAllowOrigin("*")
             << http::Header::CacheControl("no-cache")
             << http::Header::TransferEncoding("chunked")
             << http::Header::ContentType("image/jpp-stream")
