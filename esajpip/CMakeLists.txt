@@ -26,7 +26,7 @@ endforeach()
 # -DSILENT_MODE
 # -DSHOW_TRACES
 # -UNDEBUG
-add_definitions(-D_NO_READPROC -D_NO_FAST_FILE -DNO_COLORS -DSHOW_TRACES -UNDEBUG)
+add_definitions(-D_NO_READPROC -D_NO_FAST_FILE -DNO_COLORS)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	add_definitions(-D_PLATFORM_LINUX)
@@ -34,6 +34,7 @@ endif()
 
 if(APPLE)
 	add_definitions(-std=c++11)
+	set(CMAKE_EXE_LINKER_FLAGS "-lc++abi")
 endif()
 
 if(UNIX AND NOT APPLE)
