@@ -93,7 +93,7 @@ namespace jpip
     }
     else if (param == "context") {
       char jpxl_param[5];
-      stream.get(jpxl_param, 4);
+      stream.get(jpxl_param, 5);
       if (!strcmp(jpxl_param, "jpxl"))
       {
         char c;
