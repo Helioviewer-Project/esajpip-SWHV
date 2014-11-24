@@ -88,7 +88,7 @@ namespace jpeg2000
 
     /**
      * Adds a new packet segment to the index.
-     * @param segment Fiel segment associated to the packet.
+     * @param segment File segment associated to the packet.
      * @return The object itself.
      */
     PacketIndex& Add(const FileSegment& segment)

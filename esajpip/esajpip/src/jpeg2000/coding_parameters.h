@@ -3,7 +3,7 @@
 
 
 #include <vector>
-#include <math.h>
+#include <cmath>
 
 #include "tr1_compat.h"
 

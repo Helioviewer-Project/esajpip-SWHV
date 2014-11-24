@@ -1,5 +1,6 @@
 #include "coding_parameters.h"
 
+#include <cstdlib>
 
 namespace jpeg2000
 {
@@ -25,7 +26,7 @@ namespace jpeg2000
     int distance, final_r = 0;
     int distance_x = size.x - res_size.x;
     int distance_y = size.y - res_size.y;
-    int min = fabs(distance_x) + fabs(distance_y);
+    int min = abs(distance_x) + abs(distance_y);
     int res_image_x, res_image_y;
     res_image_size->x=size.x;
     res_image_size->y=size.y;
@@ -36,7 +37,7 @@ namespace jpeg2000
 	  res_image_y=ceil((double)size.y / (double)(1L << r));
       distance_x = res_image_x - res_size.x;
       distance_y = res_image_y - res_size.y;
-      distance = fabs(distance_x) + fabs(distance_y);
+      distance = abs(distance_x) + abs(distance_y);
 
       if (distance < min)
       {
