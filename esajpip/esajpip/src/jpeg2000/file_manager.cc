@@ -400,9 +400,9 @@ namespace jpeg2000
     uint16_t data_reference;
     vector<uint16_t> v_data_reference;
     vector<string> v_path_file;
-    int pini=0, plen=0, pini_box=0, plen_box=0, pini_ftbl, plen_ftbl;
+    int pini=0, plen=0, pini_box=0, plen_box=0;
     //int metadata_bin=1;
-    int num_flst;
+    int num_flst=0, pini_ftbl=0, plen_ftbl=0;
 
     while (file.GetOffset() != file.GetSize() && res)
     {
@@ -442,6 +442,7 @@ namespace jpeg2000
           pini=file.GetOffset();
           plen=0;
           break;*/
+        // 'ftbl' superbox contains a 'flst'
         case FTBL_BOX_ID:
           TRACE("FTBL box...");
           image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
@@ -449,6 +450,7 @@ namespace jpeg2000
           pini_ftbl=pini_box;
           plen_ftbl=plen_box;
           break;
+        // 'flst' box assumed to be contained within a 'ftbl' superbox
         case FLST_BOX_ID:
           TRACE("FLST box...");
           res = res && ReadFlstBox(file, length_box, &data_reference);
