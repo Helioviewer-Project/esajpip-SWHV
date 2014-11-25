@@ -48,7 +48,7 @@ namespace jpeg2000
      * @param image_index Associated image index.
      * @return <code>true</code> if successful.
      */
-    bool UnsafeCloseImage(const ImageIndex::Ptr& image_index);
+    bool UnsafeCloseImage(ImageIndex::Ptr& image_index);
 
   public:
     /**
@@ -107,7 +107,7 @@ namespace jpeg2000
      * @param image_index Associated image index.
      * @return <code>true</code> if successful.
      */
-    bool CloseImage(const ImageIndex::Ptr& image_index);
+    bool CloseImage(ImageIndex::Ptr& image_index);
 
     /**
      * Returns the size of the list.

@@ -110,7 +110,7 @@ namespace jpeg2000
     return true;
 	}
 
-	bool IndexManager::CloseImage(const ImageIndex::Ptr& image_index)
+	bool IndexManager::CloseImage(ImageIndex::Ptr& image_index)
 	{
     bool res = false;
 
@@ -129,7 +129,7 @@ namespace jpeg2000
     return res;
 	}
 
-	bool IndexManager::UnsafeCloseImage(const ImageIndex::Ptr& image_index)
+	bool IndexManager::UnsafeCloseImage(ImageIndex::Ptr& image_index)
 	{
 	  TRACE("Closing the image '" << image_index->path_name << "'");
 
