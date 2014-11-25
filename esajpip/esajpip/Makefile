@@ -1,6 +1,6 @@
 DEBUG=YES
-PLATFORM=MAC
-#PLATFORM=LINUX
+#PLATFORM=MAC
+PLATFORM=LINUX
 #PLATFORM=SOLARIS
 
 CXX=g++
@@ -60,7 +60,7 @@ else
 FLAGS = -O2 -Wall -fmessage-length=0 -I src -DNDEBUG
 endif
 
-LIBS = -lpthread -lm -lconfig++ -llog4cpp -lproc
+LIBS = -lpthread -lm -lconfig++ -llog4cpp
 
 ifeq ($(PLATFORM),LINUX)
 LIBS += -lrt
@@ -73,8 +73,9 @@ FLAGS += -D_USE_BOOST -D_NO_FAST_FILE
 endif
 
 ifeq ($(PLATFORM),MAC)
-FLAGS += -D_NO_READPROC
-FLAGS += -D_NO_FAST_FILE -I /opt/local/include/ -L /opt/local/lib/
+FLAGS += -D_NO_READPROC -D_NO_TR1 -Wno-unused-private-field
+FLAGS += -D_NO_FAST_FILE -I /opt/local/include/
+LIBS += -L /opt/local/lib/
 endif
 
 FLAGS += -D_PLATFORM_${PLATFORM}

@@ -97,18 +97,28 @@ AppInfo& AppInfo::Update()
     num_threads_ = 0;
 
   } else {
+
   	#ifndef _NO_READPROC
-    	struct proc_t usage;
+      // field 22: vsize. Virtual memory size in bytes.
+      double vsize = GetProcStat<double>(data_ptr->father_pid, 22);
+      father_memory_ = (vsize / (1024.0 * 1024.0));
 
-    	get_proc_stats(data_ptr->father_pid, &usage);
-    	father_memory_ = ((double)usage.size / (1024.0 * 1024.0));
+      // field 23: rss. Resident Set Size
+      double rss = GetProcStat<double>(data_ptr->child_pid, 23);
+      child_memory_ = rss * 4096.0 / (1024 * 1024);
 
-    	get_proc_stats(data_ptr->child_pid, &usage);
-    	child_memory_ = (double)(usage.rss) * 4096.0 / (1024 * 1024);
-    	child_time_ = usage.utime + usage.stime;
+      // field 13: utime. Amount of time that this process has been scheduled 
+      // in user mode, measured in clock ticks (divide by sysconf(_SC_CLK_TCK))
+      unsigned long utime = GetProcStat<unsigned long>(data_ptr->child_pid, 13);
+      
+      // field 14: stime. Amount of time that this process has been scheduled 
+      // in kernel mode, measured in clock ticks (divide by sysconf(_SC_CLK_TCK))
+      unsigned long stime = GetProcStat<unsigned long>(data_ptr->child_pid, 14);
 
-    	num_threads_ = usage.nlwp - 1;
-    	if(num_threads_ < 0) num_threads_ = 0;
+      child_time_ = utime + stime;
+
+      // field 19: stime. Number of threads in this process (since Linux 2.6).
+      num_threads_ = GetProcStat<int>(data_ptr->child_pid, 19);
 		#endif
   }
 
@@ -134,4 +144,20 @@ AppInfo& AppInfo::Update()
 
 AppInfo::~AppInfo()
 {
+}
+
+string AppInfo::GetProcStat_(int pid, int field) const
+{
+  string row;
+  stringstream file_name;
+
+  file_name << "/proc/" << pid << "/stat";
+  ifstream fin(file_name.str().c_str());
+
+  for (int i = 0; fin.good(); i++) {
+    fin >> row;
+    if (i == field) break;
+  }
+
+  return row;
 }

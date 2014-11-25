@@ -2,7 +2,7 @@
 #define _TR1_COMPAT_H_
 
 #ifndef _USE_BOOST
-#if __cplusplus >= 201103L
+#if (__cplusplus >= 201103L) || defined(_NO_TR1)
 	#include <memory>
 	#define SHARED_PTR std::shared_ptr
 #else

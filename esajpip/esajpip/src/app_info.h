@@ -55,6 +55,22 @@ private:
   double available_memory_;		///< Available memory in the system
   unsigned long child_time_;	///< Time spend by the child
 
+  /**
+   * Returns a specific field of /proc/<pid>/stat as a string.
+   */
+  string GetProcStat_(int pid, int field) const;
+  
+  /**
+   * Returns a specific field of /proc/<pid>/stat as a defined type.
+   */
+  template<typename TYPE> TYPE GetProcStat(int pid, int field) const
+  {
+    TYPE val;
+    string str = GetProcStat_(pid, field);
+    istringstream(str) >> val;
+    return val;
+  }
+
 public:
   /**
    * Initializes the object.
