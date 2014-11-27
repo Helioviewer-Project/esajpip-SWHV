@@ -1,4 +1,7 @@
 
+include(FindPkgConfig)
+pkg_check_modules(PKG REQUIRED glib-2.0 libgsf-1)
+
 configure_file(esajpip/server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
 
 set(ESAJPIP_TOP esajpip/src)
@@ -17,7 +20,8 @@ set(CORE_SRCS
 	app_config.cc
 	args_parser.cc
 	client_info.cc
-	client_manager.cc)
+	client_manager.cc
+	z/zfilter.c)
 
 foreach(SRC ${CORE_SRCS})
 	list(APPEND APP_SRCS ${ESAJPIP_TOP}/${SRC})
@@ -33,18 +37,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 if(APPLE)
-	add_definitions(-std=c++11)
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -std=c++11")
 	set(CMAKE_EXE_LINKER_FLAGS "-lc++abi")
 endif()
 
 if(UNIX AND NOT APPLE)
 	add_definitions(-D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=600)
-	set(CMAKE_EXE_LINKER_FLAGS "-lrt")
+	set(CMAKE_EXE_LINKER_FLAGS "-pie -lrt")
 endif()
 
-include_directories(BEFORE . ${ESAJPIP_TOP} ${LIBCONFIG}/lib ${LOG4CPP}/include)
-add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${ALL_SRCS})
+include_directories(BEFORE . ${ESAJPIP_TOP} ${LIBCONFIG}/lib ${LOG4CPP}/include ${PKG_INCLUDE_DIRS})
+link_directories(${PKG_LIBRARY_DIRS})
 
-target_link_libraries(esajpip config++ log4cpp pthread)
+add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${ALL_SRCS})
+target_link_libraries(esajpip ${PKG_LIBRARIES} config++ log4cpp pthread)
+
 install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
