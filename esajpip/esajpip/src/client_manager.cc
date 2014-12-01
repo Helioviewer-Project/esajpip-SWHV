@@ -8,6 +8,7 @@
 #include "net/socket_stream.h"
 #include "jpeg2000/index_manager.h"
 
+#define CORS "*"
 
 using namespace std;
 using namespace net;
@@ -114,7 +115,7 @@ void ClientManager::Run(ClientInfo *client_info)
         LOG("The channel " << channel << " has been closed");
         sock_stream 
           << http::Response(200)
-          << http::Header::AccessControlAllowOrigin("*")
+          << http::Header::AccessControlAllowOrigin(CORS)
           << http::Header::ContentLength("0")
           << http::Protocol::CRLF
           << flush;
@@ -140,8 +141,8 @@ void ClientManager::Run(ClientInfo *client_info)
             << http::Response(200)
             << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
             << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
-            << http::Header::AccessControlAllowOrigin("*")
-            << http::Header::AccessControlExposeHeaders("JPIP-cnew, JPIP-tid")
+            << http::Header::AccessControlAllowOrigin(CORS)
+            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
             << http::Header::CacheControl("no-cache")
             << http::Header::TransferEncoding("chunked")
             << http::Header::ContentType("image/jpp-stream")
@@ -164,7 +165,7 @@ void ClientManager::Run(ClientInfo *client_info)
         else {
           sock_stream
             << http::Response(200)
-            << http::Header::AccessControlAllowOrigin("*")
+            << http::Header::AccessControlAllowOrigin(CORS)
             << http::Header::CacheControl("no-cache")
             << http::Header::TransferEncoding("chunked")
             << http::Header::ContentType("image/jpp-stream")
@@ -182,7 +183,11 @@ void ClientManager::Run(ClientInfo *client_info)
     pclose = pclose && !send_data;
 
     if(pclose)
-      sock_stream << http::Response(500) << http::Protocol::CRLF << flush;
+      sock_stream
+        << http::Response(500)
+        << http::Header::AccessControlAllowOrigin(CORS)
+        << http::Protocol::CRLF
+        << flush;
     else if(send_data) {
       for(bool last = false; !last;) {
         chunk_len = buf_len;
@@ -258,6 +263,8 @@ void ClientManager::RunBasic(ClientInfo *client_info)
     sock_stream << http::Response(200)
       << http::Header("JPIP-cnew", "cid=C0,path=jpip,transport=http")
       << http::Header("JPIP-tid", "T0")
+      << http::Header::AccessControlAllowOrigin(CORS)
+      << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
       << http::Header::CacheControl("no-cache")
       << http::Header::ContentLength(base::to_string(buff_len))
       << http::Header::ContentType("image/jpp-stream")
