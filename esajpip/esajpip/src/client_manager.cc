@@ -102,9 +102,10 @@ void ClientManager::Run(ClientInfo *client_info)
 
     if (req.mask.items.cclose)
     {
-      if(!is_opened)
+      if (!is_opened)
         LOG("Close request received but there is not any channel opened");
-      else if(req.parameters["cclose"] != channel)
+      /* Only one channel per client supported */
+      else if (req.parameters["cclose"] != "*" && req.parameters["cclose"] != channel)
         LOG("Close request received related to another channel");
       else {
         pclose = false;
