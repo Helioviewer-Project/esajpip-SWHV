@@ -116,6 +116,7 @@ void ClientManager::Run(ClientInfo *client_info)
         sock_stream 
           << http::Response(200)
           << http::Header::AccessControlAllowOrigin(CORS)
+          << http::Header::CacheControl("no-cache")
           << http::Header::ContentLength("0")
           << http::Protocol::CRLF
           << flush;
@@ -186,6 +187,7 @@ void ClientManager::Run(ClientInfo *client_info)
       sock_stream
         << http::Response(500)
         << http::Header::AccessControlAllowOrigin(CORS)
+        << http::Header::CacheControl("no-cache")
         << http::Protocol::CRLF
         << flush;
     else if(send_data) {
@@ -274,4 +276,3 @@ void ClientManager::RunBasic(ClientInfo *client_info)
     sock_stream->Send(buff, buff_len);
   }
 }
-
