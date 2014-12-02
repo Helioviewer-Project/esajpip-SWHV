@@ -16,6 +16,16 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
+static void send_chunk(SocketStream& strm, int len, char *buf)
+{
+    if (len > 0) {
+        strm << hex << len << dec << http::Protocol::CRLF << flush;
+        //LOG("Chunk of " << len << " bytes sent");
+        strm->Send(buf, len);
+        strm << http::Protocol::CRLF << flush;
+    }
+}
+
 void ClientManager::Run(ClientInfo *client_info)
 {
     SocketStream sock_stream(client_info->sock());
@@ -177,9 +187,8 @@ void ClientManager::Run(ClientInfo *client_info)
             }
 
         }
-        else {
+        else
             LOG("Invalid request (channel parameter not found)");
-        }
 
         pclose = pclose && !send_data;
 
@@ -201,14 +210,7 @@ void ClientManager::Run(ClientInfo *client_info)
                     break;
                 }
 
-                if (chunk_len > 0) {
-                    sock_stream << hex << chunk_len << dec << http::Protocol::CRLF << flush;
-
-                    //LOG("Chunk of " << chunk_len << " bytes sent");
-                    sock_stream->Send(buf, chunk_len);
-
-                    sock_stream << http::Protocol::CRLF << flush;
-                }
+                send_chunk(sock_stream, chunk_len, buf);
             }
 
             sock_stream
