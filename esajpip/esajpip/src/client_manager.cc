@@ -16,7 +16,7 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static void send_chunk(SocketStream& strm, int len, char *buf)
+static void send_chunk(SocketStream & strm, int len, char *buf)
 {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
@@ -26,7 +26,7 @@ static void send_chunk(SocketStream& strm, int len, char *buf)
     }
 }
 
-void ClientManager::Run(ClientInfo *client_info)
+void ClientManager::Run(ClientInfo * client_info)
 {
     SocketStream sock_stream(client_info->sock());
     string channel = base::to_string(client_info->base_id());
@@ -50,8 +50,7 @@ void ClientManager::Run(ClientInfo *client_info)
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
-    string backup_file = cfg.caching_folder() +
-        base::to_string(client_info->father_sock()) + ".backup";
+    string backup_file = cfg.caching_folder() + base::to_string(client_info->father_sock()) + ".backup";
 
     if (File::Exists(backup_file.c_str())) {
         InputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
@@ -75,13 +74,13 @@ void ClientManager::Run(ClientInfo *client_info)
             com_error = !req.Parse(req_line);
 
         if (com_error) {
-            if (sock_stream->IsValid()) LOG("Incorrect request received");
-            else LOG("Connection closed by the client");
+            if (sock_stream->IsValid())
+                LOG("Incorrect request received");
+            else
+                LOG("Connection closed by the client");
             sock_stream->Close();
             break;
-
-        }
-        else {
+        } else {
             if (cfg.log_requests())
                 LOGC(_BLUE, "Request: " << req_line);
 
@@ -98,11 +97,10 @@ void ClientManager::Run(ClientInfo *client_info)
                 sock_stream.clear();
 
                 while (content_length--)
-                    body.put((char)sock_stream.get());
+                    body.put((char) sock_stream.get());
 
                 req.ParseParameters(body);
             }
-
             sock_stream.clear();
         }
 
@@ -122,16 +120,13 @@ void ClientManager::Run(ClientInfo *client_info)
                 unlink(backup_file.c_str());
                 index_manager.CloseImage(im_index);
                 LOG("The channel " << channel << " has been closed");
-                sock_stream
-                    << http::Response(200)
+                sock_stream << http::Response(200)
                     << http::Header::AccessControlAllowOrigin(CORS)
                     << http::Header::CacheControl("no-cache")
                     << http::Header::ContentLength("0")
-                    << http::Protocol::CRLF
-                    << flush;
+                    << http::Protocol::CRLF << flush;
             }
-        }
-        else if (req.mask.items.cnew) {
+        } else if (req.mask.items.cnew) {
             if (is_opened)
                 LOG("There already is a channel opened. Only one channel per client is supported");
             else {
@@ -146,8 +141,7 @@ void ClientManager::Run(ClientInfo *client_info)
                 else {
                     LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
-                    sock_stream
-                        << http::Response(200)
+                    sock_stream << http::Response(200)
                         << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                         << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
                         << http::Header::AccessControlAllowOrigin(CORS)
@@ -155,51 +149,43 @@ void ClientManager::Run(ClientInfo *client_info)
                         << http::Header::CacheControl("no-cache")
                         << http::Header::TransferEncoding("chunked")
                         << http::Header::ContentType("image/jpp-stream")
-                        << http::Protocol::CRLF
-                        << flush;
+                        << http::Protocol::CRLF << flush;
 
                     OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
                     is_opened = true;
                     send_data = true;
                 }
             }
-
-        }
-        else if (req.mask.items.cid) {
-            if (!is_opened) LOG("Request received but no channel is opened");
+        } else if (req.mask.items.cid) {
+            if (!is_opened)
+                LOG("Request received but no channel is opened");
             else {
                 if (req.parameters["cid"] != channel)
                     LOG("Request related to another channel");
                 else if (!data_server.SetRequest(req))
                     ERROR("The server can not process the request");
                 else {
-                    sock_stream
-                        << http::Response(200)
+                    sock_stream << http::Response(200)
                         << http::Header::AccessControlAllowOrigin(CORS)
                         << http::Header::CacheControl("no-cache")
                         << http::Header::TransferEncoding("chunked")
                         << http::Header::ContentType("image/jpp-stream")
-                        << http::Protocol::CRLF
-                        << flush;
+                        << http::Protocol::CRLF << flush;
 
                     send_data = true;
                 }
             }
-
-        }
-        else
+        } else
             LOG("Invalid request (channel parameter not found)");
 
         pclose = pclose && !send_data;
 
         if (pclose)
-            sock_stream
-                << http::Response(500)
+            sock_stream << http::Response(500)
                 << http::Header::AccessControlAllowOrigin(CORS)
                 << http::Header::CacheControl("no-cache")
                 << http::Header::ContentLength("0")
-                << http::Protocol::CRLF
-                << flush;
+                << http::Protocol::CRLF << flush;
         else if (send_data) {
             for (bool last = false; !last;) {
                 chunk_len = buf_len;
@@ -213,10 +199,7 @@ void ClientManager::Run(ClientInfo *client_info)
                 send_chunk(sock_stream, chunk_len, buf);
             }
 
-            sock_stream
-                << "0" << http::Protocol::CRLF
-                << http::Protocol::CRLF
-                << flush;
+            sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
 
             if (data_server.end_woi())
                 OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
@@ -228,10 +211,10 @@ void ClientManager::Run(ClientInfo *client_info)
         index_manager.CloseImage(im_index);
     }
 
-    delete [] buf;
+    delete[]buf;
 }
 
-void ClientManager::RunBasic(ClientInfo *client_info)
+void ClientManager::RunBasic(ClientInfo * client_info)
 {
     jpip::Request req;
     int buff_len = 5000;
@@ -250,15 +233,15 @@ void ClientManager::RunBasic(ClientInfo *client_info)
         }
 
         if (!(sock_stream >> req).good()) {
-            if (sock_stream->IsValid()) LOG("Incorrect request received");
-            else LOG("Connection closed by the client");
+            if (sock_stream->IsValid())
+                LOG("Incorrect request received");
+            else
+                LOG("Connection closed by the client");
             sock_stream->Close();
             break;
-
-        }
-        else {
+        } else {
             http::Header header;
-            while ((sock_stream >> header).good());
+            while ((sock_stream >> header).good()) ;
             sock_stream.clear();
         }
 
@@ -270,8 +253,7 @@ void ClientManager::RunBasic(ClientInfo *client_info)
             << http::Header::CacheControl("no-cache")
             << http::Header::ContentLength(base::to_string(buff_len))
             << http::Header::ContentType("image/jpp-stream")
-            << http::Protocol::CRLF
-            << flush;
+            << http::Protocol::CRLF << flush;
 
         sock_stream->Send(buff, buff_len);
     }
