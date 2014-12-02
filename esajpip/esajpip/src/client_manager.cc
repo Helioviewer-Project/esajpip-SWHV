@@ -104,16 +104,19 @@ void ClientManager::Run(ClientInfo * client_info)
             sock_stream.clear();
         }
 
+        const char *err_msg = "";
         pclose = true;
         send_data = false;
 
         if (req.mask.items.cclose) {
-            if (!is_opened)
-                LOG("Close request received but there is not any channel opened");
+            if (!is_opened) {
+                err_msg = "Close request received but there is not any channel opened";
+                LOG(err_msg);
             /* Only one channel per client supported */
-            else if (req.parameters["cclose"] != "*" && req.parameters["cclose"] != channel)
-                LOG("Close request received related to another channel");
-            else {
+            } else if (req.parameters["cclose"] != "*" && req.parameters["cclose"] != channel) {
+                err_msg = "Close request received related to another channel";
+                LOG(err_msg);
+            } else {
                 pclose = false;
                 is_opened = false;
                 req.cache_model.Clear();
@@ -127,9 +130,10 @@ void ClientManager::Run(ClientInfo * client_info)
                     << http::Protocol::CRLF << flush;
             }
         } else if (req.mask.items.cnew) {
-            if (is_opened)
-                LOG("There already is a channel opened. Only one channel per client is supported");
-            else {
+            if (is_opened) {
+                err_msg = "There already is a channel opened. Only one channel per client is supported";
+                LOG(err_msg);
+            } else {
                 string file_name = (req.mask.items.target ? req.parameters["target"] : req.object);
 
                 if (!index_manager.OpenImage(file_name, &im_index))
@@ -157,12 +161,14 @@ void ClientManager::Run(ClientInfo * client_info)
                 }
             }
         } else if (req.mask.items.cid) {
-            if (!is_opened)
-                LOG("Request received but no channel is opened");
-            else {
-                if (req.parameters["cid"] != channel)
-                    LOG("Request related to another channel");
-                else if (!data_server.SetRequest(req))
+            if (!is_opened) {
+                err_msg = "Request received but no channel is opened";
+                LOG(err_msg);
+            } else {
+                if (req.parameters["cid"] != channel) {
+                    err_msg = "Request related to another channel";
+                    LOG(err_msg);
+                } else if (!data_server.SetRequest(req))
                     ERROR("The server can not process the request");
                 else {
                     sock_stream << http::Response(200)
@@ -175,18 +181,23 @@ void ClientManager::Run(ClientInfo * client_info)
                     send_data = true;
                 }
             }
-        } else
-            LOG("Invalid request (channel parameter not found)");
+        } else {
+            err_msg = "Invalid request (channel parameter not found)";
+            LOG(err_msg);
+        }
 
         pclose = pclose && !send_data;
 
-        if (pclose)
+        if (pclose) {
+            int err_msg_len = strlen(err_msg);
+
             sock_stream << http::Response(500)
                 << http::Header::AccessControlAllowOrigin(CORS)
                 << http::Header::CacheControl("no-cache")
-                << http::Header::ContentLength("0")
+                << http::Header::ContentLength(base::to_string(err_msg_len))
                 << http::Protocol::CRLF << flush;
-        else if (send_data) {
+            sock_stream->Send((void *) err_msg, err_msg_len);
+        } else if (send_data) {
             for (bool last = false; !last;) {
                 chunk_len = buf_len;
 
@@ -195,7 +206,6 @@ void ClientManager::Run(ClientInfo * client_info)
                     pclose = true;
                     break;
                 }
-
                 send_chunk(sock_stream, chunk_len, buf);
             }
 
@@ -254,7 +264,6 @@ void ClientManager::RunBasic(ClientInfo * client_info)
             << http::Header::ContentLength(base::to_string(buff_len))
             << http::Header::ContentType("image/jpp-stream")
             << http::Protocol::CRLF << flush;
-
         sock_stream->Send(buff, buff_len);
     }
 }
