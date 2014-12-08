@@ -47,6 +47,7 @@ void ClientManager::Run(ClientInfo * client_info)
     bool pclose = false;
     bool is_opened = false;
     bool send_data = false;
+    bool accept_gzip = false;
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
@@ -90,6 +91,9 @@ void ClientManager::Run(ClientInfo * client_info)
             while ((sock_stream >> header).good()) {
                 if (header == http::Header::ContentLength())
                     content_length = atoi(header.value.c_str());
+                if (header == http::Header::AcceptEncoding() &&
+                    header.value.find("gzip") != string::npos)
+                    accept_gzip = true;
             }
 
             if (req.type == http::Request::POST) {

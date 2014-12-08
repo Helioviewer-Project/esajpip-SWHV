@@ -22,12 +22,13 @@ namespace http
   class HeaderName
   {
   public:
-    static const char UNDEFINED[];			           ///< No header name defined
-    static const char CONTENT_TYPE[];		           ///< The header <code>Content-Type</code>
-    static const char CACHE_CONTROL[];		           ///< The header <code>Cache-Control</code>
-    static const char CONTENT_LENGTH[];		           ///< The header <code>Content-Length</code>
-    static const char CONTENT_ENCODING[];		       ///< The header <code>Content-Encoding</code>
-    static const char TRANSFER_ENCODING[];	           ///< The header <code>Transfer-Encoding</code>
+    static const char UNDEFINED[];                     ///< No header name defined
+    static const char CONTENT_TYPE[];                  ///< The header <code>Content-Type</code>
+    static const char CACHE_CONTROL[];                 ///< The header <code>Cache-Control</code>
+    static const char CONTENT_LENGTH[];                ///< The header <code>Content-Length</code>
+    static const char ACCEPT_ENCODING[];               ///< The header <code>Accept-Encoding</code>
+    static const char CONTENT_ENCODING[];              ///< The header <code>Content-Encoding</code>
+    static const char TRANSFER_ENCODING[];             ///< The header <code>Transfer-Encoding</code>
     static const char ACCESS_CONTROL_ALLOW_ORIGIN[];   ///< The header <code>Access-Control-Allow-Origin</code>
     static const char ACCESS_CONTROL_EXPOSE_HEADERS[]; ///< The header <code>Access-Control-Expose-Headers</code>
   };
@@ -158,9 +159,9 @@ namespace http
   class Header :public HeaderBase<HeaderName::UNDEFINED>
   {
   public:
-	/**
-	 * Predefined "Content-Type"
-	 */
+    /**
+     * Predefined "Content-Type"
+     */
     typedef HeaderBase<HeaderName::CONTENT_TYPE> ContentType;
 
     /**
@@ -172,6 +173,11 @@ namespace http
      * Predefined "Content-Length" header.
      */
     typedef HeaderBase<HeaderName::CONTENT_LENGTH> ContentLength;
+
+    /**
+     * Predefined "Accept-Encoding" header.
+     */
+    typedef HeaderBase<HeaderName::ACCEPT_ENCODING> AcceptEncoding;
 
     /**
      * Predefined "Content-Encoding" header.
