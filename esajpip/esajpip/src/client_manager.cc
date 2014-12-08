@@ -47,7 +47,6 @@ void ClientManager::Run(ClientInfo * client_info)
     bool pclose = false;
     bool is_opened = false;
     bool send_data = false;
-    bool accept_gzip = false;
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
@@ -59,6 +58,9 @@ void ClientManager::Run(ClientInfo * client_info)
     }
 
     while (!pclose) {
+        bool accept_gzip = false;
+        bool send_gzip = false;
+
         if (cfg.log_requests())
             LOGC(_BLUE, "Waiting for a request ...");
 
@@ -91,9 +93,9 @@ void ClientManager::Run(ClientInfo * client_info)
             while ((sock_stream >> header).good()) {
                 if (header == http::Header::ContentLength())
                     content_length = atoi(header.value.c_str());
-                if (header == http::Header::AcceptEncoding() &&
-                    header.value.find("gzip") != string::npos)
-                    accept_gzip = true;
+                else if (header == http::Header::AcceptEncoding() &&
+                         header.value.find("gzip") != string::npos)
+                         accept_gzip = true;
             }
 
             if (req.type == http::Request::POST) {
@@ -175,12 +177,24 @@ void ClientManager::Run(ClientInfo * client_info)
                 } else if (!data_server.SetRequest(req))
                     ERROR("The server can not process the request");
                 else {
-                    sock_stream << http::Response(200)
-                        << http::Header::AccessControlAllowOrigin(CORS)
-                        << http::Header::CacheControl("no-cache")
-                        << http::Header::TransferEncoding("chunked")
-                        << http::Header::ContentType("image/jpp-stream")
-                        << http::Protocol::CRLF << flush;
+                    if (req.mask.items.metareq && accept_gzip)
+                        send_gzip = true;
+
+                    if (send_gzip)
+                        sock_stream << http::Response(200)
+                            << http::Header::AccessControlAllowOrigin(CORS)
+                            << http::Header::CacheControl("no-cache")
+                            << http::Header::ContentEncoding("gzip")
+                            << http::Header::TransferEncoding("chunked")
+                            << http::Header::ContentType("image/jpp-stream")
+                            << http::Protocol::CRLF << flush;
+                    else
+                        sock_stream << http::Response(200)
+                            << http::Header::AccessControlAllowOrigin(CORS)
+                            << http::Header::CacheControl("no-cache")
+                            << http::Header::TransferEncoding("chunked")
+                            << http::Header::ContentType("image/jpp-stream")
+                            << http::Protocol::CRLF << flush;
 
                     send_data = true;
                 }
