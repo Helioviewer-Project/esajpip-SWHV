@@ -8,6 +8,8 @@
 #include "net/socket_stream.h"
 #include "jpeg2000/index_manager.h"
 
+#include "z/zfilter.h"
+
 #define CORS "*"
 
 using namespace std;
@@ -16,12 +18,12 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static void send_chunk(SocketStream & strm, int len, char *buf)
+static void send_chunk(SocketStream & strm, int len, const char *buf)
 {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
         //LOG("Chunk of " << len << " bytes sent");
-        strm->Send(buf, len);
+        strm->Send((void *) buf, len);
         strm << http::Protocol::CRLF << flush;
     }
 }
@@ -114,6 +116,9 @@ void ClientManager::Run(ClientInfo * client_info)
         pclose = true;
         send_data = false;
 
+        if (req.mask.items.metareq && accept_gzip)
+            send_gzip = true;
+
         if (req.mask.items.cclose) {
             if (!is_opened) {
                 err_msg = "Close request received but there is not any channel opened";
@@ -152,14 +157,16 @@ void ClientManager::Run(ClientInfo * client_info)
                     LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
                     sock_stream << http::Response(200)
-                        << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                        << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
-                        << http::Header::AccessControlAllowOrigin(CORS)
-                        << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                        << http::Header::CacheControl("no-cache")
-                        << http::Header::TransferEncoding("chunked")
-                        << http::Header::ContentType("image/jpp-stream")
-                        << http::Protocol::CRLF << flush;
+                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                                << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
+                                << http::Header::AccessControlAllowOrigin(CORS)
+                                << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                                << http::Header::CacheControl("no-cache")
+                                << http::Header::TransferEncoding("chunked")
+                                << http::Header::ContentType("image/jpp-stream");
+                    if (send_gzip)
+                        sock_stream << http::Header::ContentEncoding("gzip");
+                    sock_stream << http::Protocol::CRLF << flush;
 
                     OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
                     is_opened = true;
@@ -177,24 +184,14 @@ void ClientManager::Run(ClientInfo * client_info)
                 } else if (!data_server.SetRequest(req))
                     ERROR("The server can not process the request");
                 else {
-                    if (req.mask.items.metareq && accept_gzip)
-                        send_gzip = true;
-
+                    sock_stream << http::Response(200)
+                                << http::Header::AccessControlAllowOrigin(CORS)
+                                << http::Header::CacheControl("no-cache")
+                                << http::Header::TransferEncoding("chunked")
+                                << http::Header::ContentType("image/jpp-stream");
                     if (send_gzip)
-                        sock_stream << http::Response(200)
-                            << http::Header::AccessControlAllowOrigin(CORS)
-                            << http::Header::CacheControl("no-cache")
-                            << http::Header::ContentEncoding("gzip")
-                            << http::Header::TransferEncoding("chunked")
-                            << http::Header::ContentType("image/jpp-stream")
-                            << http::Protocol::CRLF << flush;
-                    else
-                        sock_stream << http::Response(200)
-                            << http::Header::AccessControlAllowOrigin(CORS)
-                            << http::Header::CacheControl("no-cache")
-                            << http::Header::TransferEncoding("chunked")
-                            << http::Header::ContentType("image/jpp-stream")
-                            << http::Protocol::CRLF << flush;
+                        sock_stream << http::Header::ContentEncoding("gzip");
+                    sock_stream << http::Protocol::CRLF << flush;
 
                     send_data = true;
                 }
@@ -217,15 +214,45 @@ void ClientManager::Run(ClientInfo * client_info)
             if (err_msg_len)
                 sock_stream->Send((void *) err_msg, err_msg_len);
         } else if (send_data) {
-            for (bool last = false; !last;) {
-                chunk_len = buf_len;
+            if (!send_gzip)
+                for (bool last = false; !last;) {
+                    chunk_len = buf_len;
 
-                if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
-                    ERROR("A new data chunk could not be generated");
-                    pclose = true;
-                    break;
+                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                        ERROR("A new data chunk could not be generated");
+                        pclose = true;
+                        break;
+                    }
+                    send_chunk(sock_stream, chunk_len, buf);
                 }
-                send_chunk(sock_stream, chunk_len, buf);
+            else {
+                void *obj = zfilter_new();
+
+                for (bool last = false; !last;) {
+                    chunk_len = buf_len;
+
+                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                        ERROR("A new data chunk could not be generated");
+                        pclose = true;
+                        break;
+                    }
+
+                    if (chunk_len > 0)
+                        zfilter_write(obj, chunk_len, buf);
+                }
+
+                int nbytes;
+                const char *out = zfilter_bytes(obj, &nbytes);
+
+                while (nbytes > buf_len) {
+                    send_chunk(sock_stream, buf_len, out);
+                    nbytes -= buf_len;
+                    out += buf_len;
+                }
+                if (nbytes > 0)
+                    send_chunk(sock_stream, nbytes, out);
+
+                zfilter_del(obj);
             }
 
             sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
