@@ -8,7 +8,7 @@
 
 /* ---------------------------------------------------------------------- */
 
-/* glib > 2.32 */
+/* since glib 2.32 */
 #ifndef G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 #define G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 #endif
@@ -21,8 +21,8 @@ static void _zfilter_init_(void) __attribute__ ((constructor));
 
 static void _zfilter_init_(void)
 {
-    /* for glib < 2.36 */
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+    /* for glib < 2.36 */
     g_type_init();
     G_GNUC_END_IGNORE_DEPRECATIONS;
 }
