@@ -43,6 +43,14 @@ void ClientManager::Run(ClientInfo * client_info)
         return;
     }
 
+    stringstream head_data, head_data_gzip;
+
+    head_data << http::Header::AccessControlAllowOrigin(CORS)
+              << http::Header::CacheControl("no-cache")
+              << http::Header::TransferEncoding("chunked")
+              << http::Header::ContentType("image/jpp-stream");
+    head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
+
     bool com_error;
     string req_line;
     jpip::Request req;
@@ -135,10 +143,10 @@ void ClientManager::Run(ClientInfo * client_info)
                 index_manager.CloseImage(im_index);
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
-                    << http::Header::AccessControlAllowOrigin(CORS)
-                    << http::Header::CacheControl("no-cache")
-                    << http::Header::ContentLength("0")
-                    << http::Protocol::CRLF << flush;
+                            << http::Header::AccessControlAllowOrigin(CORS)
+                            << http::Header::CacheControl("no-cache")
+                            << http::Header::ContentLength("0")
+                            << http::Protocol::CRLF << flush;
             }
         } else if (req.mask.items.cnew) {
             if (is_opened) {
@@ -159,14 +167,9 @@ void ClientManager::Run(ClientInfo * client_info)
                     sock_stream << http::Response(200)
                                 << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                                 << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
-                                << http::Header::AccessControlAllowOrigin(CORS)
                                 << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                                << http::Header::CacheControl("no-cache")
-                                << http::Header::TransferEncoding("chunked")
-                                << http::Header::ContentType("image/jpp-stream");
-                    if (send_gzip)
-                        sock_stream << http::Header::ContentEncoding("gzip");
-                    sock_stream << http::Protocol::CRLF << flush;
+                                << (send_gzip ? head_data_gzip.str() : head_data.str())
+                                << http::Protocol::CRLF << flush;
 
                     OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
                     is_opened = true;
@@ -185,13 +188,8 @@ void ClientManager::Run(ClientInfo * client_info)
                     ERROR("The server can not process the request");
                 else {
                     sock_stream << http::Response(200)
-                                << http::Header::AccessControlAllowOrigin(CORS)
-                                << http::Header::CacheControl("no-cache")
-                                << http::Header::TransferEncoding("chunked")
-                                << http::Header::ContentType("image/jpp-stream");
-                    if (send_gzip)
-                        sock_stream << http::Header::ContentEncoding("gzip");
-                    sock_stream << http::Protocol::CRLF << flush;
+                                << (send_gzip ? head_data_gzip.str() : head_data.str())
+                                << http::Protocol::CRLF << flush;
 
                     send_data = true;
                 }
@@ -207,10 +205,10 @@ void ClientManager::Run(ClientInfo * client_info)
             int err_msg_len = strlen(err_msg);
 
             sock_stream << http::Response(500)
-                << http::Header::AccessControlAllowOrigin(CORS)
-                << http::Header::CacheControl("no-cache")
-                << http::Header::ContentLength(base::to_string(err_msg_len))
-                << http::Protocol::CRLF << flush;
+                        << http::Header::AccessControlAllowOrigin(CORS)
+                        << http::Header::CacheControl("no-cache")
+                        << http::Header::ContentLength(base::to_string(err_msg_len))
+                        << http::Protocol::CRLF << flush;
             if (err_msg_len)
                 sock_stream->Send((void *) err_msg, err_msg_len);
         } else if (send_data) {
@@ -267,7 +265,7 @@ void ClientManager::Run(ClientInfo * client_info)
         index_manager.CloseImage(im_index);
     }
 
-    delete[]buf;
+    delete[] buf;
 }
 
 void ClientManager::RunBasic(ClientInfo * client_info)
@@ -302,14 +300,14 @@ void ClientManager::RunBasic(ClientInfo * client_info)
         }
 
         sock_stream << http::Response(200)
-            << http::Header("JPIP-cnew", "cid=C0,path=jpip,transport=http")
-            << http::Header("JPIP-tid", "T0")
-            << http::Header::AccessControlAllowOrigin(CORS)
-            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-            << http::Header::CacheControl("no-cache")
-            << http::Header::ContentLength(base::to_string(buff_len))
-            << http::Header::ContentType("image/jpp-stream")
-            << http::Protocol::CRLF << flush;
+                    << http::Header("JPIP-cnew", "cid=C0,path=jpip,transport=http")
+                    << http::Header("JPIP-tid", "T0")
+                    << http::Header::AccessControlAllowOrigin(CORS)
+                    << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                    << http::Header::CacheControl("no-cache")
+                    << http::Header::ContentLength(base::to_string(buff_len))
+                    << http::Header::ContentType("image/jpp-stream")
+                    << http::Protocol::CRLF << flush;
         sock_stream->Send(buff, buff_len);
     }
 }
