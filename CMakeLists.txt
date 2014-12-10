@@ -3,6 +3,15 @@ project(esajpip)
 
 set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
+set(SIDC_PROJECT_NAME   ${PROJECT_NAME})
+set(SIDC_INSTALL_LIB    ${CMAKE_INSTALL_PREFIX}/lib)
+
+macro(sidc_install_lib target)
+    set_target_properties(${target} PROPERTIES VERSION 1.0 SOVERSION 1.0 INSTALL_NAME_DIR ${SIDC_INSTALL_LIB})
+    install(TARGETS ${target} EXPORT ${SIDC_PROJECT_NAME} DESTINATION ${SIDC_INSTALL_LIB})
+    install(EXPORT ${SIDC_PROJECT_NAME} DESTINATION ${SIDC_INSTALL_LIB})
+endmacro()
+
 #set(CMAKE_CXX_COMPILER $ENV{LOCAL}/clang+llvm-3.5.0-macosx-apple-darwin/bin/clang)
 #set(CMAKE_C_COMPILER   $ENV{LOCAL}/clang+llvm-3.5.0-macosx-apple-darwin/bin/clang)
 set(EXTRA_FLAGS     "-fPIE -fno-omit-frame-pointer -W -Wextra -Wno-unused-parameter")
