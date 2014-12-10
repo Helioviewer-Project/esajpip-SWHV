@@ -60,7 +60,13 @@ void ClientManager::Run(ClientInfo * client_info)
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
-    string backup_file = cfg.caching_folder() + base::to_string(client_info->father_sock()) + ".backup";
+    string backup_file = cfg.caching_folder() + base::to_string(client_info->father_sock()) + ".backup.XXXXXX";
+
+    /* triggers irrelevant mktemp/mkstemp warning */
+    char *wtemp = strdup(backup_file.c_str()), *ret = mktemp(wtemp);
+    if (ret)
+        backup_file = ret;
+    free(wtemp);
 
     if (File::Exists(backup_file.c_str())) {
         InputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
