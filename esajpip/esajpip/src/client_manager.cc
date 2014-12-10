@@ -60,18 +60,14 @@ void ClientManager::Run(ClientInfo * client_info)
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
-    string backup_file = cfg.caching_folder() + base::to_string(client_info->father_sock()) + ".backup.XXXXXX";
-
-    /* triggers irrelevant mktemp/mkstemp warning */
-    char *wtemp = strdup(backup_file.c_str()), *ret = mktemp(wtemp);
-    if (ret)
-        backup_file = ret;
-    free(wtemp);
+    /*
+    string backup_file = cfg.caching_folder() + base::to_string(client_info->father_sock()) + ".backup";
 
     if (File::Exists(backup_file.c_str())) {
         InputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
         is_opened = true;
     }
+    */
 
     while (!pclose) {
         bool accept_gzip = false;
@@ -145,7 +141,7 @@ void ClientManager::Run(ClientInfo * client_info)
                 pclose = false;
                 is_opened = false;
                 req.cache_model.Clear();
-                unlink(backup_file.c_str());
+                // unlink(backup_file.c_str());
                 index_manager.CloseImage(im_index);
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
@@ -177,7 +173,7 @@ void ClientManager::Run(ClientInfo * client_info)
                                 << (send_gzip ? head_data_gzip.str() : head_data.str())
                                 << http::Protocol::CRLF << flush;
 
-                    OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
+                    // OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
                     is_opened = true;
                     send_data = true;
                 }
@@ -261,13 +257,13 @@ void ClientManager::Run(ClientInfo * client_info)
 
             sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
 
-            if (data_server.end_woi())
-                OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
+            // if (data_server.end_woi())
+            //     OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
         }
     }
 
     if (is_opened) {
-        unlink(backup_file.c_str());
+        // unlink(backup_file.c_str());
         index_manager.CloseImage(im_index);
     }
 
