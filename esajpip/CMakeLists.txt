@@ -56,6 +56,7 @@ target_link_libraries(jpipnet jpipcore)
 sidc_install_lib(jpipnet)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS})
+set_target_properties(esajpip PROPERTIES COMPILE_FLAGS "-fpie")
 target_link_libraries(esajpip jpipnet jpipcore ${PKG_LIBRARIES} config log4cpp pthread)
 
 install(TARGETS esajpip DESTINATION server/esajpip)
