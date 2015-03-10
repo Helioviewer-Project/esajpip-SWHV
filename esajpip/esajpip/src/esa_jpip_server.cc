@@ -103,7 +103,7 @@ int main(int argc, char **argv)
 
   if (!listen_socket.OpenInet())
     ERROR("The server listen socket can not be created");
-  else if (!listen_socket.ListenAt(listen_addr))
+  else if ((listen_socket.SetNoDelay(), !listen_socket.ListenAt(listen_addr)))
     ERROR("The server listen socket can not be initialized");
   else
   {
