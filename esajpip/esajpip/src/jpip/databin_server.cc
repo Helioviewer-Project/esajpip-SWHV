@@ -151,7 +151,7 @@ namespace jpip
             res = WriteSegment<DataBinClass::PRECINCT>(current_idx, bin_id, segment, bin_offset, last_packet);
 
             if(res < 0) return false;
-            else if(res > 0) {
+            else if(res >= 0) { //!
               if (current_idx != range.last) current_idx++;
               else
               {
