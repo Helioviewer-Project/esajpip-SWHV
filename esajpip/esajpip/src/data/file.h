@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -16,6 +17,7 @@
 
 #include "tr1_compat.h"
 
+#include "trace.h"
 
 namespace data
 {
@@ -143,8 +145,10 @@ namespace data
     {
       assert(file_ptr == NULL);
 
-      if((file_ptr = fopen(file_name, access)) == NULL) return false;
-      else {
+      if((file_ptr = fopen(file_name, access)) == NULL) {
+        ERROR("Impossible to open file: '" << file_name << "': " << strerror(errno));
+        return false;
+      } else {
         IO::configure(file_ptr);
         return true;
       }
