@@ -68,6 +68,7 @@ void ClientManager::Run(ClientInfo * client_info)
         is_opened = true;
     }
     */
+    is_opened = true;
 
     while (!pclose) {
         bool accept_gzip = false;
