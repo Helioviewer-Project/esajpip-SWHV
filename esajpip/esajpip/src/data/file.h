@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <string>
+#include <string.h>
 
 #ifndef _NO_FAST_FILE
 	#include <stdio_ext.h>
