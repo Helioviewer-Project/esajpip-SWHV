@@ -68,7 +68,6 @@ void ClientManager::Run(ClientInfo * client_info)
         is_opened = true;
     }
     */
-    is_opened = true;
 
     while (!pclose) {
         bool accept_gzip = false;
@@ -160,23 +159,26 @@ void ClientManager::Run(ClientInfo * client_info)
 
                 if (!index_manager.OpenImage(file_name, &im_index))
                     ERROR("The image file '" << file_name << "' can not be read");
-                else if (!data_server.Reset(im_index))
-                    ERROR("The image file '" << file_name << "' can not be opened");
-                else if (!data_server.SetRequest(req))
-                    ERROR("The server can not process the request");
                 else {
-                    LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
-
-                    sock_stream << http::Response(200)
-                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
-                                << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                                << (send_gzip ? head_data_gzip.str() : head_data.str())
-                                << http::Protocol::CRLF << flush;
-
-                    // OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
                     is_opened = true;
-                    send_data = true;
+                    if (!data_server.Reset(im_index))
+                        ERROR("The image file '" << file_name << "' can not be opened");
+                    else if (!data_server.SetRequest(req))
+                        ERROR("The server can not process the request");
+                    else {
+                        LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
+
+                        sock_stream << http::Response(200)
+                                    << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                                    << http::Header("JPIP-tid", index_manager.file_manager().GetCacheFileName(file_name))
+                                    << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                                    << (send_gzip ? head_data_gzip.str() : head_data.str())
+                                    << http::Protocol::CRLF << flush;
+
+                        // OutputStream().Open(backup_file.c_str()).Serialize(req.cache_model);
+                        //is_opened = true;
+                        send_data = true;
+                    }
                 }
             }
         } else if (req.mask.items.cid) {
