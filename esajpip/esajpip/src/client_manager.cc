@@ -79,7 +79,6 @@ void ClientManager::Run(ClientInfo * client_info)
         if (cfg.com_time_out() > 0) {
             if (sock_stream->WaitForInput(cfg.com_time_out() * 1000) == 0) {
                 LOG("Communication time-out");
-                sock_stream->Close();
                 break;
             }
         }
@@ -93,7 +92,6 @@ void ClientManager::Run(ClientInfo * client_info)
                 LOG("Incorrect request received");
             else
                 LOG("Connection closed by the client");
-            sock_stream->Close();
             break;
         } else {
             if (cfg.log_requests())
@@ -214,10 +212,8 @@ void ClientManager::Run(ClientInfo * client_info)
                         << http::Header::CacheControl("no-cache")
                         << http::Header::ContentLength(base::to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
-            if (err_msg_len) {
+            if (err_msg_len)
                 sock_stream->Send((void *) err_msg, err_msg_len);
-                sock_stream->Close();
-            }
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
@@ -273,6 +269,8 @@ void ClientManager::Run(ClientInfo * client_info)
     }
 
     delete[] buf;
+
+    sock_stream->Close();
     close(client_info->sock());
 }
 
