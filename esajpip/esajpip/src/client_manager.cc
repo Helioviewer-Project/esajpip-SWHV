@@ -214,8 +214,10 @@ void ClientManager::Run(ClientInfo * client_info)
                         << http::Header::CacheControl("no-cache")
                         << http::Header::ContentLength(base::to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
-            if (err_msg_len)
+            if (err_msg_len) {
                 sock_stream->Send((void *) err_msg, err_msg_len);
+                sock_stream->Close();
+            }
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
