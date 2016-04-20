@@ -273,6 +273,7 @@ void ClientManager::Run(ClientInfo * client_info)
     }
 
     delete[] buf;
+    close(client_info->sock());
 }
 
 void ClientManager::RunBasic(ClientInfo * client_info)
