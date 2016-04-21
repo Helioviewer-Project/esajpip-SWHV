@@ -29,21 +29,21 @@ using namespace jpeg2000;
 #define POLLRDHUP         (0)
 #endif
 
-AppConfig cfg;
-int base_id = 0;
-AppInfo app_info;
-Socket child_socket;
-PollTable poll_table;
-bool child_lost = false;
-IndexManager index_manager;
-UnixAddress child_address("/tmp/child_unix_address");
-UnixAddress father_address("/tmp/father_unix_address");
+static AppConfig cfg;
+static int base_id = 0;
+static AppInfo app_info;
+static Socket child_socket;
+static PollTable poll_table;
+static bool child_lost = false;
+static IndexManager index_manager;
+static UnixAddress child_address("/tmp/child_unix_address");
+static UnixAddress father_address("/tmp/father_unix_address");
 
-int ChildProcess();
-void *ClientThread(void *arg);
+static int ChildProcess();
+static void *ClientThread(void *arg);
 bool ParseArguments(int argc, char **argv);
 
-void SIGCHLD_handler(int signal)
+static void SIGCHLD_handler(int signal)
 {
     wait(NULL);
     child_lost = true;
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
                                 new_conn.Close();
 
                             } else {
-                                LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int)new_conn << "]");
+                                LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
 
                                 if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
                                     ERROR("The new socket can not be sent to the child process");
@@ -189,7 +189,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-int ChildProcess()
+static int ChildProcess()
 {
     int sock, father_sock;
     pthread_t service_tid;
@@ -249,10 +249,10 @@ int ChildProcess()
     return 0;
 }
 
-void *ClientThread(void *arg)
+static void *ClientThread(void *arg)
 {
     int sock, res;
-    ClientInfo *client_info = (ClientInfo *)arg;
+    ClientInfo *client_info = (ClientInfo *) arg;
 
 #ifndef BASIC_SERVER
     ClientManager(cfg, app_info, index_manager).Run(client_info);
