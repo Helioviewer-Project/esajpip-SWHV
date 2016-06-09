@@ -29,6 +29,8 @@ using namespace jpeg2000;
 #define POLLRDHUP         (0)
 #endif
 
+#define SNDBUF 524288
+
 static AppConfig cfg;
 static int base_id = 0;
 static AppInfo app_info;
@@ -99,7 +101,7 @@ int main(int argc, char **argv)
 
     if (!listen_socket.OpenInet())
         ERROR("The server listen socket can not be created");
-    else if ((listen_socket.SetNoDelay(), !listen_socket.ListenAt(listen_addr)))
+    else if (!listen_socket.SetNoDelay() || !listen_socket.SetSndBuf(SNDBUF) || !listen_socket.ListenAt(listen_addr))
         ERROR("The server listen socket can not be initialized");
     else {
         LOG(SERVER_NAME << " started" << cfgMark);
@@ -145,7 +147,6 @@ int main(int argc, char **argv)
                             if (app_info->num_connections >= cfg.max_connections()) {
                                 LOG("Refusing a connection because the limit has been reached");
                                 new_conn.Close();
-
                             } else {
                                 LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
 

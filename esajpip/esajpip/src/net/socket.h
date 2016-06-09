@@ -246,7 +246,12 @@ namespace net
      */
     bool SetNoDelay(int val = 1)
     {
-      return !setsockopt(sid, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+      return !setsockopt(sid, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val);
+    }
+
+    bool SetSndBuf(int val)
+    {
+      return !setsockopt(sid, SOL_SOCKET, SO_SNDBUF, &val, sizeof val);
     }
 
     /**
