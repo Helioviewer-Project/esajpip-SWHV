@@ -92,7 +92,7 @@ namespace jpip
                             stream.ignore(1) >> y;
 
                         GetCodedChar(stream, c);
-                        if (c=='>') {
+                        if (c == '>') {
                             min_codestream = x;
                             max_codestream = y;
                             mask.items.context = 1;
@@ -118,7 +118,7 @@ namespace jpip
                 hex_str.put(in.get());
                 hex_str.put(in.get());
 
-                if (hex_str >> hex >> cval) c = (char)cval;
+                if (hex_str >> hex >> cval) c = (char) cval;
                 else {
                     in.setstate(istream::failbit);
                     c = EOF;
