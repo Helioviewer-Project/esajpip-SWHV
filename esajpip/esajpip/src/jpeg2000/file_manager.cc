@@ -25,6 +25,7 @@ namespace jpeg2000
 #define URL__BOX_ID 0x75726C20
 #define FLST_BOX_ID 0x666C7374
 
+/*
     string FileManager::GetCacheFileName(const string& path_image_file) {
         string name_cache_file;
 
@@ -67,13 +68,14 @@ namespace jpeg2000
 
         return false;
     }
+*/
 
     bool FileManager::ReadImage(const string& name_image_file, ImageInfo *image_info) {
         bool res = true;
         string path_cache_file;
 
         // Cache file does not exist or it is not updated
-        if (!ExistCacheImage(name_image_file, &path_cache_file)) {
+/*        if (!ExistCacheImage(name_image_file, &path_cache_file)) */ {
             File f;
             // Get file extension
             string extension = "";
@@ -117,7 +119,7 @@ namespace jpeg2000
                 ERROR("File type not supported...");
                 return false;
             }
-            // Serialize the info of the image in a cache file
+/*            // Serialize the info of the image in a cache file
             struct stat cache_dir_stat;
             if (stat(cache_dir_.c_str(), &cache_dir_stat) == 0) res = res && OutputStream().Open(path_cache_file.c_str()).Serialize(*image_info);
         }
@@ -125,7 +127,7 @@ namespace jpeg2000
         else {
             // Get info of the image
             res = res && InputStream().Open(path_cache_file.c_str()).Serialize(*image_info);
-        }
+*/      }
 
         return res;
     }

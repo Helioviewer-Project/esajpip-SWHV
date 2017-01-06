@@ -25,7 +25,7 @@ namespace jpeg2000
      * @param path_image_file Path of the image file.
      * @param path_cache_file Receives the path of the associated cache file.
      */
-    bool ExistCacheImage(const string& path_image_file, string *path_cache_file);
+//    bool ExistCacheImage(const string& path_image_file, string *path_cache_file);
 
     /**
      * Reads the header information. of a JP2/JPX box.
@@ -133,7 +133,7 @@ namespace jpeg2000
      * Returns the cache file name equivalent to the given
      * image file name.
      */
-    string GetCacheFileName(const string& path_image_file);
+//    string GetCacheFileName(const string& path_image_file);
 
     /**
      * Initializes the object.
