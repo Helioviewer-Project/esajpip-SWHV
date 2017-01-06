@@ -27,8 +27,7 @@ endforeach()
 
 # -DSILENT_MODE
 # -DSHOW_TRACES
-# -UNDEBUG
-add_definitions(-D_NO_READPROC -D_NO_FAST_FILE -DNO_COLORS)
+add_definitions(-D_NO_READPROC -D_NO_FAST_FILE -DNO_COLORS -UNDEBUG)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_definitions(-D_PLATFORM_LINUX)
