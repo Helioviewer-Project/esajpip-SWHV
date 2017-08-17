@@ -1,25 +1,18 @@
 #include <string>
 #include <iomanip>
 #include <iostream>
-#include <string>
 #include <signal.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 
 #ifndef _NO_DIRENT
-
 #include <dirent.h>
-
 #endif
 
 #include "trace.h"
 #include "args_parser.h"
 
-
 using namespace std;
-
 
 bool ArgsParser::Parse(int argc, char **argv) {
     if (argc <= 1) return true;

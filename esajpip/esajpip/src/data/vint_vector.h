@@ -1,16 +1,13 @@
 #ifndef _DATA_VINT_VECTOR_H_
 #define _DATA_VINT_VECTOR_H_
 
-
 #include <vector>
 #include <stdint.h>
 #include <assert.h>
 #include <algorithm>
 
-
 namespace data {
     using namespace std;
-
 
     /**
      * This class has been implemented with the same philosophy that the
@@ -138,8 +135,6 @@ namespace data {
         virtual ~vint_vector() {
         }
     };
-
 }
-
 
 #endif /* _DATA_VINT_VECTOR_H_ */

@@ -1,19 +1,13 @@
 #include <fcntl.h>
-#include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <string.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 #include <assert.h>
 #include "socket.h"
 #include "poll_table.h"
 
-
 #ifndef POLLRDHUP
 #define POLLRDHUP         (0)
 #endif
-
 
 namespace net {
 

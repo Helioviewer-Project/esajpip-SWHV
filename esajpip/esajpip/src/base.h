@@ -1,17 +1,14 @@
 #ifndef _BASE_H_
 #define _BASE_H_
 
-
 #include <map>
 #include <vector>
 #include <sstream>
-
 
 /**
  * Contains a set of useful static methods used by the application.
  */
 struct base {
-
     /**
      * Converts a value to a string.
      * @param val Value to convert.
@@ -56,6 +53,5 @@ struct base {
     }
 
 };
-
 
 #endif /* _BASE_H_ */

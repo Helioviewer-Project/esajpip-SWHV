@@ -1,15 +1,12 @@
 #ifndef _NET_SOCKET_STREAM_H_
 #define _NET_SOCKET_STREAM_H_
 
-
 #include <iostream>
 #include <stdio.h>
 #include <string.h>
 #include "socket.h"
 
-
 namespace net {
-
     /**
      * Class derived from the STL <code>std::streambuf</code> to allow
      * streaming with sockets. See the documentation related to this
@@ -125,6 +122,5 @@ namespace net {
         }
     };
 }
-
 
 #endif /* _NET_SOCKET_STREAM_H_ */

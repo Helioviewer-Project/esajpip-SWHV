@@ -1,16 +1,13 @@
 #ifndef _JPEG2000_INDEX_MANAGER_H_
 #define _JPEG2000_INDEX_MANAGER_H_
 
-
 #include <list>
 #include "ipc/mutex.h"
 #include "image_index.h"
 #include "file_manager.h"
 
-
 namespace jpeg2000 {
     using namespace ipc;
-
 
     /**
      * Manages the indexing information of a repository fo images.

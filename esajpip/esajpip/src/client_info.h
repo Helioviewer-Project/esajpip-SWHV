@@ -1,9 +1,7 @@
 #ifndef _CLIENT_INFO_H_
 #define _CLIENT_INFO_H_
 
-
 #include <time.h>
-
 
 /**
  * Contains information of a connected client.

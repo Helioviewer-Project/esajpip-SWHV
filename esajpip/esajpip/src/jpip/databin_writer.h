@@ -1,20 +1,16 @@
 #ifndef _JPIP_DATABIN_WRITER_H_
 #define _JPIP_DATABIN_WRITER_H_
 
-
 #include <stdint.h>
 #include "jpip.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "jpeg2000/place_holder.h"
 
-
 namespace jpip {
-
     using namespace std;
     using namespace data;
     using namespace jpeg2000;
-
 
     /**
      * Class used to generate data-bin segments and write them
@@ -215,8 +211,6 @@ namespace jpip {
         virtual ~DataBinWriter() {
         }
     };
-
 }
-
 
 #endif /* _JPIP_DATABIN_WRITER_H_ */

@@ -1,13 +1,10 @@
 #ifndef _JPEG2000_POINT_H_
 #define _JPEG2000_POINT_H_
 
-
 #include <iostream>
-
 
 namespace jpeg2000 {
     using namespace std;
-
 
     /**
      * Represents a couple of integer values that can
@@ -221,8 +218,6 @@ namespace jpeg2000 {
      * @see Point
      */
     typedef Point Size;
-
 }
-
 
 #endif /* _JPEG2000_POINT_H_ */

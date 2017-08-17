@@ -3,10 +3,8 @@
 #include "jpip/jpip.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
-#include "http/header.h"
 #include "http/response.h"
 #include "net/socket_stream.h"
-#include "jpeg2000/index_manager.h"
 
 #include "z/zfilter.h"
 

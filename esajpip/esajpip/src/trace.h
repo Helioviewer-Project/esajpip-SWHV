@@ -1,7 +1,6 @@
 #ifndef _TRACE_H_
 #define _TRACE_H_
 
-
 #include <string>
 #include <iostream>
 
@@ -54,7 +53,6 @@ public:
         return traceSystem.category->debugStream();
     }
 };
-
 
 #define _RED            "31m"
 #define _GREEN          "32m"

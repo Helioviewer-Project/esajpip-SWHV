@@ -1,11 +1,9 @@
 #include "response.h"
 
-
 namespace http {
 
     map<int, string> Response::StatusCodes;
     Response::StatusCodesInitializer Response::statusCodesInitializer;
-
 
     Response::StatusCodesInitializer::StatusCodesInitializer() {
         Response::StatusCodes[100] = "Continue";

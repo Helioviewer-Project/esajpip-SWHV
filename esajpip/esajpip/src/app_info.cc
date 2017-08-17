@@ -4,27 +4,20 @@
 #include <stdio.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
-#include <string>
 #include <sstream>
 #include <fstream>
 
 #ifndef _SC_AVPHYS_PAGES
-
 #include <sys/sysctl.h>
-
 #endif
 
 #include "app_info.h"
 
-
 using namespace std;
 
-
 #define LOCK_FILE "/tmp/esa_jpip_server.lock"
-
 
 bool AppInfo::Init() {
     struct flock fl;

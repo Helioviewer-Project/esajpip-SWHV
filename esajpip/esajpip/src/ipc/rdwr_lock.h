@@ -1,13 +1,10 @@
 #ifndef _IPC_RDWR_LOCK_H_
 #define _IPC_RDWR_LOCK_H_
 
-
 #include <pthread.h>
 #include "ipc_object.h"
 
-
 namespace ipc {
-
     /**
      * IPC object that offers the functionality of a read/write
      * lock, implemented by means of the pthread rwlock API.
@@ -63,7 +60,6 @@ namespace ipc {
          */
         bool Release();
     };
-
 }
 
 #endif /* _IPC_RDWR_LOCK_H_ */

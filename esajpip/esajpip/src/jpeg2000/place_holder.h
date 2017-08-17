@@ -1,14 +1,10 @@
 #ifndef _JPEG2000_PLACE_HOLDER_H_
 #define _JPEG2000_PLACE_HOLDER_H_
 
-
 #include "data/file_segment.h"
 
-
 namespace jpeg2000 {
-
     using namespace data;
-
 
     /**
      * Contains the information of a place-holder. This class
@@ -20,7 +16,6 @@ namespace jpeg2000 {
         bool is_jp2c;            ///< <code>true</code> if refers to a codestream.
         FileSegment header;        ///< File segment associated to the box header
         uint64_t data_length;    ///< Length of the place-holder data
-
 
         /**
          * Initializes the object.
@@ -88,8 +83,6 @@ namespace jpeg2000 {
         virtual ~PlaceHolder() {
         }
     };
-
 }
-
 
 #endif /* _JPEG2000_PLACE_HOLDER_H_ */

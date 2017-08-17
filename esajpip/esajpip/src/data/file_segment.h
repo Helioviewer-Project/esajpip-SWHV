@@ -1,15 +1,12 @@
 #ifndef _DATA_FILE_SEGMENT_H_
 #define _DATA_FILE_SEGMENT_H_
 
-
 #include <iostream>
 #include <stdint.h>
 #include <assert.h>
 
-
 namespace data {
     using namespace std;
-
 
     /**
      * Identifies a data segment of a file. This segment is defined by an offset
@@ -21,13 +18,11 @@ namespace data {
         uint64_t offset;    ///< Offset of the data segment.
         uint64_t length;    ///< Length of the data segment.
 
-
         /**
          * Identifies a null segment, with the offset as well as the length
          * set to zero.
          */
         static const FileSegment Null;
-
 
         /**
          * Initializes all the member variables with zero, being a
@@ -125,8 +120,6 @@ namespace data {
         virtual ~FileSegment() {
         }
     };
-
 }
-
 
 #endif /* _DATA_FILE_SEGMENT_H_ */

@@ -1,7 +1,6 @@
 #ifndef _JPEG2000_CODING_PARAMETERS_H_
 #define _JPEG2000_CODING_PARAMETERS_H_
 
-
 #include <vector>
 #include <cmath>
 
@@ -12,9 +11,7 @@
 #include "trace.h"
 #include "packet.h"
 
-
 namespace jpeg2000 {
-
     /**
      * Contains the coding parameters of a JPEG2000 image codestream.
      * This class can be serialized and printed.
@@ -253,7 +250,6 @@ namespace jpeg2000 {
         virtual ~CodingParameters() {
         }
     };
-
 }
 
 #endif /* _JPEG2000_CODING_PARAMETERS_H_ */

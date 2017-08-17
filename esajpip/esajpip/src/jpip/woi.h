@@ -1,16 +1,12 @@
 #ifndef _JPIP_WOI_H_
 #define _JPIP_WOI_H_
 
-
 #include <iostream>
 #include "jpeg2000/point.h"
 
-
 namespace jpip {
-
     using namespace std;
     using namespace jpeg2000;
-
 
     /**
      * Class that identifies a WOI (Window Of Interest). This term
@@ -25,7 +21,6 @@ namespace jpip {
         Size size;        ///< Size of the WOI (width and height)
         Point position;    ///< Position of the upper-left corner of the WOI
         int resolution;    ///< Resolution level where the WOI is located (0 == the highest)
-
 
         /**
          * Initializes the resolution level to zero.
@@ -90,8 +85,6 @@ namespace jpip {
         virtual ~WOI() {
         }
     };
-
 }
-
 
 #endif /* _JPIP_WOI_H_ */

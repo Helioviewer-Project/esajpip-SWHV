@@ -1,15 +1,12 @@
 #ifndef _CLIENT_MANAGER_H_
 #define _CLIENT_MANAGER_H_
 
-
 #include "app_info.h"
 #include "app_config.h"
 #include "client_info.h"
 #include "jpeg2000/index_manager.h"
 
-
 using namespace jpeg2000;
-
 
 /**
  * Handles a client connection with a dedicated

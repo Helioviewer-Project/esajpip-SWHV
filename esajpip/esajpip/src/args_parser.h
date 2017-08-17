@@ -1,10 +1,8 @@
 #ifndef _ARGS_PARSER_H_
 #define _ARGS_PARSER_H_
 
-
 #include "app_info.h"
 #include "app_config.h"
-
 
 /**
  * Class that allows to parse and handle the application
@@ -32,6 +30,5 @@ public:
      */
     bool Parse(int argc, char **argv);
 };
-
 
 #endif /* _ARGS_PARSER_H_ */

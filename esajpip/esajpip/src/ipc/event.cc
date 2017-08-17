@@ -3,7 +3,6 @@
 #include <sys/time.h>
 #include "event.h"
 
-
 namespace ipc {
 
     bool Event::Init(bool manual_reset, bool initial_state) {

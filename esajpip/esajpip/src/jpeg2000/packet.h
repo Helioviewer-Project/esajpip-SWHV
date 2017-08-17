@@ -1,12 +1,9 @@
 #ifndef _JPEG2000_PACKET_H_
 #define _JPEG2000_PACKET_H_
 
-
 #include "point.h"
 
-
 namespace jpeg2000 {
-
     /**
      * Contains the information of a packet. This
      * class can be printed.
@@ -17,7 +14,6 @@ namespace jpeg2000 {
         int component;        ///< Component number.
         int resolution;        ///< Resolution level.
         Point precinct_xy;    ///< Precinct coordinate.
-
 
         /**
          * Initializes the object to zero.
@@ -65,7 +61,6 @@ namespace jpeg2000 {
         virtual ~Packet() {
         }
     };
-
 }
 
 #endif /* _JPEG2000_PACKET_H_ */

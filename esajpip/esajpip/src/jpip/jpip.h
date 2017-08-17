@@ -1,13 +1,11 @@
 #ifndef _JPIP_JPIP_H_
 #define _JPIP_JPIP_H_
 
-
 /**
  * Set of classes related to the JPIP protocol, defined in
  * the Part 9 of the JPEG2000 standard.
  */
 namespace jpip {
-
     /**
      * Class that contains the definitions of all the
      * data-bin classes defined for the JPIP protocol.
@@ -128,7 +126,6 @@ namespace jpip {
                     NON_SPECIFIED = 0xFF
         };
     };
-
 }
 
 #endif /* _JPIP_JPIP_H_ */

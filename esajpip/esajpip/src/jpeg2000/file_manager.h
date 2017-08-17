@@ -1,14 +1,11 @@
 #ifndef _JPEG2000_FILE_MANAGER_H_
 #define _JPEG2000_FILE_MANAGER_H_
 
-
 #include <sys/stat.h>
 #include "data/serialize.h"
 #include "image_info.h"
 
-
 namespace jpeg2000 {
-
     /**
      * Manages the image files of a repository, allowing read their
      * indexing information, with a caching mechanism for efficiency.
@@ -198,10 +195,7 @@ namespace jpeg2000 {
 
         virtual ~FileManager() {
         }
-
-
     };
 }
 
 #endif /* _JPEG2000_FILE_MANAGER_H_ */
-

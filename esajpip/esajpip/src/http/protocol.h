@@ -1,16 +1,12 @@
 #ifndef _HTTP_PROTOCOL_H_
 #define _HTTP_PROTOCOL_H_
 
-
 #include <string>
 #include <iostream>
 #include <assert.h>
 
-
 namespace http {
-
     using namespace std;
-
 
     /**
      * Class used to identify the HTTP protocol. It is possible
@@ -27,7 +23,6 @@ namespace http {
          * the line separator used in the HTTP protocol.
          */
         static const char CRLF[];
-
 
         /**
          * Initialized the protocl with the given version. By
@@ -80,7 +75,6 @@ namespace http {
             return minorVersion_;
         }
     };
-
 }
 
 #endif /* _HTTP_PROTOCOL_H_ */

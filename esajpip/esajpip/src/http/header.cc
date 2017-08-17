@@ -1,6 +1,5 @@
 #include "header.h"
 
-
 namespace http {
 
     const char HeaderName::UNDEFINED[] = "";

@@ -4,11 +4,8 @@
 #include "trace.h"
 #include "index_manager.h"
 
-
 namespace jpeg2000 {
-
     using namespace std;
-
 
     bool IndexManager::OpenImage(string &path_image_file, ImageIndex::Ptr *image_index) {
         bool res = false;
@@ -24,7 +21,6 @@ namespace jpeg2000 {
             ERROR("The mutex of the index manager can not be unlocked");
             return false;
         }
-
         return res;
     }
 
@@ -112,7 +108,6 @@ namespace jpeg2000 {
             ERROR("The mutex of the index manager can not be unlocked");
             return false;
         }
-
         return res;
     }
 
@@ -130,7 +125,6 @@ namespace jpeg2000 {
 
             index_list.erase(image_index);
         }
-
         return true;
     }
 

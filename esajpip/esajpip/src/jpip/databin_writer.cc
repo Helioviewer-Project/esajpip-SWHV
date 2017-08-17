@@ -1,6 +1,5 @@
 #include "databin_writer.h"
 
-
 namespace jpip {
 
     DataBinWriter &DataBinWriter::WriteVBAS(uint64_t value) {

@@ -1,7 +1,6 @@
 #ifndef _NET_SOCKET_H__
 #define _NET_SOCKET_H__
 
-
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -14,11 +13,8 @@
 #include <string>
 #include "address.h"
 
-
 namespace net {
-
     using namespace std;
-
 
     /**
       This class has been designed to work with UNIX
@@ -260,9 +256,6 @@ namespace net {
         ~Socket() {
         }
     };
-
 }
 
-
-#endif	
-	
+#endif

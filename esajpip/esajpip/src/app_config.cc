@@ -1,10 +1,8 @@
 #include <libconfig.h++>
 #include "app_config.h"
 
-
 using namespace std;
 using namespace libconfig;
-
 
 bool AppConfig::Load(const char *file_name) {
     try {

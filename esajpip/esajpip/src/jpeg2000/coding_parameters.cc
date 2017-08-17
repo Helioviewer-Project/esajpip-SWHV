@@ -1,7 +1,5 @@
 #include "coding_parameters.h"
 
-#include <cstdlib>
-
 namespace jpeg2000 {
 
     void CodingParameters::FillTotalPrecinctsVector() {

@@ -1,14 +1,11 @@
 #ifndef _JPEG2000_PACKET_INDEX_H_
 #define _JPEG2000_PACKET_INDEX_H_
 
-
 #include "data/vint_vector.h"
 #include "data/file_segment.h"
 
-
 namespace jpeg2000 {
     using namespace data;
-
 
     /**
      * Class used for indexing the packets of a codestream image.
@@ -148,8 +145,6 @@ namespace jpeg2000 {
         virtual ~PacketIndex() {
         }
     };
-
 }
-
 
 #endif /* _JPEG2000_PACKET_INDEX_H_ */

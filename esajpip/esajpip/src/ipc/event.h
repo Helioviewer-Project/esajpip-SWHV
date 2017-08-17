@@ -1,13 +1,10 @@
 #ifndef _IPC_EVENT_H_
 #define _IPC_EVENT_H_
 
-
 #include <pthread.h>
 #include "ipc_object.h"
 
-
 namespace ipc {
-
     /**
      * IPC object that offers the functionality of an event
      * (Windows IPC object), implemented by means of a
@@ -97,8 +94,6 @@ namespace ipc {
             return Set(false);
         }
     };
-
 }
-
 
 #endif /* _IPC_EVENT_H_ */

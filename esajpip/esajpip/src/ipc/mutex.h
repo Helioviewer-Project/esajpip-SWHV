@@ -1,13 +1,10 @@
 #ifndef _IPC_MUTEX_H_
 #define _IPC_MUTEX_H_
 
-
 #include <pthread.h>
 #include "ipc_object.h"
 
-
 namespace ipc {
-
     /**
      * IPC object that offers the functionality of a mutex,
      * implemented by means of the pthread mutex API.
@@ -62,8 +59,6 @@ namespace ipc {
          */
         bool Release();
     };
-
 }
-
 
 #endif /* _IPC_MUTEX_H_ */

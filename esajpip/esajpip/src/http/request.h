@@ -1,7 +1,6 @@
 #ifndef _HTTP_REQUEST_H_
 #define _HTTP_REQUEST_H_
 
-
 #include <map>
 #include <string>
 #include <vector>
@@ -11,11 +10,8 @@
 #include "header.h"
 #include "protocol.h"
 
-
 namespace http {
-
     using namespace std;
-
 
     /**
      * Class used to identify a HTTP request (GET or POST). It
@@ -91,8 +87,6 @@ namespace http {
 
         friend ostream &operator<<(ostream &out, const Request &request);
     };
-
 }
-
 
 #endif /* _REQUEST_H_ */

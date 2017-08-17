@@ -13,11 +13,9 @@ aux_source_directory(${ESAJPIP_TOP}/jpip     JPIP_SRCS)
 aux_source_directory(${ESAJPIP_TOP}/net      NET_SRCS)
 
 set(CORE_SRCS
-    base.cc
     app_info.cc
     app_config.cc
     args_parser.cc
-    client_info.cc
     client_manager.cc
     z/zfilter.c)
 

@@ -3,7 +3,6 @@
 #include <sched.h>
 #include "mutex.h"
 
-
 namespace ipc {
 
     bool Mutex::Init(bool initial_owner) {

@@ -1,13 +1,11 @@
 #ifndef _DATA_SERIALIZE_H_
 #define _DATA_SERIALIZE_H_
 
-
 #include <stdint.h>
 #include <string>
 #include <vector>
 #include <map>
 #include "file.h"
-
 
 namespace data {
     using namespace std;

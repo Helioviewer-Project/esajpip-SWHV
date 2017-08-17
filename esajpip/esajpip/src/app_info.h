@@ -1,7 +1,6 @@
 #ifndef _APP_INFO_H_
 #define _APP_INFO_H_
 
-
 #include <assert.h>
 #include <iostream>
 #include <iomanip>
@@ -10,9 +9,7 @@
 #include <proc/readproc.h>
 #endif
 
-
 using namespace std;
-
 
 /**
  * Contains the run-time information of the application.
@@ -173,6 +170,5 @@ public:
 
     ~AppInfo();
 };
-
 
 #endif /* _APP_INFO_H_ */

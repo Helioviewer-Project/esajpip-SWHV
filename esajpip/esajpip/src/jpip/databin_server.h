@@ -1,9 +1,7 @@
 #ifndef _JPIP_DATABIN_SERVER_H_
 #define _JPIP_DATABIN_SERVER_H_
 
-
 //#define SHOW_TRACES
-
 
 #include <utility>
 #include "trace.h"
@@ -16,13 +14,10 @@
 #include "jpeg2000/range.h"
 #include "jpeg2000/image_index.h"
 
-
 namespace jpip {
-
     using namespace std;
     using namespace data;
     using namespace jpeg2000;
-
 
     /**
      * Contains the core functionality of a (JPIP) data-bin server,
@@ -197,7 +192,6 @@ namespace jpip {
         virtual ~DataBinServer() {
         }
     };
-
 }
 
 #endif /* _JPIP_DATABIN_SERVER_H_ */

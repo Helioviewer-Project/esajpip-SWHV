@@ -1,7 +1,6 @@
 #ifndef _NET_ADDRESS_H_
 #define _NET_ADDRESS_H_
 
-
 #include <string>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,7 +13,6 @@
 
 namespace net {
     using namespace std;
-
 
     /**
      * Abstract base class to wrap the <code>sockaddr</code>
@@ -49,7 +47,6 @@ namespace net {
         virtual ~Address() {
         }
     };
-
 
     /**
      * Class to identify and handle an Internet address. The
@@ -155,7 +152,6 @@ namespace net {
         }
     };
 
-
     /**
      * Class to identify and handle an UNIX address. The
      * used internal address structure is <code>sockaddr_un</code>.
@@ -233,8 +229,6 @@ namespace net {
             return sock_addr.sun_path;
         }
     };
-
 }
-
 
 #endif /* _NET_ADDRESS_H_ */

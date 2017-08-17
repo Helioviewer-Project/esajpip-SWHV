@@ -2,7 +2,6 @@
 #include "trace.h"
 #include "request.h"
 
-
 namespace http {
 
     void Request::ParseParameter(istream &stream, const string &param, string &value) {
@@ -40,7 +39,6 @@ namespace http {
                 }
             }
         }
-
         return false;
     }
 
@@ -53,7 +51,6 @@ namespace http {
             if (!request.Parse(line))
                 in.setstate(istream::failbit);
         }
-
         return in;
     }
 
@@ -74,10 +71,8 @@ namespace http {
                     else out << i->first;
                 }
             }
-
             out << " " << request.protocol << Protocol::CRLF;
         }
-
         return out;
     }
 

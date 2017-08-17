@@ -1,16 +1,12 @@
 #ifndef _JPEG2000_META_DATA_H_
 #define _JPEG2000_META_DATA_H_
 
-
 #include <vector>
 #include "base.h"
 #include "jpeg2000/place_holder.h"
 
-
 namespace jpeg2000 {
-
     using namespace data;
-
 
     /**
      * Contains the indexing information associated to the
@@ -75,8 +71,6 @@ namespace jpeg2000 {
         virtual ~Metadata() {
         }
     };
-
 }
-
 
 #endif /* _JPEG2000_META_DATA_H_ */

@@ -1,5 +1,4 @@
 #include "file_manager.h"
-#include "trace.h"
 
 namespace jpeg2000 {
 

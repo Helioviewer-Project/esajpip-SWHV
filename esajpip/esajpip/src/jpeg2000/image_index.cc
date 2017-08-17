@@ -1,7 +1,6 @@
 #include "trace.h"
 #include "image_index.h"
 
-
 namespace jpeg2000 {
 
     bool ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
@@ -217,4 +216,3 @@ namespace jpeg2000 {
     }
 
 }
-

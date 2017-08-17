@@ -8,7 +8,6 @@
 #include <assert.h>
 #include "protocol.h"
 
-
 namespace http {
 
     /**
@@ -30,7 +29,6 @@ namespace http {
         static const char ACCESS_CONTROL_ALLOW_ORIGIN[];   ///< The header <code>Access-Control-Allow-Origin</code>
         static const char ACCESS_CONTROL_EXPOSE_HEADERS[]; ///< The header <code>Access-Control-Expose-Headers</code>
     };
-
 
     /**
      * Template class used to identify a HTTP header. It is
@@ -77,7 +75,6 @@ namespace http {
             return NAME;
         }
     };
-
 
     /**
      * Specialization of the <code>HeaderBase</code> template class
@@ -137,7 +134,6 @@ namespace http {
             return in;
         }
     };
-
 
     /**
      * Class used to handle a HTTP header.
@@ -209,7 +205,6 @@ namespace http {
             return (strcasecmp(a.name.c_str(), b.name()) == 0);
         }
     };
-
 }
 
 #endif /* _HTTP_HEADER_H_ */

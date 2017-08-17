@@ -14,8 +14,6 @@
 #include "client_manager.h"
 #include "net/poll_table.h"
 #include "net/socket_stream.h"
-#include "jpeg2000/file_manager.h"
-#include "jpeg2000/index_manager.h"
 
 using namespace std;
 using namespace net;

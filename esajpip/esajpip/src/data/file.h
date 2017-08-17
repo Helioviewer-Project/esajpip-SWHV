@@ -1,7 +1,6 @@
 #ifndef _DATA_FILE_H_
 #define _DATA_FILE_H_
 
-
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
@@ -20,9 +19,7 @@
 #include "trace.h"
 
 namespace data {
-
     using namespace std;
-
 
     /**
      * Struct for wrapping the basic <code>FILE</code> locked functions for
@@ -50,7 +47,6 @@ namespace data {
             return ::fputc(c, file_ptr);
         }
     };
-
 
     /**
      * Struct for wrapping the basic <code>FILE</code> unlocked functions for
@@ -87,7 +83,6 @@ namespace data {
       }
     };
 #endif
-
 
     /**
      * This is a wrapper class for the <code>FILE</code> functions that
@@ -408,7 +403,6 @@ namespace data {
         FILE *file_ptr;
     };
 
-
     /**
      * Specialization of the class <code>BaseFile</code> with
      * locked access.
@@ -417,7 +411,6 @@ namespace data {
      * @see LockedAccess
      */
     typedef BaseFile<LockedAccess> File;
-
 
     /**
      * Specialization of the class <code>BaseFile</code> with
@@ -429,7 +422,6 @@ namespace data {
 #ifndef _NO_FAST_FILE
     typedef BaseFile<UnlockedAccess> FastFile;
 #endif
-
 }
 
 #endif /* _DATA_FILE_H_ */

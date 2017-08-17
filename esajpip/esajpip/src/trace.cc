@@ -1,11 +1,8 @@
 #include "trace.h"
 
-
 using namespace std;
 
-
 TraceSystem TraceSystem::traceSystem;
-
 
 TraceSystem::TraceSystem() {
 #ifndef SILENT_MODE

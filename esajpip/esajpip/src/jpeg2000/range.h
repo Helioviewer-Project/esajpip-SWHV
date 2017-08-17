@@ -1,14 +1,11 @@
 #ifndef _JPEG2000_RANGE_H_
 #define _JPEG2000_RANGE_H_
 
-
 #include <iostream>
 #include <assert.h>
 
-
 namespace jpeg2000 {
     using namespace std;
-
 
     /**
      * Represents a range of integer values, defined by
@@ -112,8 +109,6 @@ namespace jpeg2000 {
         virtual ~Range() {
         }
     };
-
 }
-
 
 #endif /* _JPEG2000_RANGE_H_ */

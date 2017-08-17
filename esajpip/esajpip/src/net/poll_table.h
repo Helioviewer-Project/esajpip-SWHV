@@ -1,15 +1,12 @@
 #ifndef _NET_POLL_TABLE_H_
 #define _NET_POLL_TABLE_H_
 
-
 #include <vector>
 #include <poll.h>
 #include <algorithm>
 
-
 namespace net {
     using namespace std;
-
 
     /**
      * Wrapper structure for the structure <code>pollfd</code>
@@ -37,7 +34,6 @@ namespace net {
             return (fd == n);
         }
     };
-
 
     /**
      * This class allows to perfom polls easily over a vector of
@@ -113,7 +109,6 @@ namespace net {
         virtual ~PollTable() {
         }
     };
-
 }
 
 #endif /* _NET_POLL_TABLE_H_ */

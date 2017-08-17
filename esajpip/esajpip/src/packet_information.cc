@@ -3,11 +3,9 @@
 #include "jpip/woi_composer.h"
 #include "jpeg2000/index_manager.h"
 
-
 using namespace std;
 using namespace jpip;
 using namespace jpeg2000;
-
 
 struct ui {
     template<typename T>
@@ -17,7 +15,6 @@ struct ui {
         } while ((v < mn) || (v > mx));
     }
 };
-
 
 int main(void) {
     AppConfig cfg;

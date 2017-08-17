@@ -1,15 +1,12 @@
 #ifndef _JPEG2000_CODESTREAM_INDEX_H_
 #define _JPEG2000_CODESTREAM_INDEX_H_
 
-
 #include <vector>
 #include "base.h"
 #include "data/file_segment.h"
 
-
 namespace jpeg2000 {
     using namespace data;
-
 
     /**
      * Class used for indexing the information of a JPEG2000
@@ -26,7 +23,6 @@ namespace jpeg2000 {
         FileSegment header;                    ///< Main header segment
         vector<FileSegment> packets;        ///< Tile-part packets segments
         vector<FileSegment> PLT_markers;    ///< PLT markers segments
-
 
         /**
          * Empty constructor.
@@ -86,8 +82,6 @@ namespace jpeg2000 {
         virtual ~CodestreamIndex() {
         }
     };
-
 }
-
 
 #endif /* _JPEG2000_CODESTREAM_INDEX_H_ */

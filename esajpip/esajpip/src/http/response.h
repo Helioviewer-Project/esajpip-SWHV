@@ -1,18 +1,14 @@
 #ifndef _HTTP_RESPONSE_H_
 #define _HTTP_RESPONSE_H_
 
-
 #include <map>
 #include <string>
 #include <sstream>
 #include <iostream>
 #include "protocol.h"
 
-
 namespace http {
-
     using namespace std;
-
 
     /**
      * Class used to identify a HTTP response. It is possible to
@@ -81,8 +77,6 @@ namespace http {
             return in;
         }
     };
-
 }
-
 
 #endif /* _HTTP_RESPONSE_H_ */

@@ -1,7 +1,6 @@
 #ifndef _JPIP_CACHE_MODEL_H_
 #define _JPIP_CACHE_MODEL_H_
 
-
 #include <vector>
 #include <iostream>
 #include <limits.h>
@@ -9,12 +8,9 @@
 #include "jpip/jpip.h"
 #include "data/serialize.h"
 
-
 namespace jpip {
-
     using namespace std;
     using namespace data;
-
 
     /**
      * Template class that is specialized for allowing basic operations
@@ -23,7 +19,6 @@ namespace jpip {
     template<int BIN_CLASS>
     struct DataBinSelector {
     };
-
 
     /**
      * The cache model of a JPIP client is handled using this class.
@@ -422,7 +417,6 @@ namespace jpip {
             return model.GetCodestream(num_codestream).AddToPrecinct(id, amount, complete);
         }
     };
-
 }
 
 #endif /* _JPIP_CACHE_MODEL_H_ */

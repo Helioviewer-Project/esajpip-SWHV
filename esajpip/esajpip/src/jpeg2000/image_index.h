@@ -1,7 +1,6 @@
 #ifndef _JPEG2000_INDEX_NODE_H_
 #define _JPEG2000_INDEX_NODE_H_
 
-
 //#define SHOW_TRACES
 #include "trace.h"
 
@@ -13,12 +12,9 @@
 #include "packet_index.h"
 #include "ipc/rdwr_lock.h"
 
-
 namespace jpeg2000 {
-
     using namespace std;
     using namespace ipc;
-
 
     /**
      * Contains the indexing information of a JPEG2000 image file that
@@ -56,7 +52,6 @@ namespace jpeg2000 {
 
         CodingParameters::Ptr coding_parameters;            ///< Image coding parameters
         vector<list<ImageIndex>::iterator> hyper_links;    ///< Image hyperlinks
-
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -114,7 +109,6 @@ namespace jpeg2000 {
          * Pointer of an object of this class.
          */
         typedef list<ImageIndex>::iterator Ptr;
-
 
         /**
          * Copy constructor.
@@ -298,8 +292,6 @@ namespace jpeg2000 {
             TRACE("Destroying the image index of '" << path_name << "'");
         }
     };
-
 }
 
 #endif /* _JPEG2000_INDEX_NODE_H_ */
-

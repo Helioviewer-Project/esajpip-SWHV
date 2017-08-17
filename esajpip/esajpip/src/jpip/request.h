@@ -1,7 +1,6 @@
 #ifndef _JPIP_REQUEST_H_
 #define _JPIP_REQUEST_H_
 
-
 #include <vector>
 #include <string>
 #include <iostream>
@@ -12,12 +11,9 @@
 #include "jpeg2000/coding_parameters.h"
 #include <string.h>
 
-
 namespace jpip {
-
     using namespace std;
     using namespace jpeg2000;
-
 
     /**
      * Class derived from the HTTP <code>Request</code> class
@@ -134,7 +130,6 @@ namespace jpip {
          */
         RoundDirection round_direction;
 
-
         /**
          * Empty constructor.
          */
@@ -170,7 +165,6 @@ namespace jpip {
         virtual ~Request() {
         }
     };
-
 }
 
 #endif /* _JPIP_REQUEST_H_ */

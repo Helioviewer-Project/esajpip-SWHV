@@ -1,6 +1,5 @@
 #include "jpip.h"
 
-
 namespace jpip {
 
     const char *DataBinClass::GetName(int class_name) {

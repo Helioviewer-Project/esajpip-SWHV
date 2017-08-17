@@ -1,17 +1,13 @@
 #ifndef _JPIP_WOI_COMPOSER_H_
 #define _JPIP_WOI_COMPOSER_H_
 
-
 #include "woi.h"
 #include "jpeg2000/packet.h"
 #include "jpeg2000/coding_parameters.h"
 
-
 namespace jpip {
-
     using namespace std;
     using namespace jpeg2000;
-
 
     /**
      * By means of this class it is possible to find out the
@@ -166,8 +162,6 @@ namespace jpip {
         virtual ~WOIComposer() {
         }
     };
-
 }
 
 #endif /* _JPIP_INDEX_MANAGER_H_ */
-

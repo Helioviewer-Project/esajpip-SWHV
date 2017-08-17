@@ -1,7 +1,6 @@
 #ifndef _JPEG2000_IMAGE_INFO_H_
 #define _JPEG2000_IMAGE_INFO_H_
 
-
 #include <map>
 #include "base.h"
 #include "data/file.h"
@@ -9,9 +8,7 @@
 #include "coding_parameters.h"
 #include "meta_data.h"
 
-
 namespace jpeg2000 {
-
     /**
      * Contains the indexing information of a JPEG2000 image.
      * This class can be serialized and printed.
@@ -94,7 +91,6 @@ namespace jpeg2000 {
         virtual ~ImageInfo() {
         }
     };
-
 }
 
 #endif /* _JPEG2000_IMAGE_INFO_H_ */

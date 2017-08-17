@@ -1,12 +1,9 @@
 #ifndef _IPC_OBJECT_H_
 #define _IPC_OBJECT_H_
 
-
 #include "tr1_compat.h"
 
-
 namespace ipc {
-
     /**
      * Enumeration of the possible values returned
      * when a wait operation is performed for an IPC
@@ -17,7 +14,6 @@ namespace ipc {
         WAIT_TIMEOUT,        ///< Time out
         WAIT_ERROR            ///< Error
     };
-
 
     /**
      * Class base of all the IPC classes that has the basic
@@ -106,8 +102,6 @@ namespace ipc {
             Dispose();
         }
     };
-
 }
-
 
 #endif /* _IPC_OBJECT_H_ */
