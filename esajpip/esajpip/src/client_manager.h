@@ -46,11 +46,6 @@ public:
      * @param client_info Client information.
      */
     void RunBasic(ClientInfo *client_info);
-
-
-    virtual ~ClientManager() {
-    }
 };
-
 
 #endif /* _CLIENT_MANAGER_H_ */

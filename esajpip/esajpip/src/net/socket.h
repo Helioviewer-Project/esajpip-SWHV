@@ -253,12 +253,6 @@ namespace net {
             if (sid != -1) close(sid);
             sid = -1;
         }
-
-        /**
-          The destructor does not closes the socket!.
-        */
-        ~Socket() {
-        }
     };
 }
 

@@ -167,8 +167,6 @@ public:
         assert(data_ptr);
         return data_ptr;
     }
-
-    ~AppInfo();
 };
 
 #endif /* _APP_INFO_H_ */

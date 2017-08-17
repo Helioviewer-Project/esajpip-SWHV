@@ -131,12 +131,6 @@ namespace jpip {
         RoundDirection round_direction;
 
         /**
-         * Empty constructor.
-         */
-        Request() {
-        }
-
-        /**
          * Obtains the resolution level and modifies the given WOI to adjust it
          * according to that level.
          * @param coding_parameters Associated coding parameters.
@@ -160,9 +154,6 @@ namespace jpip {
                 woi->size.x = ceil((woi->size.x * res_image_size.x) / resolution_size.x);
                 woi->size.y = ceil((woi->size.y * res_image_size.y) / resolution_size.y);
             }
-        }
-
-        virtual ~Request() {
         }
     };
 }

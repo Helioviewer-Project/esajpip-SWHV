@@ -47,12 +47,6 @@ namespace jpeg2000 {
 
     public:
         /**
-         * Empty constructor.
-         */
-        IndexManager() {
-        }
-
-        /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
          * @param cache_dir Directory used for caching.
@@ -113,9 +107,6 @@ namespace jpeg2000 {
             return (int) index_list.size();
         }
 */
-
-        virtual ~IndexManager() {
-        }
     };
 }
 

@@ -187,9 +187,6 @@ namespace jpip {
          * @return <code>true</code> if successful.
          */
         bool GenerateChunk(char *buff, int *len, bool *last);
-
-        virtual ~DataBinServer() {
-        }
     };
 }
 

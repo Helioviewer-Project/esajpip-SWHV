@@ -121,14 +121,14 @@ public:
      * Returns <code>true</code> if the logging messages are allowed.
      */
     bool logging() const {
-        return (logging_ == 1);
+        return logging_ == 1;
     }
 
     /**
      * Returns <code>true</code> if the client requests are logged.
      */
     bool log_requests() const {
-        return (log_requests_ == 1);
+        return log_requests_ == 1;
     }
 
     /**
@@ -144,9 +144,6 @@ public:
      */
     int cache_max_time() const {
         return cache_max_time_;
-    }
-
-    virtual ~AppConfig() {
     }
 };
 
