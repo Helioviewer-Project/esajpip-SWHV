@@ -39,10 +39,10 @@ namespace http {
      */
     template<const char *NAME>
     class HeaderBase {
-    private:
-        string value;    ///< String value of the header
 
     public:
+        string value;   ///< String value of the header
+
         /**
          * Empty constructor.
          */
@@ -88,8 +88,7 @@ namespace http {
     class HeaderBase<HeaderName::UNDEFINED> {
     public:
         string name;    ///< Header name
-        string value;    ///< Header value
-
+        string value;   ///< Header value
 
         /**
          * Empty constructor.

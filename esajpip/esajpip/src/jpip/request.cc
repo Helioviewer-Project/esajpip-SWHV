@@ -81,7 +81,6 @@ namespace jpip {
             stream.get(jpxl_param, 5);
 
             if (!strcmp(jpxl_param, "jpxl")) {
-                char c;
                 GetCodedChar(stream, c);
                 if (c == '<') {
                     if (stream >> x) {
