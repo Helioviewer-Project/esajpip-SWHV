@@ -120,10 +120,12 @@ namespace jpeg2000 {
         /**
          * Returns the number of codestreams.
          */
+/*
         int GetNumCodestreams() const {
             if (codestreams.size() > 0) return codestreams.size();
             else return hyper_links.size();
         }
+*/
 
         /**
          * Returns the number of meta-data blocks.
@@ -217,16 +219,20 @@ namespace jpeg2000 {
          * Returns a pointer to a hyperlink.
          * @param num_codestream Number of the hyperlink (codestream).
          */
+/*
         Ptr GetHyperLink(int num_codestream) const {
             return hyper_links[num_codestream];
         }
+*/
 
         /**
          * Returns the number of hyperlinks.
          */
+/*
         int GetNumHyperLinks() const {
             return (int) hyper_links.size();
         }
+*/
 
         operator CodingParameters::Ptr() const {
             return coding_parameters;

@@ -56,9 +56,11 @@ namespace net {
         /**
           @return <code>true</code> if the identifier has a valid value.
         */
+/*
         bool IsValid() const {
             return (sid != -1);
         }
+*/
 
         /**
           Copy asignment.
@@ -107,9 +109,11 @@ namespace net {
           @param to_address Address to connect.
           @return <code>true</code> if successful.
         */
+/*
         bool ConnectTo(const Address &to_address) {
             return (connect(sid, to_address.GetSockAddr(), to_address.GetSize()) == 0);
         }
+*/
 
         /**
          * Binds the socket to the specified address.

@@ -8,14 +8,12 @@ namespace jpeg2000 {
     using namespace std;
 
     bool IndexManager::OpenImage(string &path_image_file, ImageIndex::Ptr *image_index) {
-        bool res = false;
-
         if (mutex.Wait() != WAIT_OBJECT) {
             ERROR("The mutex of the index manager can not be locked for opening");
             return false;
         }
 
-        res = UnsafeOpenImage(path_image_file, image_index);
+        bool res = UnsafeOpenImage(path_image_file, image_index);
 
         if (!mutex.Release()) {
             ERROR("The mutex of the index manager can not be unlocked");
@@ -95,14 +93,12 @@ namespace jpeg2000 {
     }
 
     bool IndexManager::CloseImage(ImageIndex::Ptr &image_index) {
-        bool res = false;
-
         if (mutex.Wait() != WAIT_OBJECT) {
             ERROR("The mutex of the index manager can not be locked for closing");
             return false;
         }
 
-        res = UnsafeCloseImage(image_index);
+        bool res = UnsafeCloseImage(image_index);
 
         if (!mutex.Release()) {
             ERROR("The mutex of the index manager can not be unlocked");

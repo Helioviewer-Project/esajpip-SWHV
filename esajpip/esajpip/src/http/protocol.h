@@ -14,8 +14,8 @@ namespace http {
      */
     class Protocol {
     private:
-        int mayorVersion_;    ///< Mayor protocol version
-        int minorVersion_;    ///< Minor protocol version
+        int majorVersion_;    ///< major protocol version
+        int minorVersion_;    ///< minor protocol version
 
     public:
         /**
@@ -27,14 +27,14 @@ namespace http {
         /**
          * Initialized the protocl with the given version. By
          * default the version is 1.1.
-         * @param mayorVersion Mayor protocol version
+         * @param majorVersion major protocol version
          * @param minorVersion Minor protocol version
          */
-        Protocol(int mayorVersion = 1, int minorVersion = 1) {
-            assert(((mayorVersion == 1) && (minorVersion == 0)) ||
-                   ((mayorVersion == 1) && (minorVersion == 1)));
+        Protocol(int majorVersion = 1, int minorVersion = 1) {
+            assert(((majorVersion == 1) && (minorVersion == 0)) ||
+                   ((majorVersion == 1) && (minorVersion == 1)));
 
-            mayorVersion_ = mayorVersion;
+            majorVersion_ = majorVersion;
             minorVersion_ = minorVersion;
         }
 
@@ -42,12 +42,12 @@ namespace http {
          * Copy constructor.
          */
         Protocol(const Protocol &protocol) {
-            mayorVersion_ = protocol.mayorVersion_;
+            majorVersion_ = protocol.majorVersion_;
             minorVersion_ = protocol.minorVersion_;
         }
 
         friend ostream &operator<<(ostream &out, const Protocol &protocol) {
-            return out << "HTTP/" << protocol.mayorVersion_ << "." << protocol.minorVersion_;
+            return out << "HTTP/" << protocol.majorVersion_ << "." << protocol.minorVersion_;
         }
 
         friend istream &operator>>(istream &in, Protocol &protocol) {
@@ -62,18 +62,22 @@ namespace http {
         }
 
         /**
-         * Returns the mayor number of the protocol version.
+         * Returns the major number of the protocol version.
          */
-        int mayorVersion() const {
-            return mayorVersion_;
+/*
+        int majorVersion() const {
+            return majorVersion_;
         }
+*/
 
         /**
          * Returns the minor number of the protocol version.
          */
+/*
         int minorVersion() const {
             return minorVersion_;
         }
+*/
     };
 }
 

@@ -82,13 +82,14 @@ namespace data {
          * @param count Number of bytes to remove.
          * @return <code>*this</code>.
          */
+/*
         FileSegment &RemoveLast(int count) {
             assert((length - count) >= 0);
 
             length -= count;
-
             return *this;
         }
+*/
 
         /**
          * Returns <code>true</code> if the segment is contiguous to
@@ -107,10 +108,12 @@ namespace data {
             return ((offset != segment.offset) || (length != segment.length));
         }
 
+/*
         template<typename T>
         T &SerializeWith(T &stream) {
             return (stream & offset & length);
         }
+*/
 
         friend ostream &operator<<(ostream &out, const FileSegment &segment) {
             out << "[" << segment.offset << ":" << segment.length << "]";

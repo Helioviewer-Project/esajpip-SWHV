@@ -179,9 +179,11 @@ namespace jpeg2000 {
         /**
          * Returns the directory used for caching.
          */
+/*
         string cache_dir() const {
             return cache_dir_;
         }
+*/
 
         /**
          * Reads an image file and creates the associated cache file if
@@ -191,7 +193,6 @@ namespace jpeg2000 {
          * @return <code>true</code> if successful.
          */
         bool ReadImage(const string &name_image_file, ImageInfo *image_info);
-
 
         virtual ~FileManager() {
         }

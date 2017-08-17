@@ -43,7 +43,6 @@ namespace http {
          */
         static map<int, string> StatusCodes;
 
-
         /**
          * Initializes the response.
          * @param code Status code (200 by default).

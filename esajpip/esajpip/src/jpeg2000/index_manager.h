@@ -65,23 +65,29 @@ namespace jpeg2000 {
         /**
          * Returns a pointer to the first image index.
          */
+/*
         ImageIndex::Ptr GetBegin() {
             return index_list.begin();
         }
+*/
 
         /**
          * Returns a pointer to the last image index.
          */
+/*
         ImageIndex::Ptr GetEnd() {
             return index_list.end();
         }
+*/
 
         /**
          * Returns a reference to the base file manager.
          */
+/*
         FileManager &file_manager() {
             return file_manager_;
         }
+*/
 
         /**
          * Opens an image and adds its index to the list.
@@ -102,9 +108,11 @@ namespace jpeg2000 {
         /**
          * Returns the size of the list.
          */
+/*
         int GetSize() const {
             return (int) index_list.size();
         }
+*/
 
         virtual ~IndexManager() {
         }

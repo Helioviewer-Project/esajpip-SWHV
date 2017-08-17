@@ -43,8 +43,6 @@ static int ChildProcess();
 
 static void *ClientThread(void *arg);
 
-bool ParseArguments(int argc, char **argv);
-
 static void SIGCHLD_handler(int signal) {
     wait(NULL);
     child_lost = true;

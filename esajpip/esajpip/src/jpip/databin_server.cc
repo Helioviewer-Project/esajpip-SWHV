@@ -100,7 +100,7 @@ namespace jpip {
                     WriteSegment<DataBinClass::META_DATA>(0, 0, FileSegment::Null);
                 else {
                     int bin_offset = 0;
-                    bool last_metadata = false;
+                    bool last_metadata;
 
                     for (int i = 0; i < im_index->GetNumMetadatas(); i++) {
                         last_metadata = (i == (im_index->GetNumMetadatas() - 1));
@@ -128,7 +128,7 @@ namespace jpip {
                     Packet packet;
                     FileSegment segment;
                     int bin_id, bin_offset;
-                    bool last_packet = false;
+                    bool last_packet;
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();

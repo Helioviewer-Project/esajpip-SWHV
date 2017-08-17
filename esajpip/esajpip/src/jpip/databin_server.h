@@ -156,9 +156,11 @@ namespace jpip {
          * Returns <code>true</code> if the end of the WOI has been reached,
          * that is, there is not more associated packets to send.
          */
+/*
         bool end_woi() const {
             return end_woi_;
         }
+*/
 
         /**
          * Resets the server assigning a new image to serve. It

@@ -9,14 +9,11 @@ namespace ipc {
     bool RdWrLock::Init() {
         assert(!IsValid());
 
-        bool res = false;
-
         pthread_rwlockattr_t rwlockAttr;
-
         pthread_rwlockattr_init(&rwlockAttr);
         pthread_rwlockattr_setpshared(&rwlockAttr, PTHREAD_PROCESS_PRIVATE);
 
-        res = !pthread_rwlock_init(&rwlock, &rwlockAttr);
+        bool res = !pthread_rwlock_init(&rwlock, &rwlockAttr);
         pthread_rwlockattr_destroy(&rwlockAttr);
 
         if (res) IPCObject::Init();

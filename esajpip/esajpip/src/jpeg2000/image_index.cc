@@ -93,7 +93,6 @@ namespace jpeg2000 {
 
         if (!(res = res && rdwr_lock->Release()))
             ERROR("The lock of the image '" << path_name << "' can not be released");
-
         if (!(res = res && (rdwr_lock->Wait() == WAIT_OBJECT)))
             ERROR("The lock of the image '" << path_name << "' can not be taken for reading");
 
@@ -185,7 +184,6 @@ namespace jpeg2000 {
                 }
             }
         }
-
         return segment;
     }
 
@@ -198,7 +196,6 @@ namespace jpeg2000 {
             for (int i = range.first; i <= range.last; i++)
                 res = res && hyper_links[i]->ReadLock();
         }
-
         return res;
     }
 
@@ -211,7 +208,6 @@ namespace jpeg2000 {
             for (int i = range.first; i <= range.last; i++)
                 res = res && hyper_links[i]->ReadUnlock();
         }
-
         return res;
     }
 

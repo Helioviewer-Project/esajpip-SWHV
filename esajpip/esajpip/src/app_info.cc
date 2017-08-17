@@ -10,7 +10,9 @@
 #include <fstream>
 
 #ifndef _SC_AVPHYS_PAGES
+
 #include <sys/sysctl.h>
+
 #endif
 
 #include "app_info.h"
