@@ -1,9 +1,8 @@
 #include "file_segment.h"
 
 
-namespace data
-{
+namespace data {
 
-  const FileSegment FileSegment::Null(0, 0);
+    const FileSegment FileSegment::Null(0, 0);
 
 }

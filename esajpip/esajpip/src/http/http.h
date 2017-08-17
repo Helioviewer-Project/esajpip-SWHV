@@ -6,8 +6,7 @@
  * Contains the definition of a set of classes for working
  * easily with the protocol HTTP.
  */
-namespace http
-{
+namespace http {
 }
 
 

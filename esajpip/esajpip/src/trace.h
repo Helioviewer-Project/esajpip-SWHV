@@ -6,6 +6,7 @@
 #include <iostream>
 
 #define LOG4CPP_FIX_ERROR_COLLISION 1
+
 #include <log4cpp/Category.hh>
 #include <log4cpp/FileAppender.hh>
 #include <log4cpp/PatternLayout.hh>
@@ -16,47 +17,42 @@
  * Wrapper used by the application to handle the log/trace
  * messages by means of the log4cpp library.
  */
-class TraceSystem
-{
+class TraceSystem {
 private:
-  log4cpp::Category *category;
-  log4cpp::Appender *appender;
-  log4cpp::PatternLayout *layout;
-  log4cpp::Appender *file_appender;
-  log4cpp::PatternLayout *file_layout;
+    log4cpp::Category *category;
+    log4cpp::Appender *appender;
+    log4cpp::PatternLayout *layout;
+    log4cpp::Appender *file_appender;
+    log4cpp::PatternLayout *file_layout;
 
-  static TraceSystem traceSystem;
+    static TraceSystem traceSystem;
 
-  TraceSystem();
-  virtual ~TraceSystem();
+    TraceSystem();
 
-  bool AppendToFile_(const char *name);
+    virtual ~TraceSystem();
+
+    bool AppendToFile_(const char *name);
 
 public:
-  static bool AppendToFile(const char *name)
-  {
-    return traceSystem.AppendToFile_(name);
-  }
+    static bool AppendToFile(const char *name) {
+        return traceSystem.AppendToFile_(name);
+    }
 
-  static bool AppendToFile(const std::string& name)
-  {
-    return traceSystem.AppendToFile_(name.c_str());
-  }
+    static bool AppendToFile(const std::string &name) {
+        return traceSystem.AppendToFile_(name.c_str());
+    }
 
-  static log4cpp::CategoryStream logStream()
-  {
-    return traceSystem.category->infoStream();
-  }
+    static log4cpp::CategoryStream logStream() {
+        return traceSystem.category->infoStream();
+    }
 
-  static log4cpp::CategoryStream errorStream()
-  {
-    return traceSystem.category->errorStream();
-  }
+    static log4cpp::CategoryStream errorStream() {
+        return traceSystem.category->errorStream();
+    }
 
-  static log4cpp::CategoryStream traceStream()
-  {
-    return traceSystem.category->debugStream();
-  }
+    static log4cpp::CategoryStream traceStream() {
+        return traceSystem.category->debugStream();
+    }
 };
 
 

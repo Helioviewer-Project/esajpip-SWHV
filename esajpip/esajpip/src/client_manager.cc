@@ -18,8 +18,7 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static void send_chunk(SocketStream & strm, int len, const char *buf)
-{
+static void send_chunk(SocketStream &strm, int len, const char *buf) {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
         //LOG("Chunk of " << len << " bytes sent");
@@ -28,8 +27,7 @@ static void send_chunk(SocketStream & strm, int len, const char *buf)
     }
 }
 
-void ClientManager::Run(ClientInfo * client_info)
-{
+void ClientManager::Run(ClientInfo *client_info) {
     SocketStream sock_stream(client_info->sock());
     string channel = base::to_string(client_info->base_id());
 
@@ -105,7 +103,7 @@ void ClientManager::Run(ClientInfo * client_info)
                     content_length = atoi(header.value.c_str());
                 else if (header == http::Header::AcceptEncoding() &&
                          header.value.find("gzip") != string::npos)
-                         accept_gzip = true;
+                    accept_gzip = true;
             }
 
             if (req.type == http::Request::POST) {
@@ -131,7 +129,7 @@ void ClientManager::Run(ClientInfo * client_info)
             if (!is_opened) {
                 err_msg = "Close request received but there is not any channel opened";
                 LOG(err_msg);
-            /* Only one channel per client supported */
+                /* Only one channel per client supported */
             } else if (req.parameters["cclose"] != "*" && req.parameters["cclose"] != channel) {
                 err_msg = "Close request received related to another channel";
                 LOG(err_msg);
@@ -168,7 +166,8 @@ void ClientManager::Run(ClientInfo * client_info)
 
                         sock_stream << http::Response(200)
                                     << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                    << http::Header("JPIP-tid", file_name) //index_manager.file_manager().GetCacheFileName(file_name))
+                                    << http::Header("JPIP-tid",
+                                                    file_name) //index_manager.file_manager().GetCacheFileName(file_name))
                                     << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                                     << (send_gzip ? head_data_gzip.str() : head_data.str())
                                     << http::Protocol::CRLF << flush;
@@ -274,8 +273,7 @@ void ClientManager::Run(ClientInfo * client_info)
     close(client_info->sock());
 }
 
-void ClientManager::RunBasic(ClientInfo * client_info)
-{
+void ClientManager::RunBasic(ClientInfo *client_info) {
     jpip::Request req;
     int buff_len = 5000;
     char *buff = new char[buff_len];
@@ -301,7 +299,7 @@ void ClientManager::RunBasic(ClientInfo * client_info)
             break;
         } else {
             http::Header header;
-            while ((sock_stream >> header).good()) ;
+            while ((sock_stream >> header).good());
             sock_stream.clear();
         }
 

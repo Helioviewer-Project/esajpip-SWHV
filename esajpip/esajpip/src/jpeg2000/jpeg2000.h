@@ -7,8 +7,7 @@
  * files with the format defined in the Part 1 and 2 of the
  * JPEG2000 standard.
  */
-namespace jpeg2000
-{
+namespace jpeg2000 {
 }
 
 

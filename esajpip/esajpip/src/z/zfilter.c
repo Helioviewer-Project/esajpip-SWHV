@@ -19,8 +19,7 @@
 
 static void _zfilter_init_(void) __attribute__ ((constructor));
 
-static void _zfilter_init_(void)
-{
+static void _zfilter_init_(void) {
     G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
     /* for glib < 2.36 */
     g_type_init();
@@ -29,19 +28,16 @@ static void _zfilter_init_(void)
 
 /* ---------------------------------------------------------------------- */
 
-void *zfilter_new(void)
-{
+void *zfilter_new(void) {
     GsfOutputMemory *sink = GSF_OUTPUT_MEMORY(gsf_output_memory_new());
     return (void *) gsf_output_gzip_new(GSF_OUTPUT(sink), NULL);
 }
 
-int zfilter_write(void *obj, int nbytes, char *data)
-{
+int zfilter_write(void *obj, int nbytes, char *data) {
     return gsf_output_write(GSF_OUTPUT(obj), nbytes, (guint8 *) data);
 }
 
-const char *zfilter_bytes(void *obj, int *nbytes)
-{
+const char *zfilter_bytes(void *obj, int *nbytes) {
     GObject *gobj = G_OBJECT(obj), *sink;
     gsf_output_close(GSF_OUTPUT(gobj));
 
@@ -51,8 +47,7 @@ const char *zfilter_bytes(void *obj, int *nbytes)
     return (char *) gsf_output_memory_get_bytes(GSF_OUTPUT_MEMORY(sink));
 }
 
-void zfilter_del(void *obj)
-{
+void zfilter_del(void *obj) {
     GObject *gobj = G_OBJECT(obj), *sink;
 
     g_object_get(gobj, "sink", &sink, NULL);

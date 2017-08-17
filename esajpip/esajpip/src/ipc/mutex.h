@@ -6,65 +6,62 @@
 #include "ipc_object.h"
 
 
-namespace ipc
-{
-
-  /**
-   * IPC object that offers the functionality of a mutex,
-   * implemented by means of the pthread mutex API.
-   *
-   * @see IPCObject
-   */
-  class Mutex :public IPCObject
-  {
-  private:
-    pthread_t locker;		///< Id. of the thread that locks the mutex
-    pthread_mutex_t mutex;	///< Mutex information
-
-  public:
-    /**
-     * Pointer to a Mutex object.
-     */
-    typedef SHARED_PTR<Mutex> Ptr;
+namespace ipc {
 
     /**
-     * Initializes the object without locking the mutex.
-     * @return <code>true</code> if successful.
+     * IPC object that offers the functionality of a mutex,
+     * implemented by means of the pthread mutex API.
+     *
+     * @see IPCObject
      */
-    virtual bool Init()
-    {
-      return Init(false);
-    }
+    class Mutex : public IPCObject {
+    private:
+        pthread_t locker;        ///< Id. of the thread that locks the mutex
+        pthread_mutex_t mutex;    ///< Mutex information
 
-    /**
-     * Initializes the object.
-     * @param initial_owner If <code>true</code> the mutex is locked.
-     * @return <code>true</code> if successful.
-     */
-    bool Init(bool initial_owner);
+    public:
+        /**
+         * Pointer to a Mutex object.
+         */
+        typedef SHARED_PTR<Mutex> Ptr;
 
-    /**
-     * Performs a wait operation with the object to get it.
-     * @param time_out Time out (infinite by default).
-     * @return <code>WAIT_OBJECT</code> if successful,
-     * <code>WAIT_TIMEOUT</code> if time out or <code>
-     * WAIT_ERROR</code> is error.
-     */
-    virtual WaitResult Wait(int time_out = -1);
+        /**
+         * Initializes the object without locking the mutex.
+         * @return <code>true</code> if successful.
+         */
+        virtual bool Init() {
+            return Init(false);
+        }
 
-    /**
-     * Release the resources associated to the IPC object and
-     * sets the internal status to <code>false</code>.
-     * @return <code>true</code> if successful.
-     */
-    virtual bool Dispose();
+        /**
+         * Initializes the object.
+         * @param initial_owner If <code>true</code> the mutex is locked.
+         * @return <code>true</code> if successful.
+         */
+        bool Init(bool initial_owner);
 
-    /**
-     * Releases/unlocks the mutex.
-     * @return <code>true</code> if successful.
-     */
-    bool Release();
-  };
+        /**
+         * Performs a wait operation with the object to get it.
+         * @param time_out Time out (infinite by default).
+         * @return <code>WAIT_OBJECT</code> if successful,
+         * <code>WAIT_TIMEOUT</code> if time out or <code>
+         * WAIT_ERROR</code> is error.
+         */
+        virtual WaitResult Wait(int time_out = -1);
+
+        /**
+         * Release the resources associated to the IPC object and
+         * sets the internal status to <code>false</code>.
+         * @return <code>true</code> if successful.
+         */
+        virtual bool Dispose();
+
+        /**
+         * Releases/unlocks the mutex.
+         * @return <code>true</code> if successful.
+         */
+        bool Release();
+    };
 
 }
 

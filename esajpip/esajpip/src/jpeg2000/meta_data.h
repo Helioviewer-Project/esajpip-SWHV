@@ -7,81 +7,74 @@
 #include "jpeg2000/place_holder.h"
 
 
-namespace jpeg2000
-{
+namespace jpeg2000 {
 
-  using namespace data;
+    using namespace data;
 
-
-  /**
-   * Contains the indexing information associated to the
-   * meta-data of a JPEG2000 image file. This class can
-   * be printed and serialized.
-   */
-  class Metadata
-  {
-  public:
-	/**
-	 * File segments of all the meta-data blocks.
-	 */
-	vector<FileSegment> meta_data;
-
-	/**
-	 * Associated place-holders.
-	 */
-	vector<PlaceHolder> place_holders;
-
-
-	/**
-	 * Empty constructor.
-	 */
-    Metadata()
-    {
-    }
 
     /**
-     * Copy constructor.
+     * Contains the indexing information associated to the
+     * meta-data of a JPEG2000 image file. This class can
+     * be printed and serialized.
      */
-    Metadata(const Metadata& info)
-    {
-      *this = info;
-    }
+    class Metadata {
+    public:
+        /**
+         * File segments of all the meta-data blocks.
+         */
+        vector<FileSegment> meta_data;
 
-    template<typename T> T& SerializeWith(T& stream)
-    {
-      return (stream & meta_data & place_holders);
-    }
+        /**
+         * Associated place-holders.
+         */
+        vector<PlaceHolder> place_holders;
 
-    /**
-     * Copy assignment.
-     */
-    Metadata& operator=(const Metadata& info)
-    {
-      base::copy(meta_data, info.meta_data);
-      base::copy(place_holders, info.place_holders);
 
-      return *this;
-    }
+        /**
+         * Empty constructor.
+         */
+        Metadata() {
+        }
 
-    friend ostream& operator << (ostream &out, const Metadata &info)
-    {
-      out << endl << "Meta-data: ";
+        /**
+         * Copy constructor.
+         */
+        Metadata(const Metadata &info) {
+            *this = info;
+        }
 
-      for(vector<FileSegment>::const_iterator i = info.meta_data.begin(); i != info.meta_data.end(); i++)
-        out << *i << " ";
+        template<typename T>
+        T &SerializeWith(T &stream) {
+            return (stream & meta_data & place_holders);
+        }
 
-      out << endl << "Place Holders: ";
+        /**
+         * Copy assignment.
+         */
+        Metadata &operator=(const Metadata &info) {
+            base::copy(meta_data, info.meta_data);
+            base::copy(place_holders, info.place_holders);
 
-      for(vector<PlaceHolder>::const_iterator i = info.place_holders.begin(); i != info.place_holders.end(); i++)
-        out << *i << " ";
+            return *this;
+        }
 
-      return out;
-    }
+        friend ostream &operator<<(ostream &out, const Metadata &info) {
+            out << endl << "Meta-data: ";
 
-    virtual ~Metadata()
-    {
-    }
-  };
+            for (vector<FileSegment>::const_iterator i = info.meta_data.begin(); i != info.meta_data.end(); i++)
+                out << *i << " ";
+
+            out << endl << "Place Holders: ";
+
+            for (vector<PlaceHolder>::const_iterator i = info.place_holders.begin(); i != info.place_holders.end(); i++)
+                out << *i << " ";
+
+            return out;
+        }
+
+        virtual ~Metadata() {
+        }
+    };
 
 }
 

@@ -42,17 +42,17 @@ static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
 
 static int ChildProcess();
+
 static void *ClientThread(void *arg);
+
 bool ParseArguments(int argc, char **argv);
 
-static void SIGCHLD_handler(int signal)
-{
+static void SIGCHLD_handler(int signal) {
     wait(NULL);
     child_lost = true;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     int res, fd;
     char cfgMark;
     string cfgName;
@@ -148,7 +148,8 @@ int main(int argc, char **argv)
                                 LOG("Refusing a connection because the limit has been reached");
                                 new_conn.Close();
                             } else {
-                                LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
+                                LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " ["
+                                                           << (int) new_conn << "]");
 
                                 if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
                                     ERROR("The new socket can not be sent to the child process");
@@ -190,8 +191,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-static int ChildProcess()
-{
+static int ChildProcess() {
     int sock, father_sock;
     pthread_t service_tid;
     ClientInfo *client_info;
@@ -250,8 +250,7 @@ static int ChildProcess()
     return 0;
 }
 
-static void *ClientThread(void *arg)
-{
+static void *ClientThread(void *arg) {
     int sock, res;
     ClientInfo *client_info = (ClientInfo *) arg;
 

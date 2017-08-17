@@ -1,8 +1,7 @@
 #include "file_manager.h"
 #include "trace.h"
 
-namespace jpeg2000
-{
+namespace jpeg2000 {
 
     using namespace std;
     using namespace data;
@@ -70,7 +69,7 @@ namespace jpeg2000
     }
 */
 
-    bool FileManager::ReadImage(const string& name_image_file, ImageInfo *image_info) {
+    bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
         string path_cache_file;
 
@@ -95,7 +94,7 @@ namespace jpeg2000
                 res = res && ReadCodestream(f, cp, ci);
                 f.Close();
             }
-            // JP2 image
+                // JP2 image
             else if (extension.compare(".jp2") == 0) {
                 image_info->codestreams.push_back(CodestreamIndex());
 
@@ -106,7 +105,7 @@ namespace jpeg2000
                 res = res && ReadJP2(f, image_info);
                 f.Close();
             }
-            // JPX image
+                // JPX image
             else if (extension.compare(".jpx") == 0) {
                 if (!f.OpenForReading(name_image_file.c_str())) {
                     ERROR("Impossible to open file: '" << name_image_file << "'...");
@@ -114,8 +113,7 @@ namespace jpeg2000
                 }
                 res = res && ReadJPX(f, image_info);
                 f.Close();
-            }
-            else {
+            } else {
                 ERROR("File type not supported...");
                 return false;
             }
@@ -132,7 +130,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadCodestream(const File& file, CodingParameters *params, CodestreamIndex *index) {
+    bool FileManager::ReadCodestream(const File &file, CodingParameters *params, CodestreamIndex *index) {
         bool res = true;
 
         // Get markers
@@ -141,34 +139,28 @@ namespace jpeg2000
 
         while (res = res && file.ReadReverse(&value), res && (value != EOC_MARKER)) {
             switch (value) {
-                case SOC_MARKER:
-                    TRACE("SOC marker...");
+                case SOC_MARKER: TRACE("SOC marker...");
                     index->header.offset = file.GetOffset() - 2;
                     break;
 
-                case SIZ_MARKER:
-                    TRACE("SIZ marker...");
+                case SIZ_MARKER: TRACE("SIZ marker...");
                     res = res && ReadSIZMarker(file, params);
                     break;
 
-                case COD_MARKER:
-                    TRACE("COD marker...");
+                case COD_MARKER: TRACE("COD marker...");
                     res = res && ReadCODMarker(file, params);
                     break;
 
-                case SOT_MARKER:
-                    TRACE("SOT marker...");
+                case SOT_MARKER: TRACE("SOT marker...");
                     res = res && ReadSOTMarker(file, index);
                     break;
 
-                case PLT_MARKER:
-                    TRACE("PLT marker...");
+                case PLT_MARKER: TRACE("PLT marker...");
                     res = res && ReadPLTMarker(file, index);
                     if (res) plts = true;
                     break;
 
-                case SOD_MARKER:
-                    TRACE("SOD marker...");
+                case SOD_MARKER: TRACE("SOD marker...");
                     res = res && ReadSODMarker(file, index);
                     break;
 
@@ -191,7 +183,7 @@ namespace jpeg2000
         }
     }
 
-    bool FileManager::ReadSIZMarker(const File& file, CodingParameters *params) {
+    bool FileManager::ReadSIZMarker(const File &file, CodingParameters *params) {
         bool res = true;
         // To jump Lsiz, CA
         res = res && file.Seek(4, SEEK_CUR);
@@ -216,7 +208,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadCODMarker(const File& file, CodingParameters *params) {
+    bool FileManager::ReadCODMarker(const File &file, CodingParameters *params) {
         bool res = true;
         // Get CS0 parameter
         uint8_t cs_buf = 0;
@@ -254,7 +246,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadSOTMarker(const File& file, CodestreamIndex *index) {
+    bool FileManager::ReadSOTMarker(const File &file, CodestreamIndex *index) {
         bool res = true;
         // Get offset of the codestream header
         if (index->header.length == 0) index->header.length = file.GetOffset() - 2 - index->header.offset;
@@ -266,7 +258,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadPLTMarker(const File& file, CodestreamIndex *index) {
+    bool FileManager::ReadPLTMarker(const File &file, CodestreamIndex *index) {
         bool res = true;
         // Get PLT offset
         uint64_t PLT_offset = file.GetOffset() + 3;
@@ -279,10 +271,10 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadSODMarker(const File& file, CodestreamIndex *index) {
+    bool FileManager::ReadSODMarker(const File &file, CodestreamIndex *index) {
         bool res = true;
         // Get packets info
-        FileSegment& fs = index->packets.back();
+        FileSegment &fs = index->packets.back();
         fs.length = fs.length - (file.GetOffset() - fs.offset);
         fs.offset = file.GetOffset();
         res = res && file.Seek(fs.length, SEEK_CUR);
@@ -305,14 +297,14 @@ namespace jpeg2000
             res = res && file.ReadReverse(&XL);
             *length_box = XL - 16;
         }
-        // Box length = eof_offset - offset
+            // Box length = eof_offset - offset
         else if (L == 0) {
             *length_box = file.GetSize() - file.GetOffset();
         }
         return res;
     }
 
-    bool FileManager::ReadJP2(const File& file, ImageInfo *image_info) {
+    bool FileManager::ReadJP2(const File &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -322,17 +314,18 @@ namespace jpeg2000
 
         while (file.GetOffset() != file.GetSize() && res) {
             pini_box = file.GetOffset();
-            plen = pini_box-pini;
+            plen = pini_box - pini;
             res = res && ReadBoxHeader(file, &type_box, &length_box);
-            plen_box = file.GetOffset()-pini_box;
+            plen_box = file.GetOffset() - pini_box;
             switch (type_box) {
-                case JP2C_BOX_ID:
-                    TRACE("JP2C box...");
-                    image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
+                case JP2C_BOX_ID: TRACE("JP2C box...");
+                    image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.push_back(PlaceHolder(image_info->codestreams.size()-1, true, FileSegment(pini_box, plen_box), length_box));
-                    pini=file.GetOffset();
-                    plen=0;
+                    image_info->meta_data.place_holders.push_back(
+                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box),
+                                        length_box));
+                    pini = file.GetOffset();
+                    plen = 0;
                     break;
 
                     /*case XML__BOX_ID:
@@ -354,7 +347,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadJPX(const File& file, ImageInfo *image_info) {
+    bool FileManager::ReadJPX(const File &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -369,19 +362,19 @@ namespace jpeg2000
 
         while (file.GetOffset() != file.GetSize() && res) {
             pini_box = file.GetOffset();
-            plen = pini_box-pini;
+            plen = pini_box - pini;
             res = res && ReadBoxHeader(file, &type_box, &length_box);
-            plen_box=file.GetOffset()-pini_box;
+            plen_box = file.GetOffset() - pini_box;
             switch (type_box) {
-                case JPCH_BOX_ID:
-                    TRACE("JPCH box...");
+                case JPCH_BOX_ID: TRACE("JPCH box...");
                     image_info->codestreams.push_back(CodestreamIndex());
                     break;
-                case JP2C_BOX_ID:
-                    TRACE("JP2C box...");
+                case JP2C_BOX_ID: TRACE("JP2C box...");
                     image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.push_back(PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box));
+                    image_info->meta_data.place_holders.push_back(
+                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box),
+                                        length_box));
                     pini = file.GetOffset();
                     plen = 0;
                     break;
@@ -404,31 +397,28 @@ namespace jpeg2000
                     plen=0;
                     break;*/
                     // 'ftbl' superbox contains a 'flst'
-                case FTBL_BOX_ID:
-                    TRACE("FTBL box...");
+                case FTBL_BOX_ID: TRACE("FTBL box...");
                     image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
                     num_flst = 0;
                     pini_ftbl = pini_box;
                     plen_ftbl = plen_box;
                     break;
                     // 'flst' box assumed to be contained within a 'ftbl' superbox
-                case FLST_BOX_ID:
-                    TRACE("FLST box...");
+                case FLST_BOX_ID: TRACE("FLST box...");
                     res = res && ReadFlstBox(file, length_box, &data_reference);
                     if (num_flst)
                         image_info->meta_data.meta_data.push_back(FileSegment(0, 0));
                     num_flst++;
-                    image_info->meta_data.place_holders.push_back(PlaceHolder(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0));
+                    image_info->meta_data.place_holders.push_back(
+                            PlaceHolder(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0));
                     v_data_reference.push_back(data_reference);
                     pini = file.GetOffset();
                     plen = 0;
                     break;
-                case DBTL_BOX_ID:
-                    TRACE("DBTL box...");
+                case DBTL_BOX_ID: TRACE("DBTL box...");
                     res = res && file.Seek(2, SEEK_CUR);
                     break;
-                case URL__BOX_ID:
-                    TRACE("URL box...");
+                case URL__BOX_ID: TRACE("URL box...");
                     // Add the paths of the hyperlinked images to the paths vector
                     res = res && ReadUrlBox(file, length_box, &path_file);
                     //path_file=root_dir_ + path_file; /// OJOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
@@ -438,10 +428,10 @@ namespace jpeg2000
                     res = res && file.Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.push_back(FileSegment(pini,file.GetOffset()-pini));
+        image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
         int ind_codestream = 0;
         for (vector<uint16_t>::const_iterator i = v_data_reference.begin(); i != v_data_reference.end(); i++) {
-            image_info->paths.insert(pair<string, int> (v_path_file[*i - 1],ind_codestream));
+            image_info->paths.insert(pair<string, int>(v_path_file[*i - 1], ind_codestream));
             ind_codestream++;
         }
         if (image_info->paths.size() > 0) {
@@ -459,7 +449,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadNlstBox(const File& file, int *num_codestream, int length_box) {
+    bool FileManager::ReadNlstBox(const File &file, int *num_codestream, int length_box) {
         bool res = true;
         // Get the codestream number
         uint32_t an;
@@ -473,7 +463,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadFlstBox(const File& file, uint64_t length_box, uint16_t *data_reference) {
+    bool FileManager::ReadFlstBox(const File &file, uint64_t length_box, uint16_t *data_reference) {
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file.Seek(14, SEEK_CUR);
@@ -482,7 +472,7 @@ namespace jpeg2000
         return res;
     }
 
-    bool FileManager::ReadUrlBox(const File& file, uint64_t length_box, string *path_file) {
+    bool FileManager::ReadUrlBox(const File &file, uint64_t length_box, string *path_file) {
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file.Seek(4, SEEK_CUR);

@@ -1,15 +1,14 @@
 #include "trace.h"
 #include "request.h"
 
-namespace jpip
-{
+namespace jpip {
 
-    void Request::ParseParameters(istream& stream) {
+    void Request::ParseParameters(istream &stream) {
         mask.Clear();
         http::Request::ParseParameters(stream);
     }
 
-    void Request::ParseParameter(istream& stream, const string& param, string& value) {
+    void Request::ParseParameter(istream &stream, const string &param, string &value) {
         char c;
         int x, y;
         string aux;
@@ -105,11 +104,10 @@ namespace jpip
 
         getline(stream, value, '&');
 
-        if (value.size() > 0)
-            TRACE("JPIP parameter: " << param << "=" << value);
+        if (value.size() > 0) TRACE("JPIP parameter: " << param << "=" << value);
     }
 
-    istream& Request::GetCodedChar(istream& in, char& c) {
+    istream &Request::GetCodedChar(istream &in, char &c) {
         if (in.get(c)) {
             if (c == '%') {
                 int cval;
@@ -128,7 +126,7 @@ namespace jpip
         return in;
     }
 
-    istream& Request::ParseModel(istream& in) {
+    istream &Request::ParseModel(istream &in) {
         char c;
         int id, amount;
         int minc = 0, maxc = 0;
@@ -179,7 +177,7 @@ namespace jpip
                         TRACE("Model updating: M" << id << ":" << (amount == INT_MAX ? -1 : amount));
                     } else {
                         for (int i = minc; i <= maxc; i++) {
-                            CacheModel::Codestream& cod = cache_model.GetCodestream(i);
+                            CacheModel::Codestream &cod = cache_model.GetCodestream(i);
 
                             if (c == 'h') {
                                 cod.AddToMainHeader(amount);

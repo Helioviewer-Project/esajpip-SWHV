@@ -4,91 +4,86 @@
 #include "mutex.h"
 
 
-namespace ipc
-{
+namespace ipc {
 
-  bool Mutex::Init(bool initial_owner)
-  {
-    assert(!IsValid());
+    bool Mutex::Init(bool initial_owner) {
+        assert(!IsValid());
 
-    bool res = false;
+        bool res = false;
 
-    pthread_mutexattr_t mutexAttr;
+        pthread_mutexattr_t mutexAttr;
 
-    pthread_mutexattr_init(&mutexAttr);
-    pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutexattr_setpshared(&mutexAttr, PTHREAD_PROCESS_PRIVATE);
+        pthread_mutexattr_init(&mutexAttr);
+        pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutexattr_setpshared(&mutexAttr, PTHREAD_PROCESS_PRIVATE);
 
-    if(!pthread_mutex_init(&mutex, &mutexAttr)) {
-      if(initial_owner) res = (Wait() == WAIT_OBJECT);
-      else res = true;
-    }
-
-    if(!res) pthread_mutex_destroy(&mutex);
-    pthread_mutexattr_destroy(&mutexAttr);
-
-    if(res) IPCObject::Init();
-    return res;
-  }
-
-  WaitResult Mutex::Wait(int time_out)
-  {
-    assert(IsValid());
-
-    if(time_out <= -1) {
-      if(pthread_mutex_lock(&mutex)) return WAIT_ERROR;
-      else {
-        locker = pthread_self();
-        return WAIT_OBJECT;
-      }
-
-    } else {
-      int res;
-      struct timespec delay = {0, 1000000};
-
-      while((res = pthread_mutex_trylock(&mutex)) == EBUSY) {
-        if(!time_out) return WAIT_TIMEOUT;
-        else {
-          nanosleep(&delay, NULL);
-          time_out--;
+        if (!pthread_mutex_init(&mutex, &mutexAttr)) {
+            if (initial_owner) res = (Wait() == WAIT_OBJECT);
+            else res = true;
         }
-      }
 
-      if(res) return WAIT_ERROR;
-      else {
-        locker = pthread_self();
-        return WAIT_OBJECT;
-      }
+        if (!res) pthread_mutex_destroy(&mutex);
+        pthread_mutexattr_destroy(&mutexAttr);
+
+        if (res) IPCObject::Init();
+        return res;
     }
-  }
 
-  bool Mutex::Release()
-  {
-    assert(IsValid());
+    WaitResult Mutex::Wait(int time_out) {
+        assert(IsValid());
 
-    if(locker != pthread_self()) return false;
-    else {
-      if(pthread_mutex_unlock(&mutex)) return false;
-      else {
-        //pthread_yield();
-	sched_yield();
-        return true;
-      }
+        if (time_out <= -1) {
+            if (pthread_mutex_lock(&mutex)) return WAIT_ERROR;
+            else {
+                locker = pthread_self();
+                return WAIT_OBJECT;
+            }
+
+        } else {
+            int res;
+            struct timespec delay = {0, 1000000};
+
+            while ((res = pthread_mutex_trylock(&mutex)) == EBUSY) {
+                if (!time_out) return WAIT_TIMEOUT;
+                else {
+                    nanosleep(&delay, NULL);
+                    time_out--;
+                }
+            }
+
+            if (res) return WAIT_ERROR;
+            else {
+                locker = pthread_self();
+                return WAIT_OBJECT;
+            }
+        }
     }
-  }
 
-  bool Mutex::Dispose()
-  {
-    if(!IsValid()) return true;
-    else {
-      Release();
+    bool Mutex::Release() {
+        assert(IsValid());
 
-      if(pthread_mutex_destroy(&mutex)) return false;
-      else {
-        IPCObject::Dispose();
-        return true;
-      }
+        if (locker != pthread_self()) return false;
+        else {
+            if (pthread_mutex_unlock(&mutex)) return false;
+            else {
+                //pthread_yield();
+                sched_yield();
+                return true;
+            }
+        }
     }
-  }
+
+    bool Mutex::Dispose() {
+        if (!IsValid()) return true;
+        else {
+            Release();
+
+            if (pthread_mutex_destroy(&mutex)) return false;
+            else {
+                IPCObject::Dispose();
+                return true;
+            }
+        }
+    }
 
 }

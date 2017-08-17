@@ -9,8 +9,7 @@
  * similar to the one offered by Windows, because of its simplicity
  * and flexibility.
  */
-namespace ipc
-{
+namespace ipc {
 }
 
 

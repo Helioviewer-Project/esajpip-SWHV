@@ -6,8 +6,7 @@
  * Contains classes to easy the utilization of sockets,
  * specially implemented for UNIX systems.
  */
-namespace net
-{
+namespace net {
 }
 
 

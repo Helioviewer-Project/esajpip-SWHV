@@ -1,9 +1,8 @@
 #include "protocol.h"
 
 
-namespace http
-{
+namespace http {
 
-  const char Protocol::CRLF[] = "\r\n";
+    const char Protocol::CRLF[] = "\r\n";
 
 }

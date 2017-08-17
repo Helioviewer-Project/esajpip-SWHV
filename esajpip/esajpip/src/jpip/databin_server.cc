@@ -1,8 +1,7 @@
 #include "databin_server.h"
 #include "data/file_segment.h"
 
-namespace jpip
-{
+namespace jpip {
 
     bool DataBinServer::Reset(const ImageIndex::Ptr image_index) {
         files.clear();
@@ -25,7 +24,7 @@ namespace jpip
         }
     }
 
-    bool DataBinServer::SetRequest(const Request& req) {
+    bool DataBinServer::SetRequest(const Request &req) {
         bool res = true;
         bool reset_woi = false;
 
@@ -106,11 +105,12 @@ namespace jpip
 
                     for (int i = 0; i < im_index->GetNumMetadatas(); i++) {
                         last_metadata = (i == (im_index->GetNumMetadatas() - 1));
-                        res = WriteSegment<DataBinClass::META_DATA>(0, 0, im_index->GetMetadata(i), bin_offset, last_metadata);
+                        res = WriteSegment<DataBinClass::META_DATA>(0, 0, im_index->GetMetadata(i), bin_offset,
+                                                                    last_metadata);
                         bin_offset += im_index->GetMetadata(i).length;
 
                         if (last_metadata) {
-                            if( res > 0) cache_model.SetFullMetadata();
+                            if (res > 0) cache_model.SetFullMetadata();
                         } else {
                             if (WritePlaceHolder(0, 0, im_index->GetPlaceHolder(i), bin_offset) <= 0) break;
                             bin_offset += im_index->GetPlaceHolder(i).length();
@@ -131,14 +131,15 @@ namespace jpip
                     int bin_id, bin_offset;
                     bool last_packet = false;
 
-                    while(data_writer && !eof) {
+                    while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
                         segment = im_index->GetPacket(current_idx, packet, &bin_offset);
                         bin_id = im_index->GetCodingParameters()->GetPrecinctDataBinId(packet);
                         last_packet = (packet.layer >= (im_index->GetCodingParameters()->num_layers - 1));
 
-                        res = WriteSegment<DataBinClass::PRECINCT>(current_idx, bin_id, segment, bin_offset, last_packet);
+                        res = WriteSegment<DataBinClass::PRECINCT>(current_idx, bin_id, segment, bin_offset,
+                                                                   last_packet);
 
                         if (res < 0) return false;
                         else if (res > 0) {

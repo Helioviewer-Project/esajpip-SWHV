@@ -10,29 +10,27 @@
  * Class that allows to parse and handle the application
  * command line parameters.
  */
-class ArgsParser
-{
+class ArgsParser {
 private:
-  AppConfig& cfg;		///< Application configuration
-  AppInfo& app_info;	///< Application run-time information
+    AppConfig &cfg;        ///< Application configuration
+    AppInfo &app_info;    ///< Application run-time information
 
 public:
-  /**
-   * Initializes the object.
-   * @param _cfg Application configuration.
-   * @param _app_info Application run-time information.
-   */
-  ArgsParser(AppConfig& _cfg, AppInfo& _app_info) : cfg(_cfg), app_info(_app_info)
-  {
-  }
+    /**
+     * Initializes the object.
+     * @param _cfg Application configuration.
+     * @param _app_info Application run-time information.
+     */
+    ArgsParser(AppConfig &_cfg, AppInfo &_app_info) : cfg(_cfg), app_info(_app_info) {
+    }
 
-  /**
-   * Parses and handles the application command line parameters.
-   * @param argc Number of parameters.
-   * @param argv Command line parameters.
-   * @return <code>true</code> if successful.
-   */
-  bool Parse(int argc, char **argv);
+    /**
+     * Parses and handles the application command line parameters.
+     * @param argc Number of parameters.
+     * @param argv Command line parameters.
+     * @return <code>true</code> if successful.
+     */
+    bool Parse(int argc, char **argv);
 };
 
 
