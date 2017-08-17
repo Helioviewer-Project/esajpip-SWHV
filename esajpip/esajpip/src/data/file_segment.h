@@ -66,8 +66,8 @@ namespace data {
          * @param count Number of bytes to remove.
          * @return <code>*this</code>.
          */
-        FileSegment &RemoveFirst(int count) {
-            assert((length - count) >= 0);
+        FileSegment &RemoveFirst(uint64_t count) {
+            assert(length >= count);
 
             offset += count;
             length -= count;
@@ -83,8 +83,8 @@ namespace data {
          * @return <code>*this</code>.
          */
 /*
-        FileSegment &RemoveLast(int count) {
-            assert((length - count) >= 0);
+        FileSegment &RemoveLast(uint64_t count) {
+            assert(length >= count);
 
             length -= count;
             return *this;

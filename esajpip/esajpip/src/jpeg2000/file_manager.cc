@@ -76,12 +76,12 @@ namespace jpeg2000 {
 /*        if (!ExistCacheImage(name_image_file, &path_cache_file)) */ {
             File f;
             // Get file extension
-            string extension = "";
+            string extension;
             size_t pos = name_image_file.find_last_of(".");
             if (pos != string::npos) extension = name_image_file.substr(pos);
 
             // J2C image
-            if (extension.compare(".j2c") == 0) {
+            if (extension == ".j2c") {
                 image_info->codestreams.push_back(CodestreamIndex());
 
                 CodingParameters *cp = &image_info->coding_parameters;
@@ -94,7 +94,7 @@ namespace jpeg2000 {
                 f.Close();
             }
                 // JP2 image
-            else if (extension.compare(".jp2") == 0) {
+            else if (extension == ".jp2") {
                 image_info->codestreams.push_back(CodestreamIndex());
 
                 if (!f.OpenForReading(name_image_file.c_str())) {
@@ -105,7 +105,7 @@ namespace jpeg2000 {
                 f.Close();
             }
                 // JPX image
-            else if (extension.compare(".jpx") == 0) {
+            else if (extension == ".jpx") {
                 if (!f.OpenForReading(name_image_file.c_str())) {
                     ERROR("Impossible to open file: '" << name_image_file << "'...");
                     return false;

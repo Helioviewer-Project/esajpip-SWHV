@@ -28,7 +28,7 @@ namespace jpeg2000 {
 
         // Look for the image in the list
         for (*image_index = index_list.begin(); *image_index != index_list.end(); (*image_index)++) {
-            if ((*image_index)->path_name.compare(path_image_file) == 0) {
+            if ((*image_index)->path_name == path_image_file) {
                 (*image_index)->num_references++;
                 return true;
             }

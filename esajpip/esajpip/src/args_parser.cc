@@ -8,9 +8,7 @@
 #include <sys/wait.h>
 
 #ifndef _NO_DIRENT
-
 #include <dirent.h>
-
 #endif
 
 #include "trace.h"
