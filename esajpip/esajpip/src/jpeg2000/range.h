@@ -18,7 +18,6 @@ namespace jpeg2000 {
         int first;    ///< First value of the range
         int last;    ///< Last value of the range
 
-
         /**
          * Initializes the object.
          */
@@ -104,9 +103,6 @@ namespace jpeg2000 {
             else out << "[ ]";
 
             return out;
-        }
-
-        virtual ~Range() {
         }
     };
 }

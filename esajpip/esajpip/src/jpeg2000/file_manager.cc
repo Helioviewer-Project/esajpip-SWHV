@@ -70,7 +70,7 @@ namespace jpeg2000 {
 
     bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
-        string path_cache_file;
+//        string path_cache_file;
 
         // Cache file does not exist or it is not updated
 /*        if (!ExistCacheImage(name_image_file, &path_cache_file)) */ {
@@ -433,7 +433,7 @@ namespace jpeg2000 {
             image_info->paths.insert(pair<string, int>(v_path_file[*i - 1], ind_codestream));
             ind_codestream++;
         }
-        if (image_info->paths.size() > 0) {
+        if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
             image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }

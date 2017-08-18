@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     if (!File::Exists(cfg.caching_folder().c_str()))
         ERROR("The cache folder does not exist");
 
-    if (cfg.address().size() <= 0)
+    if (cfg.address().empty())
         listen_addr = InetAddress(cfg.port());
     else
         listen_addr = InetAddress(cfg.address().c_str(), cfg.port());

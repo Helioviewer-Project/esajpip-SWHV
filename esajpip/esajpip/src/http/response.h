@@ -64,7 +64,7 @@ namespace http {
             string line, cad;
 
             if (getline(in, line)) {
-                if (line.size() <= 0) in.setstate(istream::failbit);
+                if (line.empty()) in.setstate(istream::failbit);
                 else {
                     istringstream in_str(line);
 

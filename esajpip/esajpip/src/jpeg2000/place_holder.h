@@ -79,9 +79,6 @@ namespace jpeg2000 {
         int length() const {
             return (44 + header.length);
         }
-
-        virtual ~PlaceHolder() {
-        }
     };
 }
 

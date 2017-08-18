@@ -51,9 +51,6 @@ namespace net {
         vector<PollFD> fds;
 
     public:
-        PollTable() {
-        }
-
         /**
          * Adds a new file descriptor and mask to the vector.
          * @param fd File descriptor.
@@ -104,9 +101,6 @@ namespace net {
          */
         PollFD &operator[](int n) {
             return fds[n];
-        }
-
-        virtual ~PollTable() {
         }
     };
 }

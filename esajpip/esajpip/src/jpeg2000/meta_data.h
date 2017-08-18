@@ -25,7 +25,6 @@ namespace jpeg2000 {
          */
         vector<PlaceHolder> place_holders;
 
-
         /**
          * Empty constructor.
          */
@@ -56,19 +55,14 @@ namespace jpeg2000 {
 
         friend ostream &operator<<(ostream &out, const Metadata &info) {
             out << endl << "Meta-data: ";
-
             for (vector<FileSegment>::const_iterator i = info.meta_data.begin(); i != info.meta_data.end(); i++)
                 out << *i << " ";
 
             out << endl << "Place Holders: ";
-
             for (vector<PlaceHolder>::const_iterator i = info.place_holders.begin(); i != info.place_holders.end(); i++)
                 out << *i << " ";
 
             return out;
-        }
-
-        virtual ~Metadata() {
         }
     };
 }

@@ -131,9 +131,6 @@ namespace data {
             assert(data.size() >= sizeof(uint64_t));
             return *((uint64_t *) &(data[data.size() - sizeof(uint64_t)]));
         }
-
-        virtual ~vint_vector() {
-        }
     };
 }
 

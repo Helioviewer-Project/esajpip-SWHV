@@ -11,7 +11,6 @@
 #include <log4cpp/PatternLayout.hh>
 #include <log4cpp/OstreamAppender.hh>
 
-
 /**
  * Wrapper used by the application to handle the log/trace
  * messages by means of the log4cpp library.

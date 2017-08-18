@@ -122,7 +122,7 @@ namespace jpeg2000 {
         /**
          * Copy assignment.
          */
-        const CodingParameters &operator=(const CodingParameters &cod_params) {
+        CodingParameters &operator=(const CodingParameters &cod_params) {
             size = cod_params.size;
             num_levels = cod_params.num_levels;
             num_layers = cod_params.num_layers;

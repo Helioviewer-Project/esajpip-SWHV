@@ -141,9 +141,6 @@ namespace jpeg2000 {
                 return FileSegment(off_i, off_i1 - off_i);
             }
         }
-
-        virtual ~PacketIndex() {
-        }
     };
 }
 
