@@ -33,12 +33,12 @@ void ClientManager::Run(ClientInfo *client_info) {
     int buf_len = cfg.max_chunk_size();
 
     char *buf = new char[buf_len];
-
+/*
     if (buf == NULL) {
         ERROR("Insufficient memory to manage a new client session");
         return;
     }
-
+*/
     stringstream head_data, head_data_gzip;
 
     head_data << http::Header::AccessControlAllowOrigin(CORS)

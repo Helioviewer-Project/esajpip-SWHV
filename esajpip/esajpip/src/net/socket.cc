@@ -124,7 +124,6 @@ namespace net {
         if (aux) {
             iov.iov_base = aux;
             iov.iov_len = sizeof(*aux);
-
         } else {
             iov.iov_base = &aux2;
             iov.iov_len = sizeof(aux2);

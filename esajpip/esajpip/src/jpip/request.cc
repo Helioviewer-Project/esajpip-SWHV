@@ -25,7 +25,7 @@ namespace jpip {
                 mask.items.fsiz = 1;
 
                 if (stream.peek() == ',') {
-                    getline(stream.ignore(1), aux, '&');
+                    std::getline(stream.ignore(1), aux, '&');
                     if (!stream.eof()) stream.unget();
 
                     if (aux == "round-up") round_direction = ROUNDUP;
@@ -103,7 +103,7 @@ namespace jpip {
 
         getline(stream, value, '&');
 
-        if (value.size() > 0) TRACE("JPIP parameter: " << param << "=" << value);
+        if (!value.empty()) TRACE("JPIP parameter: " << param << "=" << value);
     }
 
     istream &Request::GetCodedChar(istream &in, char &c) {

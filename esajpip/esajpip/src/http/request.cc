@@ -26,7 +26,7 @@ namespace http {
 
         type = Request::UNKNOWN;
 
-        if (line.size() > 0) {
+        if (!line.empty()) {
             istringstream in(line);
 
             if (in >> cad >> uri >> protocol) {
@@ -45,7 +45,7 @@ namespace http {
     istream &operator>>(istream &in, Request &request) {
         string line;
 
-        if (getline(in, line)) {
+        if (std::getline(in, line)) {
             TRACE("HTTP Request: " << line);
 
             if (!request.Parse(line))
@@ -58,7 +58,7 @@ namespace http {
         if (request.type != Request::UNKNOWN) {
             out << (request.type == Request::GET ? "GET" : "POST") << " " << request.object;
 
-            if (request.parameters.size() > 0) {
+            if (!request.parameters.empty()) {
                 out << "?";
                 map<string, string>::const_iterator i = request.parameters.begin();
 

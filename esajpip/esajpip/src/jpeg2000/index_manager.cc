@@ -49,7 +49,7 @@ namespace jpeg2000 {
         }
 
         // Repeat the process with the image hyperlinks
-        if (image_info.paths.size() > 0) {
+        if (!image_info.paths.empty()) {
             index_node.hyper_links.resize(image_info.paths.size());
             map<string, int> hyperlinks_visited;
             map<string, int> hyperlinks_created;
