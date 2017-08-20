@@ -44,7 +44,10 @@ const char *zfilter_bytes(void *obj, int *nbytes) {
     g_object_get(gobj, "sink", &sink, NULL);
     *nbytes = gsf_output_size(GSF_OUTPUT(sink));
 
-    return (char *) gsf_output_memory_get_bytes(GSF_OUTPUT_MEMORY(sink));
+    char *ret = (char *) gsf_output_memory_get_bytes(GSF_OUTPUT_MEMORY(sink));
+    g_object_unref(sink); // g_object_get
+
+    return ret;
 }
 
 void zfilter_del(void *obj) {
@@ -52,5 +55,6 @@ void zfilter_del(void *obj) {
 
     g_object_get(gobj, "sink", &sink, NULL);
     g_object_unref(gobj);
+    g_object_unref(sink); // g_object_get
     g_object_unref(sink);
 }
