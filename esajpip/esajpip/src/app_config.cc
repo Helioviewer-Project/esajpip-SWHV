@@ -45,4 +45,3 @@ bool AppConfig::Load(const char *file_name) {
 
     return true;
 }
-

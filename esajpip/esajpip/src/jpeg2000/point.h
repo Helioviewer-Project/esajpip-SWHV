@@ -207,6 +207,9 @@ namespace jpeg2000 {
         T &SerializeWith(T &stream) {
             return (stream & x & y);
         }
+
+        virtual ~Point() {
+        }
     };
 
     /**

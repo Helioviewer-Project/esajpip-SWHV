@@ -119,6 +119,9 @@ namespace data {
             out << "[" << segment.offset << ":" << segment.length << "]";
             return out;
         }
+
+        virtual ~FileSegment() {
+        }
     };
 }
 

@@ -103,7 +103,6 @@ namespace data {
          */
         typedef SHARED_PTR<BaseFile<IO> > Ptr;
 
-
         /**
          * Initialized the internal file pointer to <code>NULL</code>.
          */

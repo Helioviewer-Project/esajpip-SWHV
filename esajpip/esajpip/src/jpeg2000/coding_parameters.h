@@ -191,15 +191,12 @@ namespace jpeg2000 {
             if (progression == RPCL_PROGRESSION) {
                 return GetProgressionIndexRPCL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
                                                packet.precinct_xy.y);
-
             } else if (progression == RLCP_PROGRESSION) {
                 return GetProgressionIndexRLCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
                                                packet.precinct_xy.y);
-
             } else if (progression == LRCP_PROGRESSION) {
                 return GetProgressionIndexLRCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
                                                packet.precinct_xy.y);
-
             } else {
                 ERROR("Progression (" << progression << ") not supported");
                 return 0;
@@ -248,6 +245,8 @@ namespace jpeg2000 {
          */
         int GetRoundDownResolution(const Size &res_size, Size *res_image_size);
 
+        virtual ~CodingParameters() {
+        }
     };
 }
 

@@ -369,6 +369,9 @@ namespace jpip {
             meta_data.clear();
             codestreams.clear();
         }
+
+        virtual ~CacheModel() {
+        }
     };
 
     template<>

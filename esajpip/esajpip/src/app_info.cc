@@ -134,6 +134,9 @@ AppInfo &AppInfo::Update() {
     return *this;
 }
 
+AppInfo::~AppInfo() {
+}
+
 string AppInfo::GetProcStat_(int pid, int field) const {
     string row;
     stringstream file_name;

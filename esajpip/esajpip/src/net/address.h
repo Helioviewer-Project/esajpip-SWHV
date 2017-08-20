@@ -25,6 +25,12 @@ namespace net {
     class Address {
     public:
         /**
+         * Empty constructor.
+         */
+        Address() {
+        }
+
+        /**
          * Returns a pointer to a <code>sockaddr</code> structure.
          */
         virtual sockaddr *GetSockAddr() const = 0;
@@ -34,6 +40,12 @@ namespace net {
          * structure returned by the previous method.
          */
         virtual int GetSize() const = 0;
+
+        /**
+         * Empty destructor.
+         */
+        virtual ~Address() {
+        }
     };
 
     /**

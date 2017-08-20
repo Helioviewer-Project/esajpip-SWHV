@@ -81,6 +81,9 @@ namespace jpip {
 
             return out;
         }
+
+        virtual ~WOI() {
+        }
     };
 }
 

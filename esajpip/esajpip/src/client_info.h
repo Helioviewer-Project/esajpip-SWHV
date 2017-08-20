@@ -65,7 +65,9 @@ public:
         time_t now = ::time(NULL);
         return (long) (tm_start - now);
     }
-};
 
+    virtual ~ClientInfo() {
+    }
+};
 
 #endif /* _CLIENT_INFO_H_ */

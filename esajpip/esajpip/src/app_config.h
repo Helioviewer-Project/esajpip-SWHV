@@ -145,6 +145,9 @@ public:
     int cache_max_time() const {
         return cache_max_time_;
     }
+
+    virtual ~AppConfig() {
+    }
 };
 
 #endif /* _APP_CONFIG_H_ */

@@ -207,6 +207,9 @@ namespace jpip {
         operator bool() const {
             return !eof;
         }
+
+        virtual ~DataBinWriter() {
+        }
     };
 }
 

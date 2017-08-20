@@ -125,4 +125,3 @@ namespace jpeg2000 {
     }
 
 }
-

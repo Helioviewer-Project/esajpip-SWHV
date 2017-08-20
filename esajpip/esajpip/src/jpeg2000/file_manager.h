@@ -193,6 +193,9 @@ namespace jpeg2000 {
          * @return <code>true</code> if successful.
          */
         bool ReadImage(const string &name_image_file, ImageInfo *image_info);
+
+        virtual ~FileManager() {
+        }
     };
 }
 

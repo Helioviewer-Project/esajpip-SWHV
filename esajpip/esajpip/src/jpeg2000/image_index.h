@@ -266,7 +266,6 @@ namespace jpeg2000 {
             for (vector<int>::const_iterator i = info_node.max_resolution.begin();
                  i != info_node.max_resolution.end(); i++)
                 out << *i << "  ";
-
             out << endl;
 
             for (vector<CodestreamIndex>::const_iterator i = info_node.codestreams.begin();
@@ -274,21 +273,18 @@ namespace jpeg2000 {
                 out << "Codestream index: " << endl << "----------------- " << endl << *i << endl << endl;
 
             out << "Packet indexes: " << endl << "--------------- " << endl;
-
             for (vector<PacketIndex>::const_iterator i = info_node.packet_indexes.begin();
                  i != info_node.packet_indexes.end(); i++)
                 for (int j = 0; j < i->Size(); j++)
                     out << j << " - " << (*i)[j] << endl;
 
             out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
-
             for (vector<list<ImageIndex>::iterator>::const_iterator i = info_node.hyper_links.begin();
                  i != info_node.hyper_links.end(); i++)
                 out << "Hyperlinks: " << endl << "----------- " << endl << **i << endl << "----------- " << endl;
 
             out << endl << "Meta-data: ";
             out << endl << info_node.meta_data;
-
             out << endl << "Num. References: " << info_node.num_references << endl;
 
             return out;

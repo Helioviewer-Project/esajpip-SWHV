@@ -158,6 +158,9 @@ namespace jpip {
                 return true;
             }
         }
+
+        virtual ~WOIComposer() {
+        }
     };
 }
 

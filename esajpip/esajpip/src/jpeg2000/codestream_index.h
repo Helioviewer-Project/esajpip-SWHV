@@ -65,18 +65,18 @@ namespace jpeg2000 {
             out << "Header: " << index.header << endl;
 
             out << "Packets: ";
-
             for (vector<FileSegment>::const_iterator i = index.packets.begin(); i != index.packets.end(); i++)
                 out << *i << " ";
 
             out << endl << "PLT-markers: ";
-
             for (vector<FileSegment>::const_iterator i = index.PLT_markers.begin(); i != index.PLT_markers.end(); i++)
                 out << *i << " ";
-
             out << endl;
 
             return out;
+        }
+
+        virtual ~CodestreamIndex() {
         }
     };
 }
