@@ -16,6 +16,10 @@ namespace ipc {
         pthread_rwlock_t rwlock;    ///< Read/write lock information
 
     public:
+        RdWrLock() {
+            rwlock = PTHREAD_RWLOCK_INITIALIZER;
+        }
+
         /**
          * Pointer to a RdWrLock object.
          */

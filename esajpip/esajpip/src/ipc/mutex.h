@@ -17,6 +17,11 @@ namespace ipc {
         pthread_mutex_t mutex;    ///< Mutex information
 
     public:
+        Mutex() {
+            locker = pthread_self();
+            mutex = PTHREAD_MUTEX_INITIALIZER;
+        }
+
         /**
          * Pointer to a Mutex object.
          */

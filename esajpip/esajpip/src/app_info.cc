@@ -21,7 +21,7 @@ using namespace std;
 
 bool AppInfo::Init() {
     struct flock fl;
-
+    memset(&fl, 0, sizeof fl);
     fl.l_type = F_WRLCK;
     fl.l_whence = SEEK_SET;
     fl.l_start = 0;
