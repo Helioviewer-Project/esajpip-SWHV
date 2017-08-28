@@ -475,7 +475,9 @@ namespace jpeg2000 {
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file.Seek(4, SEEK_CUR);
-        char path_char[length_box - 4];
+        char path_char[length_box - 3];
+        path_char[length_box - 4] = 0;
+
         res = res && file.Read(path_char, length_box - 4);
         *path_file = path_char;
         size_t found = path_file->find("file://") + 7;
