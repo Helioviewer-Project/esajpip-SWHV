@@ -39,7 +39,7 @@ namespace net {
          * Returns the size in bytes of the <code>sockaddr</code>
          * structure returned by the previous method.
          */
-        virtual int GetSize() const = 0;
+        virtual socklen_t GetSize() const = 0;
 
         /**
          * Empty destructor.
@@ -63,8 +63,7 @@ namespace net {
          * Initializes the address to zero.
          */
         InetAddress() {
-            memset(&sock_addr, 0, sizeof(sock_addr));
-
+            memset(&sock_addr, 0, sizeof sock_addr);
             sock_addr.sin_family = AF_INET;
         }
 
@@ -72,7 +71,7 @@ namespace net {
          * Copy constructor.
          */
         InetAddress(const InetAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof(sock_addr));
+            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
         }
 
         /**
@@ -80,12 +79,12 @@ namespace net {
          * is <code>INADDR_ANY</code>.
          * @param port Port number.
          */
-        InetAddress(int port) {
-            memset(&sock_addr, 0, sizeof(sock_addr));
+        InetAddress(uint16_t port) {
+            memset(&sock_addr, 0, sizeof sock_addr);
 
             sock_addr.sin_family = AF_INET;
             sock_addr.sin_addr.s_addr = INADDR_ANY;
-            sock_addr.sin_port = htons((u_short) port);
+            sock_addr.sin_port = htons(port);
         }
 
         /**
@@ -93,8 +92,8 @@ namespace net {
          * @param path Address path.
          * @param port Port number.
          */
-        InetAddress(const char *path, int port) {
-            memset(&sock_addr, 0, sizeof(sock_addr));
+        InetAddress(const char *path, uint16_t port) {
+            memset(&sock_addr, 0, sizeof sock_addr);
 
             hostent *hp = NULL;
             unsigned long addr;
@@ -103,7 +102,7 @@ namespace net {
                 hp = gethostbyname(path);
             else {
                 addr = inet_addr(path);
-                hp = gethostbyaddr((char *) &addr, sizeof(addr), AF_INET);
+                hp = gethostbyaddr((char *) &addr, sizeof addr, AF_INET);
             }
 
             if (hp != NULL) {
@@ -117,7 +116,7 @@ namespace net {
          * Copy assignment.
          */
         InetAddress &operator=(const InetAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof(sock_addr));
+            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
             return *this;
         }
 
@@ -133,8 +132,8 @@ namespace net {
          * Overloaded from the base class to use the
          * internal address structure.
          */
-        virtual int GetSize() const {
-            return sizeof(sock_addr);
+        virtual socklen_t GetSize() const {
+            return sizeof sock_addr;
         }
 
         /**
@@ -147,7 +146,7 @@ namespace net {
         /**
          * Returns the port number.
          */
-        int GetPort() const {
+        uint16_t GetPort() const {
             return ntohs(sock_addr.sin_port);
         }
     };
@@ -167,8 +166,7 @@ namespace net {
          * Initializes the address to zero.
          */
         UnixAddress() {
-            memset(&sock_addr, 0, sizeof(sock_addr));
-
+            memset(&sock_addr, 0, sizeof sock_addr);
             sock_addr.sun_family = AF_UNIX;
         }
 
@@ -176,7 +174,7 @@ namespace net {
          * Copy constructor.
          */
         UnixAddress(const UnixAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof(sock_addr));
+            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
         }
 
         /**
@@ -184,17 +182,16 @@ namespace net {
          * @param path Address path.
          */
         UnixAddress(const char *path) {
-            memset(&sock_addr, 0, sizeof(sock_addr));
-
+            memset(&sock_addr, 0, sizeof sock_addr);
             sock_addr.sun_family = AF_UNIX;
-            strncpy(sock_addr.sun_path, path, sizeof(sock_addr.sun_path) - 1);
+            strncpy(sock_addr.sun_path, path, sizeof sock_addr.sun_path - 1);
         }
 
         /**
          * Copy assignment.
          */
         UnixAddress &operator=(const UnixAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof(sock_addr));
+            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
             return *this;
         }
 
@@ -218,8 +215,8 @@ namespace net {
          * Overloaded from the base class to use the
          * internal address structure.
          */
-        virtual int GetSize() const {
-            return sizeof(sock_addr);
+        virtual socklen_t GetSize() const {
+            return sizeof sock_addr;
         }
 
         /**

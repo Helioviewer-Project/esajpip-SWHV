@@ -25,7 +25,7 @@ namespace net {
 
     bool Socket::IsBlockingMode() {
         int cur = fcntl(sid, F_GETFL, 0);
-        return (cur & O_NONBLOCK);
+        return (bool) (cur & O_NONBLOCK);
     }
 
     bool Socket::IsValid() {

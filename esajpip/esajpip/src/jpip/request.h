@@ -95,7 +95,7 @@ namespace jpip {
              * the WOI (fsiz, roff and rsiz).
              */
             bool HasWOI() const {
-                return (value & 7);
+                return (bool) (value & 7);
             }
 
             /**

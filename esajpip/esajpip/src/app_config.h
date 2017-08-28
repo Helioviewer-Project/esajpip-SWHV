@@ -71,8 +71,8 @@ public:
     /**
      * Returns the listening port.
      */
-    int port() const {
-        return port_;
+    uint16_t port() const {
+        return (uint16_t) port_;
     }
 
     /**

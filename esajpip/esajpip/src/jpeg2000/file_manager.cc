@@ -233,12 +233,12 @@ namespace jpeg2000 {
         for (int i = 0; i <= params->num_levels; i++) {
             if (cs_buf & 1) {
                 res = res && file.ReadReverse(&size_precinct);
-                height = 1L << ((size_precinct & 0xF0) >> 4);
-                width = 1L << (size_precinct & 0x0F);
+                height = 1 << ((size_precinct & 0xF0) >> 4);
+                width = 1 << (size_precinct & 0x0F);
                 params->precinct_size.push_back(Size(width, height));
             } else {
-                height = ceil((double) params->size.y / (1L << i));
-                width = ceil((double) params->size.x / (1L << i));
+                height = (int) ceil((double) params->size.y / (1L << i));
+                width = (int) ceil((double) params->size.x / (1L << i));
                 params->precinct_size.insert(params->precinct_size.begin(), Size(width, height));
             }
         }

@@ -16,7 +16,7 @@ namespace jpip {
 
                 if ((ptr + num) > end) eof = true;
                 else {
-                    while (num-- > 1) *ptr++ = bytes[num] | 0x80;
+                    while (num-- > 1) *ptr++ = bytes[num] | (uint8_t) 0x80;
                     *ptr++ = bytes[num];
                 }
             }
