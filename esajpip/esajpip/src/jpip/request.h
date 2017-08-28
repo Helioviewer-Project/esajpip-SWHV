@@ -137,7 +137,7 @@ namespace jpip {
             min_codestream = 0;
             max_codestream = 0;
             length_response = 0;
-            round_direction = RoundDirection::CLOSEST;
+            round_direction = CLOSEST;
         }
 
         /**
