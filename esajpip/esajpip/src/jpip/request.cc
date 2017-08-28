@@ -1,6 +1,9 @@
 #include "trace.h"
 #include "request.h"
 
+#define MAXC 100000
+#define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
+
 namespace jpip {
 
     void Request::ParseParameters(istream &stream) {
@@ -141,10 +144,13 @@ namespace jpip {
                 break;
             } else if (c == '[') {
                 if (in >> minc) {
+                    minc = CLAMP(minc, 0, MAXC);
                     maxc = minc;
 
-                    if (in.peek() == '-')
+                    if (in.peek() == '-') {
                         in.ignore(1) >> maxc;
+                        maxc = CLAMP(maxc, minc, MAXC);
+                    }
                     if (!GetCodedChar(in, c) || (c != ']'))
                         in.setstate(istream::failbit);
 

@@ -2,6 +2,8 @@
 #include "trace.h"
 #include "request.h"
 
+#define MAX_URI 1023
+
 namespace http {
 
     void Request::ParseParameter(istream &stream, const string &param, string &value) {
@@ -34,7 +36,7 @@ namespace http {
                 else if (cad == "GET") type = Request::GET;
 
                 if (type != Request::UNKNOWN) {
-                    ParseURI(uri);
+                    ParseURI(uri.substr(0, MAX_URI));
                     return true;
                 }
             }
