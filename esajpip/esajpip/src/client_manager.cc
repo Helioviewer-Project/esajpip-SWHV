@@ -312,4 +312,6 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Protocol::CRLF << flush;
         sock_stream->Send(buff, buff_len);
     }
+
+    delete[] buff;
 }
