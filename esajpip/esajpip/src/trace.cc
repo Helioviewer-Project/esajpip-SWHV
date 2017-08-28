@@ -17,6 +17,7 @@ TraceSystem::TraceSystem() {
     category->setAppender(appender);
 
     file_appender = NULL;
+    file_layout = new log4cpp::PatternLayout();
 #endif
 }
 

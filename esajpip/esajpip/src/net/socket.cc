@@ -88,14 +88,15 @@ namespace net {
 
         assert(sizeof(ccmsg) >= CMSG_SPACE(sizeof(int)));
 
-        struct iovec vec;
-        vec.iov_base = &aux;
-        vec.iov_len = sizeof(aux);
+        struct iovec iov;
+        memset(&iov, 0, sizeof iov);
+        iov.iov_base = &aux;
+        iov.iov_len = sizeof(aux);
 
         memset(&msg, 0, sizeof msg);
         msg.msg_name = address.GetSockAddr();
         msg.msg_namelen = address.GetSize();
-        msg.msg_iov = &vec;
+        msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
         msg.msg_control = ccmsg;
         msg.msg_controllen = CMSG_SPACE(sizeof(int));
@@ -122,7 +123,7 @@ namespace net {
 
         int aux2;
         iovec iov;
-
+        memset(&iov, 0, sizeof iov);
         if (aux) {
             iov.iov_base = aux;
             iov.iov_len = sizeof(*aux);
