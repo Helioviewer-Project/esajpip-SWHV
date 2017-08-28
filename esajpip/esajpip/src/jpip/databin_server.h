@@ -147,6 +147,7 @@ namespace jpip {
             end_woi_ = false;
             metareq = false;
             current_idx = 0;
+            eof = false;
         }
 
         /**

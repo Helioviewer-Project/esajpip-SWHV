@@ -111,24 +111,24 @@ namespace jpip {
          * of a WOI for specifying the resolution levels.
          */
         enum RoundDirection {
-            ROUNDUP,        ///< Round-up
+            ROUNDUP,      ///< Round-up
             ROUNDDOWN,    ///< Round-down
-            CLOSEST        ///< Closest
+            CLOSEST       ///< Closest
         };
 
-        Size woi_size;                ///< WOI size
-        Point woi_position;            ///< WOI position
-        int min_codestream;            ///< Minimum codestream
-        int max_codestream;            ///< Maximum codestream
-        int length_response;        ///< Maximum response length
+        Size woi_size;              ///< WOI size
+        Point woi_position;         ///< WOI position
+        int min_codestream = 0;     ///< Minimum codestream
+        int max_codestream = 0;     ///< Maximum codestream
+        int length_response= 0;     ///< Maximum response length
         ParametersMask mask;        ///< Parameters mask
-        Size resolution_size;        ///< Size of the resolution level
-        CacheModel cache_model;        ///< Cache model
+        Size resolution_size;       ///< Size of the resolution level
+        CacheModel cache_model;     ///< Cache model
 
         /**
          * Round direction.
          */
-        RoundDirection round_direction;
+        RoundDirection round_direction = RoundDirection::CLOSEST;
 
         /**
          * Empty constructor.

@@ -44,7 +44,7 @@ namespace jpeg2000 {
 
         string path_name;            ///< Image file name
         Metadata meta_data;            ///< Image Metadata
-        int num_references;            ///< Number of references
+        int num_references = 0;            ///< Number of references
         vector<int> max_resolution;    ///< Maximum resolution number
 
         vector<PacketIndex> packet_indexes;    ///< Code-stream packet index
