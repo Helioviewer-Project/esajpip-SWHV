@@ -23,8 +23,8 @@ namespace jpip {
     private:
         Point pxy1;                ///< Upper-left corner of the WOI
         Point pxy2;                ///< Bottom-right corner of the WOI
-        bool more_packets = false; ///< Flag to control the last packet
-        int max_resolution = 0;    ///< Maximum resolution
+        bool more_packets; ///< Flag to control the last packet
+        int max_resolution;    ///< Maximum resolution
         Size min_precinct_xy;      ///< Minimum precinct
         Size max_precinct_xy;      ///< Maximum precinct
         Packet current_packet;     ///< Current packet
@@ -39,6 +39,8 @@ namespace jpip {
          * Initializes the object. No packets are available.
          */
         WOIComposer() {
+            more_packets = false;
+            max_resolution = 0;
         }
 
         /**

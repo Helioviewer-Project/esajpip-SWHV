@@ -43,9 +43,9 @@ namespace jpeg2000 {
         vector<uint64_t> last_offset_packet;
 
         string path_name;            ///< Image file name
-        Metadata meta_data;            ///< Image Metadata
-        int num_references = 0;            ///< Number of references
-        vector<int> max_resolution;    ///< Maximum resolution number
+        Metadata meta_data;          ///< Image Metadata
+        int num_references;          ///< Number of references
+        vector<int> max_resolution;  ///< Maximum resolution number
 
         vector<PacketIndex> packet_indexes;    ///< Code-stream packet index
         vector<CodestreamIndex> codestreams;    ///< Image code-streams
@@ -102,7 +102,9 @@ namespace jpeg2000 {
          * Empty constructor. Only the index manager can
          * use this constructor.
          */
-        ImageIndex() {}
+        ImageIndex() {
+            num_references = 0;
+        }
 
     public:
         /**

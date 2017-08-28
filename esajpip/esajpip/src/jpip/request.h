@@ -116,24 +116,28 @@ namespace jpip {
             CLOSEST       ///< Closest
         };
 
-        Size woi_size;              ///< WOI size
-        Point woi_position;         ///< WOI position
-        int min_codestream = 0;     ///< Minimum codestream
-        int max_codestream = 0;     ///< Maximum codestream
-        int length_response= 0;     ///< Maximum response length
-        ParametersMask mask;        ///< Parameters mask
-        Size resolution_size;       ///< Size of the resolution level
-        CacheModel cache_model;     ///< Cache model
+        Size woi_size;           ///< WOI size
+        Point woi_position;      ///< WOI position
+        int min_codestream;      ///< Minimum codestream
+        int max_codestream;      ///< Maximum codestream
+        int length_response;     ///< Maximum response length
+        ParametersMask mask;     ///< Parameters mask
+        Size resolution_size;    ///< Size of the resolution level
+        CacheModel cache_model;  ///< Cache model
 
         /**
          * Round direction.
          */
-        RoundDirection round_direction = RoundDirection::CLOSEST;
+        RoundDirection round_direction;
 
         /**
          * Empty constructor.
          */
         Request() {
+            min_codestream = 0;
+            max_codestream = 0;
+            length_response = 0;
+            round_direction = RoundDirection::CLOSEST;
         }
 
         /**
