@@ -20,7 +20,7 @@ static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
         if ((size_t) strm->Send(buf, len) != len)
-            ERROR("Could not send");
+            ; // ERROR("Could not send");
         strm << http::Protocol::CRLF << flush;
     }
 }
@@ -204,7 +204,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         << http::Protocol::CRLF << flush;
             if (err_msg_len) {
                 if ((size_t) sock_stream->Send(err_msg, err_msg_len) != err_msg_len)
-                    ERROR("Could not send");
+                    ; // ERROR("Could not send");
             }
         } else if (send_data) {
             if (!send_gzip)
