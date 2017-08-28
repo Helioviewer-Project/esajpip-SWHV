@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <assert.h>
+#include <string.h>
 #include "socket.h"
 #include "poll_table.h"
 
@@ -91,6 +92,7 @@ namespace net {
         vec.iov_base = &aux;
         vec.iov_len = sizeof(aux);
 
+        memset(&msg, 0, sizeof msg);
         msg.msg_name = address.GetSockAddr();
         msg.msg_namelen = address.GetSize();
         msg.msg_iov = &vec;
@@ -129,6 +131,7 @@ namespace net {
             iov.iov_len = sizeof(aux2);
         }
 
+        memset(&msg, 0, sizeof msg);
         msg.msg_name = 0;
         msg.msg_namelen = 0;
         msg.msg_iov = &iov;
