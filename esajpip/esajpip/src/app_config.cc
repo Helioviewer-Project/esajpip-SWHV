@@ -6,7 +6,7 @@ using namespace libconfig;
 
 bool AppConfig::Load(const char *file_name) {
     try {
-        int n;
+        size_t n;
         Config cfg;
 
         cfg.readFile(file_name);
@@ -38,8 +38,7 @@ bool AppConfig::Load(const char *file_name) {
         root["general"].lookupValue("log_requests", log_requests_);
         root["general"].lookupValue("max_chunk_size", max_chunk_size_);
         root["general"].lookupValue("cache_max_time", cache_max_time_);
-    }
-    catch (...) {
+    } catch (...) {
         return false;
     }
 

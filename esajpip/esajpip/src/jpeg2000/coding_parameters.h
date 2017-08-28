@@ -174,8 +174,8 @@ namespace jpeg2000 {
          */
         Size GetPrecincts(int r, const Size &point) {
             return Size(
-                    ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) precinct_size[r].x),
-                    ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) precinct_size[r].y)
+                    (int) ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) precinct_size[r].x),
+                    (int) ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) precinct_size[r].y)
             );
         }
 

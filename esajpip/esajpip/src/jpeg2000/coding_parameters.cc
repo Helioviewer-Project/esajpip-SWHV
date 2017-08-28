@@ -26,8 +26,8 @@ namespace jpeg2000 {
         res_image_size->y = size.y;
 
         for (int r = 1; r <= num_levels; r++) {
-            res_image_x = ceil((double) size.x / (double) (1L << r));
-            res_image_y = ceil((double) size.y / (double) (1L << r));
+            res_image_x = (int) ceil((double) size.x / (1L << r));
+            res_image_y = (int) ceil((double) size.y / (1L << r));
             distance_x = res_image_x - res_size.x;
             distance_y = res_image_y - res_size.y;
             distance = abs(distance_x) + abs(distance_y);
@@ -52,9 +52,9 @@ namespace jpeg2000 {
         int r = num_levels;
         bool bigger = false;
 
-        while ((!bigger) && (r >= 0)) {
-            res_image_size->x = ceil((double) size.x / (double) (1L << r));
-            res_image_size->y = ceil((double) size.y / (double) (1L << r));
+        while (!bigger && r >= 0) {
+            res_image_size->x = (int) ceil((double) size.x / (1L << r));
+            res_image_size->y = (int) ceil((double) size.y / (1L << r));
             if ((res_image_size->x >= res_size.x) &&
                 (res_image_size->y >= res_size.y))
                 bigger = true;
@@ -73,9 +73,9 @@ namespace jpeg2000 {
         int r = 0;
         bool smaller = false;
 
-        while ((!smaller) && (r <= num_levels)) {
-            res_image_size->x = ceil((double) size.x / (double) (1L << r));
-            res_image_size->y = ceil((double) size.y / (double) (1L << r));
+        while (!smaller && r <= num_levels) {
+            res_image_size->x = (int) ceil((double) size.x / (1L << r));
+            res_image_size->y = (int) ceil((double) size.y / (1L << r));
             if ((res_image_size->x <= res_size.x) &&
                 (res_image_size->y <= res_size.y))
                 smaller = true;

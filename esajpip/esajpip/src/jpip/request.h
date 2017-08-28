@@ -159,10 +159,10 @@ namespace jpip {
                 woi->resolution = coding_parameters->GetRoundDownResolution(resolution_size, &res_image_size);
 
             if (resolution_size != res_image_size) {
-                woi->position.x = ceil((woi->position.x * res_image_size.x) / resolution_size.x);
-                woi->position.y = ceil((woi->position.y * res_image_size.y) / resolution_size.y);
-                woi->size.x = ceil((woi->size.x * res_image_size.x) / resolution_size.x);
-                woi->size.y = ceil((woi->size.y * res_image_size.y) / resolution_size.y);
+                woi->position.x = (int) ceil((woi->position.x * res_image_size.x) / resolution_size.x);
+                woi->position.y = (int) ceil((woi->position.y * res_image_size.y) / resolution_size.y);
+                woi->size.x = (int) ceil((woi->size.x * res_image_size.x) / resolution_size.x);
+                woi->size.y = (int) ceil((woi->size.y * res_image_size.y) / resolution_size.y);
             }
         }
 

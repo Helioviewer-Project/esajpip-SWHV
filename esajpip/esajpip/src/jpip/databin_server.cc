@@ -102,8 +102,8 @@ namespace jpip {
                     int bin_offset = 0;
                     bool last_metadata;
 
-                    for (int i = 0; i < im_index->GetNumMetadatas(); i++) {
-                        last_metadata = (i == (im_index->GetNumMetadatas() - 1));
+                    for (size_t i = 0; i < im_index->GetNumMetadatas(); i++) {
+                        last_metadata = (i == im_index->GetNumMetadatas() - 1);
                         res = WriteSegment<DataBinClass::META_DATA>(0, 0, im_index->GetMetadata(i), bin_offset,
                                                                     last_metadata);
                         bin_offset += im_index->GetMetadata(i).length;

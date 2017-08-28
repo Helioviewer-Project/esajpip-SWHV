@@ -132,7 +132,7 @@ namespace jpeg2000 {
         /**
          * Returns the number of meta-data blocks.
          */
-        int GetNumMetadatas() const {
+        size_t GetNumMetadatas() const {
             return meta_data.meta_data.size();
         }
 
@@ -181,7 +181,7 @@ namespace jpeg2000 {
          * Returns the file segment of a meta-data block.
          * @param num_metadata Meta-data number.
          */
-        FileSegment GetMetadata(int num_metadata) const {
+        FileSegment GetMetadata(size_t num_metadata) const {
             return meta_data.meta_data[num_metadata];
         }
 

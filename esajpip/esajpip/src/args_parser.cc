@@ -26,21 +26,17 @@ bool ArgsParser::Parse(int argc, char **argv) {
         if (argv1 == "stop") {
             if (!app_info.is_running()) {
                 CERR("The server is not running");
-
             } else if (argc == 2) {
                 kill(app_info->father_pid, SIGKILL);
                 waitpid(app_info->father_pid, NULL, 0);
                 kill(app_info->child_pid, SIGKILL);
                 waitpid(app_info->child_pid, NULL, 0);
-
             } else if (argv2 == "child") {
                 kill(app_info->child_pid, SIGKILL);
                 waitpid(app_info->child_pid, NULL, 0);
-
             } else {
                 CERR("Invalid command");
             }
-
         } else if (argv1 == "debug") {
             if (!app_info.is_running()) {
                 CERR("The server is not running");
@@ -54,16 +50,13 @@ bool ArgsParser::Parse(int argc, char **argv) {
 
                 system(cmd.str().c_str());
             }
-
         } else if (argv1 == "start") {
             res = true;
-
         } else if (argv1 == "status") {
             app_info.Update();
             cout << app_info;
-
         } else if (argv1 == "record") {
-            static float cpu = 0;
+            static double cpu = 0;
             unsigned long tm_after, tm_before;
 
             cout << "Time\t\t\t Alive?\tFree\tFather\tChild\tConns\tIters\tThreads\t%CPU" << endl;
@@ -95,7 +88,6 @@ bool ArgsParser::Parse(int argc, char **argv) {
                 tm_after = app_info.child_time();
                 cpu = (tm_after - tm_before) / 5.0;
             }
-
         } else if ((argv1 == "clean") && (argv2 == "cache")) {
             int num = 0;
             long rbytes = 0;
@@ -118,7 +110,6 @@ bool ArgsParser::Parse(int argc, char **argv) {
                                 }
                             }
                         }
-
                     } else if (path.rfind(".backup") == (path.size() - 7)) {
                         if (!stat(path.c_str(), &file_stat)) {
                             if (!unlink(path.c_str())) {
@@ -131,9 +122,7 @@ bool ArgsParser::Parse(int argc, char **argv) {
 
                 closedir(dir);
             }
-
             CERR("Removed " << num << " files from cache (" << rbytes << " bytes)");
-
         } else {
             CERR("Invalid command");
         }
