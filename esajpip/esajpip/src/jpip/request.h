@@ -9,7 +9,7 @@
 #include "http/request.h"
 #include "jpeg2000/point.h"
 #include "jpeg2000/coding_parameters.h"
-#include <string.h>
+#include <cstring>
 
 namespace jpip {
     using namespace std;

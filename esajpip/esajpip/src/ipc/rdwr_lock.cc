@@ -1,6 +1,6 @@
 #include "rdwr_lock.h"
-#include <assert.h>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
 
 using namespace std;
 

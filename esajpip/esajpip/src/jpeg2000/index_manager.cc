@@ -1,6 +1,6 @@
 //#define SHOW_TRACES
 
-#include <assert.h>
+#include <cassert>
 #include "trace.h"
 #include "index_manager.h"
 

@@ -5,7 +5,7 @@
 
 #include <string>
 #include <iostream>
-#include <assert.h>
+#include <cassert>
 #include "protocol.h"
 
 namespace http {

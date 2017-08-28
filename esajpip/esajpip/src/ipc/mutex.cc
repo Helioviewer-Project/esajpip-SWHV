@@ -1,5 +1,5 @@
-#include <assert.h>
-#include <errno.h>
+#include <cassert>
+#include <cerrno>
 #include <sched.h>
 #include "mutex.h"
 

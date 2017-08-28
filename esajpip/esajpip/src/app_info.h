@@ -1,7 +1,7 @@
 #ifndef _APP_INFO_H_
 #define _APP_INFO_H_
 
-#include <assert.h>
+#include <cassert>
 #include <iostream>
 #include <iomanip>
 

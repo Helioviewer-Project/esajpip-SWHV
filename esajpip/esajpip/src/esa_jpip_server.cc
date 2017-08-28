@@ -4,7 +4,7 @@
 
 #include <sys/wait.h>
 
-#include <signal.h>
+#include <csignal>
 #include "trace.h"
 #include "version.h"
 #include "app_info.h"

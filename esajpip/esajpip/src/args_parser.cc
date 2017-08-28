@@ -1,8 +1,8 @@
 #include <string>
 #include <iomanip>
 #include <iostream>
-#include <signal.h>
-#include <stdlib.h>
+#include <csignal>
+#include <cstdlib>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>

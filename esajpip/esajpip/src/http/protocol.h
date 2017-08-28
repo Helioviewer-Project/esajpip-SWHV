@@ -3,7 +3,7 @@
 
 #include <string>
 #include <iostream>
-#include <assert.h>
+#include <cassert>
 
 namespace http {
     using namespace std;

@@ -1,8 +1,8 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <assert.h>
-#include <string.h>
+#include <cassert>
+#include <cstring>
 #include "socket.h"
 #include "poll_table.h"
 

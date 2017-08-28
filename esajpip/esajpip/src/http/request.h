@@ -6,7 +6,7 @@
 #include <vector>
 #include <sstream>
 #include <iostream>
-#include <stdlib.h>
+#include <cstdlib>
 #include "header.h"
 #include "protocol.h"
 

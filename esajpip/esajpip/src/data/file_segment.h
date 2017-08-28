@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <stdint.h>
-#include <assert.h>
+#include <cassert>
 
 namespace data {
     using namespace std;
