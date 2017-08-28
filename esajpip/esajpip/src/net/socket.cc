@@ -43,7 +43,7 @@ namespace net {
         return poll(&poll_fd, 1, time_out);
     }
 
-    int Socket::Receive(void *buf, int len, bool prevent_block) {
+    int Socket::Receive(void *buf, size_t len, bool prevent_block) {
         if (!prevent_block)
             return recv(sid, buf, len, 0);
 
@@ -52,7 +52,7 @@ namespace net {
         return recv(sid, buf, len, 0);
     }
 
-    int Socket::ReceiveFrom(Address *address, void *buf, int len, bool prevent_block) {
+    int Socket::ReceiveFrom(Address *address, void *buf, size_t len, bool prevent_block) {
         socklen_t sock_len = address->GetSize();
 
         if (!prevent_block)
@@ -63,7 +63,7 @@ namespace net {
         return recvfrom(sid, buf, len, 0, address->GetSockAddr(), &sock_len);
     }
 
-    int Socket::Send(void *buf, int len, bool prevent_block) {
+    int Socket::Send(const void *buf, size_t len, bool prevent_block) {
         if (!prevent_block)
             return send(sid, buf, len, 0);
 
@@ -72,7 +72,7 @@ namespace net {
         return send(sid, buf, len, 0);
     }
 
-    int Socket::SendTo(const Address &address, void *buf, int len, bool prevent_block) {
+    int Socket::SendTo(const Address &address, const void *buf, size_t len, bool prevent_block) {
         if (!prevent_block)
             return sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
 

@@ -169,7 +169,6 @@ namespace data {
                 if ((file_ptr = fdopen(new_fd, access)) == NULL) {
                     close(new_fd);
                     return false;
-
                 } else {
                     IO::configure(file_ptr);
                     return true;

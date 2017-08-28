@@ -19,8 +19,8 @@ namespace net {
     class SocketBuffer : public std::streambuf {
     protected:
         int sum;
-        int in_len;
-        int out_len;
+        size_t in_len;
+        size_t out_len;
         char *in_buf;
         char *out_buf;
         Socket socket;
@@ -32,8 +32,8 @@ namespace net {
         };
 
         SocketBuffer(int sid,
-                     int in_len = INPUT_BUFFER_LENGTH,
-                     int out_len = OUTPUT_BUFFER_LENGTH) : socket(sid) {
+                     size_t in_len = INPUT_BUFFER_LENGTH,
+                     size_t out_len = OUTPUT_BUFFER_LENGTH) : socket(sid) {
             sum = 0;
 
             this->in_len = in_len;
@@ -109,8 +109,8 @@ namespace net {
     class SocketStream : public SocketBuffer, public std::iostream {
     public:
         SocketStream(int sid,
-                     int in_len = INPUT_BUFFER_LENGTH,
-                     int out_len = OUTPUT_BUFFER_LENGTH)
+                     size_t in_len = INPUT_BUFFER_LENGTH,
+                     size_t out_len = OUTPUT_BUFFER_LENGTH)
                 : SocketBuffer(sid, in_len, out_len), std::iostream(this) {
         }
 

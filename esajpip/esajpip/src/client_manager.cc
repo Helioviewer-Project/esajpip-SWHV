@@ -16,11 +16,10 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static void send_chunk(SocketStream &strm, int len, const char *buf) {
+static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
-        //LOG("Chunk of " << len << " bytes sent");
-        strm->Send((void *) buf, len);
+        strm->Send(buf, len);
         strm << http::Protocol::CRLF << flush;
     }
 }
@@ -33,12 +32,7 @@ void ClientManager::Run(ClientInfo *client_info) {
     int buf_len = cfg.max_chunk_size();
 
     char *buf = new char[buf_len];
-/*
-    if (buf == NULL) {
-        ERROR("Insufficient memory to manage a new client session");
-        return;
-    }
-*/
+
     stringstream head_data, head_data_gzip;
 
     head_data << http::Header::AccessControlAllowOrigin(CORS)
@@ -190,7 +184,6 @@ void ClientManager::Run(ClientInfo *client_info) {
                     sock_stream << http::Response(200)
                                 << (send_gzip ? head_data_gzip.str() : head_data.str())
                                 << http::Protocol::CRLF << flush;
-
                     send_data = true;
                 }
             }
@@ -202,15 +195,14 @@ void ClientManager::Run(ClientInfo *client_info) {
         pclose = pclose && !send_data;
 
         if (pclose) {
-            int err_msg_len = strlen(err_msg);
-
+            size_t err_msg_len = strlen(err_msg);
             sock_stream << http::Response(500)
                         << http::Header::AccessControlAllowOrigin(CORS)
                         << http::Header::CacheControl("no-cache")
                         << http::Header::ContentLength(base::to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
             if (err_msg_len)
-                sock_stream->Send((void *) err_msg, err_msg_len);
+                sock_stream->Send(err_msg, err_msg_len);
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
@@ -221,7 +213,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    send_chunk(sock_stream, chunk_len, buf);
+                    send_chunk(sock_stream, buf, chunk_len);
                 }
             else {
                 void *obj = zfilter_new();
@@ -243,12 +235,12 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const char *out = zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    send_chunk(sock_stream, buf_len, out);
+                    send_chunk(sock_stream, out, buf_len);
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
-                    send_chunk(sock_stream, nbytes, out);
+                    send_chunk(sock_stream, out, nbytes);
 
                 zfilter_del(obj);
             }
@@ -273,8 +265,8 @@ void ClientManager::Run(ClientInfo *client_info) {
 
 void ClientManager::RunBasic(ClientInfo *client_info) {
     jpip::Request req;
-    int buff_len = 5000;
-    char *buff = new char[buff_len];
+    size_t buf_len = 5000;
+    char *buf = new char[buf_len];
     SocketStream sock_stream(client_info->sock());
 
     for (;;) {
@@ -307,11 +299,11 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Header::AccessControlAllowOrigin(CORS)
                     << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                     << http::Header::CacheControl("no-cache")
-                    << http::Header::ContentLength(base::to_string(buff_len))
+                    << http::Header::ContentLength(base::to_string(buf_len))
                     << http::Header::ContentType("image/jpp-stream")
                     << http::Protocol::CRLF << flush;
-        sock_stream->Send(buff, buff_len);
+        sock_stream->Send(buf, buf_len);
     }
 
-    delete[] buff;
+    delete[] buf;
 }
