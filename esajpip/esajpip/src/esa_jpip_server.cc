@@ -159,11 +159,13 @@ int main(int argc, char **argv) {
                     }
 
                     if (poll_table[1].revents & POLLIN) {
-                        father_socket.Receive(&fd, sizeof(int));
-                        LOG("Closing the connection [" << fd << "] from child");
-                        app_info->num_connections--;
-                        poll_table.Remove(fd);
-                        close(fd);
+                        if (father_socket.Receive(&fd, sizeof(int)) == sizeof(int)) {
+                            LOG("Closing the connection [" << fd << "] from child");
+                            app_info->num_connections--;
+                            poll_table.Remove(fd);
+                            close(fd);
+                        } else
+                            ERROR("Could not receive descriptor");
                     }
 
                     for (int i = 2; i < poll_table.GetSize(); i++) {
