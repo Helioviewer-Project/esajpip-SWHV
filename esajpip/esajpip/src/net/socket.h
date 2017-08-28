@@ -77,7 +77,7 @@ namespace net {
           @return <code>true</code> if successful.
         */
         bool OpenInet(int type = SOCK_STREAM) {
-            return ((sid = socket(PF_INET, type, 0)) != -1);
+            return (sid = socket(PF_INET, type, 0)) != -1;
         }
 
         /**
@@ -156,7 +156,7 @@ namespace net {
           @param prevent_block true if blocking will be prevented.
           @return The number of received bytes.
         */
-        int Receive(void *buf, size_t len, bool prevent_block = false);
+        ssize_t Receive(void *buf, size_t len, bool prevent_block = false);
 
         /**
           Receives a number of bytes. This methods allows to prevent
@@ -168,7 +168,7 @@ namespace net {
           @param prevent_block true if blocking will be prevented.
           @return The number of received bytes.
         */
-        int ReceiveFrom(Address *address, void *buf, size_t len,
+        ssize_t ReceiveFrom(Address *address, void *buf, size_t len,
                         bool prevent_block = false);
 
         /**
@@ -180,7 +180,7 @@ namespace net {
           @param prevent_block true if blocking will be prevented.
           @return The number of sent bytes.
         */
-        int Send(const void *buf, size_t len, bool prevent_block = false);
+        ssize_t Send(const void *buf, size_t len, bool prevent_block = false);
 
         /**
           Sends a number of bytes to a specific address. This methods
@@ -192,7 +192,7 @@ namespace net {
           @param prevent_block true if blocking will be prevented.
           @return The number of sent bytes.
         */
-        int SendTo(const Address &address, const void *buf, size_t len,
+        ssize_t SendTo(const Address &address, const void *buf, size_t len,
                    bool prevent_block = false);
 
         /**

@@ -47,7 +47,7 @@ namespace net {
 
         virtual int sync() {
             if (pptr() != pbase()) {
-                int n, len = 0;
+                ssize_t n, len = 0;
 
                 while (pbase() + len < pptr()) {
                     n = socket.Send(pbase() + len, pptr() - pbase() - len);
@@ -63,7 +63,7 @@ namespace net {
 
         virtual int_type underflow() {
             sum += (egptr() - eback());
-            int len = socket.Receive(in_buf, in_len);
+            ssize_t len = socket.Receive(in_buf, in_len);
 
             if (len <= 0) return traits_type::eof();
             else {

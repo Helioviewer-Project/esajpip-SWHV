@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
                     }
 
                     if (poll_table[1].revents & POLLIN) {
-                        if (father_socket.Receive(&fd, sizeof(int)) == sizeof(int)) {
+                        if (father_socket.Receive(&fd, sizeof fd) == sizeof fd) {
                             LOG("Closing the connection [" << fd << "] from child");
                             app_info->num_connections--;
                             poll_table.Remove(fd);
@@ -249,7 +249,6 @@ static int ChildProcess() {
 }
 
 static void *ClientThread(void *arg) {
-    int sock, res;
     ClientInfo *client_info = (ClientInfo *) arg;
 
 #ifndef BASIC_SERVER
@@ -258,10 +257,8 @@ static void *ClientThread(void *arg) {
     ClientManager(cfg, app_info, index_manager).RunBasic(client_info);
 #endif
 
-    sock = client_info->father_sock();
-    res = child_socket.SendTo(father_address, &sock, sizeof(int));
-
-    if (res < (int) sizeof(int))
+    int sock = client_info->father_sock();
+    if (child_socket.SendTo(father_address, &sock, sizeof sock) != sizeof sock)
         ERROR("The connection [" << sock << "] could not be closed");
 
     delete client_info;

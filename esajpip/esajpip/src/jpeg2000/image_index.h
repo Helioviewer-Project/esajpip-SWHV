@@ -123,7 +123,7 @@ namespace jpeg2000 {
          * Returns the number of codestreams.
          */
 /*
-        int GetNumCodestreams() const {
+        size_t GetNumCodestreams() const {
             if (codestreams.size() > 0) return codestreams.size();
             else return hyper_links.size();
         }
@@ -189,7 +189,7 @@ namespace jpeg2000 {
          * Returns the information of a place-holder.
          * @param num_placeholder Place-holder number.
          */
-        PlaceHolder GetPlaceHolder(int num_placeholder) const {
+        PlaceHolder GetPlaceHolder(size_t num_placeholder) const {
             return meta_data.place_holders[num_placeholder];
         }
 

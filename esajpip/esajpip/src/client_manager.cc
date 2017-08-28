@@ -19,8 +19,8 @@ using namespace jpeg2000;
 static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF << flush;
-        if ((size_t) strm->Send(buf, len) != len)
-            ; // ERROR("Could not send");
+        if (strm->Send(buf, len) != (ssize_t) len)
+            { /* ERROR("Could not send"); */ }
         strm << http::Protocol::CRLF << flush;
     }
 }
@@ -203,8 +203,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                         << http::Header::ContentLength(base::to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
             if (err_msg_len) {
-                if ((size_t) sock_stream->Send(err_msg, err_msg_len) != err_msg_len)
-                    ; // ERROR("Could not send");
+                if (sock_stream->Send(err_msg, err_msg_len) != (ssize_t) err_msg_len)
+                    { /* ERROR("Could not send"); */ }
             }
         } else if (send_data) {
             if (!send_gzip)
@@ -305,7 +305,7 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Header::ContentLength(base::to_string(buf_len))
                     << http::Header::ContentType("image/jpp-stream")
                     << http::Protocol::CRLF << flush;
-        if ((size_t) sock_stream->Send(buf, buf_len) != buf_len)
+        if (sock_stream->Send(buf, buf_len) != (ssize_t) buf_len)
             ERROR("Could not send");
     }
 
