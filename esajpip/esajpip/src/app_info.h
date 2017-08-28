@@ -97,6 +97,8 @@ public:
     }
 
     friend ostream &operator<<(ostream &out, const AppInfo &app) {
+        ios::fmtflags f(out.flags());
+
         out << "Status: " << (app.is_running() ? "running" : "stopped") << endl;
         out << "Available memory: " << setiosflags(ios::fixed) << setprecision(2) << app.available_memory() << " MB"
             << endl;
@@ -112,6 +114,8 @@ public:
             out << "Child used memory: " << setiosflags(ios::fixed) << setprecision(2) << app.child_memory() << " MB"
                 << endl;
         }
+
+        out.flags(f);
 
         return out;
     }
