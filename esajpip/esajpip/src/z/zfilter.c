@@ -33,18 +33,18 @@ void *zfilter_new(void) {
     return (void *) gsf_output_gzip_new(GSF_OUTPUT(sink), NULL);
 }
 
-int zfilter_write(void *obj, int nbytes, char *data) {
+int zfilter_write(void *obj, const void *data, size_t nbytes) {
     return gsf_output_write(GSF_OUTPUT(obj), nbytes, (guint8 *) data);
 }
 
-const char *zfilter_bytes(void *obj, int *nbytes) {
+const void *zfilter_bytes(void *obj, size_t *nbytes) {
     GObject *gobj = G_OBJECT(obj), *sink;
     gsf_output_close(GSF_OUTPUT(gobj));
 
     g_object_get(gobj, "sink", &sink, NULL);
     *nbytes = gsf_output_size(GSF_OUTPUT(sink));
 
-    char *ret = (char *) gsf_output_memory_get_bytes(GSF_OUTPUT_MEMORY(sink));
+    const void *ret = gsf_output_memory_get_bytes(GSF_OUTPUT_MEMORY(sink));
     g_object_unref(sink); // g_object_get
 
     return ret;

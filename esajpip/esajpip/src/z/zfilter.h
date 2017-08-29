@@ -9,9 +9,9 @@ extern "C" {
 
 void *zfilter_new(void);
 
-int zfilter_write(void *obj, int num_bytes, char *data);
+int zfilter_write(void *obj, const void *data, size_t nbytes);
 
-const char *zfilter_bytes(void *obj, int *num_bytes);
+const void *zfilter_bytes(void *obj, size_t *num_bytes);
 
 void zfilter_del(void *obj);
 

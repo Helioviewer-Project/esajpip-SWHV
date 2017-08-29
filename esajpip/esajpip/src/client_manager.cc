@@ -30,7 +30,7 @@ void ClientManager::Run(ClientInfo *client_info) {
     string channel = base::to_string(client_info->base_id());
 
     int chunk_len = 0;
-    int buf_len = cfg.max_chunk_size();
+    size_t buf_len = cfg.max_chunk_size();
 
     char *buf = new char[buf_len];
 
@@ -231,11 +231,11 @@ void ClientManager::Run(ClientInfo *client_info) {
                     }
 
                     if (chunk_len > 0)
-                        zfilter_write(obj, chunk_len, buf);
+                        zfilter_write(obj, buf, chunk_len);
                 }
 
-                int nbytes;
-                const char *out = zfilter_bytes(obj, &nbytes);
+                size_t nbytes;
+                const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
                     send_chunk(sock_stream, out, buf_len);
