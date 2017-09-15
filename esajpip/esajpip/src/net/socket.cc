@@ -48,7 +48,7 @@ namespace net {
             return recv(sid, buf, len, 0);
 
         PollFD poll_fd(sid, POLLIN);
-        if (poll(&poll_fd, 1, 0) <= 0) return -1;
+        if (poll(&poll_fd, 1, 0) <= 0) return (ssize_t) -1;
         return recv(sid, buf, len, 0);
     }
 
@@ -59,7 +59,7 @@ namespace net {
             return recvfrom(sid, buf, len, 0, address->GetSockAddr(), &sock_len);
 
         PollFD poll_fd(sid, POLLIN);
-        if (poll(&poll_fd, 1, 0) <= 0) return -1;
+        if (poll(&poll_fd, 1, 0) <= 0) return (ssize_t) -1;
         return recvfrom(sid, buf, len, 0, address->GetSockAddr(), &sock_len);
     }
 
@@ -68,7 +68,7 @@ namespace net {
             return send(sid, buf, len, 0);
 
         PollFD poll_fd(sid, POLLOUT);
-        if (poll(&poll_fd, 1, 0) <= 0) return -1;
+        if (poll(&poll_fd, 1, 0) <= 0) return (ssize_t) -1;
         return send(sid, buf, len, 0);
     }
 
@@ -77,7 +77,7 @@ namespace net {
             return sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
 
         PollFD poll_fd(sid, POLLOUT);
-        if (poll(&poll_fd, 1, 0) <= 0) return -1;
+        if (poll(&poll_fd, 1, 0) <= 0) return (ssize_t) -1;
         return sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
     }
 
