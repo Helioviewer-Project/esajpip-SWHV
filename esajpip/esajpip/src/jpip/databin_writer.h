@@ -173,15 +173,15 @@ namespace jpip {
         /**
          * Returns the number of bytes written.
          */
-        int GetCount() const {
-            return (ptr - ini);
+        ptrdiff_t GetCount() const {
+            return ptr - ini;
         }
 
         /**
          * Returns the number of bytes available.
          */
-        int GetFree() const {
-            return (end - ptr);
+        ptrdiff_t GetFree() const {
+            return end - ptr;
         }
 
         /**
