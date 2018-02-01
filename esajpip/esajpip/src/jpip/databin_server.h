@@ -4,6 +4,7 @@
 //#define SHOW_TRACES
 
 #include <utility>
+#include <vector>
 #include "trace.h"
 #include "data/file.h"
 #include "jpip/woi.h"
@@ -11,7 +12,6 @@
 #include "jpip/cache_model.h"
 #include "jpip/woi_composer.h"
 #include "jpip/databin_writer.h"
-#include "jpeg2000/range.h"
 #include "jpeg2000/image_index.h"
 
 namespace jpip {
@@ -28,7 +28,7 @@ namespace jpip {
     private:
         WOI woi;            ///< Current WOI
         int pending;        ///< Number of pending bytes
-        Range range;        ///< Range of codestreams
+        vector<int> codestreams;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         bool metareq;        ///< <code>true</code> if the last request contained a "metareq"
         bool end_woi_;        ///< <code>true</code> if the WOI has been completely sent
@@ -88,7 +88,7 @@ namespace jpip {
                     File::Ptr file_ptr;
                     if (BIN_CLASS == DataBinClass::META_DATA) file_ptr = file;
                     else {
-                        int idx = range.GetIndex(num_codestream);
+                        int idx = num_codestream;//codestreams[num_codestream];
                         if ((int) files.size() <= idx) return -1;
                         file_ptr = files[idx];
                     }

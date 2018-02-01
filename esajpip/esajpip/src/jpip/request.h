@@ -1,6 +1,7 @@
 #ifndef _JPIP_REQUEST_H_
 #define _JPIP_REQUEST_H_
 
+#include <list>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -24,6 +25,8 @@ namespace jpip {
      * @see CacheModel
      */
     class Request : public http::Request {
+    private:
+        list<int> codestreamList;
     public:
         /**
          * Parses a cache model from an input stream.
@@ -118,8 +121,7 @@ namespace jpip {
 
         Size woi_size;           ///< WOI size
         Point woi_position;      ///< WOI position
-        int min_codestream;      ///< Minimum codestream
-        int max_codestream;      ///< Maximum codestream
+        vector<int> codestreams;
         int length_response;     ///< Maximum response length
         ParametersMask mask;     ///< Parameters mask
         Size resolution_size;    ///< Size of the resolution level
@@ -134,8 +136,6 @@ namespace jpip {
          * Empty constructor.
          */
         Request() {
-            min_codestream = 0;
-            max_codestream = 0;
             length_response = 0;
             round_direction = CLOSEST;
         }

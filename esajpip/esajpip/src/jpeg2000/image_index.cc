@@ -187,25 +187,25 @@ namespace jpeg2000 {
         return segment;
     }
 
-    bool ImageIndex::ReadLock(const Range &range) {
+    bool ImageIndex::ReadLock(const vector<int> &v) {
         bool res = true;
 
         if (hyper_links.size() <= 0)
             res = (rdwr_lock->Wait() == WAIT_OBJECT);
         else {
-            for (int i = range.first; i <= range.last; i++)
+            for (int i : v)
                 res = res && hyper_links[i]->ReadLock();
         }
         return res;
     }
 
-    bool ImageIndex::ReadUnlock(const Range &range) {
+    bool ImageIndex::ReadUnlock(const vector<int> &v) {
         bool res = true;
 
         if (hyper_links.size() <= 0)
             res = rdwr_lock->Release();
         else {
-            for (int i = range.first; i <= range.last; i++)
+            for (int i : v)
                 res = res && hyper_links[i]->ReadUnlock();
         }
         return res;

@@ -48,19 +48,16 @@ namespace jpip {
             metareq = true;
 
         if (req.mask.items.stream || req.mask.items.context) {
-            Range new_range = Range(req.min_codestream, req.max_codestream);
-
-            if (new_range != range) {
+            if (codestreams != req.codestreams) {
+                codestreams = req.codestreams;
+                current_idx = 0;
                 reset_woi = true;
 
-                if (new_range.Length() != range.Length())
-                    files.resize(new_range.Length());
+                if (files.size() != codestreams.size())
+                    files.resize(codestreams.size());
 
-                range = new_range;
-                current_idx = range.first;
-
-                for (int i = 0; i < range.Length(); i++) {
-                    int idx = range.GetItem(i);
+                for (unsigned long i = 0; i < codestreams.size(); i++) {
+                    int idx = codestreams[i];
 
                     if (!im_index->IsHyperLinked(idx)) files[i] = file;
                     else {
@@ -90,7 +87,7 @@ namespace jpip {
         if (pending > 0) {
             eof = false;
 
-            if (!im_index->ReadLock(range)) {
+            if (!im_index->ReadLock(codestreams)) {
                 ERROR("The lock of the image '" << im_index->GetPathName() << "' can not be taken for reading");
                 return false;
             }
@@ -119,9 +116,9 @@ namespace jpip {
             }
 
             if (!eof) {
-                for (int i = range.first; i <= range.last; i++) {
-                    WriteSegment<DataBinClass::MAIN_HEADER>(i, 0, im_index->GetMainHeader(i));
-                    WriteSegment<DataBinClass::TILE_HEADER>(i, 0, FileSegment::Null);
+                for (int idx : codestreams) {
+                    WriteSegment<DataBinClass::MAIN_HEADER>(idx, 0, im_index->GetMainHeader(idx));
+                    WriteSegment<DataBinClass::TILE_HEADER>(idx, 0, FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -133,19 +130,19 @@ namespace jpip {
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
-                        segment = im_index->GetPacket(current_idx, packet, &bin_offset);
+                        segment = im_index->GetPacket(codestreams[current_idx], packet, &bin_offset);
                         bin_id = im_index->GetCodingParameters()->GetPrecinctDataBinId(packet);
                         last_packet = (packet.layer >= (im_index->GetCodingParameters()->num_layers - 1));
 
-                        res = WriteSegment<DataBinClass::PRECINCT>(current_idx, bin_id, segment, bin_offset,
+                        res = WriteSegment<DataBinClass::PRECINCT>(codestreams[current_idx], bin_id, segment, bin_offset,
                                                                    last_packet);
 
                         if (res < 0) return false;
                         else if (res > 0) {
-                            if (current_idx != range.last) current_idx++;
+                            if (current_idx != codestreams.size() - 1) current_idx++;
                             else {
                                 if (!woi_composer.GetNextPacket()) break;
-                                else current_idx = range.first;
+                                else current_idx = 0;
                             }
                         }
                     }
@@ -164,7 +161,7 @@ namespace jpip {
                 }
             }
 
-            if (!im_index->ReadUnlock(range)) {
+            if (!im_index->ReadUnlock(codestreams)) {
                 ERROR("The lock of the image '" << im_index->GetPathName() << "' can not be released");
                 return false;
             }
