@@ -94,14 +94,14 @@ namespace jpip {
 
             if (!cache_model.IsFullMetadata()) {
                 if (im_index->GetNumMetadatas() <= 0)
-                    WriteSegment<DataBinClass::META_DATA>(0, 0, FileSegment::Null);
+                    WriteSegment<DataBinClass::META_DATA>(0, current_idx, 0, FileSegment::Null);
                 else {
                     int bin_offset = 0;
                     bool last_metadata;
 
                     for (size_t i = 0; i < im_index->GetNumMetadatas(); i++) {
                         last_metadata = (i == im_index->GetNumMetadatas() - 1);
-                        res = WriteSegment<DataBinClass::META_DATA>(0, 0, im_index->GetMetadata(i), bin_offset,
+                        res = WriteSegment<DataBinClass::META_DATA>(0, current_idx, 0, im_index->GetMetadata(i), bin_offset,
                                                                     last_metadata);
                         bin_offset += im_index->GetMetadata(i).length;
 
@@ -116,9 +116,9 @@ namespace jpip {
             }
 
             if (!eof) {
-                for (int idx : codestreams) {
-                    WriteSegment<DataBinClass::MAIN_HEADER>(idx, 0, im_index->GetMainHeader(idx));
-                    WriteSegment<DataBinClass::TILE_HEADER>(idx, 0, FileSegment::Null);
+                for (size_t i = 0; i < codestreams.size(); i++) {
+                    WriteSegment<DataBinClass::MAIN_HEADER>(codestreams[i], i, 0, im_index->GetMainHeader(codestreams[i]));
+                    WriteSegment<DataBinClass::TILE_HEADER>(codestreams[i], i, 0, FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -134,7 +134,7 @@ namespace jpip {
                         bin_id = im_index->GetCodingParameters()->GetPrecinctDataBinId(packet);
                         last_packet = (packet.layer >= (im_index->GetCodingParameters()->num_layers - 1));
 
-                        res = WriteSegment<DataBinClass::PRECINCT>(codestreams[current_idx], bin_id, segment, bin_offset,
+                        res = WriteSegment<DataBinClass::PRECINCT>(codestreams[current_idx], current_idx, bin_id, segment, bin_offset,
                                                                    last_packet);
 
                         if (res < 0) return false;

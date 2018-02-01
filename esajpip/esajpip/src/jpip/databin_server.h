@@ -63,7 +63,7 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         template<int BIN_CLASS>
-        int WriteSegment(int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
+        int WriteSegment(int num_codestream, int idx, int id, FileSegment segment, int offset = 0, bool last = true) {
             int cached = cache_model.GetDataBin<BIN_CLASS>(num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -88,7 +88,6 @@ namespace jpip {
                     File::Ptr file_ptr;
                     if (BIN_CLASS == DataBinClass::META_DATA) file_ptr = file;
                     else {
-                        int idx = num_codestream;//codestreams[num_codestream];
                         if ((int) files.size() <= idx) return -1;
                         file_ptr = files[idx];
                     }
