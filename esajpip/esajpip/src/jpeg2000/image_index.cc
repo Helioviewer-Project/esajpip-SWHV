@@ -194,7 +194,7 @@ namespace jpeg2000 {
             res = (rdwr_lock->Wait() == WAIT_OBJECT);
         else {
             for (size_t i = 0; i < v.size(); i++)
-                res = res && hyper_links[v[i]]->ReadLock();
+                res = res && (hyper_links[v[i]]->rdwr_lock->Wait() == WAIT_OBJECT);
         }
         return res;
     }
@@ -206,7 +206,7 @@ namespace jpeg2000 {
             res = rdwr_lock->Release();
         else {
             for (size_t i = 0; i < v.size(); i++)
-                res = res && hyper_links[v[i]]->ReadUnlock();
+                res = res && hyper_links[v[i]]->rdwr_lock->Release();
         }
         return res;
     }
