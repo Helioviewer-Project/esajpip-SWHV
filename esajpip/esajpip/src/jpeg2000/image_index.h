@@ -140,14 +140,14 @@ namespace jpeg2000 {
          * codestreams.
          * @return <code>true</code> if successful
          */
-        bool ReadLock(const vector<int> &v = {0});
+        bool ReadLock(const vector<int> &v);
 
         /**
          * Releases the lock for reading, for a specific range of
          * codestreams.
          * @return <code>true</code> if successful
          */
-        bool ReadUnlock(const vector<int> &v = {0});
+        bool ReadUnlock(const vector<int> &v);
 
         /**
          * Returns the path name of the image.
