@@ -429,7 +429,8 @@ namespace jpeg2000 {
         }
         image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
 
-        for (unsigned long i = 0; i < v_data_reference.size(); i++) {
+        assert(v_data_reference.size() == v_path_file.size());
+        for (size_t i = 0; i < v_data_reference.size(); i++) {
             image_info->paths.insert(pair<string, int>(v_path_file[i], i));
         }
 

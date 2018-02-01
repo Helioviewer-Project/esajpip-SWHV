@@ -1,4 +1,8 @@
 
+if(COMMAND cmake_policy)
+    cmake_policy(SET CMP0003 NEW)
+endif(COMMAND cmake_policy)
+
 include(FindPkgConfig)
 pkg_check_modules(PKG REQUIRED glib-2.0 libgsf-1)
 
