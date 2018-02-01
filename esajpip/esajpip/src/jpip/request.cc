@@ -8,13 +8,8 @@ namespace jpip {
 
     void Request::ParseParameters(istream &stream) {
         mask.Clear();
+        codestreams.clear();
         http::Request::ParseParameters(stream);
-
-        codestreamList.sort();
-        codestreamList.unique();
-        codestreams.reserve(codestreamList.size());
-        copy(codestreamList.begin(), codestreamList.end(), back_inserter(codestreams));
-        codestreamList.clear();
     }
 
     void Request::ParseParameter(istream &stream, const string &param, string &value) {
@@ -76,7 +71,7 @@ namespace jpip {
 
                 if (stream) {
                     for (int i = x; i <= y; i++)
-                        codestreamList.push_back(i);
+                        codestreams.push_back(i);
                     mask.items.stream = 1;
                 }
 
@@ -101,7 +96,7 @@ namespace jpip {
                         GetCodedChar(stream, c);
                         if (c == '>') {
                             for (int i = x; i <= y; i++)
-                                codestreamList.push_back(i);
+                                codestreams.push_back(i);
                             mask.items.context = 1;
                         }
                     }
