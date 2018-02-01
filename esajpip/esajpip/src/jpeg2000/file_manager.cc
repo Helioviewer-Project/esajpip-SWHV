@@ -428,22 +428,22 @@ namespace jpeg2000 {
             }
         }
         image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
-        int ind_codestream = 0;
-        for (vector<uint16_t>::const_iterator i = v_data_reference.begin(); i != v_data_reference.end(); i++) {
-            image_info->paths.insert(pair<string, int>(v_path_file[*i - 1], ind_codestream));
-            ind_codestream++;
+
+        for (unsigned long i = 0; i < v_data_reference.size(); i++) {
+            image_info->paths.insert(pair<string, int>(v_path_file[i], i));
         }
+
         if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
             image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }
         // Get image info of the hyperlinked images
-        for (multimap<string, int>::iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; i++) {
+        for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; i++) {
             ImageInfo image_info_hyperlink;
-            res = res && ReadImage((*i).first, &image_info_hyperlink);
+            res = res && ReadImage(i->first, &image_info_hyperlink);
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
-            image_info->codestreams[(*i).second] = image_info_hyperlink.codestreams.back();
-            image_info->meta_data_hyperlinks[(*i).second] = image_info_hyperlink.meta_data;
+            image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
+            image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
         }
         return res;
     }
