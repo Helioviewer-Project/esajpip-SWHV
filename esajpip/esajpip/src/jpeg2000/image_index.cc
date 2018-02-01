@@ -51,13 +51,13 @@ namespace jpeg2000 {
     bool ImageIndex::BuildIndex(int ind_codestream, int r) {
         File file;
         bool res = true;
-
+/*
         if (!(res = res && rdwr_lock->Release()))
             ERROR("The lock of the image '" << path_name << "' can not be released");
 
         if (!(res = res && (rdwr_lock->WaitForWriting() == WAIT_OBJECT)))
             ERROR("The lock of the image '" << path_name << "' can not be taken for writing");
-
+*/
         // Open file for reading
         if ((res = res && file.OpenForReading(path_name))) {
             // Check if PacketIndex has been created
@@ -90,12 +90,12 @@ namespace jpeg2000 {
 
             file.Close();
         }
-
+/*
         if (!(res = res && rdwr_lock->Release()))
             ERROR("The lock of the image '" << path_name << "' can not be released");
         if (!(res = res && (rdwr_lock->Wait() == WAIT_OBJECT)))
             ERROR("The lock of the image '" << path_name << "' can not be taken for reading");
-
+*/
         return res;
     }
 
