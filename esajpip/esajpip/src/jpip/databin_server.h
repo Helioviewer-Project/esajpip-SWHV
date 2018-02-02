@@ -63,7 +63,7 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         template<int BIN_CLASS>
-        int WriteSegment(int num_codestream, int idx, int id, FileSegment segment, int offset = 0, bool last = true) {
+        int WriteSegment(File::Ptr file_ptr, int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
             int cached = cache_model.GetDataBin<BIN_CLASS>(num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -85,18 +85,10 @@ namespace jpip {
                     data_writer.SetCodestream(num_codestream);
                     data_writer.SetDataBinClass(BIN_CLASS);
 
-                    File::Ptr file_ptr;
-                    if (BIN_CLASS == DataBinClass::META_DATA) file_ptr = file;
-                    else {
-                        if ((int) files.size() <= idx) return -1;
-                        file_ptr = files[idx];
-                    }
-
                     if (!data_writer.Write(id, cached, *file_ptr, segment, last)) res = -1;
                     else cache_model.AddToDataBin<BIN_CLASS>(num_codestream, id, segment.length, last);
                 }
             }
-
             return res;
         }
 
