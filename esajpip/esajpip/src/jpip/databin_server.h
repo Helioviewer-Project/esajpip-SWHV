@@ -4,6 +4,7 @@
 //#define SHOW_TRACES
 
 #include <utility>
+#include <vector>
 #include "trace.h"
 #include "data/file.h"
 #include "jpip/woi.h"
@@ -11,7 +12,6 @@
 #include "jpip/cache_model.h"
 #include "jpip/woi_composer.h"
 #include "jpip/databin_writer.h"
-#include "jpeg2000/range.h"
 #include "jpeg2000/image_index.h"
 
 namespace jpip {
@@ -28,7 +28,7 @@ namespace jpip {
     private:
         WOI woi;            ///< Current WOI
         int pending;        ///< Number of pending bytes
-        Range range;        ///< Range of codestreams
+        vector<int> codestreams;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         bool metareq;        ///< <code>true</code> if the last request contained a "metareq"
         bool end_woi_;        ///< <code>true</code> if the WOI has been completely sent
@@ -63,7 +63,7 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         template<int BIN_CLASS>
-        int WriteSegment(int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
+        int WriteSegment(File::Ptr file_ptr, int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
             int cached = cache_model.GetDataBin<BIN_CLASS>(num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -85,19 +85,10 @@ namespace jpip {
                     data_writer.SetCodestream(num_codestream);
                     data_writer.SetDataBinClass(BIN_CLASS);
 
-                    File::Ptr file_ptr;
-                    if (BIN_CLASS == DataBinClass::META_DATA) file_ptr = file;
-                    else {
-                        int idx = range.GetIndex(num_codestream);
-                        if ((int) files.size() <= idx) return -1;
-                        file_ptr = files[idx];
-                    }
-
                     if (!data_writer.Write(id, cached, *file_ptr, segment, last)) res = -1;
                     else cache_model.AddToDataBin<BIN_CLASS>(num_codestream, id, segment.length, last);
                 }
             }
-
             return res;
         }
 

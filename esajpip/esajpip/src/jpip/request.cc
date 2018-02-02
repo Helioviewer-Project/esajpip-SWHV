@@ -8,6 +8,7 @@ namespace jpip {
 
     void Request::ParseParameters(istream &stream) {
         mask.Clear();
+        codestreams.clear();
         http::Request::ParseParameters(stream);
     }
 
@@ -69,12 +70,17 @@ namespace jpip {
                     stream.ignore(1) >> y;
 
                 if (stream) {
-                    min_codestream = x;
-                    max_codestream = y;
+                    if (x > y) { // not standard
+                        for (int i = x; i >= y; i--)
+                            codestreams.push_back(i);
+                    } else {
+                        for (int i = x; i <= y; i++)
+                            codestreams.push_back(i);
+                    }
                     mask.items.stream = 1;
                 }
 
-                TRACE("JPIP parameter: stream=" << min_codestream << ":" << max_codestream);
+                TRACE("JPIP parameter: stream=" << x << ":" << y);
             }
         } else if (param == "model") {
             if (ParseModel(stream))
@@ -94,13 +100,18 @@ namespace jpip {
 
                         GetCodedChar(stream, c);
                         if (c == '>') {
-                            min_codestream = x;
-                            max_codestream = y;
+                            if (x > y) { // not standard
+                                for (int i = x; i >= y; i--)
+                                    codestreams.push_back(i);
+                            } else {
+                                for (int i = x; i <= y; i++)
+                                    codestreams.push_back(i);
+                            }
                             mask.items.context = 1;
                         }
                     }
                 }
-                TRACE("JPIP parameter: context=" << min_codestream << ":" << max_codestream);
+                TRACE("JPIP parameter: context=" << x << ":" << y);
             }
         }
 

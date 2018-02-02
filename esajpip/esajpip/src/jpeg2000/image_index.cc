@@ -51,13 +51,13 @@ namespace jpeg2000 {
     bool ImageIndex::BuildIndex(int ind_codestream, int r) {
         File file;
         bool res = true;
-
+/*
         if (!(res = res && rdwr_lock->Release()))
             ERROR("The lock of the image '" << path_name << "' can not be released");
 
         if (!(res = res && (rdwr_lock->WaitForWriting() == WAIT_OBJECT)))
             ERROR("The lock of the image '" << path_name << "' can not be taken for writing");
-
+*/
         // Open file for reading
         if ((res = res && file.OpenForReading(path_name))) {
             // Check if PacketIndex has been created
@@ -90,12 +90,12 @@ namespace jpeg2000 {
 
             file.Close();
         }
-
+/*
         if (!(res = res && rdwr_lock->Release()))
             ERROR("The lock of the image '" << path_name << "' can not be released");
         if (!(res = res && (rdwr_lock->Wait() == WAIT_OBJECT)))
             ERROR("The lock of the image '" << path_name << "' can not be taken for reading");
-
+*/
         return res;
     }
 
@@ -187,26 +187,26 @@ namespace jpeg2000 {
         return segment;
     }
 
-    bool ImageIndex::ReadLock(const Range &range) {
+    bool ImageIndex::ReadLock(const vector<int> &v) {
         bool res = true;
 
         if (hyper_links.size() <= 0)
             res = (rdwr_lock->Wait() == WAIT_OBJECT);
         else {
-            for (int i = range.first; i <= range.last; i++)
-                res = res && hyper_links[i]->ReadLock();
+            for (size_t i = 0; i < v.size(); i++)
+                res = res && (hyper_links[v[i]]->rdwr_lock->Wait() == WAIT_OBJECT);
         }
         return res;
     }
 
-    bool ImageIndex::ReadUnlock(const Range &range) {
+    bool ImageIndex::ReadUnlock(const vector<int> &v) {
         bool res = true;
 
         if (hyper_links.size() <= 0)
             res = rdwr_lock->Release();
         else {
-            for (int i = range.first; i <= range.last; i++)
-                res = res && hyper_links[i]->ReadUnlock();
+            for (size_t i = 0; i < v.size(); i++)
+                res = res && hyper_links[v[i]]->rdwr_lock->Release();
         }
         return res;
     }

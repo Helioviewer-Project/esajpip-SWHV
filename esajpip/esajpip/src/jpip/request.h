@@ -118,8 +118,7 @@ namespace jpip {
 
         Size woi_size;           ///< WOI size
         Point woi_position;      ///< WOI position
-        int min_codestream;      ///< Minimum codestream
-        int max_codestream;      ///< Maximum codestream
+        vector<int> codestreams; ///< Requested codestreams
         int length_response;     ///< Maximum response length
         ParametersMask mask;     ///< Parameters mask
         Size resolution_size;    ///< Size of the resolution level
@@ -134,10 +133,9 @@ namespace jpip {
          * Empty constructor.
          */
         Request() {
-            min_codestream = 0;
-            max_codestream = 0;
             length_response = 0;
             round_direction = CLOSEST;
+            codestreams.reserve(100);
         }
 
         /**
