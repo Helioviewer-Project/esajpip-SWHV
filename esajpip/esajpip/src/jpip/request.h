@@ -118,7 +118,7 @@ namespace jpip {
 
         Size woi_size;           ///< WOI size
         Point woi_position;      ///< WOI position
-        vector<int> codestreams;
+        vector<int> codestreams; ///< Requested codestreams
         int length_response;     ///< Maximum response length
         ParametersMask mask;     ///< Parameters mask
         Size resolution_size;    ///< Size of the resolution level
