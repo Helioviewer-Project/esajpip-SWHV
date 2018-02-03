@@ -55,11 +55,10 @@ namespace jpeg2000 {
         /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
-         * @param cache_dir Directory used for caching.
          * @return <code>true</code> if successful
          */
-        bool Init(string root_dir, string cache_dir) {
-            return file_manager_.Init(root_dir, cache_dir) && mutex.Init(false);
+        bool Init(string root_dir) {
+            return file_manager_.Init(root_dir) && mutex.Init(false);
         }
 
         /**

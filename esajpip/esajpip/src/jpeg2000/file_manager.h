@@ -12,7 +12,6 @@ namespace jpeg2000 {
     class FileManager {
     private:
         string root_dir_;    ///< Root directory of the repository
-        string cache_dir_;    ///< Caching directory
 
         /**
          * Reads the header information. of a JP2/JPX box.
@@ -121,36 +120,27 @@ namespace jpeg2000 {
          */
         FileManager() {
             root_dir_ = "./";
-            cache_dir_ = "./";
         }
 
         /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
-         * @param cache_dir Directory for caching.
          */
-        FileManager(string root_dir, string cache_dir) {
-            assert(Init(root_dir, cache_dir));
+        FileManager(string root_dir) {
+            assert(Init(root_dir));
         }
 
         /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
-         * @param cache_dir Directory for caching.
          * @return <code>true</code> if successful
          */
-        bool Init(string root_dir = "./", string cache_dir = "./") {
-            if ((root_dir.size() == 0) || (cache_dir.size() == 0)) return false;
+        bool Init(string root_dir = "./") {
+            if (root_dir.size() == 0) return false;
             else {
                 root_dir_ = root_dir;
-                cache_dir_ = cache_dir;
-
                 if (root_dir_.at(root_dir_.size() - 1) != '/')
                     root_dir_ += '/';
-
-                if (cache_dir_.at(cache_dir_.size() - 1) != '/')
-                    cache_dir_ += '/';
-
                 return true;
             }
         }

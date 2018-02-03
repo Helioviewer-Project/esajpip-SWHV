@@ -28,11 +28,8 @@ int main(void) {
 
     string name_image_file;
 
-    if (!File::Exists(cfg.caching_folder().c_str()))
-        cerr << "The cache folder does not exist" << endl;
-
     IndexManager im;
-    im.Init(cfg.images_folder(), cfg.caching_folder());
+    im.Init(cfg.images_folder());
 
     ImageIndex::Ptr it_node;
 

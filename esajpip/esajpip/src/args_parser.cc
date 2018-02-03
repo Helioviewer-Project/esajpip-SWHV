@@ -88,41 +88,6 @@ bool ArgsParser::Parse(int argc, char **argv) {
                 tm_after = app_info.child_time();
                 cpu = (tm_after - tm_before) / 5.0;
             }
-        } else if ((argv1 == "clean") && (argv2 == "cache")) {
-            int num = 0;
-            long rbytes = 0;
-            DIR *dir = NULL;
-            dirent *dir_ent = NULL;
-
-            if ((dir = opendir(cfg.caching_folder().c_str())) != NULL) {
-                struct stat file_stat;
-                time_t now = time(NULL);
-
-                while ((dir_ent = readdir(dir)) != NULL) {
-                    string path = cfg.caching_folder() + dir_ent->d_name;
-
-                    if (path.rfind(".cache") == (path.size() - 6)) {
-                        if (!stat(path.c_str(), &file_stat)) {
-                            if (((now - file_stat.st_atime) > cfg.cache_max_time()) && (cfg.cache_max_time() >= 0)) {
-                                if (!unlink(path.c_str())) {
-                                    rbytes += file_stat.st_size;
-                                    num++;
-                                }
-                            }
-                        }
-                    } else if (path.rfind(".backup") == (path.size() - 7)) {
-                        if (!stat(path.c_str(), &file_stat)) {
-                            if (!unlink(path.c_str())) {
-                                rbytes += file_stat.st_size;
-                                num++;
-                            }
-                        }
-                    }
-                }
-
-                closedir(dir);
-            }
-            CERR("Removed " << num << " files from cache (" << rbytes << " bytes)");
         } else {
             CERR("Invalid command");
         }

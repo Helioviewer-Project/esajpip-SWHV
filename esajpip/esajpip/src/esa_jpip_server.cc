@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     if (app_info.is_running())
         return CERR("The server is already running");
 
-    if (!index_manager.Init(cfg.images_folder(), cfg.caching_folder()))
+    if (!index_manager.Init(cfg.images_folder()))
         return CERR("The index manager can not be initialized");
 
     app_info->father_pid = getpid();
@@ -86,9 +86,6 @@ int main(int argc, char **argv) {
 
     if (cfg.logging())
         TraceSystem::AppendToFile(cfg.logging_folder() + SERVER_APP_NAME);
-
-    if (!File::Exists(cfg.caching_folder().c_str()))
-        ERROR("The cache folder does not exist");
 
     if (cfg.address().empty())
         listen_addr = InetAddress(cfg.port());

@@ -92,13 +92,6 @@ public:
     }
 
     /**
-     * Returns the folder used for caching.
-     */
-    string caching_folder() const {
-        return caching_folder_;
-    }
-
-    /**
      * Returns the folder used for the logging files.
      */
     string logging_folder() const {
