@@ -62,10 +62,6 @@ int main(int argc, char **argv) {
 
     cfgMark = '-';
     cfgName = CONFIG_FILE;
-    if (File::Exists("/etc/esajpip/" CONFIG_FILE)) {
-        cfgName = "/etc/esajpip/" CONFIG_FILE;
-        cfgMark = ' ';
-    }
 
     if (!cfg.Load(cfgName.c_str()))
         return CERR("The configuration file '" << cfgName << "' can not be read");

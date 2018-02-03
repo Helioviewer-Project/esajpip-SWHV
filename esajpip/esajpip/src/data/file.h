@@ -36,15 +36,6 @@ namespace data {
         }
 
         /**
-         * Returns <code>true</code> if the given file exists. This
-         * is a wrapper of the system function <code>stat</code>.
-         */
-        static bool Exists(const char *file_name) {
-            struct stat file_stat;
-            return (stat(file_name, &file_stat) == 0);
-        }
-
-        /**
          * @param file_name Path name of the file to open.
          * @return <code>true</code> if successful.
          */
@@ -129,26 +120,17 @@ namespace data {
         }
 
         /**
-         * Returns the file descriptor.
-         */
-        int GetDescriptor() const {
-            assert(file_ptr != NULL);
-            return fileno(file_ptr);
-        }
-
-        /**
          * Return the current size of the file, without modifying
          * the file position.
          */
         uint64_t GetSize() const {
             assert(file_ptr != NULL);
 
-            uint64_t offset = GetOffset();
-            Seek(0, SEEK_END);
-            uint64_t final_offset = GetOffset();
-            Seek(offset, SEEK_SET);
-
-            return final_offset;
+            int fd = GetDescriptor();
+            struct stat file_stat;
+            if (fstat(fd, &file_stat) == -1)
+                return 0;
+            return file_stat.st_size;
         }
 
         /**
@@ -253,6 +235,11 @@ namespace data {
          * File pointer.
          */
         FILE *file_ptr;
+
+        int GetDescriptor() const {
+            assert(file_ptr != NULL);
+            return fileno(file_ptr);
+        }
     };
 
     typedef BaseFile File;
