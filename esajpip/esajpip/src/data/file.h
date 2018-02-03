@@ -46,6 +46,12 @@ namespace data {
                 ERROR("Impossible to open file: '" << file_name << "': " << strerror(errno));
                 return false;
             } else {
+                int fd = fileno(file_ptr);
+                struct stat file_stat;
+                if (fstat(fd, &file_stat) == -1)
+                    size = 0;
+                else
+                    size = file_stat.st_size;
                 return true;
             }
         }
@@ -56,29 +62,6 @@ namespace data {
          */
         bool Open(const string &file_name) {
             return Open(file_name.c_str());
-        }
-
-        /**
-         * Opens a file with given an already
-         * opened <code>File</code> object. The descriptor of the opened
-         * file is duplicated and re-opened
-         * @param file Opened file.
-         * @return <code>true</code> if successful.
-         */
-        bool Open(const BaseFile &file) {
-            assert(file_ptr == NULL && file.file_ptr != NULL);
-
-            int new_fd = -1;
-
-            if ((new_fd = dup(file.GetDescriptor())) < 0) return false;
-            else {
-                if ((file_ptr = fdopen(new_fd, "rb")) == NULL) {
-                    close(new_fd);
-                    return false;
-                } else {
-                    return true;
-                }
-            }
         }
 
         /**
@@ -100,6 +83,7 @@ namespace data {
             if (file_ptr != NULL) {
                 fclose(file_ptr);
                 file_ptr = NULL;
+                size = 0;
             }
         }
 
@@ -111,34 +95,9 @@ namespace data {
             return ftell(file_ptr);
         }
 
-        /**
-         * Returns the EOF status (<code>feof</code>) of the file.
-         */
-        int IsEOF() const {
-            assert(file_ptr != NULL);
-            return feof(file_ptr);
-        }
-
-        /**
-         * Return the current size of the file, without modifying
-         * the file position.
-         */
         uint64_t GetSize() const {
             assert(file_ptr != NULL);
-
-            int fd = GetDescriptor();
-            struct stat file_stat;
-            if (fstat(fd, &file_stat) == -1)
-                return 0;
-            return file_stat.st_size;
-        }
-
-        /**
-         * Reads a byte from the file.
-         */
-        int ReadByte() const {
-            assert(file_ptr != NULL);
-            return fgetc(file_ptr);
+            return size;
         }
 
         /**
@@ -171,43 +130,6 @@ namespace data {
         }
 
         /**
-         * Writes a byte to the file.
-         */
-        int WriteByte(int c) const {
-            assert(file_ptr != NULL);
-            return fputc(c, file_ptr);
-        }
-
-        /**
-         * Writes a value to the file.
-         * @param value Pointer to the value.
-         * @param num_bytes Number of bytes to write (by default,
-         * the size of the value).
-         * @return <code>true</code> if successful.
-         */
-        template<typename T>
-        bool Write(T *value, int num_bytes = sizeof(T)) const {
-            assert(file_ptr != NULL);
-            return fwrite((void *) value, num_bytes, 1, file_ptr) == 1;
-        }
-
-        /**
-         * Writes a value to the file in reverse order.
-         * @param value Pointer to the value.
-         * @param num_bytes Number of bytes to write (by default,
-         * the size of the value).
-         * @return <code>true</code> if successful.
-         */
-        template<typename T>
-        bool WriteReverse(T *value, int num_bytes = sizeof(T)) const {
-            assert(file_ptr != NULL);
-            for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--)
-                if (fwrite((void *) ptr, 1, 1, file_ptr) != 1) return false;
-
-            return true;
-        }
-
-        /**
          * Returns <code>true</code> if the file pointer is not
          * <code>NULL</code>.
          */
@@ -223,15 +145,11 @@ namespace data {
         }
 
     private:
+        size_t size;
         /**
          * File pointer.
          */
         FILE *file_ptr;
-
-        int GetDescriptor() const {
-            assert(file_ptr != NULL);
-            return fileno(file_ptr);
-        }
     };
 
     typedef BaseFile File;
