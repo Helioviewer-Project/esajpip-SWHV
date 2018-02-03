@@ -29,13 +29,6 @@ namespace data {
         typedef SHARED_PTR<BaseFile> Ptr;
 
         /**
-         * Initialized the internal file pointer to <code>NULL</code>.
-         */
-        BaseFile() {
-            file_ptr = NULL;
-        }
-
-        /**
          * @param file_name Path name of the file to open.
          * @return <code>true</code> if successful.
          */
@@ -43,7 +36,7 @@ namespace data {
             assert(file_ptr == NULL);
 
             if ((file_ptr = fopen(file_name, "rb")) == NULL) {
-                ERROR("Impossible to open file: '" << file_name << "': " << strerror(errno));
+                ERROR("Unable to open file: '" << file_name << "': " << strerror(errno));
                 return false;
             } else {
                 int fd = fileno(file_ptr);
@@ -140,16 +133,13 @@ namespace data {
         /**
          * The destructor closes the file.
          */
-        virtual ~BaseFile() {
+        ~BaseFile() {
             Close();
         }
 
     private:
-        size_t size;
-        /**
-         * File pointer.
-         */
-        FILE *file_ptr;
+        size_t size = 0;
+        FILE *file_ptr = NULL;
     };
 
     typedef BaseFile File;

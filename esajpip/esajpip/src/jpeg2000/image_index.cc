@@ -104,8 +104,8 @@ namespace jpeg2000 {
         vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
         // Get packet plt offset
         if (last_offset_PLT[ind_codestream] == 0)
-            res = res && file.Seek(plt[last_plt[ind_codestream]].offset, SEEK_SET);
-        else res = res && file.Seek(last_offset_PLT[ind_codestream], SEEK_SET);
+            res = res && file.Seek(plt[last_plt[ind_codestream]].offset);
+        else res = res && file.Seek(last_offset_PLT[ind_codestream]);
 
         // Get packet length
         uint8_t buf_packet = 0;
