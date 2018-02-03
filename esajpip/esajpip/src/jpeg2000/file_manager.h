@@ -2,7 +2,6 @@
 #define _JPEG2000_FILE_MANAGER_H_
 
 #include <sys/stat.h>
-#include "data/serialize.h"
 #include "image_info.h"
 
 namespace jpeg2000 {
@@ -14,13 +13,6 @@ namespace jpeg2000 {
     private:
         string root_dir_;    ///< Root directory of the repository
         string cache_dir_;    ///< Caching directory
-
-        /**
-         * Returns <code>true</code> if the cache file exists and it is updated.
-         * @param path_image_file Path of the image file.
-         * @param path_cache_file Receives the path of the associated cache file.
-         */
-//    bool ExistCacheImage(const string& path_image_file, string *path_cache_file);
 
         /**
          * Reads the header information. of a JP2/JPX box.
@@ -125,12 +117,6 @@ namespace jpeg2000 {
 
     public:
         /**
-         * Returns the cache file name equivalent to the given
-         * image file name.
-         */
-//    string GetCacheFileName(const string& path_image_file);
-
-        /**
          * Initializes the object.
          */
         FileManager() {
@@ -175,15 +161,6 @@ namespace jpeg2000 {
         string root_dir() const {
             return root_dir_;
         }
-
-        /**
-         * Returns the directory used for caching.
-         */
-/*
-        string cache_dir() const {
-            return cache_dir_;
-        }
-*/
 
         /**
          * Reads an image file and creates the associated cache file if

@@ -56,11 +56,6 @@ namespace jpeg2000 {
             return *this;
         }
 
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & header & packets & PLT_markers);
-        }
-
         friend ostream &operator<<(ostream &out, const CodestreamIndex &index) {
             out << "Header: " << index.header << endl;
 

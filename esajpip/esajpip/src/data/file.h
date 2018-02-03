@@ -10,10 +10,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#ifndef _NO_FAST_FILE
-#include <stdio_ext.h>
-#endif
-
 #include "tr1_compat.h"
 
 #include "trace.h"
@@ -22,86 +18,15 @@ namespace data {
     using namespace std;
 
     /**
-     * Struct for wrapping the basic <code>FILE</code> locked functions for
-     * reading and writing defined in <code>stdio.h</code>.
-     *
-     * @see File
-     */
-    struct LockedAccess {
-        static inline void configure(FILE *file_ptr) {
-        }
-
-        static inline size_t fwrite(const void *ptr, size_t size, size_t count, FILE *file_ptr) {
-            return ::fwrite(ptr, size, count, file_ptr);
-        }
-
-        static inline size_t fread(void *ptr, size_t size, size_t count, FILE *file_ptr) {
-            return ::fread(ptr, size, count, file_ptr);
-        }
-
-        static inline int fgetc(FILE *file_ptr) {
-            return ::fgetc(file_ptr);
-        }
-
-        static inline int fputc(int c, FILE *file_ptr) {
-            return ::fputc(c, file_ptr);
-        }
-    };
-
-    /**
-     * Struct for wrapping the basic <code>FILE</code> unlocked functions for
-     * reading and writing defined in <code>stdio_exts.h</code>.
-     *
-     * @see File
-     */
-#ifndef _NO_FAST_FILE
-    struct UnlockedAccess
-    {
-      static inline void configure(FILE *file_ptr)
-      {
-        __fsetlocking(file_ptr, FSETLOCKING_BYCALLER);
-      }
-
-      static inline size_t fwrite(const void *ptr, size_t size, size_t count, FILE *file_ptr)
-      {
-        return ::fwrite_unlocked(ptr, size, count, file_ptr);
-      }
-
-      static inline size_t fread(void * ptr, size_t size, size_t count, FILE *file_ptr)
-      {
-        return ::fread_unlocked(ptr, size, count, file_ptr);
-      }
-
-      static inline int fgetc(FILE *file_ptr)
-      {
-        return ::fgetc_unlocked(file_ptr);
-      }
-
-      static inline int fputc(int c, FILE *file_ptr)
-      {
-        return ::fputc_unlocked(c, file_ptr);
-      }
-    };
-#endif
-
-    /**
      * This is a wrapper class for the <code>FILE</code> functions that
-     * provides all the functionality to handle files safely. It is defined
-     * as a template in order to allow to use either the locked or the
-     * unlocked API, by means of the structs <code>LockedAccess</code> and
-     * <code>UnlockedAccess</code>. The unlocked API is not thread-safe,
-     * but it provides faster file operations.
-     *
-     * @see LockedAccess
-     * @see UnlockedAccess
+     * provides all the functionality to handle files safely.
      */
-    template<class IO>
     class BaseFile {
     public:
         /**
          * Safe pointer to this class.
          */
-        typedef SHARED_PTR<BaseFile<IO> > Ptr;
+        typedef SHARED_PTR<BaseFile> Ptr;
 
         /**
          * Initialized the internal file pointer to <code>NULL</code>.
@@ -133,7 +58,6 @@ namespace data {
                 ERROR("Impossible to open file: '" << file_name << "': " << strerror(errno));
                 return false;
             } else {
-                IO::configure(file_ptr);
                 return true;
             }
         }
@@ -158,8 +82,7 @@ namespace data {
          * compatible format string.
          * @return <code>true</code> if successful.
          */
-        template<class IO2>
-        bool Open(const BaseFile<IO2> &file, const char *access) {
+        bool Open(const BaseFile &file, const char *access) {
             assert((file_ptr == NULL) && file.IsValid());
 
             int new_fd = -1;
@@ -170,7 +93,6 @@ namespace data {
                     close(new_fd);
                     return false;
                 } else {
-                    IO::configure(file_ptr);
                     return true;
                 }
             }
@@ -196,8 +118,7 @@ namespace data {
          * Calls the function <code>Open</code> with the <code>"rb"
          * </code> access mode (reading).
          */
-        template<class IO2>
-        bool OpenForReading(const BaseFile<IO2> &file) {
+        bool OpenForReading(const BaseFile &file) {
             return Open(file, "rb");
         }
 
@@ -221,8 +142,7 @@ namespace data {
          * Calls the function <code>Open</code> with the <code>"wb"
          * </code> access mode (writing).
          */
-        template<class IO2>
-        bool OpenForWriting(const BaseFile<IO2> &file) {
+        bool OpenForWriting(const BaseFile &file) {
             return Open(file, "wb");
         }
 
@@ -235,7 +155,6 @@ namespace data {
          */
         bool Seek(int offset, int origin = SEEK_SET) const {
             assert(file_ptr != NULL);
-
             return !fseek(file_ptr, offset, origin);
         }
 
@@ -254,7 +173,6 @@ namespace data {
          */
         uint64_t GetOffset() const {
             assert(file_ptr != NULL);
-
             return ftell(file_ptr);
         }
 
@@ -263,7 +181,6 @@ namespace data {
          */
         int IsEOF() const {
             assert(file_ptr != NULL);
-
             return feof(file_ptr);
         }
 
@@ -272,7 +189,6 @@ namespace data {
          */
         int GetDescriptor() const {
             assert(file_ptr != NULL);
-
             return fileno(file_ptr);
         }
 
@@ -296,8 +212,7 @@ namespace data {
          */
         int ReadByte() const {
             assert(file_ptr != NULL);
-
-            return IO::fgetc(file_ptr);
+            return fgetc(file_ptr);
         }
 
         /**
@@ -310,8 +225,7 @@ namespace data {
         template<typename T>
         bool Read(T *value, int num_bytes = sizeof(T)) const {
             assert(file_ptr != NULL);
-
-            return (IO::fread((void *) value, num_bytes, 1, file_ptr) == 1);
+            return fread((void *) value, num_bytes, 1, file_ptr) == 1;
         }
 
         /**
@@ -324,9 +238,8 @@ namespace data {
         template<typename T>
         bool ReadReverse(T *value, int num_bytes = sizeof(T)) const {
             assert(file_ptr != NULL);
-
             for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--)
-                if (IO::fread((void *) ptr, 1, 1, file_ptr) != 1) return false;
+                if (fread((void *) ptr, 1, 1, file_ptr) != 1) return false;
 
             return true;
         }
@@ -336,8 +249,7 @@ namespace data {
          */
         int WriteByte(int c) const {
             assert(file_ptr != NULL);
-
-            return IO::fputc(c, file_ptr);
+            return fputc(c, file_ptr);
         }
 
         /**
@@ -350,8 +262,7 @@ namespace data {
         template<typename T>
         bool Write(T *value, int num_bytes = sizeof(T)) const {
             assert(file_ptr != NULL);
-
-            return (IO::fwrite((void *) value, num_bytes, 1, file_ptr) == 1);
+            return fwrite((void *) value, num_bytes, 1, file_ptr) == 1;
         }
 
         /**
@@ -364,9 +275,8 @@ namespace data {
         template<typename T>
         bool WriteReverse(T *value, int num_bytes = sizeof(T)) const {
             assert(file_ptr != NULL);
-
             for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--)
-                if (IO::fwrite((void *) ptr, 1, 1, file_ptr) != 1) return false;
+                if (fwrite((void *) ptr, 1, 1, file_ptr) != 1) return false;
 
             return true;
         }
@@ -401,25 +311,7 @@ namespace data {
         FILE *file_ptr;
     };
 
-    /**
-     * Specialization of the class <code>BaseFile</code> with
-     * locked access.
-     *
-     * @see BaseFile
-     * @see LockedAccess
-     */
-    typedef BaseFile<LockedAccess> File;
-
-    /**
-     * Specialization of the class <code>BaseFile</code> with
-     * unlocked access.
-     *
-     * @see BaseFile
-     * @see UnlockedAccess
-     */
-#ifndef _NO_FAST_FILE
-    typedef BaseFile<UnlockedAccess> FastFile;
-#endif
+    typedef BaseFile File;
 }
 
 #endif /* _DATA_FILE_H_ */

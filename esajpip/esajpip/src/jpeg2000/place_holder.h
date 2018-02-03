@@ -47,11 +47,6 @@ namespace jpeg2000 {
             *this = place_holder;
         }
 
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & id & is_jp2c & header & data_length);
-        }
-
         /**
          * Copy assignment.
          */

@@ -134,13 +134,6 @@ namespace jpeg2000 {
             return *this;
         }
 
-/*
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & size & num_levels & num_layers & progression & num_components & precinct_size);
-        }
-*/
-
         friend ostream &operator<<(ostream &out, const CodingParameters &params) {
             out << "Progression: " <<
                 (params.progression == LRCP_PROGRESSION ? "LRCP" :

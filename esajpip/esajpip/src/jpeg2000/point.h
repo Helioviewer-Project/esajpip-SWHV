@@ -203,11 +203,6 @@ namespace jpeg2000 {
             return out;
         }
 
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & x & y);
-        }
-
         virtual ~Point() {
         }
     };

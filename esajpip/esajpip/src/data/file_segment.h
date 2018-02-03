@@ -108,13 +108,6 @@ namespace data {
             return ((offset != segment.offset) || (length != segment.length));
         }
 
-/*
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & offset & length);
-        }
-*/
-
         friend ostream &operator<<(ostream &out, const FileSegment &segment) {
             out << "[" << segment.offset << ":" << segment.length << "]";
             return out;

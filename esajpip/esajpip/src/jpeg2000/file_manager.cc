@@ -23,108 +23,50 @@ namespace jpeg2000 {
 #define URL__BOX_ID 0x75726C20
 #define FLST_BOX_ID 0x666C7374
 
-/*
-    string FileManager::GetCacheFileName(const string& path_image_file) {
-        string name_cache_file;
-
-        size_t begin_pos = 0;
-        while (!isalpha(path_image_file[begin_pos]))
-            begin_pos++;
-
-        name_cache_file=path_image_file.substr(begin_pos,path_image_file.size()-begin_pos);
-
-        // Replace "." with "_"
-        for (size_t j; (j = name_cache_file.find(".")) != string::npos;)
-            name_cache_file.replace(j, 1, "_");
-
-        // Replace "/" with "_"
-        for (size_t j; (j = name_cache_file.find("/")) != string::npos;)
-            name_cache_file.replace(j, 1, "_");
-
-        // Add the file extension ".cache"
-        //name_cache_file+=".cache";
-
-        return name_cache_file;
-    }
-
-    bool FileManager::ExistCacheImage(const string& path_image_file, string *path_cache_file) {
-        // Get the path cache file
-        *path_cache_file = cache_dir_ + GetCacheFileName(path_image_file) + ".cache";
-
-        struct stat cache_att;
-
-        // Cache file exists
-        if (stat(path_cache_file->c_str(), &cache_att) == 0) {
-            // Get last modification dates of image and cache files
-            struct stat file_att;
-            stat(path_image_file.c_str(), &file_att);
-
-            // Check if last modification date of image file is lower than
-            // last modification date of cache file
-            if (file_att.st_mtime < cache_att.st_mtime) return true;
-        }
-
-        return false;
-    }
-*/
-
     bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
-//        string path_cache_file;
+        File f;
+        // Get file extension
+        string extension;
+        size_t pos = name_image_file.find_last_of(".");
+        if (pos != string::npos) extension = name_image_file.substr(pos);
 
-        // Cache file does not exist or it is not updated
-/*        if (!ExistCacheImage(name_image_file, &path_cache_file)) */ {
-            File f;
-            // Get file extension
-            string extension;
-            size_t pos = name_image_file.find_last_of(".");
-            if (pos != string::npos) extension = name_image_file.substr(pos);
+        // J2C image
+        if (extension == ".j2c") {
+            image_info->codestreams.push_back(CodestreamIndex());
 
-            // J2C image
-            if (extension == ".j2c") {
-                image_info->codestreams.push_back(CodestreamIndex());
-
-                CodingParameters *cp = &image_info->coding_parameters;
-                CodestreamIndex *ci = &image_info->codestreams.back();
-                if (!f.OpenForReading(name_image_file.c_str())) {
-                    ERROR("Impossible to open file: '" << name_image_file << "'...");
-                    return false;
-                }
-                res = res && ReadCodestream(f, cp, ci);
-                f.Close();
-            }
-                // JP2 image
-            else if (extension == ".jp2") {
-                image_info->codestreams.push_back(CodestreamIndex());
-
-                if (!f.OpenForReading(name_image_file.c_str())) {
-                    ERROR("Impossible to open file: '" << name_image_file << "'...");
-                    return false;
-                }
-                res = res && ReadJP2(f, image_info);
-                f.Close();
-            }
-                // JPX image
-            else if (extension == ".jpx") {
-                if (!f.OpenForReading(name_image_file.c_str())) {
-                    ERROR("Impossible to open file: '" << name_image_file << "'...");
-                    return false;
-                }
-                res = res && ReadJPX(f, image_info);
-                f.Close();
-            } else {
-                ERROR("File type not supported...");
+            CodingParameters *cp = &image_info->coding_parameters;
+            CodestreamIndex *ci = &image_info->codestreams.back();
+            if (!f.OpenForReading(name_image_file.c_str())) {
+                ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
             }
-/*            // Serialize the info of the image in a cache file
-            struct stat cache_dir_stat;
-            if (stat(cache_dir_.c_str(), &cache_dir_stat) == 0) res = res && OutputStream().Open(path_cache_file.c_str()).Serialize(*image_info);
+            res = res && ReadCodestream(f, cp, ci);
+            f.Close();
         }
-        // Cache file is updated
-        else {
-            // Get info of the image
-            res = res && InputStream().Open(path_cache_file.c_str()).Serialize(*image_info);
-*/      }
+            // JP2 image
+        else if (extension == ".jp2") {
+            image_info->codestreams.push_back(CodestreamIndex());
+
+            if (!f.OpenForReading(name_image_file.c_str())) {
+                ERROR("Impossible to open file: '" << name_image_file << "'...");
+                return false;
+            }
+            res = res && ReadJP2(f, image_info);
+            f.Close();
+        }
+            // JPX image
+        else if (extension == ".jpx") {
+            if (!f.OpenForReading(name_image_file.c_str())) {
+                ERROR("Impossible to open file: '" << name_image_file << "'...");
+                return false;
+            }
+            res = res && ReadJPX(f, image_info);
+            f.Close();
+        } else {
+            ERROR("File type not supported...");
+            return false;
+        }
 
         return res;
     }

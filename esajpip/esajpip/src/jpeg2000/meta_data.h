@@ -38,11 +38,6 @@ namespace jpeg2000 {
             *this = info;
         }
 
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & meta_data & place_holders);
-        }
-
         /**
          * Copy assignment.
          */

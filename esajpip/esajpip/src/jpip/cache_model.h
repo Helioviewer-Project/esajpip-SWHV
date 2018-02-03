@@ -6,11 +6,9 @@
 #include <limits.h>
 #include "base.h"
 #include "jpip/jpip.h"
-#include "data/serialize.h"
 
 namespace jpip {
     using namespace std;
-    using namespace data;
 
     /**
      * Template class that is specialized for allowing basic operations
@@ -91,11 +89,6 @@ namespace jpip {
                     AddToPrecinct(model.min_precinct + i, model.precincts[i]);
 
                 return *this;
-            }
-
-            template<typename T>
-            T &SerializeWith(T &stream) {
-                return (stream & header & tile_header & min_precinct & precincts);
             }
 
             /**
@@ -263,11 +256,6 @@ namespace jpip {
                 GetCodestream(i) += model.codestreams[i];
 
             return *this;
-        }
-
-        template<typename T>
-        T &SerializeWith(T &stream) {
-            return (stream & full_meta & meta_data & codestreams);
         }
 
         /**
