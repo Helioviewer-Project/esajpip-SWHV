@@ -59,7 +59,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(const File &file, int ind_codestream, uint64_t *length_packet);
+        bool GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.

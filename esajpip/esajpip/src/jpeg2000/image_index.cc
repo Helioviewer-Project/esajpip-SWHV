@@ -99,7 +99,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool ImageIndex::GetPLTLength(const File &file, int ind_codestream, uint64_t *length_packet) {
+    bool ImageIndex::GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet) {
         bool res = true;
         vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
         // Get packet plt offset

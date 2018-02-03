@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -13,6 +14,8 @@
 #include "tr1_compat.h"
 
 #include "trace.h"
+
+#define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
 
 namespace data {
     using namespace std;
@@ -28,23 +31,32 @@ namespace data {
          */
         typedef SHARED_PTR<BaseFile> Ptr;
 
+        BaseFile() {
+            clear();
+        }
+
         /**
          * @param file_name Path name of the file to open.
          * @return <code>true</code> if successful.
          */
         bool Open(const char *file_name) {
-            assert(file_ptr == NULL);
+            assert(address == MAP_FAILED);
 
-            if ((file_ptr = fopen(file_name, "rb")) == NULL) {
+            int fd;
+            if ((fd = open(file_name, O_RDONLY)) == -1) {
                 ERROR("Unable to open file: '" << file_name << "': " << strerror(errno));
                 return false;
             } else {
-                int fd = fileno(file_ptr);
                 struct stat file_stat;
-                if (fstat(fd, &file_stat) == -1)
-                    size = 0;
-                else
+                if (fstat(fd, &file_stat) != -1) {
                     size = file_stat.st_size;
+                    address = (char *) mmap(0, size, PROT_READ, MAP_FILE |  MAP_SHARED, fd, 0);
+                }
+                close(fd);
+                if (address == MAP_FAILED) {
+                    Close();
+                    return false;
+                }
                 return true;
             }
         }
@@ -64,32 +76,32 @@ namespace data {
          * SEEK_SET</code> by default).
          * @return <code>true</code> if successful.
          */
-        bool Seek(int offset, int origin = SEEK_SET) const {
-            assert(file_ptr != NULL);
-            return !fseek(file_ptr, offset, origin);
+        bool Seek(int _offset, int origin = SEEK_SET) {
+            assert(address != MAP_FAILED);
+
+            size_t new_offset;
+            if (origin == SEEK_SET)
+                new_offset = _offset;
+            else
+                new_offset = offset + _offset;
+            offset = CLAMP(new_offset, 0, size);
+            return true;
         }
 
-        /**
-         * Closes the file.
-         */
         void Close() {
-            if (file_ptr != NULL) {
-                fclose(file_ptr);
-                file_ptr = NULL;
-                size = 0;
+            if (address != MAP_FAILED) {
+                munmap(address, size);
+                clear();
             }
         }
 
-        /**
-         * Returns the current file position.
-         */
-        uint64_t GetOffset() const {
-            assert(file_ptr != NULL);
-            return ftell(file_ptr);
+        size_t GetOffset() const {
+            assert(address != MAP_FAILED);
+            return offset;
         }
 
-        uint64_t GetSize() const {
-            assert(file_ptr != NULL);
+        size_t GetSize() const {
+            assert(address != MAP_FAILED);
             return size;
         }
 
@@ -101,9 +113,14 @@ namespace data {
          * @return <code>true</code> if successful.
          */
         template<typename T>
-        bool Read(T *value, int num_bytes = sizeof(T)) const {
-            assert(file_ptr != NULL);
-            return fread((void *) value, num_bytes, 1, file_ptr) == 1;
+        bool Read(T *value, int num_bytes = sizeof(T)) {
+            assert(address != MAP_FAILED);
+            int to_read = num_bytes;
+            if (offset + to_read > size)
+                to_read = size - offset;
+            memcpy(value, address + offset, to_read);
+            offset += to_read;
+            return to_read == num_bytes;
         }
 
         /**
@@ -114,12 +131,17 @@ namespace data {
          * @return <code>true</code> if successful.
          */
         template<typename T>
-        bool ReadReverse(T *value, int num_bytes = sizeof(T)) const {
-            assert(file_ptr != NULL);
-            for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--)
-                if (fread((void *) ptr, 1, 1, file_ptr) != 1) return false;
+        bool ReadReverse(T *value, int num_bytes = sizeof(T)) {
+            assert(address != MAP_FAILED);
+            for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--) {
+                if (offset < size) {
+                    *ptr = *(address + offset);
+                    offset++;
+                } else
+                    return false;
+            }
 
-            return true;
+           return true;
         }
 
         /**
@@ -127,7 +149,7 @@ namespace data {
          * <code>NULL</code>.
          */
         operator bool() const {
-            return file_ptr != NULL;
+            return address != MAP_FAILED;
         }
 
         /**
@@ -138,8 +160,15 @@ namespace data {
         }
 
     private:
-        size_t size = 0;
-        FILE *file_ptr = NULL;
+        char *address;
+        size_t size;
+        size_t offset;
+
+        void clear() {
+            address = (char *) MAP_FAILED;
+            size = 0;
+            offset = 0;
+        }
     };
 
     typedef BaseFile File;

@@ -20,7 +20,7 @@ namespace jpeg2000 {
          * @param length_box Receives the length of the box.
          * @return <code>true</code> if successful.
          */
-        bool ReadBoxHeader(const File &fim, uint32_t *type_box, uint64_t *length_box);
+        bool ReadBoxHeader(File &fim, uint32_t *type_box, uint64_t *length_box);
 
         /**
          * Reads the information of a codestream.
@@ -29,7 +29,7 @@ namespace jpeg2000 {
          * @param index Receives the indexing information.
          * @return <code>true</code> if successful.
          */
-        bool ReadCodestream(const File &file, CodingParameters *params, CodestreamIndex *index);
+        bool ReadCodestream(File &file, CodingParameters *params, CodestreamIndex *index);
 
         /**
          * Reads the information of a SIZ marker.
@@ -37,7 +37,7 @@ namespace jpeg2000 {
          * @param params Pointer to the coding parameters to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSIZMarker(const File &file, CodingParameters *params);
+        bool ReadSIZMarker(File &file, CodingParameters *params);
 
         /**
          * Reads the information of a COD marker.
@@ -45,7 +45,7 @@ namespace jpeg2000 {
          * @param params Pointer to the coding parameters to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadCODMarker(const File &file, CodingParameters *params);
+        bool ReadCODMarker(File &file, CodingParameters *params);
 
         /**
          * Reads the information of a SOT marker.
@@ -53,7 +53,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSOTMarker(const File &file, CodestreamIndex *index);
+        bool ReadSOTMarker(File &file, CodestreamIndex *index);
 
         /**
          * Reads the information of a PLT marker.
@@ -61,7 +61,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadPLTMarker(const File &file, CodestreamIndex *index);
+        bool ReadPLTMarker(File &file, CodestreamIndex *index);
 
         /**
          * Reads the information of a SOD marker.
@@ -69,7 +69,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSODMarker(const File &file, CodestreamIndex *index);
+        bool ReadSODMarker(File &file, CodestreamIndex *index);
 
         /**
          * Reads the information of a JP2 image file.
@@ -77,7 +77,7 @@ namespace jpeg2000 {
          * @param image_info Receives the image information.
          * @return <code>true</code> if successful.
          */
-        bool ReadJP2(const File &file, ImageInfo *image_info);
+        bool ReadJP2(File &file, ImageInfo *image_info);
 
         /**
          * Reads the information of a JPX image file.
@@ -85,7 +85,7 @@ namespace jpeg2000 {
          * @param image_info Receives the image information.
          * @return <code>true</code> if successful.
          */
-        bool ReadJPX(const File &file, ImageInfo *image_info);
+        bool ReadJPX(File &file, ImageInfo *image_info);
 
         /**
          * Reads the information of a NLST box.
@@ -94,7 +94,7 @@ namespace jpeg2000 {
          * @param length_box Box length in bytes.
          * @return <code>true</code> if successful.
          */
-        bool ReadNlstBox(const File &file, int *num_codestream, int length_box);
+        bool ReadNlstBox(File &file, int *num_codestream, int length_box);
 
         /**
          * Reads the information of a FLST box.
@@ -103,7 +103,7 @@ namespace jpeg2000 {
          * @param data_reference Receives the data reference.
          * @return <code>true</code> if successful.
          */
-        bool ReadFlstBox(const File &file, uint64_t length_box, uint16_t *data_reference);
+        bool ReadFlstBox(File &file, uint64_t length_box, uint16_t *data_reference);
 
         /**
          * Reads the information of a URL box.
@@ -112,7 +112,7 @@ namespace jpeg2000 {
          * @param path_file Receives the URL path read.
          * @return <code>true</code> if successful.
          */
-        bool ReadUrlBox(const File &file, uint64_t length_box, string *path_file);
+        bool ReadUrlBox(File &file, uint64_t length_box, string *path_file);
 
     public:
         /**

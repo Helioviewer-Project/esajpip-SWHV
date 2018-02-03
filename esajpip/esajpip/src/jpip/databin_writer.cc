@@ -63,8 +63,7 @@ namespace jpip {
         return *this;
     }
 
-    DataBinWriter &DataBinWriter::Write(uint64_t bin_id, uint64_t bin_offset,
-                                        const File &file, const FileSegment &segment, bool last_byte) {
+    DataBinWriter &DataBinWriter::Write(uint64_t bin_id, uint64_t bin_offset, File &file, const FileSegment &segment, bool last_byte) {
         char *aux_ptr = ptr;
 
         if (WriteHeader(bin_id, bin_offset, segment.length, last_byte)) {
@@ -86,7 +85,7 @@ namespace jpip {
     }
 
     DataBinWriter &DataBinWriter::WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
-                                                   const File &file, const PlaceHolder &place_holder, bool last_byte) {
+                                                   File &file, const PlaceHolder &place_holder, bool last_byte) {
         char *aux_ptr = ptr;
 
         if (WriteHeader(bin_id, bin_offset, place_holder.length(), last_byte)) {

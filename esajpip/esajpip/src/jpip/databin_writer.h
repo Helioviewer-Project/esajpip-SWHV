@@ -146,7 +146,7 @@ namespace jpip {
          * @return The object itself.
          */
         DataBinWriter &Write(uint64_t bin_id, uint64_t bin_offset,
-                             const File &file, const FileSegment &segment,
+                             File &file, const FileSegment &segment,
                              bool last_byte = false);
 
         /**
@@ -160,7 +160,7 @@ namespace jpip {
          * @return The object itself.
          */
         DataBinWriter &WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
-                                        const File &file, const PlaceHolder &place_holder,
+                                        File &file, const PlaceHolder &place_holder,
                                         bool last_byte = false);
 
         /**

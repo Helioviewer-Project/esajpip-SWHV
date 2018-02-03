@@ -71,7 +71,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadCodestream(const File &file, CodingParameters *params, CodestreamIndex *index) {
+    bool FileManager::ReadCodestream(File &file, CodingParameters *params, CodestreamIndex *index) {
         bool res = true;
 
         // Get markers
@@ -124,7 +124,7 @@ namespace jpeg2000 {
         }
     }
 
-    bool FileManager::ReadSIZMarker(const File &file, CodingParameters *params) {
+    bool FileManager::ReadSIZMarker(File &file, CodingParameters *params) {
         bool res = true;
         // To jump Lsiz, CA
         res = res && file.Seek(4, SEEK_CUR);
@@ -149,7 +149,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadCODMarker(const File &file, CodingParameters *params) {
+    bool FileManager::ReadCODMarker(File &file, CodingParameters *params) {
         bool res = true;
         // Get CS0 parameter
         uint8_t cs_buf = 0;
@@ -187,7 +187,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadSOTMarker(const File &file, CodestreamIndex *index) {
+    bool FileManager::ReadSOTMarker(File &file, CodestreamIndex *index) {
         bool res = true;
         // Get offset of the codestream header
         if (index->header.length == 0) index->header.length = file.GetOffset() - 2 - index->header.offset;
@@ -199,7 +199,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadPLTMarker(const File &file, CodestreamIndex *index) {
+    bool FileManager::ReadPLTMarker(File &file, CodestreamIndex *index) {
         bool res = true;
         // Get PLT offset
         uint64_t PLT_offset = file.GetOffset() + 3;
@@ -212,7 +212,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadSODMarker(const File &file, CodestreamIndex *index) {
+    bool FileManager::ReadSODMarker(File &file, CodestreamIndex *index) {
         bool res = true;
         // Get packets info
         FileSegment &fs = index->packets.back();
@@ -222,7 +222,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadBoxHeader(const File &file, uint32_t *type_box, uint64_t *length_box) {
+    bool FileManager::ReadBoxHeader(File &file, uint32_t *type_box, uint64_t *length_box) {
         bool res = true;
         // Get L, if it is not 0 or 1, then box length is L
         uint32_t L = 0;
@@ -245,7 +245,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadJP2(const File &file, ImageInfo *image_info) {
+    bool FileManager::ReadJP2(File &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -288,7 +288,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadJPX(const File &file, ImageInfo *image_info) {
+    bool FileManager::ReadJPX(File &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -391,7 +391,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadNlstBox(const File &file, int *num_codestream, int length_box) {
+    bool FileManager::ReadNlstBox(File &file, int *num_codestream, int length_box) {
         bool res = true;
         // Get the codestream number
         uint32_t an;
@@ -405,7 +405,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadFlstBox(const File &file, uint64_t length_box, uint16_t *data_reference) {
+    bool FileManager::ReadFlstBox(File &file, uint64_t length_box, uint16_t *data_reference) {
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file.Seek(14, SEEK_CUR);
@@ -414,7 +414,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadUrlBox(const File &file, uint64_t length_box, string *path_file) {
+    bool FileManager::ReadUrlBox(File &file, uint64_t length_box, string *path_file) {
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file.Seek(4, SEEK_CUR);
