@@ -37,7 +37,7 @@ namespace jpeg2000 {
 
             CodingParameters *cp = &image_info->coding_parameters;
             CodestreamIndex *ci = &image_info->codestreams.back();
-            if (!f.OpenForReading(name_image_file.c_str())) {
+            if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
             }
@@ -48,7 +48,7 @@ namespace jpeg2000 {
         else if (extension == ".jp2") {
             image_info->codestreams.push_back(CodestreamIndex());
 
-            if (!f.OpenForReading(name_image_file.c_str())) {
+            if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
             }
@@ -57,7 +57,7 @@ namespace jpeg2000 {
         }
             // JPX image
         else if (extension == ".jpx") {
-            if (!f.OpenForReading(name_image_file.c_str())) {
+            if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
             }

@@ -59,7 +59,7 @@ namespace jpeg2000 {
             ERROR("The lock of the image '" << path_name << "' can not be taken for writing");
 
         // Open file for reading
-        if ((res = res && file.OpenForReading(path_name))) {
+        if ((res = res && file.Open(path_name))) {
             // Check if PacketIndex has been created
             if (packet_indexes[ind_codestream].Size() == 0)
                 packet_indexes[ind_codestream] = PacketIndex(file.GetSize());

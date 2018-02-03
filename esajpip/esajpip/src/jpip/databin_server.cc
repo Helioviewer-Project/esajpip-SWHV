@@ -10,12 +10,12 @@ namespace jpip {
 
         file = File::Ptr(new File());
 
-        if (!file->OpenForReading(im_index->GetPathName())) return false;
+        if (!file->Open(im_index->GetPathName())) return false;
         else {
             if (!im_index->IsHyperLinked(0)) files.push_back(file);
             else {
                 File::Ptr hyperlinked_file = File::Ptr(new File());
-                if (!hyperlinked_file->OpenForReading(im_index->GetPathName(0))) return false;
+                if (!hyperlinked_file->Open(im_index->GetPathName(0))) return false;
                 else files.push_back(hyperlinked_file);
             }
 
@@ -62,7 +62,7 @@ namespace jpip {
                     if (!im_index->IsHyperLinked(idx)) files[i] = file;
                     else {
                         files[i] = File::Ptr(new File());
-                        res = res && files[i]->OpenForReading(im_index->GetPathName(idx));
+                        res = res && files[i]->Open(im_index->GetPathName(idx));
                     }
                 }
             }

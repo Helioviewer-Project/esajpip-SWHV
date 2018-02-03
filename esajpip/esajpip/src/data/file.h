@@ -37,7 +37,7 @@ namespace data {
 
         /**
          * Returns <code>true</code> if the given file exists. This
-         * is a wrapper of the system funcion <code>stat</code>.
+         * is a wrapper of the system function <code>stat</code>.
          */
         static bool Exists(const char *file_name) {
             struct stat file_stat;
@@ -45,16 +45,13 @@ namespace data {
         }
 
         /**
-         * Opens a file with a specific access mode.
          * @param file_name Path name of the file to open.
-         * @param access Access mode as a <code>fopen</code>
-         * compatible format string.
          * @return <code>true</code> if successful.
          */
-        bool Open(const char *file_name, const char *access) {
+        bool Open(const char *file_name) {
             assert(file_ptr == NULL);
 
-            if ((file_ptr = fopen(file_name, access)) == NULL) {
+            if ((file_ptr = fopen(file_name, "rb")) == NULL) {
                 ERROR("Impossible to open file: '" << file_name << "': " << strerror(errno));
                 return false;
             } else {
@@ -63,87 +60,34 @@ namespace data {
         }
 
         /**
-         * Opens a file with a specific access mode.
          * @param file_name Path name of the file to open.
-         * @param access Access mode as a <code>fopen</code>
-         * compatible format string.
          * @return <code>true</code> if successful.
          */
-        bool Open(const string &file_name, const char *access) {
-            return Open(file_name.c_str(), access);
+        bool Open(const string &file_name) {
+            return Open(file_name.c_str());
         }
 
         /**
-         * Opens a file with a specific access mode given an already
+         * Opens a file with given an already
          * opened <code>File</code> object. The descriptor of the opened
-         * file is duplicated and re-opened with the access mode given.
+         * file is duplicated and re-opened
          * @param file Opened file.
-         * @param access Access mode as a <code>fopen</code>
-         * compatible format string.
          * @return <code>true</code> if successful.
          */
-        bool Open(const BaseFile &file, const char *access) {
+        bool Open(const BaseFile &file) {
             assert((file_ptr == NULL) && file.IsValid());
 
             int new_fd = -1;
 
             if ((new_fd = dup(file.GetDescriptor())) < 0) return false;
             else {
-                if ((file_ptr = fdopen(new_fd, access)) == NULL) {
+                if ((file_ptr = fdopen(new_fd, "rb")) == NULL) {
                     close(new_fd);
                     return false;
                 } else {
                     return true;
                 }
             }
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"rb"
-         * </code> access mode (reading).
-         */
-        bool OpenForReading(const char *file_name) {
-            return Open(file_name, "rb");
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"rb"
-         * </code> access mode (reading).
-         */
-        bool OpenForReading(const string &file_name) {
-            return Open(file_name.c_str(), "rb");
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"rb"
-         * </code> access mode (reading).
-         */
-        bool OpenForReading(const BaseFile &file) {
-            return Open(file, "rb");
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"wb"
-         * </code> access mode (writing).
-         */
-        bool OpenForWriting(const char *file_name) {
-            return Open(file_name, "wb");
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"wb"
-         * </code> access mode (writing).
-         */
-        bool OpenForWriting(const string &file_name) {
-            return Open(file_name.c_str(), "wb");
-        }
-
-        /*
-         * Calls the function <code>Open</code> with the <code>"wb"
-         * </code> access mode (writing).
-         */
-        bool OpenForWriting(const BaseFile &file) {
-            return Open(file, "wb");
         }
 
         /**
