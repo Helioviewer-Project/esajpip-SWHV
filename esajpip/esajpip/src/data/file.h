@@ -66,7 +66,7 @@ namespace data {
          * @return <code>true</code> if successful.
          */
         bool Open(const BaseFile &file) {
-            assert((file_ptr == NULL) && file.IsValid());
+            assert(file_ptr == NULL && file.file_ptr != NULL);
 
             int new_fd = -1;
 
@@ -211,16 +211,8 @@ namespace data {
          * Returns <code>true</code> if the file pointer is not
          * <code>NULL</code>.
          */
-        bool IsValid() const {
-            return (file_ptr != NULL);
-        }
-
-        /**
-         * Returns <code>true</code> if the file pointer is not
-         * <code>NULL</code>.
-         */
         operator bool() const {
-            return (file_ptr != NULL);
+            return file_ptr != NULL;
         }
 
         /**

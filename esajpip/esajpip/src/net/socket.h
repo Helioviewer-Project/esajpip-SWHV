@@ -54,15 +54,6 @@ namespace net {
         }
 
         /**
-          @return <code>true</code> if the identifier has a valid value.
-        */
-/*
-        bool IsValid() const {
-            return (sid != -1);
-        }
-*/
-
-        /**
           Copy asignment.
         */
         Socket &operator=(int nsid) {
