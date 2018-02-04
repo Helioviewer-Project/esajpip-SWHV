@@ -15,15 +15,11 @@
 
 #include "trace.h"
 
-#define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
 namespace data {
     using namespace std;
 
-    /**
-     * This is a wrapper class for the <code>FILE</code> functions that
-     * provides all the functionality to handle files safely.
-     */
     class BaseFile {
     public:
         /**
@@ -50,7 +46,7 @@ namespace data {
                 struct stat file_stat;
                 if (fstat(fd, &file_stat) != -1) {
                     size = file_stat.st_size;
-                    address = (char *) mmap(0, size, PROT_READ, MAP_FILE |  MAP_SHARED, fd, 0);
+                    address = (char *) mmap(0, size, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0);
                 }
                 close(fd);
                 if (address == MAP_FAILED) {
@@ -61,30 +57,19 @@ namespace data {
             }
         }
 
-        /**
-         * @param file_name Path name of the file to open.
-         * @return <code>true</code> if successful.
-         */
         bool Open(const string &file_name) {
             return Open(file_name.c_str());
         }
 
-        /**
-         * Changes the current position of the file.
-         * @param offset Offset to add to the current position.
-         * @param origin Origin to use for the change (<code>
-         * SEEK_SET</code> by default).
-         * @return <code>true</code> if successful.
-         */
         bool Seek(int _offset, int origin = SEEK_SET) {
             assert(address != MAP_FAILED);
 
             size_t new_offset;
             if (origin == SEEK_SET)
                 new_offset = _offset;
-            else
+            else // SEEK_CUR
                 new_offset = offset + _offset;
-            offset = CLAMP(new_offset, 0, size);
+            offset = MIN(new_offset, size);
             return true;
         }
 
@@ -144,17 +129,10 @@ namespace data {
            return true;
         }
 
-        /**
-         * Returns <code>true</code> if the file pointer is not
-         * <code>NULL</code>.
-         */
         operator bool() const {
             return address != MAP_FAILED;
         }
 
-        /**
-         * The destructor closes the file.
-         */
         ~BaseFile() {
             Close();
         }
