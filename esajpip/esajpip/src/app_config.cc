@@ -16,15 +16,10 @@ bool AppConfig::Load(const char *file_name) {
         root["listen_at"].lookupValue("address", address_);
 
         root["folders"].lookupValue("images", images_folder_);
-        root["folders"].lookupValue("caching", caching_folder_);
         root["folders"].lookupValue("logging", logging_folder_);
 
         if ((n = images_folder_.size()) != 0) {
             if (images_folder_[n - 1] != '/') images_folder_ += '/';
-        }
-
-        if ((n = caching_folder_.size()) != 0) {
-            if (caching_folder_[n - 1] != '/') caching_folder_ += '/';
         }
 
         if ((n = logging_folder_.size()) != 0) {
@@ -37,7 +32,6 @@ bool AppConfig::Load(const char *file_name) {
         root["general"].lookupValue("logging", logging_);
         root["general"].lookupValue("log_requests", log_requests_);
         root["general"].lookupValue("max_chunk_size", max_chunk_size_);
-        root["general"].lookupValue("cache_max_time", cache_max_time_);
     } catch (...) {
         return false;
     }
