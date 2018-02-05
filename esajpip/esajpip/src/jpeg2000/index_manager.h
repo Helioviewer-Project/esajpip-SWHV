@@ -10,10 +10,10 @@ namespace jpeg2000 {
     using namespace ipc;
 
     /**
-     * Manages the indexing information of a repository fo images.
+     * Manages the indexing information of a repository of images.
      * Maintains a list in memory of the indexes (using the class
      * <code>ImageIndex</code> for the nodes) of all the opened
-     * images and allows a multi-thread access to the information.
+     * images.
      *
      * @see FileManager
      * @see ImageIndex
