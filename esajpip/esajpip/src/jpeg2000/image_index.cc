@@ -10,7 +10,7 @@ namespace jpeg2000 {
 
         meta_data = image_info.meta_data;
 
-        if (image_info.paths.size() == 0) {
+        if (image_info.paths.empty()) {
             base::copy(codestreams, image_info.codestreams);
             max_resolution.resize(codestreams.size(), -1);
 
