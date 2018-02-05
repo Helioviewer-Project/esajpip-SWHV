@@ -91,8 +91,7 @@ namespace net {
             int flags = 1;
             setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
             if (::bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
-            if (listen(sid, nstack) != 0) return false;
-            return true;
+            return listen(sid, nstack) == 0;
         }
 
         /**

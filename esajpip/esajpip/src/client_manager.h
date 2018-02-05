@@ -4,9 +4,6 @@
 #include "app_info.h"
 #include "app_config.h"
 #include "client_info.h"
-#include "jpeg2000/index_manager.h"
-
-using namespace jpeg2000;
 
 /**
  * Handles a client connection with a dedicated
@@ -16,7 +13,6 @@ class ClientManager {
 private:
     AppConfig &cfg;                ///< Application configuration
     AppInfo &app_info;            ///< Application run-time information
-    IndexManager &index_manager;    ///< Index manager
 
 public:
     /**
@@ -27,9 +23,8 @@ public:
      */
     ClientManager(
             AppConfig &_cfg,
-            AppInfo &_app_info,
-            IndexManager &_index_manager)
-            : cfg(_cfg), app_info(_app_info), index_manager(_index_manager) {
+            AppInfo &_app_info)
+            : cfg(_cfg), app_info(_app_info) {
     }
 
     /**

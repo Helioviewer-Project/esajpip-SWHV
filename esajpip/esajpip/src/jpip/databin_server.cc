@@ -87,11 +87,6 @@ namespace jpip {
         if (pending > 0) {
             eof = false;
 
-            if (!im_index->ReadLock(codestreams)) {
-                ERROR("The lock of the image '" << im_index->GetPathName() << "' can not be taken for reading");
-                return false;
-            }
-
             if (!cache_model.IsFullMetadata()) {
                 if (im_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
@@ -157,11 +152,6 @@ namespace jpip {
                     data_writer.WriteEOR(EOR::BYTE_LIMIT_REACHED);
                     pending = 0;
                 }
-            }
-
-            if (!im_index->ReadUnlock(codestreams)) {
-                ERROR("The lock of the image '" << im_index->GetPathName() << "' can not be released");
-                return false;
             }
         }
 

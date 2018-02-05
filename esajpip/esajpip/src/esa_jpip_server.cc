@@ -17,7 +17,6 @@
 
 using namespace std;
 using namespace net;
-using namespace jpeg2000;
 
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
@@ -35,7 +34,6 @@ static AppInfo app_info;
 static Socket child_socket;
 static PollTable poll_table;
 static bool child_lost = false;
-static IndexManager index_manager;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
 
@@ -71,9 +69,6 @@ int main(int argc, char **argv) {
 
     if (app_info.is_running())
         return CERR("The server is already running");
-
-    if (!index_manager.Init(cfg.images_folder()))
-        return CERR("The index manager can not be initialized");
 
     app_info->father_pid = getpid();
 
@@ -245,9 +240,9 @@ static void *ClientThread(void *arg) {
     ClientInfo *client_info = (ClientInfo *) arg;
 
 #ifndef BASIC_SERVER
-    ClientManager(cfg, app_info, index_manager).Run(client_info);
+    ClientManager(cfg, app_info).Run(client_info);
 #else
-    ClientManager(cfg, app_info, index_manager).RunBasic(client_info);
+    ClientManager(cfg, app_info).RunBasic(client_info);
 #endif
 
     int sock = client_info->father_sock();

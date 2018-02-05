@@ -21,12 +21,10 @@ private:
     int log_requests_;  ///< <code>true</code> if the client requests are logged
     string address_;            ///< Listening address
     string images_folder_;    ///< Directory for the images
-    string caching_folder_;    ///< Directory for the caching files
     string logging_folder_;    ///< Directory for the logging files
     int max_chunk_size_;        ///< Maximum chunk size
     int max_connections_;        ///< Maximum number of connections
     int com_time_out_;        ///< Connection time-out
-    int cache_max_time_;        ///< Maximum time for the cache files
 
 public:
     /**
@@ -38,11 +36,9 @@ public:
         address_ = "";
         log_requests_ = 0;
         images_folder_ = "";
-        caching_folder_ = "";
         logging_folder_ = "";
         max_chunk_size_ = 0;
         max_connections_ = 0;
-        cache_max_time_ = 0;
         com_time_out_ = -1;
     }
 
@@ -58,7 +54,6 @@ public:
         out << "\tListen at: " << cfg.address_ << ":" << cfg.port_ << endl;
         out << "\tFolders:" << endl;
         out << "\t\tImages: " << cfg.images_folder_ << endl;
-        out << "\t\tCaching: " << cfg.caching_folder_ << endl;
         out << "\t\tLogging: " << cfg.logging_folder_ << endl;
         out << "\tConnections: " << endl;
         out << "\t\tMax. number: " << cfg.max_connections_ << endl;
@@ -131,14 +126,6 @@ public:
      */
     int com_time_out() const {
         return com_time_out_;
-    }
-
-    /**
-     * Returns the maximum time for the cache files in
-     * seconds.
-     */
-    int cache_max_time() const {
-        return cache_max_time_;
     }
 
     virtual ~AppConfig() {

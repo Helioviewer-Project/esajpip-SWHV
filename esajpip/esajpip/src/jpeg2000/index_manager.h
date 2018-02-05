@@ -2,48 +2,23 @@
 #define _JPEG2000_INDEX_MANAGER_H_
 
 #include <list>
-#include "ipc/mutex.h"
 #include "image_index.h"
 #include "file_manager.h"
 
 namespace jpeg2000 {
-    using namespace ipc;
-
     /**
-     * Manages the indexing information of a repository fo images.
+     * Manages the indexing information of a repository of images.
      * Maintains a list in memory of the indexes (using the class
      * <code>ImageIndex</code> for the nodes) of all the opened
-     * images and allows a multi-thread access to the information.
+     * images.
      *
      * @see FileManager
      * @see ImageIndex
      */
     class IndexManager {
     private:
-        /**
-         * Mutex for the operations with the list.
-         */
-        Mutex mutex;
-
-        FileManager file_manager_;        ///< File manager
+        FileManager file_manager_;      ///< File manager
         list<ImageIndex> index_list;    ///< List of the indexes
-
-        /**
-         * Unsafely (without mutex) opens an image and adds its index
-         * to the list.
-         * @param path_image_file Path of the image file.
-         * @param image_index Receives the pointer to the image index created.
-         * @return <code>true</code> if successful.
-         */
-        bool UnsafeOpenImage(string &path_image_file, ImageIndex::Ptr *image_index);
-
-        /**
-         * Unsafely (without mutex) closes an image and removes its index
-         * from the list, only if it is not used by any other one.
-         * @param image_index Associated image index.
-         * @return <code>true</code> if successful.
-         */
-        bool UnsafeCloseImage(ImageIndex::Ptr &image_index);
 
     public:
         /**
@@ -58,7 +33,7 @@ namespace jpeg2000 {
          * @return <code>true</code> if successful
          */
         bool Init(string root_dir) {
-            return file_manager_.Init(root_dir) && mutex.Init(false);
+            return file_manager_.Init(root_dir);
         }
 
         /**

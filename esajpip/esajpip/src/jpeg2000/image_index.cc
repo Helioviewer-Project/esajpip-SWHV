@@ -3,14 +3,14 @@
 
 namespace jpeg2000 {
 
-    bool ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
+    void ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
         num_references = 1;
         this->path_name = path_name;
         this->coding_parameters = CodingParameters::Ptr(new CodingParameters(image_info.coding_parameters));
 
         meta_data = image_info.meta_data;
 
-        if (image_info.paths.size() == 0) {
+        if (image_info.paths.empty()) {
             base::copy(codestreams, image_info.codestreams);
             max_resolution.resize(codestreams.size(), -1);
 
@@ -22,13 +22,9 @@ namespace jpeg2000 {
                 packet_indexes.push_back(PacketIndex());
             }
         }
-
-        rdwr_lock = RdWrLock::Ptr(new RdWrLock());
-        return rdwr_lock->Init();
     }
 
-    bool ImageIndex::Init(const string &path_name, CodingParameters::Ptr coding_parameters, const ImageInfo &image_info,
-                          int index) {
+    void ImageIndex::Init(const string &path_name, CodingParameters::Ptr coding_parameters, const ImageInfo &image_info, int index) {
         num_references = 1;
         this->path_name = path_name;
         this->coding_parameters = coding_parameters;
@@ -43,20 +39,11 @@ namespace jpeg2000 {
         last_offset_PLT.push_back(0);
         last_offset_packet.push_back(0);
         packet_indexes.push_back(PacketIndex());
-
-        rdwr_lock = RdWrLock::Ptr(new RdWrLock());
-        return rdwr_lock->Init();
     }
 
     bool ImageIndex::BuildIndex(int ind_codestream, int r) {
         File file;
         bool res = true;
-
-        if (!(res = res && rdwr_lock->Release()))
-            ERROR("The lock of the image '" << path_name << "' can not be released");
-
-        if (!(res = res && (rdwr_lock->WaitForWriting() == WAIT_OBJECT)))
-            ERROR("The lock of the image '" << path_name << "' can not be taken for writing");
 
         // Open file for reading
         if ((res = res && file.Open(path_name))) {
@@ -87,19 +74,13 @@ namespace jpeg2000 {
                 res = res && GetPLTLength(file, ind_codestream, &length_packet);
                 GetOffsetPacket(file, ind_codestream, length_packet);
             }
-
             file.Close();
         }
-
-        if (!(res = res && rdwr_lock->Release()))
-            ERROR("The lock of the image '" << path_name << "' can not be released");
-        if (!(res = res && (rdwr_lock->Wait() == WAIT_OBJECT)))
-            ERROR("The lock of the image '" << path_name << "' can not be taken for reading");
 
         return res;
     }
 
-    bool ImageIndex::GetPLTLength(const File &file, int ind_codestream, uint64_t *length_packet) {
+    bool ImageIndex::GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet) {
         bool res = true;
         vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
         // Get packet plt offset
@@ -185,30 +166,6 @@ namespace jpeg2000 {
             }
         }
         return segment;
-    }
-
-    bool ImageIndex::ReadLock(const vector<int> &v) {
-        bool res = true;
-
-        if (hyper_links.size() <= 0)
-            res = (rdwr_lock->Wait() == WAIT_OBJECT);
-        else {
-            for (size_t i = 0; i < v.size(); i++)
-                res = res && (hyper_links[v[i]]->rdwr_lock->Wait() == WAIT_OBJECT);
-        }
-        return res;
-    }
-
-    bool ImageIndex::ReadUnlock(const vector<int> &v) {
-        bool res = true;
-
-        if (hyper_links.size() <= 0)
-            res = rdwr_lock->Release();
-        else {
-            for (size_t i = 0; i < v.size(); i++)
-                res = res && hyper_links[v[i]]->rdwr_lock->Release();
-        }
-        return res;
     }
 
 }

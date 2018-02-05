@@ -9,32 +9,19 @@
 #include "base.h"
 #include "image_info.h"
 #include "packet_index.h"
-#include "ipc/rdwr_lock.h"
 
 namespace jpeg2000 {
     using namespace std;
-    using namespace ipc;
 
     /**
      * Contains the indexing information of a JPEG2000 image file that
      * is managed by the index manager. This class can be printed.
-     *
-     * Maintains a read/write lock for controlling the multi-thread
-     * access to the indexing information. For instance, by default
-     * all the threads usually want to read the information. The
-     * packet index built on demand, so only when a thread wants to
-     * create a new level of the packet index, it needs to write.
      *
      * @see IndexManager
      */
     class ImageIndex {
     private:
         friend class IndexManager;
-
-        /**
-         * Read/write lock.
-         */
-        RdWrLock::Ptr rdwr_lock;
 
         vector<int> last_plt;
         vector<int> last_packet;
@@ -59,7 +46,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(const File &file, int ind_codestream, uint64_t *length_packet);
+        bool GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
@@ -82,9 +69,8 @@ namespace jpeg2000 {
          * Initializes the object.
          * @param path_name Path name of the image.
          * @param image_info Indexing image information.
-         * @return <code>true</code> if successful
          */
-        bool Init(const string &path_name, const ImageInfo &image_info);
+        void Init(const string &path_name, const ImageInfo &image_info);
 
         /**
          * Initializes the object.
@@ -92,9 +78,8 @@ namespace jpeg2000 {
          * @param coding_parameters Coding parameters.
          * @param image_info Indexing image information.
          * @param index Image index.
-         * @return <code>true</code> if successful
          */
-        bool Init(const string &path_name, CodingParameters::Ptr coding_parameters,
+        void Init(const string &path_name, CodingParameters::Ptr coding_parameters,
                   const ImageInfo &image_info, int index);
 
         /**
@@ -134,20 +119,6 @@ namespace jpeg2000 {
         size_t GetNumMetadatas() const {
             return meta_data.meta_data.size();
         }
-
-        /**
-         * Gets the lock for reading, for a specific range of
-         * codestreams.
-         * @return <code>true</code> if successful
-         */
-        bool ReadLock(const vector<int> &v);
-
-        /**
-         * Releases the lock for reading, for a specific range of
-         * codestreams.
-         * @return <code>true</code> if successful
-         */
-        bool ReadUnlock(const vector<int> &v);
 
         /**
          * Returns the path name of the image.
@@ -240,8 +211,6 @@ namespace jpeg2000 {
         }
 
         ImageIndex &operator=(const ImageIndex &image_index) {
-            rdwr_lock = image_index.rdwr_lock;
-
             meta_data = image_index.meta_data;
             path_name = image_index.path_name;
             num_references = image_index.num_references;

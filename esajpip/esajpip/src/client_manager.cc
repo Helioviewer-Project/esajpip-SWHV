@@ -1,5 +1,6 @@
 #include "trace.h"
 #include "client_manager.h"
+#include "jpeg2000/index_manager.h"
 #include "jpip/jpip.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
@@ -50,6 +51,12 @@ void ClientManager::Run(ClientInfo *client_info) {
     bool send_data = false;
     ImageIndex::Ptr im_index;
     DataBinServer data_server;
+
+    IndexManager index_manager;
+    if (!index_manager.Init(cfg.images_folder())) {
+        ERROR("The index manager can not be initialized");
+        return;
+    }
 
     while (!pclose) {
         bool accept_gzip = false;
