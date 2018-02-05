@@ -26,11 +26,7 @@ namespace jpeg2000 {
 
         // IndexNode is created
         ImageIndex index_node;
-
-        if (!index_node.Init(path_image_file, image_info)) {
-            ERROR("The index for the image file '" << path_image_file << "' can not be created");
-            return false;
-        }
+        index_node.Init(path_image_file, image_info);
 
         // Repeat the process with the image hyperlinks
         if (!image_info.paths.empty()) {
@@ -55,11 +51,7 @@ namespace jpeg2000 {
                 if (hyperlinks_visited.find(i->first) == hyperlinks_visited.end()) {
                     if (hyperlinks_created.find(i->first) == hyperlinks_created.end()) {
                         ImageIndex index_node_linked;
-
-                        if (!index_node_linked.Init(i->first, index_node.coding_parameters, image_info, i->second)) {
-                            ERROR("The index for the image file '" << i->first << "' can not be created");
-                            return false;
-                        }
+                        index_node_linked.Init(i->first, index_node.coding_parameters, image_info, i->second);
 
                         index_list.push_back(index_node_linked);
                         hyperlinks_created.insert(*i);

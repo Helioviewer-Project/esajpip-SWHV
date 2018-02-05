@@ -6,8 +6,6 @@
 #include "file_manager.h"
 
 namespace jpeg2000 {
-    using namespace ipc;
-
     /**
      * Manages the indexing information of a repository of images.
      * Maintains a list in memory of the indexes (using the class
@@ -19,7 +17,6 @@ namespace jpeg2000 {
      */
     class IndexManager {
     private:
-
         FileManager file_manager_;      ///< File manager
         list<ImageIndex> index_list;    ///< List of the indexes
 
