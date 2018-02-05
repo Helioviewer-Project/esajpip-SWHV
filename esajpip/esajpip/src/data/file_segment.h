@@ -90,7 +90,6 @@ namespace data {
             return *this;
         }
 */
-
         /**
          * Returns <code>true</code> if the segment is contiguous to
          * another given segment, so the first byte of the given segment
