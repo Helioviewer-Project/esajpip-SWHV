@@ -1,6 +1,5 @@
 //#define SHOW_TRACES
 
-#include <cassert>
 #include "trace.h"
 #include "index_manager.h"
 
@@ -8,21 +7,6 @@ namespace jpeg2000 {
     using namespace std;
 
     bool IndexManager::OpenImage(string &path_image_file, ImageIndex::Ptr *image_index) {
-        if (mutex.Wait() != WAIT_OBJECT) {
-            ERROR("The mutex of the index manager can not be locked for opening");
-            return false;
-        }
-
-        bool res = UnsafeOpenImage(path_image_file, image_index);
-
-        if (!mutex.Release()) {
-            ERROR("The mutex of the index manager can not be unlocked");
-            return false;
-        }
-        return res;
-    }
-
-    bool IndexManager::UnsafeOpenImage(string &path_image_file, ImageIndex::Ptr *image_index) {
         if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
         path_image_file = file_manager_.root_dir() + path_image_file;
 
@@ -93,21 +77,6 @@ namespace jpeg2000 {
     }
 
     bool IndexManager::CloseImage(ImageIndex::Ptr &image_index) {
-        if (mutex.Wait() != WAIT_OBJECT) {
-            ERROR("The mutex of the index manager can not be locked for closing");
-            return false;
-        }
-
-        bool res = UnsafeCloseImage(image_index);
-
-        if (!mutex.Release()) {
-            ERROR("The mutex of the index manager can not be unlocked");
-            return false;
-        }
-        return res;
-    }
-
-    bool IndexManager::UnsafeCloseImage(ImageIndex::Ptr &image_index) {
         TRACE("Closing the image '" << image_index->path_name << "'");
 
         // Decrease the number of references
@@ -117,7 +86,7 @@ namespace jpeg2000 {
         if (image_index->num_references == 0) {
             for (vector<list<ImageIndex>::iterator>::iterator i = image_index->hyper_links.begin();
                  i != image_index->hyper_links.end(); i++)
-                UnsafeCloseImage(*i);
+                CloseImage(*i);
 
             index_list.erase(image_index);
         }
