@@ -37,7 +37,7 @@ namespace jpeg2000 {
             pair<multimap<string, int>::iterator, multimap<string, int>::iterator> it_find_range;
 
             // Increase the number of references of the hyperlinks in the index list
-            for (list<ImageIndex>::iterator i = index_list.begin(); i != index_list.end(); i++) {
+            for (list<ImageIndex>::iterator i = index_list.begin(); i != index_list.end(); ++i) {
                 it_find_range = image_info.paths.equal_range(i->path_name);
                 for (it_find = it_find_range.first; it_find != it_find_range.second; ++it_find) {
                     i->num_references++;
@@ -47,7 +47,7 @@ namespace jpeg2000 {
             }
 
             // Add the rest of hyperlinks to the index list
-            for (multimap<string, int>::const_iterator i = image_info.paths.begin(); i != image_info.paths.end(); i++) {
+            for (multimap<string, int>::const_iterator i = image_info.paths.begin(); i != image_info.paths.end(); ++i) {
                 if (hyperlinks_visited.find(i->first) == hyperlinks_visited.end()) {
                     if (hyperlinks_created.find(i->first) == hyperlinks_created.end()) {
                         ImageIndex index_node_linked;
@@ -76,10 +76,8 @@ namespace jpeg2000 {
 
         // If the number of references is zero, then the IndexNode is removed from the list
         if (image_index->num_references == 0) {
-            for (vector<list<ImageIndex>::iterator>::iterator i = image_index->hyper_links.begin();
-                 i != image_index->hyper_links.end(); i++)
-                CloseImage(*i);
-
+            for (size_t i = 0; i < image_index->hyper_links.size(); ++i)
+                CloseImage(image_index->hyper_links[i]);
             index_list.erase(image_index);
         }
         return true;

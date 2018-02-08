@@ -57,7 +57,7 @@ namespace jpeg2000 {
                 << info.coding_parameters << endl << endl;
 
             if (info.paths.size() > 0) {
-                for (multimap<string, int>::const_iterator i = info.paths.begin(); i != info.paths.end(); i++) {
+                for (multimap<string, int>::const_iterator i = info.paths.begin(); i != info.paths.end(); ++i) {
                     out << "Codestream index " << (*i).second + 1 << ":" << endl;
                     out << "------------------------" << endl;
                     out << "Path: " << (*i).first << endl;
@@ -65,10 +65,9 @@ namespace jpeg2000 {
                 }
             } else {
                 int ind = 0;
-                for (vector<CodestreamIndex>::const_iterator i = info.codestreams.begin();
-                     i != info.codestreams.end(); i++, ind++) {
-                    out << "Codestream index " << ind << ":" << endl;
-                    out << "------------------------" << endl << *i << endl << endl;
+                for (size_t i = 0; i < info.codestreams.size(); ++i) {
+                    out << "Codestream index " << i << ":" << endl;
+                    out << "------------------------" << endl << info.codestreams[i] << endl << endl;
                 }
             }
 
@@ -76,9 +75,8 @@ namespace jpeg2000 {
             out << info.meta_data << endl << endl;
 
             out << endl << "Meta-data-hyperlinks: ";
-            for (vector<Metadata>::const_iterator i = info.meta_data_hyperlinks.begin();
-                 i != info.meta_data_hyperlinks.end(); i++)
-                out << *i << " ";
+            for (size_t i = 0; i < info.meta_data_hyperlinks.size(); ++i)
+                out << info.meta_data_hyperlinks[i] << " ";
 
             return out;
         }

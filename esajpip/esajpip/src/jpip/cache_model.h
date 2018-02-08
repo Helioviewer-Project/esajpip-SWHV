@@ -85,7 +85,7 @@ namespace jpip {
                 AddToMainHeader(model.header);
                 AddToTileHeader(model.tile_header);
 
-                for (int i = 0; i < (int) model.precincts.size(); i++)
+                for (size_t i = 0; i < model.precincts.size(); ++i)
                     AddToPrecinct(model.min_precinct + i, model.precincts[i]);
 
                 return *this;
@@ -189,7 +189,7 @@ namespace jpip {
             void Pack(int min_sum = 1) {
                 int sum = 0;
 
-                for (int i = 0; i < (int) precincts.size(); i++) {
+                for (int i = 0; i < (int) precincts.size(); ++i) {
                     if (precincts[i] == INT_MAX) sum++;
                     else break;
                 }
@@ -248,11 +248,11 @@ namespace jpip {
          */
         CacheModel &operator+=(const CacheModel &model) {
             if (!full_meta) {
-                for (int i = 0; i < (int) model.meta_data.size(); i++)
+                for (int i = 0; i < (int) model.meta_data.size(); ++i)
                     AddToMetadata(i, model.meta_data[i]);
             }
 
-            for (int i = 0; i < (int) model.codestreams.size(); i++)
+            for (int i = 0; i < (int) model.codestreams.size(); ++i)
                 GetCodestream(i) += model.codestreams[i];
 
             return *this;
@@ -345,8 +345,8 @@ namespace jpip {
          * Calls the <code>Pack</code> method of all the codestreams.
          */
         void Pack(int min_sum = 1) {
-            for (vector<Codestream>::iterator i = codestreams.begin(); i != codestreams.end(); i++)
-                i->Pack(min_sum);
+            for (size_t i = 0; i < codestreams.size(); ++i)
+                codestreams[i].Pack(min_sum);
         }
 
         /**

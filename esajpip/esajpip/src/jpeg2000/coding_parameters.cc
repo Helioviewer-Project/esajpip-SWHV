@@ -9,7 +9,7 @@ namespace jpeg2000 {
         total_precincts.clear();
         total_precincts.push_back(pa);
 
-        for (int i = 0; i <= num_levels; i++) {
+        for (int i = 0; i <= num_levels; ++i) {
             precinct_point = GetPrecincts(i, size);
             pa += precinct_point.x * precinct_point.y;
             total_precincts.push_back(pa);
@@ -25,7 +25,7 @@ namespace jpeg2000 {
         res_image_size->x = size.x;
         res_image_size->y = size.y;
 
-        for (int r = 1; r <= num_levels; r++) {
+        for (int r = 1; r <= num_levels; ++r) {
             res_image_x = (int) ceil((double) size.x / (1L << r));
             res_image_y = (int) ceil((double) size.y / (1L << r));
             distance_x = res_image_x - res_size.x;

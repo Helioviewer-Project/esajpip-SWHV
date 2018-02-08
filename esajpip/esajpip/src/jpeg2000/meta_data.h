@@ -50,12 +50,12 @@ namespace jpeg2000 {
 
         friend ostream &operator<<(ostream &out, const Metadata &info) {
             out << endl << "Meta-data: ";
-            for (vector<FileSegment>::const_iterator i = info.meta_data.begin(); i != info.meta_data.end(); i++)
-                out << *i << " ";
+            for (size_t i = 0; i < info.meta_data.size(); ++i)
+                out << info.meta_data[i] << " ";
 
             out << endl << "Place Holders: ";
-            for (vector<PlaceHolder>::const_iterator i = info.place_holders.begin(); i != info.place_holders.end(); i++)
-                out << *i << " ";
+            for (size_t i = 0; i < info.place_holders.size(); ++i)
+                out << info.place_holders[i] << " ";
 
             return out;
         }

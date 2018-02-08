@@ -145,7 +145,7 @@ string AppInfo::GetProcStat_(int pid, int field) const {
     file_name << "/proc/" << pid << "/stat";
     ifstream fin(file_name.str().c_str());
 
-    for (int i = 0; fin.good(); i++) {
+    for (int i = 0; fin.good(); ++i) {
         fin >> row;
         if (i == field) break;
     }

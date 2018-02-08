@@ -71,10 +71,10 @@ namespace jpip {
 
                 if (stream) {
                     if (x > y) { // not standard
-                        for (int i = x; i >= y; i--)
+                        for (int i = x; i >= y; --i)
                             codestreams.push_back(i);
                     } else {
-                        for (int i = x; i <= y; i++)
+                        for (int i = x; i <= y; ++i)
                             codestreams.push_back(i);
                     }
                     mask.items.stream = 1;
@@ -101,10 +101,10 @@ namespace jpip {
                         GetCodedChar(stream, c);
                         if (c == '>') {
                             if (x > y) { // not standard
-                                for (int i = x; i >= y; i--)
+                                for (int i = x; i >= y; --i)
                                     codestreams.push_back(i);
                             } else {
-                                for (int i = x; i <= y; i++)
+                                for (int i = x; i <= y; ++i)
                                     codestreams.push_back(i);
                             }
                             mask.items.context = 1;
@@ -192,7 +192,7 @@ namespace jpip {
                         cache_model.AddToMetadata(id, amount);
                         TRACE("Model updating: M" << id << ":" << (amount == INT_MAX ? -1 : amount));
                     } else {
-                        for (int i = minc; i <= maxc; i++) {
+                        for (int i = minc; i <= maxc; ++i) {
                             CacheModel::Codestream &cod = cache_model.GetCodestream(i);
 
                             if (c == 'h') {

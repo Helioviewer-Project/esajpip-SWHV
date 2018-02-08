@@ -26,8 +26,8 @@ struct base {
     template<typename T>
     static void copy(std::vector<T> &dest, const std::vector<T> &src) {
         dest.clear();
-        for (typename std::vector<T>::const_iterator i = src.begin(); i != src.end(); i++)
-            dest.push_back(*i);
+        for (size_t i = 0; i < src.size(); ++i)
+            dest.push_back(src[i]);
     }
 
     /**
@@ -38,8 +38,8 @@ struct base {
         int n = 0;
         dest.clear();
         dest.resize(src.size());
-        for (typename std::vector<std::vector<T> >::const_iterator i = src.begin(); i != src.end(); i++)
-            base::copy(dest[n++], *i);
+        for (size_t i = 0; i < src.size(); ++i)
+            base::copy(dest[n++], src[i]);
     }
 
     /**
@@ -48,7 +48,7 @@ struct base {
     template<typename T1, typename T2>
     static void copy(std::multimap<T1, T2> &dest, const std::multimap<T1, T2> &src) {
         dest.clear();
-        for (typename std::multimap<T1, T2>::const_iterator i = src.begin(); i != src.end(); i++)
+        for (typename std::multimap<T1, T2>::const_iterator i = src.begin(); i != src.end(); ++i)
             dest.insert(*i);
     }
 

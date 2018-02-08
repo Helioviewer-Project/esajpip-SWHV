@@ -145,8 +145,8 @@ namespace jpeg2000 {
                 << "Num. of layers: " << params.num_layers << endl
                 << "Num. of components: " << params.num_components << endl << "Precinct size: { ";
 
-            for (vector<Size>::const_iterator i = params.precinct_size.begin(); i != params.precinct_size.end(); i++)
-                out << *i << " ";
+            for (size_t i = 0; i < params.precinct_size.size(); ++i)
+                out << params.precinct_size[i] << " ";
 
             out << "}" << endl;
 

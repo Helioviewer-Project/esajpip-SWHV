@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
                             ERROR("Could not receive descriptor");
                     }
 
-                    for (int i = 2; i < poll_table.GetSize(); i++) {
+                    for (int i = 2; i < poll_table.GetSize(); ++i) {
                         if (poll_table[i].revents) {
                             LOG("Closing the connection [" << poll_table[i].fd << "]");
                             app_info->num_connections--;
@@ -203,7 +203,7 @@ static int ChildProcess() {
         return -1;
     }
 
-    for (int i = 2; i < poll_table.GetSize(); i++) {
+    for (int i = 2; i < poll_table.GetSize(); ++i) {
         sock = poll_table[i].fd;
         client_info = new ClientInfo(0, sock, sock);
 

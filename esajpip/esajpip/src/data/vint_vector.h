@@ -55,8 +55,8 @@ namespace data {
             num_bytes_ = v.num_bytes_;
 
             data.clear();
-            for (vector<uint8_t>::const_iterator i = v.data.begin(); i != v.data.end(); i++)
-                data.push_back(*i);
+            for (size_t i = 0; i < v.data.size(); ++i)
+                data.push_back(v.data[i]);
 
             return *this;
         }

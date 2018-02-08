@@ -56,7 +56,7 @@ namespace jpip {
                 if (files.size() != codestreams.size())
                     files.resize(codestreams.size());
 
-                for (size_t i = 0; i < codestreams.size(); i++) {
+                for (size_t i = 0; i < codestreams.size(); ++i) {
                     int idx = codestreams[i];
 
                     if (!im_index->IsHyperLinked(idx)) files[i] = file;
@@ -94,7 +94,7 @@ namespace jpip {
                     int bin_offset = 0;
                     bool last_metadata;
 
-                    for (size_t i = 0; i < im_index->GetNumMetadatas(); i++) {
+                    for (size_t i = 0; i < im_index->GetNumMetadatas(); ++i) {
                         last_metadata = (i == im_index->GetNumMetadatas() - 1);
                         res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, im_index->GetMetadata(i), bin_offset, last_metadata);
                         bin_offset += im_index->GetMetadata(i).length;
@@ -110,7 +110,7 @@ namespace jpip {
             }
 
             if (!eof) {
-                for (size_t i = 0; i < codestreams.size(); i++) {
+                for (size_t i = 0; i < codestreams.size(); ++i) {
                     WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0, im_index->GetMainHeader(codestreams[i]));
                     WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0, FileSegment::Null);
                 }

@@ -14,7 +14,7 @@ namespace jpeg2000 {
             base::copy(codestreams, image_info.codestreams);
             max_resolution.resize(codestreams.size(), -1);
 
-            for (vector<CodestreamIndex>::const_iterator i = codestreams.begin(); i != codestreams.end(); i++) {
+            for (size_t i = 0; i < codestreams.size(); ++i) {
                 last_plt.push_back(0);
                 last_packet.push_back(0);
                 last_offset_PLT.push_back(0);
@@ -154,11 +154,11 @@ namespace jpeg2000 {
             *offset = 0;
 
             if (coding_parameters->progression == CodingParameters::RPCL_PROGRESSION) {
-                for (int l = packet.layer; l > 0; l--)
+                for (int l = packet.layer; l > 0; --l)
                     *offset += packet_index[--idx].length;
             } else {
                 Packet p_aux = packet;
-                for (int l = 0; l < packet.layer; l++) {
+                for (int l = 0; l < packet.layer; ++l) {
                     p_aux.layer = l;
                     idx = coding_parameters->GetProgressionIndex(p_aux);
                     *offset += packet_index[idx].length;

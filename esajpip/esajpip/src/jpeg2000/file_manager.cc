@@ -130,14 +130,14 @@ namespace jpeg2000 {
         res = res && file.Seek(4, SEEK_CUR);
         // Get image height and width
         uint32_t FE[4];
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 4; ++i)
             res = res && file.ReadReverse(&FE[i]);
         // height=F1-E1
         // width=F2-E2
         params->size = Size(FE[0] - FE[2], FE[1] - FE[3]);
         // Get T2, T1, omegaT2, omegaT1
         uint32_t tiling[4];
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 4; ++i)
             res = res && file.ReadReverse(&tiling[i]);
         // Get number of components
         uint16_t num_components = 0;
@@ -172,7 +172,7 @@ namespace jpeg2000 {
         int height, width;
         uint8_t size_precinct;
         params->precinct_size.clear();
-        for (int i = 0; i <= params->num_levels; i++) {
+        for (int i = 0; i <= params->num_levels; ++i) {
             if (cs_buf & 1) {
                 res = res && file.ReadReverse(&size_precinct);
                 height = 1 << ((size_precinct & 0xF0) >> 4);
@@ -263,8 +263,7 @@ namespace jpeg2000 {
                     image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.push_back(
-                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box),
-                                        length_box));
+                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box));
                     pini = file.GetOffset();
                     plen = 0;
                     break;
@@ -314,8 +313,7 @@ namespace jpeg2000 {
                     image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.push_back(
-                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box),
-                                        length_box));
+                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box));
                     pini = file.GetOffset();
                     plen = 0;
                     break;
@@ -372,7 +370,7 @@ namespace jpeg2000 {
         image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
 
         assert(v_data_reference.size() == v_path_file.size());
-        for (size_t i = 0; i < v_data_reference.size(); i++) {
+        for (size_t i = 0; i < v_data_reference.size(); ++i) {
             image_info->paths.insert(pair<string, int>(v_path_file[i], i));
         }
 
@@ -381,7 +379,7 @@ namespace jpeg2000 {
             image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }
         // Get image info of the hyperlinked images
-        for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; i++) {
+        for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; ++i) {
             ImageInfo image_info_hyperlink;
             res = res && ReadImage(i->first, &image_info_hyperlink);
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;

@@ -2,7 +2,7 @@
 #define _JPEG2000_PACKET_INDEX_H_
 
 #include <vector>
-//#include "data/vint_vector.h"
+#include "data/vint_vector.h"
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
@@ -21,8 +21,7 @@ namespace jpeg2000 {
         /**
          * Vector of packet offsets.
          */
-        //vint_vector offsets;
-        vector<uint64_t> offsets;
+        vint_vector offsets;
 
         /**
          * Vector of file segments to handle the different
@@ -49,17 +48,14 @@ namespace jpeg2000 {
          * @param max_offset Maximum value for an offset.
          */
         PacketIndex(uint64_t max_offset) {
-/*
             assert(max_offset > 0);
 
             int num_bytes = 0;
-
             while (max_offset > 0) {
                 max_offset >>= 8;
                 num_bytes++;
             }
             offsets.set_num_bytes(num_bytes);
-*/
         }
 
         /**
@@ -75,8 +71,8 @@ namespace jpeg2000 {
         const PacketIndex &operator=(const PacketIndex &index) {
             offsets = index.offsets;
             aux.clear();
-            for (vector<FileSegment>::const_iterator i = index.aux.begin(); i != index.aux.end(); i++)
-                aux.push_back(*i);
+            for (size_t i = 0; i < index.aux.size(); ++i)
+                aux.push_back(index.aux[i]);
 
             return *this;
         }
