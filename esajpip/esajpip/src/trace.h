@@ -71,15 +71,15 @@ public:
 #define LOGC(c, a)  (TraceSystem::logStream() << _SET_COLOR(c) << a << _RESET_COLOR() << log4cpp::eol)
 #define ERROR(a)    (TraceSystem::errorStream() << _SET_COLOR(_RED) << __FILE__ << ":" << __LINE__ << ": ERROR: " << a << _RESET_COLOR() << log4cpp::eol)
 #else
-#define LOG(a)      {}
-#define LOGC(c, a)  {}
-#define ERROR(a)    {}
+#define LOG(a)
+#define LOGC(c, a)
+#define ERROR(a)
 #endif
 
 #if defined(SHOW_TRACES) && !defined(NDEBUG) && !defined(SILENT_MODE)
 #define TRACE(a)    (TraceSystem::traceStream() << _SET_COLOR(_YELLOW) << __FILE__ << ":" << __LINE__ << ": TRACE: " << a << _RESET_COLOR() << log4cpp::eol)
 #else
-#define TRACE(a)    {}
+#define TRACE(a)
 #endif
 
 #define CERR(a)     (cerr << _SET_COLOR(_RED) << a << "!" << _RESET_COLOR() << endl, -1)
