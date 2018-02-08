@@ -189,7 +189,7 @@ namespace jpip {
             void Pack(int min_sum = 1) {
                 int sum = 0;
 
-                for (int i = 0; i < (int) precincts.size(); ++i) {
+                for (size_t i = 0; i < precincts.size(); ++i) {
                     if (precincts[i] == INT_MAX) sum++;
                     else break;
                 }
@@ -248,11 +248,11 @@ namespace jpip {
          */
         CacheModel &operator+=(const CacheModel &model) {
             if (!full_meta) {
-                for (int i = 0; i < (int) model.meta_data.size(); ++i)
+                for (size_t i = 0; i < model.meta_data.size(); ++i)
                     AddToMetadata(i, model.meta_data[i]);
             }
 
-            for (int i = 0; i < (int) model.codestreams.size(); ++i)
+            for (size_t i = 0; i < model.codestreams.size(); ++i)
                 GetCodestream(i) += model.codestreams[i];
 
             return *this;

@@ -21,7 +21,8 @@ namespace jpeg2000 {
         /**
          * Vector of packet offsets.
          */
-        vint_vector offsets;
+        //vint_vector offsets;
+        vector<uint32_t> offsets;
 
         /**
          * Vector of file segments to handle the different
@@ -48,7 +49,8 @@ namespace jpeg2000 {
          * @param max_offset Maximum value for an offset.
          */
         PacketIndex(uint64_t max_offset) {
-            assert(max_offset > 0);
+            assert(max_offset <= UINT32_MAX);
+/*            assert(max_offset > 0);
 
             int num_bytes = 0;
             while (max_offset > 0) {
@@ -56,7 +58,7 @@ namespace jpeg2000 {
                 num_bytes++;
             }
             offsets.set_num_bytes(num_bytes);
-        }
+*/        }
 
         /**
          * Copy constructor.

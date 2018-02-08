@@ -41,23 +41,14 @@ endif()
 
 if(UNIX AND NOT APPLE)
     add_definitions(-D_POSIX_C_SOURCE=200112L -D_XOPEN_SOURCE=600)
-    set(CMAKE_EXE_LINKER_FLAGS "-pie -lrt")
+    set(CMAKE_EXE_LINKER_FLAGS "-lrt")
 endif()
 
 include_directories(BEFORE . ${ESAJPIP_TOP} ${LIBCONFIG}/lib ${LOG4CPP}/include ${PKG_INCLUDE_DIRS})
 link_directories(${PKG_LIBRARY_DIRS})
 
-add_library(jpipcore SHARED ${DATA_SRCS} ${JPEG2000_SRCS} ${ESAJPIP_TOP}/trace.cc)
-target_link_libraries(jpipcore log4cpp)
-sidc_install_lib(jpipcore)
-
-add_library(jpipnet SHARED ${HTTP_SRCS} ${JPIP_SRCS} ${NET_SRCS})
-target_link_libraries(jpipnet jpipcore)
-sidc_install_lib(jpipnet)
-
-add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS})
-set_target_properties(esajpip PROPERTIES COMPILE_FLAGS "-fpie")
-target_link_libraries(esajpip jpipnet jpipcore ${PKG_LIBRARIES} config log4cpp pthread)
+add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${HTTP_SRCS} ${JPIP_SRCS} ${NET_SRCS} ${DATA_SRCS} ${JPEG2000_SRCS} ${ESAJPIP_TOP}/trace.cc)
+target_link_libraries(esajpip ${PKG_LIBRARIES} config log4cpp pthread)
 
 install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
