@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
 
     if (!listen_socket.OpenInet())
         ERROR("The server listen socket can not be created");
-    else if (!listen_socket.SetNoDelay() || !listen_socket.SetSndBuf(SNDBUF) || !listen_socket.ListenAt(listen_addr))
+    else if (!listen_socket.ListenAt(listen_addr))
         ERROR("The server listen socket can not be initialized");
     else {
         LOG(SERVER_NAME << " started" << cfgMark);
@@ -139,6 +139,7 @@ int main(int argc, char **argv) {
                                     ERROR("The new socket can not be sent to the child process");
                                     new_conn.Close();
                                 } else {
+                                    bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
                                     poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
                                     app_info->num_connections++;
                                 }

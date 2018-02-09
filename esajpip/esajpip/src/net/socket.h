@@ -224,6 +224,10 @@ namespace net {
             return !setsockopt(sid, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val);
         }
 
+        bool SetKeepAlive(int val = 1) {
+            return !setsockopt(sid, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val));
+        }
+
         bool SetSndBuf(int val) {
             return !setsockopt(sid, SOL_SOCKET, SO_SNDBUF, &val, sizeof val);
         }
