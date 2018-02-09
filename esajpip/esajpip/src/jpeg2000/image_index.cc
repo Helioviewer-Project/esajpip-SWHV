@@ -95,7 +95,7 @@ namespace jpeg2000 {
 
         *length_packet = 0;
         while (partial) {
-            res = res && file.Read(&buf_packet, 1);
+            res = res && file.Read(&buf_packet);
             partial = buf_packet & (uint8_t) 128; // To get if the packet is final or not
             length_packet_partial = buf_packet & (uint8_t) 127; // To get the packet length
             *length_packet = (*length_packet << 7) | length_packet_partial;

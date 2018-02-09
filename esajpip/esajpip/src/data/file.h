@@ -101,7 +101,7 @@ namespace data {
         bool Read(T *value, int num_bytes = sizeof(T)) {
             assert(address != MAP_FAILED);
             int to_read = num_bytes;
-            if (offset + to_read > size)
+            if (offset + to_read >= size)
                 to_read = size - offset;
             memcpy(value, address + offset, to_read);
             offset += to_read;
@@ -133,7 +133,7 @@ namespace data {
             return address != MAP_FAILED;
         }
 
-        ~BaseFile() {
+        virtual ~BaseFile() {
             Close();
         }
 

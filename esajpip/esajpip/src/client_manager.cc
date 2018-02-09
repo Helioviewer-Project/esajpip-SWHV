@@ -128,7 +128,6 @@ void ClientManager::Run(ClientInfo *client_info) {
                 pclose = false;
                 is_opened = false;
                 req.cache_model.Clear();
-                // unlink(backup_file.c_str());
                 index_manager.CloseImage(im_index);
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
