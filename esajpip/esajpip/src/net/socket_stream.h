@@ -118,6 +118,10 @@ namespace net {
             return &(socket);
         }
 
+        ssize_t Send(const void *buf, size_t len) {
+            return sputn((const char *) buf, len);
+        }
+
         virtual ~SocketStream() {
         }
     };

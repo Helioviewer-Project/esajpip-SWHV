@@ -19,15 +19,15 @@ using namespace jpeg2000;
 
 static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     if (len > 0) {
-        strm << hex << len << dec << http::Protocol::CRLF << flush;
-        if (strm->Send(buf, len) != (ssize_t) len)
+        strm << hex << len << dec << http::Protocol::CRLF;
+        if (strm.Send(buf, len) != (ssize_t) len)
             { /* ERROR("Could not send"); */ }
-        strm << http::Protocol::CRLF << flush;
+        strm << http::Protocol::CRLF;
     }
 }
 
 void ClientManager::Run(ClientInfo *client_info) {
-    SocketStream sock_stream(client_info->sock());
+    SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
     string channel = base::to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -295,9 +295,10 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Header::CacheControl("no-cache")
                     << http::Header::ContentLength(base::to_string(buf_len))
                     << http::Header::ContentType("image/jpp-stream")
-                    << http::Protocol::CRLF << flush;
-        if (sock_stream->Send(buf, buf_len) != (ssize_t) buf_len)
+                    << http::Protocol::CRLF;
+        if (sock_stream.Send(buf, buf_len) != (ssize_t) buf_len)
             ERROR("Could not send");
+        sock_stream << flush;
     }
 
     delete[] buf;
