@@ -117,7 +117,7 @@ namespace jpip {
 
         getline(stream, value, '&');
 
-        if (!value.empty()) TRACE("JPIP parameter: " << param << "=" << value);
+        if (!value.empty()) { TRACE("JPIP parameter: " << param << "=" << value); }
     }
 
     istream &Request::GetCodedChar(istream &in, char &c) {

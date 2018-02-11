@@ -130,7 +130,8 @@ namespace jpeg2000 {
     FileSegment ImageIndex::GetPacket(int num_codestream, const Packet &packet, int *offset) {
         FileSegment segment = FileSegment::Null;
 
-        if (hyper_links.size() > 0) {
+        bool linked = !hyper_links.empty();
+        if (linked) {
             if (packet.resolution > hyper_links[num_codestream]->max_resolution.back()) {
                 if (!hyper_links[num_codestream]->BuildIndex(0, packet.resolution))
                     ERROR("The packet index could not be created");
@@ -143,8 +144,7 @@ namespace jpeg2000 {
                 max_resolution[num_codestream] = packet.resolution;
             }
         }
-        PacketIndex &packet_index = (hyper_links.size() > 0) ? hyper_links[num_codestream]->packet_indexes[0]
-                                                             : packet_indexes[num_codestream];
+        PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
 
         //PacketIndex& packet_index = packet_indexes[num_codestream];
         int idx = coding_parameters->GetProgressionIndex(packet);

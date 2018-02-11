@@ -133,8 +133,8 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number.
          */
         string GetPathName(int num_codestream) const {
-            if (codestreams.size() > 0) return path_name;
-            else return hyper_links[num_codestream]->path_name;
+            if (codestreams.empty()) return hyper_links[num_codestream]->path_name;
+            else return path_name;
         }
 
         /**
@@ -143,8 +143,8 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         FileSegment GetMainHeader(int num_codestream) const {
-            if (codestreams.size() > 0) return codestreams[num_codestream].header;
-            else return hyper_links[num_codestream]->codestreams.back().header;
+            if (codestreams.empty()) return hyper_links[num_codestream]->codestreams.back().header;
+            else return codestreams[num_codestream].header;
         }
 
         /**

@@ -136,7 +136,7 @@ namespace jpeg2000 {
          * @return <code>true</code> if successful
          */
         bool Init(string root_dir = "./") {
-            if (root_dir.size() == 0) return false;
+            if (root_dir.empty()) return false;
             else {
                 root_dir_ = root_dir;
                 if (root_dir_.at(root_dir_.size() - 1) != '/')
