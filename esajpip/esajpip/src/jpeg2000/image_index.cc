@@ -127,8 +127,6 @@ namespace jpeg2000 {
     }
 
     FileSegment ImageIndex::GetPacket(int num_codestream, const Packet &packet, int *offset) {
-        FileSegment segment = FileSegment::Null;
-
         bool linked = !hyper_links.empty();
         if (linked) {
             if (packet.resolution > hyper_links[num_codestream]->max_resolution.back()) {
@@ -143,11 +141,10 @@ namespace jpeg2000 {
                 max_resolution[num_codestream] = packet.resolution;
             }
         }
-        PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
 
-        //PacketIndex& packet_index = packet_indexes[num_codestream];
         int idx = coding_parameters->GetProgressionIndex(packet);
-        segment = packet_index[idx];
+        PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
+        FileSegment segment = packet_index[idx];
 
         if (offset != NULL) {
             *offset = 0;
