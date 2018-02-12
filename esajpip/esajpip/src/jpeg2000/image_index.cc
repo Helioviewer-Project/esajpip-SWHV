@@ -24,7 +24,7 @@ namespace jpeg2000 {
         }
     }
 
-    void ImageIndex::Init(const string &path_name, CodingParameters::Ptr coding_parameters, const ImageInfo &image_info, int index) {
+    void ImageIndex::Init(const string &path_name, const CodingParameters::Ptr &coding_parameters, const ImageInfo &image_info, int index) {
         num_references = 1;
         this->path_name = path_name;
         this->coding_parameters = coding_parameters;

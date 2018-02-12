@@ -11,7 +11,7 @@ namespace jpeg2000 {
         path_image_file = file_manager_.root_dir() + path_image_file;
 
         // Look for the image in the list
-        for (*image_index = index_list.begin(); *image_index != index_list.end(); (*image_index)++) {
+        for (*image_index = index_list.begin(); *image_index != index_list.end(); ++(*image_index)) {
             if ((*image_index)->path_name == path_image_file) {
                 (*image_index)->num_references++;
                 return true;

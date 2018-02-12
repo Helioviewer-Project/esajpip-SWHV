@@ -79,7 +79,7 @@ namespace jpeg2000 {
          * @param image_info Indexing image information.
          * @param index Image index.
          */
-        void Init(const string &path_name, CodingParameters::Ptr coding_parameters,
+        void Init(const string &path_name, const CodingParameters::Ptr &coding_parameters,
                   const ImageInfo &image_info, int index);
 
         /**

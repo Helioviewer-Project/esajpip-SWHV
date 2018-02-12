@@ -125,17 +125,9 @@ namespace jpeg2000 {
         /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
-         */
-        FileManager(string root_dir) {
-            assert(Init(root_dir));
-        }
-
-        /**
-         * Initializes the object.
-         * @param root_dir Root directory of the image repository.
          * @return <code>true</code> if successful
          */
-        bool Init(string root_dir = "./") {
+        bool Init(const string &root_dir) {
             if (root_dir.empty()) return false;
             else {
                 root_dir_ = root_dir;

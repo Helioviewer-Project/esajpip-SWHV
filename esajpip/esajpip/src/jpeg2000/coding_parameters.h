@@ -178,7 +178,7 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetProgressionIndex(const Packet &packet) {
-            if (total_precincts.size() == 0)
+            if (total_precincts.empty())
                 FillTotalPrecinctsVector();
 
             if (progression == RPCL_PROGRESSION) {
@@ -202,7 +202,7 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetPrecinctDataBinId(const Packet &packet) {
-            if (total_precincts.size() == 0)
+            if (total_precincts.empty())
                 FillTotalPrecinctsVector();
 
             Size precinct_point = GetPrecincts(packet.resolution, size);

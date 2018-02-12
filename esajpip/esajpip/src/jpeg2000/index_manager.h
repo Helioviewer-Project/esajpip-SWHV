@@ -32,7 +32,7 @@ namespace jpeg2000 {
          * @param root_dir Root directory of the image repository.
          * @return <code>true</code> if successful
          */
-        bool Init(string root_dir) {
+        bool Init(const string &root_dir) {
             return file_manager_.Init(root_dir);
         }
 
