@@ -129,7 +129,7 @@ namespace jpeg2000 {
             progression = cod_params.progression;
             num_components = cod_params.num_components;
             base::copy(precinct_size, cod_params.precinct_size);
-            base::copy(total_precincts, cod_params.total_precincts);
+            //base::copy(total_precincts, cod_params.total_precincts);
 
             FillTotalPrecinctsVector();
 
@@ -180,19 +180,17 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetProgressionIndex(const Packet &packet) const {
-            if (progression == RPCL_PROGRESSION) {
-                return GetProgressionIndexRPCL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
-                                               packet.precinct_xy.y);
-            } else if (progression == RLCP_PROGRESSION) {
-                return GetProgressionIndexRLCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
-                                               packet.precinct_xy.y);
-            } else if (progression == LRCP_PROGRESSION) {
-                return GetProgressionIndexLRCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
-                                               packet.precinct_xy.y);
-            } else {
-                ERROR("Progression (" << progression << ") not supported");
-                return 0;
+            switch (progression) {
+                case LRCP_PROGRESSION:
+                    return GetProgressionIndexLRCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
+                case RLCP_PROGRESSION:
+                    return GetProgressionIndexRLCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
+                case RPCL_PROGRESSION:
+                    return GetProgressionIndexRPCL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
+                default:
+                    ERROR("Progression (" << progression << ") not supported");
             }
+            return 0;
         }
 
         /**
