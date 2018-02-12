@@ -33,7 +33,7 @@ namespace jpeg2000 {
 
         // J2C image
         if (extension == ".j2c") {
-            image_info->codestreams.push_back(CodestreamIndex());
+            image_info->codestreams.emplace_back();
 
             CodingParameters *cp = &image_info->coding_parameters;
             CodestreamIndex *ci = &image_info->codestreams.back();
@@ -46,7 +46,7 @@ namespace jpeg2000 {
         }
             // JP2 image
         else if (extension == ".jp2") {
-            image_info->codestreams.push_back(CodestreamIndex());
+            image_info->codestreams.emplace_back();
 
             if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
@@ -177,7 +177,7 @@ namespace jpeg2000 {
                 res = res && file.ReadReverse(&size_precinct);
                 height = 1 << ((size_precinct & 0xF0) >> 4);
                 width = 1 << (size_precinct & 0x0F);
-                params->precinct_size.push_back(Size(width, height));
+                params->precinct_size.emplace_back(width, height);
             } else {
                 height = (int) ceil((double) params->size.y / (1L << i));
                 width = (int) ceil((double) params->size.x / (1L << i));
@@ -195,7 +195,7 @@ namespace jpeg2000 {
         uint32_t ltp = 0;
         // To jump Lsot, it, itp, ntp
         res = res && file.Seek(4, SEEK_CUR) && file.ReadReverse(&ltp) && file.Seek(2, SEEK_CUR);
-        index->packets.push_back(FileSegment(file.GetOffset(), ltp - 12));
+        index->packets.emplace_back(file.GetOffset(), ltp - 12);
         return res;
     }
 
@@ -208,7 +208,7 @@ namespace jpeg2000 {
         res = res && file.ReadReverse(&lplt);
         res = res && file.Seek(lplt - 2, SEEK_CUR);
         // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
-        index->PLT_markers.push_back(FileSegment(PLT_offset, lplt - 3));
+        index->PLT_markers.emplace_back(PLT_offset, lplt - 3);
         return res;
     }
 
@@ -260,10 +260,9 @@ namespace jpeg2000 {
             plen_box = file.GetOffset() - pini_box;
             switch (type_box) {
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
+                    image_info->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.push_back(
-                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box));
+                    image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file.GetOffset();
                     plen = 0;
                     break;
@@ -283,7 +282,7 @@ namespace jpeg2000 {
                     res = res && file.Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
+        image_info->meta_data.meta_data.emplace_back(pini, file.GetOffset() - pini);
         return res;
     }
 
@@ -307,13 +306,12 @@ namespace jpeg2000 {
             plen_box = file.GetOffset() - pini_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
-                    image_info->codestreams.push_back(CodestreamIndex());
+                    image_info->codestreams.emplace_back();
                     break;
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
+                    image_info->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.push_back(
-                            PlaceHolder(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box));
+                    image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file.GetOffset();
                     plen = 0;
                     break;
@@ -337,7 +335,7 @@ namespace jpeg2000 {
                     break;*/
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
-                    image_info->meta_data.meta_data.push_back(FileSegment(pini, plen));
+                    image_info->meta_data.meta_data.emplace_back(pini, plen);
                     num_flst = 0;
                     pini_ftbl = pini_box;
                     plen_ftbl = plen_box;
@@ -346,10 +344,9 @@ namespace jpeg2000 {
                 case FLST_BOX_ID: TRACE("FLST box...");
                     res = res && ReadFlstBox(file, length_box, &data_reference);
                     if (num_flst)
-                        image_info->meta_data.meta_data.push_back(FileSegment(0, 0));
+                        image_info->meta_data.meta_data.emplace_back(0, 0);
                     num_flst++;
-                    image_info->meta_data.place_holders.push_back(
-                            PlaceHolder(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0));
+                    image_info->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
                     v_data_reference.push_back(data_reference);
                     pini = file.GetOffset();
                     plen = 0;
@@ -367,7 +364,7 @@ namespace jpeg2000 {
                     res = res && file.Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.push_back(FileSegment(pini, file.GetOffset() - pini));
+        image_info->meta_data.meta_data.emplace_back(pini, file.GetOffset() - pini);
 
         assert(v_data_reference.size() == v_path_file.size());
         for (size_t i = 0; i < v_data_reference.size(); ++i) {

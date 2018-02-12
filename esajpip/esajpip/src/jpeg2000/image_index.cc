@@ -19,7 +19,7 @@ namespace jpeg2000 {
                 last_packet.push_back(0);
                 last_offset_PLT.push_back(0);
                 last_offset_packet.push_back(0);
-                packet_indexes.push_back(PacketIndex());
+                packet_indexes.emplace_back();
             }
         }
     }
@@ -38,7 +38,7 @@ namespace jpeg2000 {
         last_packet.push_back(0);
         last_offset_PLT.push_back(0);
         last_offset_packet.push_back(0);
-        packet_indexes.push_back(PacketIndex());
+        packet_indexes.emplace_back();
     }
 
     bool ImageIndex::BuildIndex(int ind_codestream, int r) {
