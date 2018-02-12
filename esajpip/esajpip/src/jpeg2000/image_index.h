@@ -36,7 +36,7 @@ namespace jpeg2000 {
         vector<PacketIndex> packet_indexes;    ///< Code-stream packet index
         vector<CodestreamIndex> codestreams;    ///< Image code-streams
 
-        CodingParameters::Ptr coding_parameters;            ///< Image coding parameters
+        const CodingParameters *coding_parameters;            ///< Image coding parameters
         vector<list<ImageIndex>::iterator> hyper_links;    ///< Image hyperlinks
 
         /**
@@ -79,7 +79,7 @@ namespace jpeg2000 {
          * @param image_info Indexing image information.
          * @param index Image index.
          */
-        void Init(const string &path_name, const CodingParameters::Ptr &coding_parameters,
+        void Init(const string &path_name, const CodingParameters *coding_parameters,
                   const ImageInfo &image_info, int index);
 
         /**
@@ -175,7 +175,7 @@ namespace jpeg2000 {
         /**
          * Returns a pointer to the coding parameters.
          */
-        CodingParameters::Ptr GetCodingParameters() const {
+        const CodingParameters *GetCodingParameters() {
             return coding_parameters;
         }
 
@@ -207,8 +207,7 @@ namespace jpeg2000 {
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
-                << *(info_node.coding_parameters)
-                << "Coding parameters ref: " << info_node.coding_parameters.use_count() << endl
+                << info_node.coding_parameters << endl
                 << "Max resolution: ";
             for (size_t i = 0; i < info_node.max_resolution.size(); ++i)
                 out << info_node.max_resolution[i] << "  ";

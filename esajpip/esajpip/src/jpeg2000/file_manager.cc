@@ -31,8 +31,7 @@ namespace jpeg2000 {
         size_t pos = name_image_file.find_last_of(".");
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
-        // J2C image
-        if (extension == ".j2c") {
+        if (extension == ".j2c") { // J2C image
             image_info->codestreams.emplace_back();
 
             CodingParameters *cp = &image_info->coding_parameters;
@@ -43,9 +42,7 @@ namespace jpeg2000 {
             }
             res = res && ReadCodestream(f, cp, ci);
             f.Close();
-        }
-            // JP2 image
-        else if (extension == ".jp2") {
+        } else if (extension == ".jp2") { // JP2 image
             image_info->codestreams.emplace_back();
 
             if (!f.Open(name_image_file)) {
@@ -54,9 +51,7 @@ namespace jpeg2000 {
             }
             res = res && ReadJP2(f, image_info);
             f.Close();
-        }
-            // JPX image
-        else if (extension == ".jpx") {
+        } else if (extension == ".jpx") { // JPX image
             if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
@@ -67,6 +62,7 @@ namespace jpeg2000 {
             ERROR("File type not supported...");
             return false;
         }
+        image_info->coding_parameters.FillTotalPrecinctsVector();
 
         return res;
     }

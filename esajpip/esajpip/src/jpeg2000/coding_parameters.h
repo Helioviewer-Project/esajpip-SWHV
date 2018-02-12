@@ -4,8 +4,6 @@
 #include <vector>
 #include <cmath>
 
-#include "tr1_compat.h"
-
 #include "base.h"
 #include "point.h"
 #include "trace.h"
@@ -23,11 +21,6 @@ namespace jpeg2000 {
          * resolution level.
          */
         vector<int> total_precincts;
-
-        /**
-         * Fills the vector <code>total_precincts</code>.
-         */
-        void FillTotalPrecinctsVector();
 
         /**
          * Returns the index of a packet according to the RPCL progression.
@@ -86,11 +79,6 @@ namespace jpeg2000 {
         vector<Size> precinct_size;
 
         /**
-         * Pointer to an object of this class.
-         */
-        typedef SHARED_PTR<CodingParameters> Ptr;
-
-        /**
          * All the progression orders defined in the JPEG2000
          * standard (Part 1).
          */
@@ -120,8 +108,14 @@ namespace jpeg2000 {
         }
 
         /**
+         * Fills the vector <code>total_precincts</code>.
+         */
+        void FillTotalPrecinctsVector();
+
+        /**
          * Copy assignment.
          */
+/*
         CodingParameters &operator=(const CodingParameters &cod_params) {
             size = cod_params.size;
             num_levels = cod_params.num_levels;
@@ -130,12 +124,11 @@ namespace jpeg2000 {
             num_components = cod_params.num_components;
             base::copy(precinct_size, cod_params.precinct_size);
             //base::copy(total_precincts, cod_params.total_precincts);
-
             FillTotalPrecinctsVector();
 
             return *this;
         }
-
+*/
         friend ostream &operator<<(ostream &out, const CodingParameters &params) {
             out << "Progression: " <<
                 (params.progression == LRCP_PROGRESSION ? "LRCP" :
@@ -180,6 +173,8 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetProgressionIndex(const Packet &packet) const {
+            //if (total_precincts.empty())
+            //    FillTotalPrecinctsVector();
             switch (progression) {
                 case LRCP_PROGRESSION:
                     return GetProgressionIndexLRCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
@@ -199,6 +194,8 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetPrecinctDataBinId(const Packet &packet) const {
+            //if (total_precincts.empty())
+            //    FillTotalPrecinctsVector();
             Size precinct_point = GetPrecincts(packet.resolution, size);
             int s = total_precincts[packet.resolution] + (precinct_point.x * packet.precinct_xy.y) +
                     packet.precinct_xy.x;

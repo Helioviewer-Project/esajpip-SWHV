@@ -6,7 +6,7 @@ namespace jpeg2000 {
     void ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
         num_references = 1;
         this->path_name = path_name;
-        this->coding_parameters = CodingParameters::Ptr(new CodingParameters(image_info.coding_parameters));
+        this->coding_parameters = new CodingParameters(image_info.coding_parameters);
 
         meta_data = image_info.meta_data;
 
@@ -24,7 +24,7 @@ namespace jpeg2000 {
         }
     }
 
-    void ImageIndex::Init(const string &path_name, const CodingParameters::Ptr &coding_parameters, const ImageInfo &image_info, int index) {
+    void ImageIndex::Init(const string &path_name, const CodingParameters *coding_parameters, const ImageInfo &image_info, int index) {
         num_references = 1;
         this->path_name = path_name;
         this->coding_parameters = coding_parameters;
@@ -54,7 +54,7 @@ namespace jpeg2000 {
             // Check the upper top of the index (to build)
             int max_index;
 
-            if ((r < coding_parameters->num_levels) && (coding_parameters->IsResolutionProgression())) {
+            if (r < coding_parameters->num_levels && coding_parameters->IsResolutionProgression()) {
                 // The max_index is the last packet index of the resolution r
                 Packet packet(0, r + 1, 0, Size(0, 0));
                 max_index = coding_parameters->GetProgressionIndex(packet) - 1;
@@ -70,7 +70,6 @@ namespace jpeg2000 {
             uint64_t length_packet = 0;
 
             while (packet_indexes[ind_codestream].Size() <= max_index) {
-                //GetPLTLength(file, ind_codestream, &length_packet);
                 res = res && GetPLTLength(file, ind_codestream, &length_packet);
                 GetOffsetPacket(file, ind_codestream, length_packet);
             }

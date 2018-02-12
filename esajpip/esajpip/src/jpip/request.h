@@ -144,7 +144,7 @@ namespace jpip {
          * @param coding_parameters Associated coding parameters.
          * @param woi WOI to modify.
          */
-        void GetResolution(const CodingParameters::Ptr &coding_parameters, WOI *woi) const {
+        void GetResolution(const CodingParameters *coding_parameters, WOI *woi) const {
             Size res_image_size;
 
             if (round_direction == Request::CLOSEST)

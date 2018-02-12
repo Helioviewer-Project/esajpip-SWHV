@@ -120,7 +120,7 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters::Ptr coding_parameters = im_index->GetCodingParameters();
+                    const CodingParameters *coding_parameters = im_index->GetCodingParameters();
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();

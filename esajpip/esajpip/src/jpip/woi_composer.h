@@ -52,7 +52,7 @@ namespace jpip {
          * @param coding_parameters Coding parameters to use.
          * @param woi New WOI to use.
          */
-        void Reset(const CodingParameters::Ptr &coding_parameters, const WOI &woi) {
+        void Reset(const CodingParameters *coding_parameters, const WOI &woi) {
             more_packets = true;
             current_packet = Packet();
             max_resolution = woi.resolution;
@@ -98,7 +98,7 @@ namespace jpip {
          * @param packet Pointer to store the current packet (not the next one).
          * @return <code>true</code> if successful.
          */
-        bool GetNextPacket(const CodingParameters::Ptr &coding_parameters, Packet *packet = NULL) {
+        bool GetNextPacket(const CodingParameters *coding_parameters, Packet *packet = NULL) {
             if (!more_packets) return false;
             else {
                 if (packet) *packet = current_packet;
