@@ -37,7 +37,7 @@ namespace jpeg2000 {
          * @param px Precinct position X.
          * @param py Precinct position Y.
          */
-        int GetProgressionIndexRPCL(int l, int r, int c, int px, int py) {
+        int GetProgressionIndexRPCL(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
             return (total_precincts[r] * num_components * num_layers) +
                    (py * precinct_point.x * num_components * num_layers) +
@@ -52,7 +52,7 @@ namespace jpeg2000 {
          * @param px Precinct position X.
          * @param py Precinct position Y.
          */
-        int GetProgressionIndexRLCP(int l, int r, int c, int px, int py) {
+        int GetProgressionIndexRLCP(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
             return (total_precincts[r] * num_components * num_layers) +
                    (l * num_components * precinct_point.x * precinct_point.y) +
@@ -67,7 +67,7 @@ namespace jpeg2000 {
          * @param px Precinct position X.
          * @param py Precinct position Y.
          */
-        int GetProgressionIndexLRCP(int l, int r, int c, int px, int py) {
+        int GetProgressionIndexLRCP(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
             return (l * total_precincts[num_levels + 1] * num_components) + (num_components * total_precincts[r]) +
                    (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
@@ -131,6 +131,8 @@ namespace jpeg2000 {
             base::copy(precinct_size, cod_params.precinct_size);
             base::copy(total_precincts, cod_params.total_precincts);
 
+            FillTotalPrecinctsVector();
+
             return *this;
         }
 
@@ -165,7 +167,7 @@ namespace jpeg2000 {
          * @param r Resolution level.
          * @param point Precinct coordinate.
          */
-        Size GetPrecincts(int r, const Size &point) {
+        Size GetPrecincts(int r, const Size &point) const {
             return Size(
                     (int) ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) precinct_size[r].x),
                     (int) ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) precinct_size[r].y)
@@ -177,10 +179,7 @@ namespace jpeg2000 {
          * progression order.
          * @param packet Packet information.
          */
-        int GetProgressionIndex(const Packet &packet) {
-            if (total_precincts.empty())
-                FillTotalPrecinctsVector();
-
+        int GetProgressionIndex(const Packet &packet) const {
             if (progression == RPCL_PROGRESSION) {
                 return GetProgressionIndexRPCL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x,
                                                packet.precinct_xy.y);
@@ -201,10 +200,7 @@ namespace jpeg2000 {
          * given packet.
          * @param packet Packet information.
          */
-        int GetPrecinctDataBinId(const Packet &packet) {
-            if (total_precincts.empty())
-                FillTotalPrecinctsVector();
-
+        int GetPrecinctDataBinId(const Packet &packet) const {
             Size precinct_point = GetPrecincts(packet.resolution, size);
             int s = total_precincts[packet.resolution] + (precinct_point.x * packet.precinct_xy.y) +
                     packet.precinct_xy.x;
@@ -218,7 +214,7 @@ namespace jpeg2000 {
          * @param res_image_size Image size associated to the
          * resolution level returned.
          */
-        int GetClosestResolution(const Size &res_size, Size *res_image_size);
+        int GetClosestResolution(const Size &res_size, Size *res_image_size) const;
 
         /**
          * Returns the resolution level according to the given size and
@@ -227,7 +223,7 @@ namespace jpeg2000 {
          * @param res_image_size Image size associated to the
          * resolution level returned.
          */
-        int GetRoundUpResolution(const Size &res_size, Size *res_image_size);
+        int GetRoundUpResolution(const Size &res_size, Size *res_image_size) const;
 
         /**
          * Returns the resolution level according to the given size and
@@ -236,7 +232,7 @@ namespace jpeg2000 {
          * @param res_image_size Image size associated to the
          * resolution level returned.
          */
-        int GetRoundDownResolution(const Size &res_size, Size *res_image_size);
+        int GetRoundDownResolution(const Size &res_size, Size *res_image_size) const;
 
         virtual ~CodingParameters() {
         }

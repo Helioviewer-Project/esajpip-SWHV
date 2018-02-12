@@ -16,7 +16,7 @@ namespace jpeg2000 {
         }
     }
 
-    int CodingParameters::GetClosestResolution(const Size &res_size, Size *res_image_size) {
+    int CodingParameters::GetClosestResolution(const Size &res_size, Size *res_image_size) const {
         int distance, final_r = 0;
         int distance_x = size.x - res_size.x;
         int distance_y = size.y - res_size.y;
@@ -48,7 +48,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    int CodingParameters::GetRoundUpResolution(const Size &res_size, Size *res_image_size) {
+    int CodingParameters::GetRoundUpResolution(const Size &res_size, Size *res_image_size) const {
         int r = num_levels;
         bool bigger = false;
 
@@ -69,7 +69,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    int CodingParameters::GetRoundDownResolution(const Size &res_size, Size *res_image_size) {
+    int CodingParameters::GetRoundDownResolution(const Size &res_size, Size *res_image_size) const {
         int r = 0;
         bool smaller = false;
 

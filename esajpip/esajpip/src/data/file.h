@@ -129,10 +129,6 @@ namespace data {
            return true;
         }
 
-        operator bool() const {
-            return address != MAP_FAILED;
-        }
-
         virtual ~BaseFile() {
             Close();
         }
