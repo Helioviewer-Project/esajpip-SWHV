@@ -29,11 +29,6 @@ namespace jpip {
         Size max_precinct_xy;      ///< Maximum precinct
         Packet current_packet;     ///< Current packet
 
-        /**
-         * Pointer to the associated coding parameters.
-         */
-        CodingParameters::Ptr coding_parameters;
-
     public:
         /**
          * Initializes the object. No packets are available.
@@ -51,26 +46,16 @@ namespace jpip {
         }
 
         /**
-         * Initializes the object. No packets are available.
-         * @param coding_parameters Pointer to the coding parameters.
-         */
-        WOIComposer(CodingParameters::Ptr coding_parameters) {
-            more_packets = false;
-            this->coding_parameters = coding_parameters;
-        }
-
-        /**
          * Resets the packets navigation and starts a new one. Sets the
          * current packet to the first packet of the WOI, assuming a
          * LRCP order.
-         * @param woi New WOI to use.
          * @param coding_parameters Coding parameters to use.
+         * @param woi New WOI to use.
          */
-        void Reset(const WOI &woi, CodingParameters::Ptr coding_parameters) {
+        void Reset(const CodingParameters::Ptr &coding_parameters, const WOI &woi) {
             more_packets = true;
             current_packet = Packet();
             max_resolution = woi.resolution;
-            this->coding_parameters = coding_parameters;
 
             pxy1 = woi.position * (1L << (coding_parameters->num_levels - woi.resolution));
             pxy2 = (woi.position + woi.size - 1) * (1L << (coding_parameters->num_levels - woi.resolution));
@@ -97,7 +82,6 @@ namespace jpip {
             current_packet = composer.current_packet;
             min_precinct_xy = composer.min_precinct_xy;
             max_precinct_xy = composer.max_precinct_xy;
-            coding_parameters = composer.coding_parameters;
 
             return *this;
         }
@@ -114,7 +98,7 @@ namespace jpip {
          * @param packet Pointer to store the current packet (not the next one).
          * @return <code>true</code> if successful.
          */
-        bool GetNextPacket(Packet *packet = NULL) {
+        bool GetNextPacket(const CodingParameters::Ptr &coding_parameters, Packet *packet = NULL) {
             if (!more_packets) return false;
             else {
                 if (packet) *packet = current_packet;

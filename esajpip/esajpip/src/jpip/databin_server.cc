@@ -73,7 +73,7 @@ namespace jpip {
 
         if (reset_woi) {
             end_woi_ = false;
-            woi_composer.Reset(woi, im_index->GetCodingParameters());
+            woi_composer.Reset(im_index->GetCodingParameters(), woi);
         }
 
         return res;
@@ -120,13 +120,14 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
+                    const CodingParameters::Ptr coding_parameters = im_index->GetCodingParameters();
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
                         segment = im_index->GetPacket(codestreams[current_idx], packet, &bin_offset);
-                        bin_id = im_index->GetCodingParameters()->GetPrecinctDataBinId(packet);
-                        last_packet = (packet.layer >= (im_index->GetCodingParameters()->num_layers - 1));
+                        bin_id = coding_parameters->GetPrecinctDataBinId(packet);
+                        last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
                         res = WriteSegment<DataBinClass::PRECINCT>(files[current_idx], codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
@@ -134,7 +135,7 @@ namespace jpip {
                         else if (res > 0) {
                             if (current_idx != (int) codestreams.size() - 1) current_idx++;
                             else {
-                                if (!woi_composer.GetNextPacket()) break;
+                                if (!woi_composer.GetNextPacket(coding_parameters)) break;
                                 else current_idx = 0;
                             }
                         }
