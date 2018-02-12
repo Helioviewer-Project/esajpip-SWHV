@@ -1,10 +1,10 @@
 #ifndef _DATA_VINT_VECTOR_H_
 #define _DATA_VINT_VECTOR_H_
 
-#include <vector>
-#include <stdint.h>
-#include <assert.h>
+#include <cstdint>
+#include <cassert>
 #include <algorithm>
+#include <vector>
 
 namespace data {
     using namespace std;

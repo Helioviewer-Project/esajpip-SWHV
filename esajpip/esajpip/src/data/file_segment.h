@@ -2,8 +2,8 @@
 #define _DATA_FILE_SEGMENT_H_
 
 #include <iostream>
-#include <stdint.h>
 #include <cassert>
+#include <cstdint>
 
 namespace data {
     using namespace std;

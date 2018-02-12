@@ -1,15 +1,15 @@
 #ifndef _DATA_FILE_H_
 #define _DATA_FILE_H_
 
-#include <stdio.h>
-#include <assert.h>
+#include <cstdio>
+#include <cassert>
 #include <errno.h>
-#include <stdint.h>
+#include <cstdint>
+#include <cstring>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <string.h>
 
 #include "tr1_compat.h"
 
@@ -101,7 +101,7 @@ namespace data {
         bool Read(T *value, int num_bytes = sizeof(T)) {
             assert(address != MAP_FAILED);
             int to_read = num_bytes;
-            if (offset + to_read >= size)
+            if (offset + to_read > size)
                 to_read = size - offset;
             memcpy(value, address + offset, to_read);
             offset += to_read;

@@ -1,9 +1,9 @@
 #ifndef _NET_SOCKET_STREAM_H_
 #define _NET_SOCKET_STREAM_H_
 
+#include <cstdio>
+#include <cstring>
 #include <iostream>
-#include <stdio.h>
-#include <string.h>
 #include "socket.h"
 
 namespace net {

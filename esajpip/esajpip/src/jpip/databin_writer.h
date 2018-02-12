@@ -1,7 +1,7 @@
 #ifndef _JPIP_DATABIN_WRITER_H_
 #define _JPIP_DATABIN_WRITER_H_
 
-#include <stdint.h>
+#include <cstdint>
 #include "jpip.h"
 #include "data/file.h"
 #include "data/file_segment.h"
