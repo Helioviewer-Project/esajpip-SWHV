@@ -33,7 +33,7 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
-            req.GetResolution(*im_index, &new_woi);
+            req.GetResolution(im_index->GetCodingParameters(), &new_woi);
 
             if (new_woi != woi) {
                 reset_woi = true;
@@ -73,7 +73,7 @@ namespace jpip {
 
         if (reset_woi) {
             end_woi_ = false;
-            woi_composer.Reset(woi, *im_index);
+            woi_composer.Reset(woi, im_index->GetCodingParameters());
         }
 
         return res;

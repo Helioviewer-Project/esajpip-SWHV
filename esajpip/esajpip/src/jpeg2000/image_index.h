@@ -187,29 +187,6 @@ namespace jpeg2000 {
             return (num_codestream < (int) hyper_links.size());
         }
 
-        /**
-         * Returns a pointer to a hyperlink.
-         * @param num_codestream Number of the hyperlink (codestream).
-         */
-/*
-        Ptr GetHyperLink(int num_codestream) const {
-            return hyper_links[num_codestream];
-        }
-*/
-
-        /**
-         * Returns the number of hyperlinks.
-         */
-/*
-        int GetNumHyperLinks() const {
-            return (int) hyper_links.size();
-        }
-*/
-
-        operator CodingParameters::Ptr() const {
-            return coding_parameters;
-        }
-
         ImageIndex &operator=(const ImageIndex &image_index) {
             meta_data = image_index.meta_data;
             path_name = image_index.path_name;
