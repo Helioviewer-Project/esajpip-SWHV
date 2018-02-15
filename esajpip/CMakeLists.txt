@@ -51,5 +51,8 @@ link_directories(${PKG_LIBRARY_DIRS})
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${APP_SRCS} ${HTTP_SRCS} ${JPIP_SRCS} ${NET_SRCS} ${DATA_SRCS} ${JPEG2000_SRCS} ${ESAJPIP_TOP}/trace.cc)
 target_link_libraries(esajpip ${PKG_LIBRARIES} config log4cpp pthread)
 
+add_executable(packet_information ${ESAJPIP_TOP}/packet_information.cc ${APP_SRCS} ${HTTP_SRCS} ${JPIP_SRCS} ${NET_SRCS} ${DATA_SRCS} ${JPEG2000_SRCS} ${ESAJPIP_TOP}/trace.cc)
+target_link_libraries(packet_information ${PKG_LIBRARIES} config log4cpp pthread)
+
 install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)

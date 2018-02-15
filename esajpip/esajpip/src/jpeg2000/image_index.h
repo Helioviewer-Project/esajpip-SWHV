@@ -106,12 +106,10 @@ namespace jpeg2000 {
         /**
          * Returns the number of codestreams.
          */
-/*
         size_t GetNumCodestreams() const {
             if (codestreams.size() > 0) return codestreams.size();
             else return hyper_links.size();
         }
-*/
 
         /**
          * Returns the number of meta-data blocks.

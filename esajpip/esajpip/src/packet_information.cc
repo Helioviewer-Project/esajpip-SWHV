@@ -73,27 +73,27 @@ int main(void) {
                 if (im.GetSize() <= 0) cout << "Image list is empty!" << endl;
                 {
                     int wx, wy, ww, wh, wr, ind_codestream;
-                    CodingParameters cp = *it_node->GetCodingParameters();
+                    const CodingParameters *cp = it_node->GetCodingParameters();
 
                     cout << "Number codestream [0-" << (it_node->GetNumCodestreams() - 1) << "]: ";
                     ui::read(ind_codestream, 0, (int) it_node->GetNumCodestreams() - 1);
 
-                    cout << "Resolution [0-" << cp.num_levels << "]: ";
-                    ui::read(wr, 0, cp.num_levels);
+                    cout << "Resolution [0-" << cp->num_levels << "]: ";
+                    ui::read(wr, 0, cp->num_levels);
 
-                    int max_x = ceil((double) cp.size.x / (1L << (cp.num_levels - wr))) - 1;
+                    int max_x = ceil((double) cp->size.x / (1L << (cp->num_levels - wr))) - 1;
                     cout << "Coord. X [0-" << max_x << "]: ";
                     ui::read(wx, 0, max_x);
 
-                    int max_y = ceil((double) cp.size.y / (1L << (cp.num_levels - wr))) - 1;
+                    int max_y = ceil((double) cp->size.y / (1L << (cp->num_levels - wr))) - 1;
                     cout << "Coord. Y [0-" << max_y << "]: ";
                     ui::read(wy, 0, max_y);
 
-                    int max_width = ceil((double) cp.size.x / (1L << (cp.num_levels - wr))) - wx;
+                    int max_width = ceil((double) cp->size.x / (1L << (cp->num_levels - wr))) - wx;
                     cout << "Width [0-" << max_width << "]: ";
                     ui::read(ww, 0, max_width);
 
-                    int max_height = ceil((double) cp.size.y / (1L << (cp.num_levels - wr))) - wy;
+                    int max_height = ceil((double) cp->size.y / (1L << (cp->num_levels - wr))) - wy;
                     cout << "Height [0-" << max_height << "]: ";
                     ui::read(wh, 0, max_height);
 
@@ -101,21 +101,15 @@ int main(void) {
                     WOI woi(Point(wx, wy), Size(wh, ww), wr);
                     cout << woi << endl;
 
-                    woi_composer.Reset(woi, it_node->GetCodingParameters());
+                    woi_composer.Reset(cp, woi);
 
                     cout << "ID\tL\tR\tC\tPY\tPX\tOFFSET:LENGTH" << endl;
                     cout << string(60, '-') << endl;
 
-                    it_node->ReadLock(Range(0, 0));
-
                     Packet packet;
-                    while (woi_composer.GetNextPacket(&packet))
-                        cout << it_node->GetCodingParameters()->GetPrecinctDataBinId(packet)
-                             << "\t" << packet << "\t" << it_node->GetPacket(ind_codestream, packet) << endl;
-
+                    while (woi_composer.GetNextPacket(cp, &packet))
+                        cout << cp->GetPrecinctDataBinId(packet) << "\t" << packet << "\t" << it_node->GetPacket(ind_codestream, packet) << endl;
                     cout << string(60, '-') << endl;
-
-                    it_node->ReadUnlock(Range(0, 0));
                 }
                 break;
 

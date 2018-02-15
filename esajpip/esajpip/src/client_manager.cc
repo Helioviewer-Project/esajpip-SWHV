@@ -156,8 +156,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                         sock_stream << http::Response(200)
                                     << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                    << http::Header("JPIP-tid",
-                                                    file_name) //index_manager.file_manager().GetCacheFileName(file_name))
+                                    << http::Header("JPIP-tid", file_name)
                                     << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                                     << (send_gzip ? head_data_gzip.str() : head_data.str())
                                     << http::Protocol::CRLF << flush;
