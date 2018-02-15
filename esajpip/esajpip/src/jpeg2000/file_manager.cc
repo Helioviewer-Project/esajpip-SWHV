@@ -36,14 +36,14 @@ namespace jpeg2000 {
         if (extension == ".jp2") { // JP2 image
             File::Ptr file = index_manager.OpenFile(name_image_file);
             if (file == NULL) {
-                ERROR("Impossible to open file: '" << name_image_file << "'...");
+                ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
             res = res && ReadJP2(file, image_info);
         } else if (extension == ".jpx") { // JPX image
             File::Ptr file = index_manager.OpenFile(name_image_file);
             if (file == NULL) {
-                ERROR("Impossible to open file: '" << name_image_file << "'...");
+                ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
             res = res && ReadJPX(index_manager, file, image_info);

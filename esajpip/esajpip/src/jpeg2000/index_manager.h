@@ -74,7 +74,7 @@ namespace jpeg2000 {
             } catch (...) {
                 File::Ptr file = File::Ptr(new File());
                 if (!file->Open(path_file))
-                    return NULL;
+                    return File::Ptr();
                 file_map.insert(pair<const string, File::Ptr>(path_file, file));
                 return file;
             }
