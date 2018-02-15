@@ -2,28 +2,27 @@
 
 namespace jpip {
 
-    bool DataBinServer::Reset(const ImageIndex::Ptr image_index) {
+    bool DataBinServer::Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index) {
         files.clear();
         metareq = false;
         has_woi = false;
         im_index = image_index;
 
-        file = File::Ptr(new File());
+        file = index_manager.OpenFile(im_index->GetPathName());
+        if (file == NULL)
+            return false;
 
-        if (!file->Open(im_index->GetPathName())) return false;
+        if (!im_index->IsHyperLinked(0)) files.push_back(file);
         else {
-            if (!im_index->IsHyperLinked(0)) files.push_back(file);
-            else {
-                File::Ptr hyperlinked_file = File::Ptr(new File());
-                if (!hyperlinked_file->Open(im_index->GetPathName(0))) return false;
-                else files.push_back(hyperlinked_file);
-            }
-
-            return true;
+            File::Ptr hyperlinked_file = index_manager.OpenFile(im_index->GetPathName(0));
+            if (hyperlinked_file == NULL)
+                return false;
+            else files.push_back(hyperlinked_file);
         }
+        return true;
     }
 
-    bool DataBinServer::SetRequest(const Request &req) {
+    bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
         bool res = true;
         bool reset_woi = false;
 
@@ -61,8 +60,12 @@ namespace jpip {
 
                     if (!im_index->IsHyperLinked(idx)) files[i] = file;
                     else {
-                        files[i] = File::Ptr(new File());
-                        res = res && files[i]->Open(im_index->GetPathName(idx));
+                        File::Ptr f = index_manager.OpenFile(im_index->GetPathName(idx));
+                        if (f == NULL) {
+                            res = false;
+                            files[i] = File::Ptr(new File());
+                        } else
+                            files[i] = f;
                     }
                 }
             }
@@ -79,10 +82,10 @@ namespace jpip {
         return res;
     }
 
-    bool DataBinServer::GenerateChunk(char *buff, int *len, bool *last) {
+    bool DataBinServer::GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last) {
         int res;
 
-        data_writer.SetBuffer(buff, min(pending, *len));
+        data_writer.SetBuffer(buf, min(pending, *len));
 
         if (pending > 0) {
             eof = false;
@@ -125,7 +128,7 @@ namespace jpip {
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
-                        segment = im_index->GetPacket(codestreams[current_idx], packet, &bin_offset);
+                        segment = im_index->GetPacket(index_manager, codestreams[current_idx], packet, &bin_offset);
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 

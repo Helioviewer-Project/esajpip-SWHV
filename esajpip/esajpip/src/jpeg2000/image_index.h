@@ -13,6 +13,7 @@
 namespace jpeg2000 {
     using namespace std;
 
+    class IndexManager;
     /**
      * Contains the indexing information of a JPEG2000 image file that
      * is managed by the index manager. This class can be printed.
@@ -46,7 +47,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet);
+        bool GetPLTLength(File::Ptr &file, int ind_codestream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
@@ -55,7 +56,7 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        void GetOffsetPacket(const File &file, int ind_codestream, uint64_t length_packet);
+        void GetOffsetPacket(File::Ptr &file, int ind_codestream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
@@ -63,7 +64,7 @@ namespace jpeg2000 {
          * @param max_index Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(int ind_codestream, int max_index);
+        bool BuildIndex(IndexManager &index_manager, int ind_codestream, int max_index);
 
         /**
          * Initializes the object.
@@ -168,7 +169,7 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        FileSegment GetPacket(int num_codestream, const Packet &packet, int *offset = NULL);
+        FileSegment GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset = NULL);
 
         /**
          * Returns a pointer to the coding parameters.

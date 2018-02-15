@@ -2,10 +2,11 @@
 #define _JPEG2000_INDEX_MANAGER_H_
 
 #include <list>
-#include "image_index.h"
 #include "file_manager.h"
+#include "image_index.h"
 
 namespace jpeg2000 {
+
     /**
      * Manages the indexing information of a repository of images.
      * Maintains a list in memory of the indexes (using the class
@@ -19,6 +20,7 @@ namespace jpeg2000 {
     private:
         FileManager file_manager_;      ///< File manager
         list<ImageIndex> index_list;    ///< List of the indexes
+        map<string, File::Ptr> file_map;
 
     public:
         /**
@@ -65,6 +67,19 @@ namespace jpeg2000 {
          * @return <code>true</code> if successful.
          */
         bool CloseImage(ImageIndex::Ptr &image_index);
+
+        File::Ptr OpenFile(const string &path_file) {
+            try {
+                return file_map.at(path_file);
+            } catch (...) {
+                File::Ptr file = File::Ptr(new File());
+                bool res = file->Open(path_file);
+                if (!res)
+                    return NULL;
+                file_map.insert(pair<string, File::Ptr>(path_file, file));
+                return file;
+            }
+        }
 
         /**
          * Returns the size of the list.

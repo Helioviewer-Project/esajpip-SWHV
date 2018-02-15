@@ -147,9 +147,9 @@ void ClientManager::Run(ClientInfo *client_info) {
                     ERROR("The image file '" << file_name << "' can not be read");
                 else {
                     is_opened = true;
-                    if (!data_server.Reset(im_index))
+                    if (!data_server.Reset(index_manager, im_index))
                         ERROR("The image file '" << file_name << "' can not be opened");
-                    else if (!data_server.SetRequest(req))
+                    else if (!data_server.SetRequest(index_manager, req))
                         ERROR("The server can not process the request");
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
@@ -172,7 +172,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (req.parameters["cid"] != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
-                } else if (!data_server.SetRequest(req))
+                } else if (!data_server.SetRequest(index_manager, req))
                     ERROR("The server can not process the request");
                 else {
                     sock_stream << http::Response(200)
@@ -204,7 +204,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -217,7 +217,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;

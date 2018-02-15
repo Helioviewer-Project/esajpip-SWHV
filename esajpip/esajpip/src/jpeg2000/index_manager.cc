@@ -19,7 +19,7 @@ namespace jpeg2000 {
         }
         // Get image info
         ImageInfo image_info;
-        if (!file_manager_.ReadImage(path_image_file, &image_info)) {
+        if (!file_manager_.ReadImage(*this, path_image_file, &image_info)) {
             ERROR("The image file '" << path_image_file << "' can not be read");
             return false;
         }
