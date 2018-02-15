@@ -2,24 +2,10 @@
 
 namespace jpip {
 
-    bool DataBinServer::Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index) {
-        files.clear();
+    void DataBinServer::Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index) {
         metareq = false;
         has_woi = false;
         im_index = image_index;
-
-        file = index_manager.OpenFile(im_index->GetPathName());
-        if (file == NULL)
-            return false;
-
-        if (!im_index->IsHyperLinked(0)) files.push_back(file);
-        else {
-            File::Ptr hyperlinked_file = index_manager.OpenFile(im_index->GetPathName(0));
-            if (hyperlinked_file == NULL)
-                return false;
-            else files.push_back(hyperlinked_file);
-        }
-        return true;
     }
 
     bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
@@ -51,23 +37,6 @@ namespace jpip {
                 codestreams = req.codestreams;
                 current_idx = 0;
                 reset_woi = true;
-
-                if (files.size() != codestreams.size())
-                    files.resize(codestreams.size());
-
-                for (size_t i = 0; i < codestreams.size(); ++i) {
-                    int idx = codestreams[i];
-
-                    if (!im_index->IsHyperLinked(idx)) files[i] = file;
-                    else {
-                        File::Ptr f = index_manager.OpenFile(im_index->GetPathName(idx));
-                        if (f == NULL) {
-                            res = false;
-                            files[i] = File::Ptr(new File());
-                        } else
-                            files[i] = f;
-                    }
-                }
             }
         }
 
@@ -91,6 +60,7 @@ namespace jpip {
             eof = false;
 
             if (!cache_model.IsFullMetadata()) {
+                File::Ptr file = index_manager.OpenFile(im_index->GetPathName());
                 if (im_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
                 else {
@@ -105,7 +75,7 @@ namespace jpip {
                         if (last_metadata) {
                             if (res > 0) cache_model.SetFullMetadata();
                         } else {
-                            if (WritePlaceHolder(0, 0, im_index->GetPlaceHolder(i), bin_offset) <= 0) break;
+                            if (WritePlaceHolder(file, 0, 0, im_index->GetPlaceHolder(i), bin_offset) <= 0) break;
                             bin_offset += im_index->GetPlaceHolder(i).length();
                         }
                     }
@@ -114,8 +84,9 @@ namespace jpip {
 
             if (!eof) {
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0, im_index->GetMainHeader(codestreams[i]));
-                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0, FileSegment::Null);
+                    File::Ptr file = index_manager.OpenFile(im_index->GetPathName(codestreams[i]));
+                    WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, im_index->GetMainHeader(codestreams[i]));
+                    WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -132,7 +103,8 @@ namespace jpip {
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        res = WriteSegment<DataBinClass::PRECINCT>(files[current_idx], codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
+                        File::Ptr file = index_manager.OpenFile(im_index->GetPathName(codestreams[current_idx]));
+                        res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
                         if (res < 0) return false;
                         else if (res > 0) {

@@ -147,9 +147,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                     ERROR("The image file '" << file_name << "' can not be read");
                 else {
                     is_opened = true;
-                    if (!data_server.Reset(index_manager, im_index))
-                        ERROR("The image file '" << file_name << "' can not be opened");
-                    else if (!data_server.SetRequest(index_manager, req))
+                    data_server.Reset(index_manager, im_index);
+                    if (!data_server.SetRequest(index_manager, req))
                         ERROR("The server can not process the request");
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");

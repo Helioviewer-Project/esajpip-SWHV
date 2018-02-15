@@ -33,7 +33,6 @@ namespace jpip {
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         bool metareq;        ///< <code>true</code> if the last request contained a "metareq"
         bool end_woi_;        ///< <code>true</code> if the WOI has been completely sent
-        File::Ptr file;        ///< Pointer to the associated image file
         int current_idx;    ///< Current codestream index
 
         /**
@@ -43,7 +42,6 @@ namespace jpip {
         bool eof;
 
         CacheModel cache_model;        ///< Cache model of the client
-        vector<File::Ptr> files;    ///< List of files (for hyperlinked JPX files)
         WOIComposer woi_composer;    ///< WOI composer for determining the packets
         ImageIndex::Ptr im_index;    ///< Pointer to the associated image index
         DataBinWriter data_writer;    ///< Data-bin writer for generating the chunks
@@ -64,7 +62,7 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         template<int BIN_CLASS>
-        int WriteSegment(File::Ptr &file_ptr, int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
+        int WriteSegment(File::Ptr &file, int num_codestream, int id, FileSegment segment, int offset = 0, bool last = true) {
             int cached = cache_model.GetDataBin<BIN_CLASS>(num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -86,7 +84,7 @@ namespace jpip {
                     data_writer.SetCodestream(num_codestream);
                     data_writer.SetDataBinClass(BIN_CLASS);
 
-                    if (!data_writer.Write(id, cached, *file_ptr, segment, last)) res = -1;
+                    if (!data_writer.Write(id, cached, *file, segment, last)) res = -1;
                     else cache_model.AddToDataBin<BIN_CLASS>(num_codestream, id, segment.length, last);
                 }
             }
@@ -104,7 +102,7 @@ namespace jpip {
          * 0 if it was incompletely written (or not at all, if EOF flag is set),
          * or -1 if an error was generated.
          */
-        int WritePlaceHolder(int num_codestream, int id, const PlaceHolder &place_holder, int offset = 0, bool last = false) {
+        int WritePlaceHolder(File::Ptr &file, int num_codestream, int id, const PlaceHolder &place_holder, int offset = 0, bool last = false) {
             int cached = cache_model.GetDataBin<DataBinClass::META_DATA>(num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -155,7 +153,7 @@ namespace jpip {
          * @param image_index Pointer to the new image index to use.
          * @return <code>true</code> if successful.
          */
-        bool Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index);
+        void Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index);
 
         /**
          * Sets the new current request to take into account for
