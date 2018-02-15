@@ -31,20 +31,7 @@ namespace jpeg2000 {
         size_t pos = name_image_file.find_last_of(".");
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
-        if (extension == ".j2c") { // J2C image
-            image_info->codestreams.emplace_back();
-
-            CodingParameters *cp = &image_info->coding_parameters;
-            CodestreamIndex *ci = &image_info->codestreams.back();
-            if (!f.Open(name_image_file)) {
-                ERROR("Impossible to open file: '" << name_image_file << "'...");
-                return false;
-            }
-            res = res && ReadCodestream(f, cp, ci);
-            f.Close();
-        } else if (extension == ".jp2") { // JP2 image
-            image_info->codestreams.emplace_back();
-
+        if (extension == ".jp2") { // JP2 image
             if (!f.Open(name_image_file)) {
                 ERROR("Impossible to open file: '" << name_image_file << "'...");
                 return false;
@@ -249,6 +236,7 @@ namespace jpeg2000 {
         int pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         //int metadata_bin=1;
 
+        image_info->codestreams.emplace_back();
         while (file.GetOffset() != file.GetSize() && res) {
             pini_box = file.GetOffset();
             plen = pini_box - pini;

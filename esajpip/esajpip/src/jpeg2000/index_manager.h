@@ -51,15 +51,6 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns a reference to the base file manager.
-         */
-/*
-        FileManager &file_manager() {
-            return file_manager_;
-        }
-*/
-
-        /**
          * Opens an image and adds its index to the list.
          * @param path_image_file Path of the image file.
          * @param image_index Receives the pointer to the image index created.
