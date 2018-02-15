@@ -20,7 +20,7 @@ namespace jpeg2000 {
     private:
         FileManager file_manager_;      ///< File manager
         list<ImageIndex> index_list;    ///< List of the indexes
-        map<string, File::Ptr> file_map;
+        map<const string, File::Ptr> file_map;
 
     public:
         /**
@@ -73,10 +73,9 @@ namespace jpeg2000 {
                 return file_map.at(path_file);
             } catch (...) {
                 File::Ptr file = File::Ptr(new File());
-                bool res = file->Open(path_file);
-                if (!res)
+                if (!file->Open(path_file))
                     return NULL;
-                file_map.insert(pair<string, File::Ptr>(path_file, file));
+                file_map.insert(pair<const string, File::Ptr>(path_file, file));
                 return file;
             }
         }

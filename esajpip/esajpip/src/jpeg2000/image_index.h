@@ -178,14 +178,6 @@ namespace jpeg2000 {
             return coding_parameters;
         }
 
-        /**
-         * Returns <code>true</code> if the image contains
-         * hyperlinks.
-         */
-        bool IsHyperLinked(int num_codestream) const {
-            return (num_codestream < (int) hyper_links.size());
-        }
-
         ImageIndex &operator=(const ImageIndex &image_index) {
             meta_data = image_index.meta_data;
             path_name = image_index.path_name;
