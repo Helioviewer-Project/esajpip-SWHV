@@ -43,7 +43,6 @@ namespace jpip {
 
         CacheModel cache_model;        ///< Cache model of the client
         WOIComposer woi_composer;    ///< WOI composer for determining the packets
-        ImageIndex::Ptr im_index;    ///< Pointer to the associated image index
         DataBinWriter data_writer;    ///< Data-bin writer for generating the chunks
 
         enum {
@@ -153,7 +152,7 @@ namespace jpip {
          * @param image_index Pointer to the new image index to use.
          * @return <code>true</code> if successful.
          */
-        void Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index);
+        void Reset();
 
         /**
          * Sets the new current request to take into account for
@@ -161,7 +160,7 @@ namespace jpip {
          * @param req Request.
          * @return <code>true</code> if successful.
          */
-        bool SetRequest(IndexManager &index_manager, const Request &req);
+        bool SetRequest(const IndexManager &index_manager, const ImageIndex::Ptr image_index, const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and
@@ -174,7 +173,7 @@ namespace jpip {
          * the last chunk of data associated to the last request.
          * @return <code>true</code> if successful.
          */
-        bool GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last);
+        bool GenerateChunk(IndexManager &index_manager, const ImageIndex::Ptr image_index, char *buf, int *len, bool *last);
 
         virtual ~DataBinServer() {
         }

@@ -2,13 +2,12 @@
 
 namespace jpip {
 
-    void DataBinServer::Reset(IndexManager &index_manager, const ImageIndex::Ptr image_index) {
+    void DataBinServer::Reset() {
         metareq = false;
         has_woi = false;
-        im_index = image_index;
     }
 
-    bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
+    bool DataBinServer::SetRequest(const IndexManager &index_manager, const ImageIndex::Ptr image_index, const Request &req) {
         bool res = true;
         bool reset_woi = false;
 
@@ -18,7 +17,7 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
-            req.GetResolution(im_index->GetCodingParameters(), &new_woi);
+            req.GetResolution(image_index->GetCodingParameters(), &new_woi);
 
             if (new_woi != woi) {
                 reset_woi = true;
@@ -45,13 +44,13 @@ namespace jpip {
 
         if (reset_woi) {
             end_woi_ = false;
-            woi_composer.Reset(im_index->GetCodingParameters(), woi);
+            woi_composer.Reset(image_index->GetCodingParameters(), woi);
         }
 
         return res;
     }
 
-    bool DataBinServer::GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last) {
+    bool DataBinServer::GenerateChunk(IndexManager &index_manager, const ImageIndex::Ptr image_index, char *buf, int *len, bool *last) {
         int res;
 
         data_writer.SetBuffer(buf, min(pending, *len));
@@ -60,23 +59,23 @@ namespace jpip {
             eof = false;
 
             if (!cache_model.IsFullMetadata()) {
-                File::Ptr file = index_manager.OpenFile(im_index->GetPathName());
-                if (im_index->GetNumMetadatas() <= 0)
+                File::Ptr file = index_manager.OpenFile(image_index->GetPathName());
+                if (image_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
                 else {
                     int bin_offset = 0;
                     bool last_metadata;
 
-                    for (size_t i = 0; i < im_index->GetNumMetadatas(); ++i) {
-                        last_metadata = (i == im_index->GetNumMetadatas() - 1);
-                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, im_index->GetMetadata(i), bin_offset, last_metadata);
-                        bin_offset += im_index->GetMetadata(i).length;
+                    for (size_t i = 0; i < image_index->GetNumMetadatas(); ++i) {
+                        last_metadata = (i == image_index->GetNumMetadatas() - 1);
+                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, image_index->GetMetadata(i), bin_offset, last_metadata);
+                        bin_offset += image_index->GetMetadata(i).length;
 
                         if (last_metadata) {
                             if (res > 0) cache_model.SetFullMetadata();
                         } else {
-                            if (WritePlaceHolder(file, 0, 0, im_index->GetPlaceHolder(i), bin_offset) <= 0) break;
-                            bin_offset += im_index->GetPlaceHolder(i).length();
+                            if (WritePlaceHolder(file, 0, 0, image_index->GetPlaceHolder(i), bin_offset) <= 0) break;
+                            bin_offset += image_index->GetPlaceHolder(i).length();
                         }
                     }
                 }
@@ -84,8 +83,8 @@ namespace jpip {
 
             if (!eof) {
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    File::Ptr file = index_manager.OpenFile(im_index->GetPathName(codestreams[i]));
-                    WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, im_index->GetMainHeader(codestreams[i]));
+                    File::Ptr file = index_manager.OpenFile(image_index->GetPathName(codestreams[i]));
+                    WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
                     WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
                 }
 
@@ -94,16 +93,16 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters *coding_parameters = im_index->GetCodingParameters();
+                    const CodingParameters *coding_parameters = image_index->GetCodingParameters();
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
-                        segment = im_index->GetPacket(index_manager, codestreams[current_idx], packet, &bin_offset);
+                        segment = image_index->GetPacket(index_manager, codestreams[current_idx], packet, &bin_offset);
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        File::Ptr file = index_manager.OpenFile(im_index->GetPathName(codestreams[current_idx]));
+                        File::Ptr file = index_manager.OpenFile(image_index->GetPathName(codestreams[current_idx]));
                         res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
                         if (res < 0) return false;
