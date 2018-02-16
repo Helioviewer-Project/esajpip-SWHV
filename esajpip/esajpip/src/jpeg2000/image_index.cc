@@ -5,7 +5,6 @@
 namespace jpeg2000 {
 
     void ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
-        num_references = 1;
         this->path_name = path_name;
 
         meta_data = image_info.meta_data;
@@ -25,7 +24,6 @@ namespace jpeg2000 {
     }
 
     void ImageIndex::Init(const string &path_name, const ImageInfo &image_info, int index) {
-        num_references = 1;
         this->path_name = path_name;
 
         meta_data = image_info.meta_data_hyperlinks[index];

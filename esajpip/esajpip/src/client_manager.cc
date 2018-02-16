@@ -127,7 +127,6 @@ void ClientManager::Run(ClientInfo *client_info) {
                 pclose = false;
                 is_opened = false;
                 req.cache_model.Clear();
-                index_manager.CloseImage();
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
                             << http::Header::AccessControlAllowOrigin(CORS)
@@ -241,10 +240,6 @@ void ClientManager::Run(ClientInfo *client_info) {
 
             sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
         }
-    }
-
-    if (is_opened) {
-        index_manager.CloseImage();
     }
 
     delete[] buf;

@@ -27,7 +27,6 @@ namespace jpeg2000 {
 
     bool FileManager::ReadImage(IndexManager &index_manager, const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
-        File::Ptr file;
         // Get file extension
         string extension;
         size_t pos = name_image_file.find_last_of(".");

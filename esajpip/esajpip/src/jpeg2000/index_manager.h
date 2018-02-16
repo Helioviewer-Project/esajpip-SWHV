@@ -1,25 +1,15 @@
 #ifndef _JPEG2000_INDEX_MANAGER_H_
 #define _JPEG2000_INDEX_MANAGER_H_
 
-#include <list>
 #include "file_manager.h"
 #include "image_index.h"
 
 namespace jpeg2000 {
 
-    /**
-     * Manages the indexing information of a repository of images.
-     * Maintains a list in memory of the indexes (using the class
-     * <code>ImageIndex</code> for the nodes) of all the opened
-     * images.
-     *
-     * @see FileManager
-     * @see ImageIndex
-     */
     class IndexManager {
     private:
         FileManager file_manager_;                 ///< File manager
-        list<ImageIndex> index_list;               ///< List of the indexes
+        ImageIndex::Ptr image;
         const CodingParameters *coding_parameters; ///< Image coding parameters
 
         map<const string, File::Ptr> file_map;
@@ -32,7 +22,7 @@ namespace jpeg2000 {
         }
 
         ImageIndex::Ptr GetImage() {
-            return --index_list.end();
+            return image;
         }
 
         /**
@@ -51,21 +41,7 @@ namespace jpeg2000 {
             return file_manager_.Init(root_dir);
         }
 
-        /**
-         * Opens an image and adds its index to the list.
-         * @param path_image_file Path of the image file.
-         * @param image_index Receives the pointer to the image index created.
-         * @return <code>true</code> if successful.
-         */
         bool OpenImage(string &path_image_file);
-
-        /**
-         * Closes an image and removes its index
-         * from the list, only if it is not used by any other one.
-         * @param image_index Associated image index.
-         * @return <code>true</code> if successful.
-         */
-        bool CloseImage();
 
         File::Ptr OpenFile(const string &path_file) {
             try {

@@ -4,7 +4,6 @@
 //#define SHOW_TRACES
 #include "trace.h"
 
-#include <list>
 #include <vector>
 #include "base.h"
 #include "image_info.h"
@@ -31,13 +30,12 @@ namespace jpeg2000 {
 
         string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
-        int num_references;         ///< Number of references
         vector<int> max_resolution; ///< Maximum resolution number
 
         vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
         vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        vector<list<ImageIndex>::iterator> hyper_links; ///< Image hyperlinks
+        vector<SHARED_PTR<ImageIndex>> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -85,14 +83,13 @@ namespace jpeg2000 {
          * use this constructor.
          */
         ImageIndex() {
-            num_references = 0;
         }
 
     public:
         /**
          * Pointer of an object of this class.
          */
-        typedef list<ImageIndex>::iterator Ptr;
+        typedef SHARED_PTR<ImageIndex> Ptr;
 
         /**
          * Copy constructor.
@@ -168,23 +165,6 @@ namespace jpeg2000 {
          */
         FileSegment GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset = NULL);
 
-        ImageIndex &operator=(const ImageIndex &image_index) {
-            meta_data = image_index.meta_data;
-            path_name = image_index.path_name;
-            num_references = image_index.num_references;
-
-            base::copy(max_resolution, image_index.max_resolution);
-            base::copy(last_plt, image_index.last_plt);
-            base::copy(last_packet, image_index.last_packet);
-            base::copy(codestreams, image_index.codestreams);
-            base::copy(hyper_links, image_index.hyper_links);
-            base::copy(packet_indexes, image_index.packet_indexes);
-            base::copy(last_offset_PLT, image_index.last_offset_PLT);
-            base::copy(last_offset_packet, image_index.last_offset_packet);
-
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
                 << "Max resolution: ";
@@ -205,8 +185,7 @@ namespace jpeg2000 {
                 out << "Hyperlinks: " << endl << "----------- " << endl << *info_node.hyper_links[i] << endl << "----------- " << endl;
 
             out << endl << "Meta-data: ";
-            out << endl << info_node.meta_data;
-            out << endl << "Num. References: " << info_node.num_references << endl;
+            out << endl << info_node.meta_data << endl;
 
             return out;
         }
