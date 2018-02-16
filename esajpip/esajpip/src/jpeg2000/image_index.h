@@ -132,7 +132,7 @@ namespace jpeg2000 {
          * codestream.
          * @param num_codestream Codestream number
          */
-        FileSegment GetMainHeader(int num_codestream) const {
+        const FileSegment &GetMainHeader(int num_codestream) const {
             return codestreams.empty() ? hyper_links[num_codestream]->codestreams.back().header : codestreams[num_codestream].header;
         }
 
@@ -140,7 +140,7 @@ namespace jpeg2000 {
          * Returns the file segment of a meta-data block.
          * @param num_metadata Meta-data number.
          */
-        FileSegment GetMetadata(size_t num_metadata) const {
+        const FileSegment &GetMetadata(size_t num_metadata) const {
             return meta_data.meta_data[num_metadata];
         }
 
@@ -148,7 +148,7 @@ namespace jpeg2000 {
          * Returns the information of a place-holder.
          * @param num_placeholder Place-holder number.
          */
-        PlaceHolder GetPlaceHolder(size_t num_placeholder) const {
+        const PlaceHolder &GetPlaceHolder(size_t num_placeholder) const {
             return meta_data.place_holders[num_placeholder];
         }
 
