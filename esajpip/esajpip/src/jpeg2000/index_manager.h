@@ -18,8 +18,10 @@ namespace jpeg2000 {
      */
     class IndexManager {
     private:
-        FileManager file_manager_;      ///< File manager
-        list<ImageIndex> index_list;    ///< List of the indexes
+        FileManager file_manager_;                 ///< File manager
+        list<ImageIndex> index_list;               ///< List of the indexes
+        const CodingParameters *coding_parameters; ///< Image coding parameters
+
         map<const string, File::Ptr> file_map;
 
     public:
@@ -31,6 +33,13 @@ namespace jpeg2000 {
 
         ImageIndex::Ptr GetImage() {
             return --index_list.end();
+        }
+
+        /**
+         * Returns a pointer to the coding parameters.
+         */
+        const CodingParameters *GetCodingParameters() {
+            return coding_parameters;
         }
 
         /**

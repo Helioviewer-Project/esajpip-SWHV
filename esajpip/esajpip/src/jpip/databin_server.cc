@@ -10,7 +10,7 @@ namespace jpip {
     bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
         bool res = true;
         bool reset_woi = false;
-        ImageIndex::Ptr image_index = index_manager.GetImage();
+        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
 
         data_writer.ClearPreviousIds();
 
@@ -18,7 +18,7 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
-            req.GetResolution(image_index->GetCodingParameters(), &new_woi);
+            req.GetResolution(coding_parameters, &new_woi);
 
             if (new_woi != woi) {
                 reset_woi = true;
@@ -45,7 +45,7 @@ namespace jpip {
 
         if (reset_woi) {
             end_woi_ = false;
-            woi_composer.Reset(image_index->GetCodingParameters(), woi);
+            woi_composer.Reset(coding_parameters, woi);
         }
 
         return res;
@@ -95,7 +95,7 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters *coding_parameters = image_index->GetCodingParameters();
+                    const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();

@@ -7,7 +7,6 @@ namespace jpeg2000 {
     void ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
         num_references = 1;
         this->path_name = path_name;
-        this->coding_parameters = new CodingParameters(image_info.coding_parameters);
 
         meta_data = image_info.meta_data;
 
@@ -25,10 +24,9 @@ namespace jpeg2000 {
         }
     }
 
-    void ImageIndex::Init(const string &path_name, const CodingParameters *coding_parameters, const ImageInfo &image_info, int index) {
+    void ImageIndex::Init(const string &path_name, const ImageInfo &image_info, int index) {
         num_references = 1;
         this->path_name = path_name;
-        this->coding_parameters = coding_parameters;
 
         meta_data = image_info.meta_data_hyperlinks[index];
 
@@ -50,7 +48,7 @@ namespace jpeg2000 {
 
         // Check the upper top of the index (to build)
         int max_index;
-
+        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
         if (r < coding_parameters->num_levels && coding_parameters->IsResolutionProgression()) {
             // The max_index is the last packet index of the resolution r
             Packet packet(0, r + 1, 0, Size(0, 0));
@@ -136,6 +134,7 @@ namespace jpeg2000 {
             }
         }
 
+        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
         int idx = coding_parameters->GetProgressionIndex(packet);
         PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
         FileSegment segment = packet_index[idx];

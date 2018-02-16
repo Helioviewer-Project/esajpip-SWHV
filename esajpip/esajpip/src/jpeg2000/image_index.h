@@ -37,7 +37,6 @@ namespace jpeg2000 {
         vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
         vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        const CodingParameters *coding_parameters;      ///< Image coding parameters
         vector<list<ImageIndex>::iterator> hyper_links; ///< Image hyperlinks
 
         /**
@@ -76,12 +75,10 @@ namespace jpeg2000 {
         /**
          * Initializes the object.
          * @param path_name Path name of the image.
-         * @param coding_parameters Coding parameters.
          * @param image_info Indexing image information.
          * @param index Image index.
          */
-        void Init(const string &path_name, const CodingParameters *coding_parameters,
-                  const ImageInfo &image_info, int index);
+        void Init(const string &path_name, const ImageInfo &image_info, int index);
 
         /**
          * Empty constructor. Only the index manager can
@@ -171,18 +168,10 @@ namespace jpeg2000 {
          */
         FileSegment GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset = NULL);
 
-        /**
-         * Returns a pointer to the coding parameters.
-         */
-        const CodingParameters *GetCodingParameters() {
-            return coding_parameters;
-        }
-
         ImageIndex &operator=(const ImageIndex &image_index) {
             meta_data = image_index.meta_data;
             path_name = image_index.path_name;
             num_references = image_index.num_references;
-            coding_parameters = image_index.coding_parameters;
 
             base::copy(max_resolution, image_index.max_resolution);
             base::copy(last_plt, image_index.last_plt);
@@ -198,7 +187,6 @@ namespace jpeg2000 {
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
-                << info_node.coding_parameters << endl
                 << "Max resolution: ";
             for (size_t i = 0; i < info_node.max_resolution.size(); ++i)
                 out << info_node.max_resolution[i] << "  ";

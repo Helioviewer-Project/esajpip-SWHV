@@ -23,6 +23,7 @@ namespace jpeg2000 {
             ERROR("The image file '" << path_image_file << "' can not be read");
             return false;
         }
+        coding_parameters = new CodingParameters(image_info.coding_parameters);
 
         // IndexNode is created
         ImageIndex index_node;
@@ -51,7 +52,7 @@ namespace jpeg2000 {
                 if (hyperlinks_visited.find(i->first) == hyperlinks_visited.end()) {
                     if (hyperlinks_created.find(i->first) == hyperlinks_created.end()) {
                         ImageIndex index_node_linked;
-                        index_node_linked.Init(i->first, index_node.coding_parameters, image_info, i->second);
+                        index_node_linked.Init(i->first, image_info, i->second);
 
                         index_list.push_back(index_node_linked);
                         hyperlinks_created.insert(*i);
