@@ -10,7 +10,7 @@ namespace jpeg2000 {
     private:
         FileManager file_manager_;                 ///< File manager
         ImageIndex::Ptr image;
-        const CodingParameters *coding_parameters; ///< Image coding parameters
+        CodingParameters coding_parameters; ///< Image coding parameters
 
         map<const string, File::Ptr> file_map;
 
@@ -29,7 +29,7 @@ namespace jpeg2000 {
          * Returns a pointer to the coding parameters.
          */
         const CodingParameters *GetCodingParameters() {
-            return coding_parameters;
+            return &coding_parameters;
         }
 
         /**

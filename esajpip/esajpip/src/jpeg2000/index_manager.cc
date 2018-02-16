@@ -16,7 +16,7 @@ namespace jpeg2000 {
             ERROR("The image file '" << path_image_file << "' can not be read");
             return false;
         }
-        coding_parameters = new CodingParameters(image_info.coding_parameters);
+        coding_parameters = image_info.coding_parameters;
 
         image = ImageIndex::Ptr(new ImageIndex());
         image->Init(path_image_file, image_info);

@@ -20,14 +20,14 @@
 namespace data {
     using namespace std;
 
-    class BaseFile {
+    class File {
     public:
         /**
          * Safe pointer to this class.
          */
-        typedef SHARED_PTR<BaseFile> Ptr;
+        typedef SHARED_PTR<File> Ptr;
 
-        BaseFile() {
+        File() {
             clear();
         }
 
@@ -129,7 +129,7 @@ namespace data {
            return true;
         }
 
-        virtual ~BaseFile() {
+        virtual ~File() {
             Close();
         }
 
@@ -144,8 +144,6 @@ namespace data {
             offset = 0;
         }
     };
-
-    typedef BaseFile File;
 }
 
 #endif /* _DATA_FILE_H_ */

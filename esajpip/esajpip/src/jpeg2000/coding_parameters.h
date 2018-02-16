@@ -114,20 +114,17 @@ namespace jpeg2000 {
         /**
          * Copy assignment.
          */
-/*
         CodingParameters &operator=(const CodingParameters &cod_params) {
             size = cod_params.size;
             num_levels = cod_params.num_levels;
             num_layers = cod_params.num_layers;
             progression = cod_params.progression;
             num_components = cod_params.num_components;
-            base::copy(precinct_size, cod_params.precinct_size);
-            //base::copy(total_precincts, cod_params.total_precincts);
-            FillTotalPrecinctsVector();
-
+            precinct_size = cod_params.precinct_size;
+            total_precincts = cod_params.total_precincts;
             return *this;
         }
-*/
+
         friend ostream &operator<<(ostream &out, const CodingParameters &params) {
             out << "Progression: " <<
                 (params.progression == LRCP_PROGRESSION ? "LRCP" :
@@ -138,12 +135,9 @@ namespace jpeg2000 {
                 << "Size: " << params.size << endl << "Num. of levels: " << params.num_levels << endl
                 << "Num. of layers: " << params.num_layers << endl
                 << "Num. of components: " << params.num_components << endl << "Precinct size: { ";
-
             for (size_t i = 0; i < params.precinct_size.size(); ++i)
                 out << params.precinct_size[i] << " ";
-
             out << "}" << endl;
-
             return out;
         }
 
@@ -151,7 +145,7 @@ namespace jpeg2000 {
          * Returns <code>true</code> if the progression is RLCP or RPCL.
          */
         bool IsResolutionProgression() const {
-            return ((progression == RLCP_PROGRESSION) || (progression == RPCL_PROGRESSION));
+            return progression == RLCP_PROGRESSION || progression == RPCL_PROGRESSION;
         }
 
         /**
