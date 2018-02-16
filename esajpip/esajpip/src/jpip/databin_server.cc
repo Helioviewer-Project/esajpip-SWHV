@@ -2,30 +2,15 @@
 
 namespace jpip {
 
-    bool DataBinServer::Reset(const ImageIndex::Ptr image_index) {
-        files.clear();
+    void DataBinServer::Reset() {
         metareq = false;
         has_woi = false;
-        im_index = image_index;
-
-        file = File::Ptr(new File());
-
-        if (!file->Open(im_index->GetPathName())) return false;
-        else {
-            if (!im_index->IsHyperLinked(0)) files.push_back(file);
-            else {
-                File::Ptr hyperlinked_file = File::Ptr(new File());
-                if (!hyperlinked_file->Open(im_index->GetPathName(0))) return false;
-                else files.push_back(hyperlinked_file);
-            }
-
-            return true;
-        }
     }
 
-    bool DataBinServer::SetRequest(const Request &req) {
+    bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
         bool res = true;
         bool reset_woi = false;
+        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
 
         data_writer.ClearPreviousIds();
 
@@ -33,7 +18,7 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
-            req.GetResolution(im_index->GetCodingParameters(), &new_woi);
+            req.GetResolution(coding_parameters, &new_woi);
 
             if (new_woi != woi) {
                 reset_woi = true;
@@ -52,19 +37,6 @@ namespace jpip {
                 codestreams = req.codestreams;
                 current_idx = 0;
                 reset_woi = true;
-
-                if (files.size() != codestreams.size())
-                    files.resize(codestreams.size());
-
-                for (size_t i = 0; i < codestreams.size(); ++i) {
-                    int idx = codestreams[i];
-
-                    if (!im_index->IsHyperLinked(idx)) files[i] = file;
-                    else {
-                        files[i] = File::Ptr(new File());
-                        res = res && files[i]->Open(im_index->GetPathName(idx));
-                    }
-                }
             }
         }
 
@@ -73,37 +45,39 @@ namespace jpip {
 
         if (reset_woi) {
             end_woi_ = false;
-            woi_composer.Reset(im_index->GetCodingParameters(), woi);
+            woi_composer.Reset(coding_parameters, woi);
         }
 
         return res;
     }
 
-    bool DataBinServer::GenerateChunk(char *buff, int *len, bool *last) {
+    bool DataBinServer::GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last) {
         int res;
+        ImageIndex::Ptr image_index = index_manager.GetImage();
 
-        data_writer.SetBuffer(buff, min(pending, *len));
+        data_writer.SetBuffer(buf, min(pending, *len));
 
         if (pending > 0) {
             eof = false;
 
             if (!cache_model.IsFullMetadata()) {
-                if (im_index->GetNumMetadatas() <= 0)
+                File::Ptr file = index_manager.OpenFile(image_index->GetPathName());
+                if (image_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
                 else {
                     int bin_offset = 0;
                     bool last_metadata;
 
-                    for (size_t i = 0; i < im_index->GetNumMetadatas(); ++i) {
-                        last_metadata = (i == im_index->GetNumMetadatas() - 1);
-                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, im_index->GetMetadata(i), bin_offset, last_metadata);
-                        bin_offset += im_index->GetMetadata(i).length;
+                    for (size_t i = 0; i < image_index->GetNumMetadatas(); ++i) {
+                        last_metadata = (i == image_index->GetNumMetadatas() - 1);
+                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, image_index->GetMetadata(i), bin_offset, last_metadata);
+                        bin_offset += image_index->GetMetadata(i).length;
 
                         if (last_metadata) {
                             if (res > 0) cache_model.SetFullMetadata();
                         } else {
-                            if (WritePlaceHolder(0, 0, im_index->GetPlaceHolder(i), bin_offset) <= 0) break;
-                            bin_offset += im_index->GetPlaceHolder(i).length();
+                            if (WritePlaceHolder(file, 0, 0, image_index->GetPlaceHolder(i), bin_offset) <= 0) break;
+                            bin_offset += image_index->GetPlaceHolder(i).length();
                         }
                     }
                 }
@@ -111,8 +85,9 @@ namespace jpip {
 
             if (!eof) {
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0, im_index->GetMainHeader(codestreams[i]));
-                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0, FileSegment::Null);
+                    File::Ptr file = index_manager.OpenFile(image_index->GetPathName(codestreams[i]));
+                    WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
+                    WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -120,16 +95,17 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters *coding_parameters = im_index->GetCodingParameters();
+                    const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
-                        segment = im_index->GetPacket(codestreams[current_idx], packet, &bin_offset);
+                        segment = image_index->GetPacket(index_manager, codestreams[current_idx], packet, &bin_offset);
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        res = WriteSegment<DataBinClass::PRECINCT>(files[current_idx], codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
+                        File::Ptr file = index_manager.OpenFile(image_index->GetPathName(codestreams[current_idx]));
+                        res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
                         if (res < 0) return false;
                         else if (res > 0) {

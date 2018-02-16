@@ -1,4 +1,6 @@
 #include "file_manager.h"
+#include "index_manager.h"
+
 
 namespace jpeg2000 {
 
@@ -23,28 +25,27 @@ namespace jpeg2000 {
 #define URL__BOX_ID 0x75726C20
 #define FLST_BOX_ID 0x666C7374
 
-    bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
+    bool FileManager::ReadImage(IndexManager &index_manager, const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
-        File f;
         // Get file extension
         string extension;
         size_t pos = name_image_file.find_last_of(".");
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
         if (extension == ".jp2") { // JP2 image
-            if (!f.Open(name_image_file)) {
-                ERROR("Impossible to open file: '" << name_image_file << "'...");
+            File::Ptr file = index_manager.OpenFile(name_image_file);
+            if (file == NULL) {
+                ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
-            res = res && ReadJP2(f, image_info);
-            f.Close();
+            res = res && ReadJP2(file, image_info);
         } else if (extension == ".jpx") { // JPX image
-            if (!f.Open(name_image_file)) {
-                ERROR("Impossible to open file: '" << name_image_file << "'...");
+            File::Ptr file = index_manager.OpenFile(name_image_file);
+            if (file == NULL) {
+                ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
-            res = res && ReadJPX(f, image_info);
-            f.Close();
+            res = res && ReadJPX(index_manager, file, image_info);
         } else {
             ERROR("File type not supported...");
             return false;
@@ -54,17 +55,17 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadCodestream(File &file, CodingParameters *params, CodestreamIndex *index) {
+    bool FileManager::ReadCodestream(File::Ptr &file, CodingParameters *params, CodestreamIndex *index) {
         bool res = true;
 
         // Get markers
         bool plts = false;
         uint16_t value = 0;
 
-        while (res = res && file.ReadReverse(&value), res && (value != EOC_MARKER)) {
+        while (res = res && file->ReadReverse(&value), res && (value != EOC_MARKER)) {
             switch (value) {
                 case SOC_MARKER: TRACE("SOC marker...");
-                    index->header.offset = file.GetOffset() - 2;
+                    index->header.offset = file->GetOffset() - 2;
                     break;
 
                 case SIZ_MARKER: TRACE("SIZ marker...");
@@ -89,7 +90,7 @@ namespace jpeg2000 {
                     break;
 
                 default:
-                    res = res && file.ReadReverse(&value) && file.Seek(value - 2, SEEK_CUR);
+                    res = res && file->ReadReverse(&value) && file->Seek(value - 2, SEEK_CUR);
             }
         }
 
@@ -107,49 +108,49 @@ namespace jpeg2000 {
         }
     }
 
-    bool FileManager::ReadSIZMarker(File &file, CodingParameters *params) {
+    bool FileManager::ReadSIZMarker(File::Ptr &file, CodingParameters *params) {
         bool res = true;
         // To jump Lsiz, CA
-        res = res && file.Seek(4, SEEK_CUR);
+        res = res && file->Seek(4, SEEK_CUR);
         // Get image height and width
         uint32_t FE[4];
         for (int i = 0; i < 4; ++i)
-            res = res && file.ReadReverse(&FE[i]);
+            res = res && file->ReadReverse(&FE[i]);
         // height=F1-E1
         // width=F2-E2
         params->size = Size(FE[0] - FE[2], FE[1] - FE[3]);
         // Get T2, T1, omegaT2, omegaT1
         uint32_t tiling[4];
         for (int i = 0; i < 4; ++i)
-            res = res && file.ReadReverse(&tiling[i]);
+            res = res && file->ReadReverse(&tiling[i]);
         // Get number of components
         uint16_t num_components = 0;
-        res = res && file.ReadReverse(&num_components);
+        res = res && file->ReadReverse(&num_components);
         params->num_components = num_components;
         // To jump to the end of the marker
-        res = res && file.Seek(3 * num_components, SEEK_CUR);
+        res = res && file->Seek(3 * num_components, SEEK_CUR);
 
         return res;
     }
 
-    bool FileManager::ReadCODMarker(File &file, CodingParameters *params) {
+    bool FileManager::ReadCODMarker(File::Ptr &file, CodingParameters *params) {
         bool res = true;
         // Get CS0 parameter
         uint8_t cs_buf = 0;
-        res = res && file.Seek(2, SEEK_CUR) && file.ReadReverse(&cs_buf);
+        res = res && file->Seek(2, SEEK_CUR) && file->ReadReverse(&cs_buf);
         // Get progression order
         uint8_t progression = 0;
-        res = res && file.ReadReverse(&progression);
+        res = res && file->ReadReverse(&progression);
         params->progression = progression;
         // Get number of quality layers
         uint16_t quality_layers = 0;
         // To jump MC
-        res = res && file.ReadReverse(&quality_layers) && file.Seek(1, SEEK_CUR);
+        res = res && file->ReadReverse(&quality_layers) && file->Seek(1, SEEK_CUR);
         params->num_layers = quality_layers;
         // Get transform levels
         uint8_t transform_levels = 0;
         // To jump 4 bytes (ECB2,ECB1,MS,WT)
-        res = res && file.ReadReverse(&transform_levels) && file.Seek(4, SEEK_CUR);
+        res = res && file->ReadReverse(&transform_levels) && file->Seek(4, SEEK_CUR);
         params->num_levels = transform_levels;
         // Get precint sizes for each resolution
         int height, width;
@@ -157,7 +158,7 @@ namespace jpeg2000 {
         params->precinct_size.clear();
         for (int i = 0; i <= params->num_levels; ++i) {
             if (cs_buf & 1) {
-                res = res && file.ReadReverse(&size_precinct);
+                res = res && file->ReadReverse(&size_precinct);
                 height = 1 << ((size_precinct & 0xF0) >> 4);
                 width = 1 << (size_precinct & 0x0F);
                 params->precinct_size.emplace_back(width, height);
@@ -170,65 +171,65 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadSOTMarker(File &file, CodestreamIndex *index) {
+    bool FileManager::ReadSOTMarker(File::Ptr &file, CodestreamIndex *index) {
         bool res = true;
         // Get offset of the codestream header
-        if (index->header.length == 0) index->header.length = file.GetOffset() - 2 - index->header.offset;
+        if (index->header.length == 0) index->header.length = file->GetOffset() - 2 - index->header.offset;
         // Get Ltp
         uint32_t ltp = 0;
         // To jump Lsot, it, itp, ntp
-        res = res && file.Seek(4, SEEK_CUR) && file.ReadReverse(&ltp) && file.Seek(2, SEEK_CUR);
-        index->packets.emplace_back(file.GetOffset(), ltp - 12);
+        res = res && file->Seek(4, SEEK_CUR) && file->ReadReverse(&ltp) && file->Seek(2, SEEK_CUR);
+        index->packets.emplace_back(file->GetOffset(), ltp - 12);
         return res;
     }
 
-    bool FileManager::ReadPLTMarker(File &file, CodestreamIndex *index) {
+    bool FileManager::ReadPLTMarker(File::Ptr &file, CodestreamIndex *index) {
         bool res = true;
         // Get PLT offset
-        uint64_t PLT_offset = file.GetOffset() + 3;
+        uint64_t PLT_offset = file->GetOffset() + 3;
         // Get Lplt
         uint16_t lplt = 0;
-        res = res && file.ReadReverse(&lplt);
-        res = res && file.Seek(lplt - 2, SEEK_CUR);
+        res = res && file->ReadReverse(&lplt);
+        res = res && file->Seek(lplt - 2, SEEK_CUR);
         // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
         index->PLT_markers.emplace_back(PLT_offset, lplt - 3);
         return res;
     }
 
-    bool FileManager::ReadSODMarker(File &file, CodestreamIndex *index) {
+    bool FileManager::ReadSODMarker(File::Ptr &file, CodestreamIndex *index) {
         bool res = true;
         // Get packets info
         FileSegment &fs = index->packets.back();
-        fs.length = fs.length - (file.GetOffset() - fs.offset);
-        fs.offset = file.GetOffset();
-        res = res && file.Seek(fs.length, SEEK_CUR);
+        fs.length = fs.length - (file->GetOffset() - fs.offset);
+        fs.offset = file->GetOffset();
+        res = res && file->Seek(fs.length, SEEK_CUR);
         return res;
     }
 
-    bool FileManager::ReadBoxHeader(File &file, uint32_t *type_box, uint64_t *length_box) {
+    bool FileManager::ReadBoxHeader(File::Ptr &file, uint32_t *type_box, uint64_t *length_box) {
         bool res = true;
         // Get L, if it is not 0 or 1, then box length is L
         uint32_t L = 0;
-        res = res && file.ReadReverse(&L);
+        res = res && file->ReadReverse(&L);
         *length_box = L - 8;
         // Get T (box type)
         uint32_t T = 0;
-        res = res && file.ReadReverse(&T);
+        res = res && file->ReadReverse(&T);
         *type_box = T;
         // XL indicates the box length
         if (L == 1) {
             uint64_t XL = 0;
-            res = res && file.ReadReverse(&XL);
+            res = res && file->ReadReverse(&XL);
             *length_box = XL - 16;
         }
             // Box length = eof_offset - offset
         else if (L == 0) {
-            *length_box = file.GetSize() - file.GetOffset();
+            *length_box = file->GetSize() - file->GetOffset();
         }
         return res;
     }
 
-    bool FileManager::ReadJP2(File &file, ImageInfo *image_info) {
+    bool FileManager::ReadJP2(File::Ptr &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -237,17 +238,17 @@ namespace jpeg2000 {
         //int metadata_bin=1;
 
         image_info->codestreams.emplace_back();
-        while (file.GetOffset() != file.GetSize() && res) {
-            pini_box = file.GetOffset();
+        while (file->GetOffset() != file->GetSize() && res) {
+            pini_box = file->GetOffset();
             plen = pini_box - pini;
             res = res && ReadBoxHeader(file, &type_box, &length_box);
-            plen_box = file.GetOffset() - pini_box;
+            plen_box = file->GetOffset() - pini_box;
             switch (type_box) {
                 case JP2C_BOX_ID: TRACE("JP2C box...");
                     image_info->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
-                    pini = file.GetOffset();
+                    pini = file->GetOffset();
                     plen = 0;
                     break;
 
@@ -255,22 +256,22 @@ namespace jpeg2000 {
                       TRACE("XML box...");
                       image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
                       // Get meta_data info
-                      res = res && file.Seek(length_box, SEEK_CUR);
+                      res = res && file->Seek(length_box, SEEK_CUR);
                       image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
                       metadata_bin++;
-                      pini=file.GetOffset();
+                      pini=file->GetOffset();
                       plen=0;
                       break;*/
 
                 default:
-                    res = res && file.Seek(length_box, SEEK_CUR);
+                    res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.emplace_back(pini, file.GetOffset() - pini);
+        image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
         return res;
     }
 
-    bool FileManager::ReadJPX(File &file, ImageInfo *image_info) {
+    bool FileManager::ReadJPX(IndexManager &index_manager, File::Ptr &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -283,11 +284,11 @@ namespace jpeg2000 {
         //int metadata_bin=1;
         int num_flst = 0, pini_ftbl = 0, plen_ftbl = 0;
 
-        while (file.GetOffset() != file.GetSize() && res) {
-            pini_box = file.GetOffset();
+        while (file->GetOffset() != file->GetSize() && res) {
+            pini_box = file->GetOffset();
             plen = pini_box - pini;
             res = res && ReadBoxHeader(file, &type_box, &length_box);
-            plen_box = file.GetOffset() - pini_box;
+            plen_box = file->GetOffset() - pini_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
                     image_info->codestreams.emplace_back();
@@ -296,25 +297,25 @@ namespace jpeg2000 {
                     image_info->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
-                    pini = file.GetOffset();
+                    pini = file->GetOffset();
                     plen = 0;
                     break;
                     /*case ASOC_BOX_ID:
                       TRACE("ASOC box...");
                       image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
-                      res = res && file.Seek(length_box, SEEK_CUR);
+                      res = res && file->Seek(length_box, SEEK_CUR);
                       image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
                       metadata_bin++;
-                      pini=file.GetOffset();
+                      pini=file->GetOffset();
                       plen=0;
                       break;
                     case XML__BOX_ID:
                       TRACE("XML box...");
                     image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
-                    res = res && file.Seek(length_box, SEEK_CUR);
+                    res = res && file->Seek(length_box, SEEK_CUR);
                     image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
                     metadata_bin++;
-                    pini=file.GetOffset();
+                    pini=file->GetOffset();
                     plen=0;
                     break;*/
                     // 'ftbl' superbox contains a 'flst'
@@ -332,11 +333,11 @@ namespace jpeg2000 {
                     num_flst++;
                     image_info->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
                     v_data_reference.push_back(data_reference);
-                    pini = file.GetOffset();
+                    pini = file->GetOffset();
                     plen = 0;
                     break;
                 case DBTL_BOX_ID: TRACE("DBTL box...");
-                    res = res && file.Seek(2, SEEK_CUR);
+                    res = res && file->Seek(2, SEEK_CUR);
                     break;
                 case URL__BOX_ID: TRACE("URL box...");
                     // Add the paths of the hyperlinked images to the paths vector
@@ -345,10 +346,10 @@ namespace jpeg2000 {
                     v_path_file.push_back(path_file);
                     break;
                 default:
-                    res = res && file.Seek(length_box, SEEK_CUR);
+                    res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.emplace_back(pini, file.GetOffset() - pini);
+        image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
         assert(v_data_reference.size() == v_path_file.size());
         for (size_t i = 0; i < v_data_reference.size(); ++i) {
@@ -362,7 +363,7 @@ namespace jpeg2000 {
         // Get image info of the hyperlinked images
         for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; ++i) {
             ImageInfo image_info_hyperlink;
-            res = res && ReadImage(i->first, &image_info_hyperlink);
+            res = res && ReadImage(index_manager, i->first, &image_info_hyperlink);
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
             image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
             image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
@@ -370,12 +371,12 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadNlstBox(File &file, int *num_codestream, int length_box) {
+    bool FileManager::ReadNlstBox(File::Ptr &file, int *num_codestream, int length_box) {
         bool res = true;
         // Get the codestream number
         uint32_t an;
         while (res && (length_box > 0)) {
-            res = res && file.ReadReverse(&an);
+            res = res && file->ReadReverse(&an);
             if ((an >> 24) == 1) {
                 *num_codestream = an & 0x00FFFFFF;
             }
@@ -384,22 +385,22 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadFlstBox(File &file, uint64_t length_box, uint16_t *data_reference) {
+    bool FileManager::ReadFlstBox(File::Ptr &file, uint64_t length_box, uint16_t *data_reference) {
         bool res = true;
         // Get the path of the hyperlinked image
-        res = res && file.Seek(14, SEEK_CUR);
-        res = res && file.ReadReverse(data_reference);
+        res = res && file->Seek(14, SEEK_CUR);
+        res = res && file->ReadReverse(data_reference);
 
         return res;
     }
 
-    bool FileManager::ReadUrlBox(File &file, uint64_t length_box, string *path_file) {
+    bool FileManager::ReadUrlBox(File::Ptr &file, uint64_t length_box, string *path_file) {
         bool res = true;
         // Get the path of the hyperlinked image
-        res = res && file.Seek(4, SEEK_CUR);
+        res = res && file->Seek(4, SEEK_CUR);
 
         char path_char[length_box - 3];
-        res = res && file.Read(path_char, length_box - 4);
+        res = res && file->Read(path_char, length_box - 4);
         path_char[length_box - 4] = 0;
 
         *path_file = path_char;

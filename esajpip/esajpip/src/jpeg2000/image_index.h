@@ -4,7 +4,6 @@
 //#define SHOW_TRACES
 #include "trace.h"
 
-#include <list>
 #include <vector>
 #include "base.h"
 #include "image_info.h"
@@ -13,6 +12,7 @@
 namespace jpeg2000 {
     using namespace std;
 
+    class IndexManager;
     /**
      * Contains the indexing information of a JPEG2000 image file that
      * is managed by the index manager. This class can be printed.
@@ -28,16 +28,14 @@ namespace jpeg2000 {
         vector<uint64_t> last_offset_PLT;
         vector<uint64_t> last_offset_packet;
 
-        string path_name;            ///< Image file name
-        Metadata meta_data;          ///< Image Metadata
-        int num_references;          ///< Number of references
-        vector<int> max_resolution;  ///< Maximum resolution number
+        string path_name;           ///< Image file name
+        Metadata meta_data;         ///< Image Metadata
+        vector<int> max_resolution; ///< Maximum resolution number
 
-        vector<PacketIndex> packet_indexes;    ///< Code-stream packet index
-        vector<CodestreamIndex> codestreams;    ///< Image code-streams
+        vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
+        vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        const CodingParameters *coding_parameters;            ///< Image coding parameters
-        vector<list<ImageIndex>::iterator> hyper_links;    ///< Image hyperlinks
+        vector<SHARED_PTR<ImageIndex>> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -46,7 +44,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(File &file, int ind_codestream, uint64_t *length_packet);
+        bool GetPLTLength(File::Ptr &file, int ind_codestream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
@@ -55,7 +53,7 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        void GetOffsetPacket(const File &file, int ind_codestream, uint64_t length_packet);
+        void GetOffsetPacket(File::Ptr &file, int ind_codestream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
@@ -63,7 +61,7 @@ namespace jpeg2000 {
          * @param max_index Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(int ind_codestream, int max_index);
+        bool BuildIndex(IndexManager &index_manager, int ind_codestream, int max_index);
 
         /**
          * Initializes the object.
@@ -75,26 +73,23 @@ namespace jpeg2000 {
         /**
          * Initializes the object.
          * @param path_name Path name of the image.
-         * @param coding_parameters Coding parameters.
          * @param image_info Indexing image information.
          * @param index Image index.
          */
-        void Init(const string &path_name, const CodingParameters *coding_parameters,
-                  const ImageInfo &image_info, int index);
+        void Init(const string &path_name, const ImageInfo &image_info, int index);
 
         /**
          * Empty constructor. Only the index manager can
          * use this constructor.
          */
         ImageIndex() {
-            num_references = 0;
         }
 
     public:
         /**
          * Pointer of an object of this class.
          */
-        typedef list<ImageIndex>::iterator Ptr;
+        typedef SHARED_PTR<ImageIndex> Ptr;
 
         /**
          * Copy constructor.
@@ -168,44 +163,10 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        FileSegment GetPacket(int num_codestream, const Packet &packet, int *offset = NULL);
-
-        /**
-         * Returns a pointer to the coding parameters.
-         */
-        const CodingParameters *GetCodingParameters() {
-            return coding_parameters;
-        }
-
-        /**
-         * Returns <code>true</code> if the image contains
-         * hyperlinks.
-         */
-        bool IsHyperLinked(int num_codestream) const {
-            return (num_codestream < (int) hyper_links.size());
-        }
-
-        ImageIndex &operator=(const ImageIndex &image_index) {
-            meta_data = image_index.meta_data;
-            path_name = image_index.path_name;
-            num_references = image_index.num_references;
-            coding_parameters = image_index.coding_parameters;
-
-            base::copy(max_resolution, image_index.max_resolution);
-            base::copy(last_plt, image_index.last_plt);
-            base::copy(last_packet, image_index.last_packet);
-            base::copy(codestreams, image_index.codestreams);
-            base::copy(hyper_links, image_index.hyper_links);
-            base::copy(packet_indexes, image_index.packet_indexes);
-            base::copy(last_offset_PLT, image_index.last_offset_PLT);
-            base::copy(last_offset_packet, image_index.last_offset_packet);
-
-            return *this;
-        }
+        FileSegment GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset = NULL);
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
-                << info_node.coding_parameters << endl
                 << "Max resolution: ";
             for (size_t i = 0; i < info_node.max_resolution.size(); ++i)
                 out << info_node.max_resolution[i] << "  ";
@@ -224,8 +185,7 @@ namespace jpeg2000 {
                 out << "Hyperlinks: " << endl << "----------- " << endl << *info_node.hyper_links[i] << endl << "----------- " << endl;
 
             out << endl << "Meta-data: ";
-            out << endl << info_node.meta_data;
-            out << endl << "Num. References: " << info_node.num_references << endl;
+            out << endl << info_node.meta_data << endl;
 
             return out;
         }

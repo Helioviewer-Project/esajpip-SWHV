@@ -49,7 +49,6 @@ void ClientManager::Run(ClientInfo *client_info) {
     bool pclose = false;
     bool is_opened = false;
     bool send_data = false;
-    ImageIndex::Ptr im_index;
     DataBinServer data_server;
 
     IndexManager index_manager;
@@ -128,7 +127,6 @@ void ClientManager::Run(ClientInfo *client_info) {
                 pclose = false;
                 is_opened = false;
                 req.cache_model.Clear();
-                index_manager.CloseImage(im_index);
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
                             << http::Header::AccessControlAllowOrigin(CORS)
@@ -143,13 +141,12 @@ void ClientManager::Run(ClientInfo *client_info) {
             } else {
                 string file_name = (req.mask.items.target ? req.parameters["target"] : req.object);
 
-                if (!index_manager.OpenImage(file_name, &im_index))
+                if (!index_manager.OpenImage(file_name))
                     ERROR("The image file '" << file_name << "' can not be read");
                 else {
                     is_opened = true;
-                    if (!data_server.Reset(im_index))
-                        ERROR("The image file '" << file_name << "' can not be opened");
-                    else if (!data_server.SetRequest(req))
+                    data_server.Reset();
+                    if (!data_server.SetRequest(index_manager, req))
                         ERROR("The server can not process the request");
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
@@ -172,7 +169,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (req.parameters["cid"] != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
-                } else if (!data_server.SetRequest(req))
+                } else if (!data_server.SetRequest(index_manager, req))
                     ERROR("The server can not process the request");
                 else {
                     sock_stream << http::Response(200)
@@ -204,7 +201,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -217,7 +214,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -243,10 +240,6 @@ void ClientManager::Run(ClientInfo *client_info) {
 
             sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
         }
-    }
-
-    if (is_opened) {
-        index_manager.CloseImage(im_index);
     }
 
     delete[] buf;
