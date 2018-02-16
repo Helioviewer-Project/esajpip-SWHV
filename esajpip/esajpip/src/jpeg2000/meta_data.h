@@ -2,7 +2,6 @@
 #define _JPEG2000_META_DATA_H_
 
 #include <vector>
-#include "base.h"
 #include "jpeg2000/place_holder.h"
 
 namespace jpeg2000 {
@@ -42,9 +41,8 @@ namespace jpeg2000 {
          * Copy assignment.
          */
         Metadata &operator=(const Metadata &info) {
-            base::copy(meta_data, info.meta_data);
-            base::copy(place_holders, info.place_holders);
-
+            meta_data = info.meta_data;
+            place_holders = info.place_holders;
             return *this;
         }
 

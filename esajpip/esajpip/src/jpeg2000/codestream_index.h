@@ -2,7 +2,6 @@
 #define _JPEG2000_CODESTREAM_INDEX_H_
 
 #include <vector>
-#include "base.h"
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
@@ -38,31 +37,20 @@ namespace jpeg2000 {
         }
 
         /**
-         * Clears the information.
-         */
-        void Clear() {
-            packets.clear();
-            PLT_markers.clear();
-        }
-
-        /**
          * Copy assignment.
          */
         const CodestreamIndex &operator=(const CodestreamIndex &index) {
             header = index.header;
-            base::copy(packets, index.packets);
-            base::copy(PLT_markers, index.PLT_markers);
-
+            packets = index.packets;
+            PLT_markers = index.PLT_markers;
             return *this;
         }
 
         friend ostream &operator<<(ostream &out, const CodestreamIndex &index) {
             out << "Header: " << index.header << endl;
-
             out << "Packets: ";
             for (size_t i = 0; i < index.packets.size(); ++i)
                 out << index.packets[i] << " ";
-
             out << endl << "PLT-markers: ";
             for (size_t i = 0; i < index.PLT_markers.size(); ++i)
                 out << index.PLT_markers[i] << " ";

@@ -4,7 +4,6 @@
 #include <vector>
 #include <iostream>
 #include <limits.h>
-#include "base.h"
 #include "jpip/jpip.h"
 
 namespace jpip {
@@ -73,7 +72,7 @@ namespace jpip {
                 header = model.header;
                 tile_header = model.tile_header;
                 min_precinct = model.min_precinct;
-                base::copy(precincts, model.precincts);
+                precincts = model.precincts;
 
                 return *this;
             }
@@ -117,7 +116,6 @@ namespace jpip {
                     if (complete || (amount == INT_MAX)) header = INT_MAX;
                     else header += amount;
                 }
-
                 return header;
             }
 
@@ -133,7 +131,6 @@ namespace jpip {
                     if (complete || (amount == INT_MAX)) tile_header = INT_MAX;
                     else tile_header += amount;
                 }
-
                 return tile_header;
             }
 
@@ -145,9 +142,7 @@ namespace jpip {
                 if (num_precinct < min_precinct) return INT_MAX;
                 else {
                     int n = num_precinct - min_precinct;
-
                     if (n >= (int) precincts.size()) precincts.resize(n + 1, 0);
-
                     return precincts[n];
                 }
             }
@@ -164,16 +159,12 @@ namespace jpip {
                 if (num_precinct < min_precinct) return INT_MAX;
                 else {
                     int n = num_precinct - min_precinct;
-
                     if (n >= (int) precincts.size()) precincts.resize(n + 1, 0);
-
                     int &p = precincts[n];
-
                     if (p != INT_MAX) {
                         if (complete || (amount == INT_MAX)) p = INT_MAX;
                         else p += amount;
                     }
-
                     return p;
                 }
             }
@@ -237,9 +228,8 @@ namespace jpip {
          */
         CacheModel &operator=(const CacheModel &model) {
             full_meta = model.full_meta;
-            base::copy(meta_data, model.meta_data);
-            base::copy(codestreams, model.codestreams);
-
+            meta_data = model.meta_data;
+            codestreams = model.codestreams;
             return *this;
         }
 
@@ -251,10 +241,8 @@ namespace jpip {
                 for (size_t i = 0; i < model.meta_data.size(); ++i)
                     AddToMetadata(i, model.meta_data[i]);
             }
-
             for (size_t i = 0; i < model.codestreams.size(); ++i)
                 GetCodestream(i) += model.codestreams[i];
-
             return *this;
         }
 
@@ -295,7 +283,6 @@ namespace jpip {
                     if (complete || (amount == INT_MAX)) meta_data[id] = INT_MAX;
                     else meta_data[id] += amount;
                 }
-
                 return meta_data[id];
             }
         }

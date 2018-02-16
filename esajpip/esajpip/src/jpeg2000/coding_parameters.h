@@ -4,7 +4,6 @@
 #include <vector>
 #include <cmath>
 
-#include "base.h"
 #include "point.h"
 #include "trace.h"
 #include "packet.h"

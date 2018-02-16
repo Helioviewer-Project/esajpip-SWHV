@@ -10,7 +10,7 @@ namespace jpeg2000 {
         meta_data = image_info.meta_data;
 
         if (image_info.paths.empty()) {
-            base::copy(codestreams, image_info.codestreams);
+            codestreams = image_info.codestreams;
             max_resolution.resize(codestreams.size(), -1);
 
             for (size_t i = 0; i < codestreams.size(); ++i) {
@@ -27,7 +27,6 @@ namespace jpeg2000 {
         this->path_name = path_name;
 
         meta_data = image_info.meta_data_hyperlinks[index];
-
         codestreams.push_back(image_info.codestreams[index]);
         max_resolution.push_back(-1);
 

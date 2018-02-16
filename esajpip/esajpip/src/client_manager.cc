@@ -28,7 +28,7 @@ static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
 
 void ClientManager::Run(ClientInfo *client_info) {
     SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
-    string channel = base::to_string(client_info->base_id());
+    string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
     size_t buf_len = cfg.max_chunk_size();
@@ -190,7 +190,7 @@ void ClientManager::Run(ClientInfo *client_info) {
             sock_stream << http::Response(500)
                         << http::Header::AccessControlAllowOrigin(CORS)
                         << http::Header::CacheControl("no-cache")
-                        << http::Header::ContentLength(base::to_string(err_msg_len))
+                        << http::Header::ContentLength(to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
             if (err_msg_len) {
                 if (sock_stream->Send(err_msg, err_msg_len) != (ssize_t) err_msg_len)
@@ -284,7 +284,7 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Header::AccessControlAllowOrigin(CORS)
                     << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                     << http::Header::CacheControl("no-cache")
-                    << http::Header::ContentLength(base::to_string(buf_len))
+                    << http::Header::ContentLength(to_string(buf_len))
                     << http::Header::ContentType("image/jpp-stream")
                     << http::Protocol::CRLF;
         if (sock_stream.Send(buf, buf_len) != (ssize_t) buf_len)

@@ -5,7 +5,6 @@
 #include "trace.h"
 
 #include <vector>
-#include "base.h"
 #include "image_info.h"
 #include "packet_index.h"
 
@@ -171,12 +170,10 @@ namespace jpeg2000 {
 
             for (size_t i = 0; i < info_node.codestreams.size(); ++i)
                 out << "Codestream index: " << endl << "----------------- " << endl << info_node.codestreams[i] << endl << endl;
-
             out << "Packet indexes: " << endl << "--------------- " << endl;
             for (size_t i = 0; i < info_node.packet_indexes.size(); ++i)
                 for (int j = 0; j < info_node.packet_indexes[i].Size(); ++j)
                     out << j << " - " << info_node.packet_indexes[i][j] << endl;
-
             out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
             for (size_t i = 0; i < info_node.hyper_links.size(); ++i)
                 out << "Hyperlinks: " << endl << "----------- " << endl << *info_node.hyper_links[i] << endl << "----------- " << endl;

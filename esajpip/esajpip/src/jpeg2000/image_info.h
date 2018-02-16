@@ -2,7 +2,6 @@
 #define _JPEG2000_IMAGE_INFO_H_
 
 #include <map>
-#include "base.h"
 #include "data/file.h"
 #include "codestream_index.h"
 #include "coding_parameters.h"
@@ -42,12 +41,11 @@ namespace jpeg2000 {
          * Copy assignment.
          */
         const ImageInfo &operator=(const ImageInfo &info) {
-            base::copy(paths, info.paths);
+            paths = info.paths;
             coding_parameters = info.coding_parameters;
-            base::copy(codestreams, info.codestreams);
+            codestreams = info.codestreams;
             meta_data = info.meta_data;
-            base::copy(meta_data_hyperlinks, info.meta_data_hyperlinks);
-
+            meta_data_hyperlinks = info.meta_data_hyperlinks;
             return *this;
         }
 
@@ -55,7 +53,6 @@ namespace jpeg2000 {
             out << "Coding parameters: " << endl
                 << "---------------------- " << endl
                 << info.coding_parameters << endl << endl;
-
             if (info.paths.size() > 0) {
                 for (multimap<string, int>::const_iterator i = info.paths.begin(); i != info.paths.end(); ++i) {
                     out << "Codestream index " << (*i).second + 1 << ":" << endl;
@@ -70,10 +67,8 @@ namespace jpeg2000 {
                     out << "------------------------" << endl << info.codestreams[i] << endl << endl;
                 }
             }
-
             out << endl << "Meta-data: ";
             out << info.meta_data << endl << endl;
-
             out << endl << "Meta-data-hyperlinks: ";
             for (size_t i = 0; i < info.meta_data_hyperlinks.size(); ++i)
                 out << info.meta_data_hyperlinks[i] << " ";
