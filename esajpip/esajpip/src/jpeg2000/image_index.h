@@ -102,8 +102,7 @@ namespace jpeg2000 {
          * Returns the number of codestreams.
          */
         size_t GetNumCodestreams() const {
-            if (codestreams.size() > 0) return codestreams.size();
-            else return hyper_links.size();
+            return codestreams.empty() ? hyper_links.size() : codestreams.size();
         }
 
         /**
@@ -126,8 +125,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number.
          */
         string GetPathName(int num_codestream) const {
-            if (codestreams.empty()) return hyper_links[num_codestream]->path_name;
-            else return path_name;
+            return codestreams.empty() ? hyper_links[num_codestream]->path_name : path_name;
         }
 
         /**
@@ -136,8 +134,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         FileSegment GetMainHeader(int num_codestream) const {
-            if (codestreams.empty()) return hyper_links[num_codestream]->codestreams.back().header;
-            else return codestreams[num_codestream].header;
+            return codestreams.empty() ? hyper_links[num_codestream]->codestreams.back().header : codestreams[num_codestream].header;
         }
 
         /**

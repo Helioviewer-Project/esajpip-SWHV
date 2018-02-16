@@ -21,7 +21,7 @@ namespace jpeg2000 {
         IndexManager() {
         }
 
-        ImageIndex::Ptr GetImage() {
+        const ImageIndex::Ptr GetImage() {
             return image;
         }
 

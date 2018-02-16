@@ -31,21 +31,17 @@ int main(void) {
     IndexManager im;
     im.Init(cfg.images_folder());
 
-    ImageIndex::Ptr it_node;
-
     int option;
     do {
         cout << endl
              << "MENU:" << endl
              << "-----" << endl
              << "1) Open image file" << endl
-             << "2) Close image file" << endl
-             << "3) Get WOI packets from image file" << endl
-             << "4) Image file list" << endl
-             << "5) Exit" << endl << endl
+             << "2) Get WOI packets from image file" << endl
+             << "3) Exit" << endl << endl
              << "Option: ";
 
-        ui::read(option, 1, 5);
+        ui::read(option, 1, 3);
 
         switch (option) {
             case 1:
@@ -53,7 +49,7 @@ int main(void) {
                 cin >> name_image_file;
 
                 while (name_image_file.compare("exit") != 0) {
-                    if (im.OpenImage(name_image_file, &it_node)) cout << "Image file loaded..." << endl;
+                    if (im.OpenImage(name_image_file)) cout << "Image file loaded..." << endl;
                     else cout << "Image file not loaded..." << endl;
 
                     cout << "Name image file (type 'exit' to finish): ";
@@ -62,18 +58,10 @@ int main(void) {
                 break;
 
             case 2:
-                if (im.GetSize() <= 0) cout << "Image list is empty!" << endl;
-                {
-                    if (im.CloseImage(it_node)) cout << "Image file closed." << endl;
-                    else cout << "Image file not closed!" << endl;
-                }
-                break;
-
-            case 3:
-                if (im.GetSize() <= 0) cout << "Image list is empty!" << endl;
                 {
                     int wx, wy, ww, wh, wr, ind_codestream;
-                    const CodingParameters *cp = it_node->GetCodingParameters();
+                    const CodingParameters *cp = im.GetCodingParameters();
+                    const ImageIndex::Ptr it_node = im.GetImage();
 
                     cout << "Number codestream [0-" << (it_node->GetNumCodestreams() - 1) << "]: ";
                     ui::read(ind_codestream, 0, (int) it_node->GetNumCodestreams() - 1);
@@ -108,25 +96,12 @@ int main(void) {
 
                     Packet packet;
                     while (woi_composer.GetNextPacket(cp, &packet))
-                        cout << cp->GetPrecinctDataBinId(packet) << "\t" << packet << "\t" << it_node->GetPacket(ind_codestream, packet) << endl;
+                        cout << cp->GetPrecinctDataBinId(packet) << "\t" << packet << "\t" << it_node->GetPacket(im, ind_codestream, packet) << endl;
                     cout << string(60, '-') << endl;
                 }
                 break;
-
-            case 4:
-                int i = 0;
-                cout << endl;
-                for (ImageIndex::Ptr it = im.GetBegin(); it != im.GetEnd(); ++it) {
-                    cout
-                            << "Node " << i++ << ":" << endl
-                            << string(60, '-') << endl
-                            << *it << endl
-                            << string(60, '-') << endl
-                            << endl;
-                }
-                break;
         }
-    } while (option != 5);
+    } while (option != 3);
 
     return 0;
 }

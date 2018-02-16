@@ -53,7 +53,7 @@ namespace jpip {
 
     bool DataBinServer::GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last) {
         int res;
-        ImageIndex::Ptr image_index = index_manager.GetImage();
+        const ImageIndex::Ptr image_index = index_manager.GetImage();
 
         data_writer.SetBuffer(buf, min(pending, *len));
 
