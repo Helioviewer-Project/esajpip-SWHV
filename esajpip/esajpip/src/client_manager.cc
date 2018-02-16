@@ -27,22 +27,6 @@ static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
 }
 
 void ClientManager::Run(ClientInfo *client_info) {
-    SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
-    string channel = to_string(client_info->base_id());
-
-    int chunk_len = 0;
-    size_t buf_len = cfg.max_chunk_size();
-
-    char *buf = new char[buf_len];
-
-    stringstream head_data, head_data_gzip;
-
-    head_data << http::Header::AccessControlAllowOrigin(CORS)
-              << http::Header::CacheControl("no-cache")
-              << http::Header::TransferEncoding("chunked")
-              << http::Header::ContentType("image/jpp-stream");
-    head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
-
     bool com_error;
     string req_line;
     jpip::Request req;
@@ -56,6 +40,20 @@ void ClientManager::Run(ClientInfo *client_info) {
         ERROR("The index manager can not be initialized");
         return;
     }
+
+    stringstream head_data, head_data_gzip;
+    head_data << http::Header::AccessControlAllowOrigin(CORS)
+              << http::Header::CacheControl("no-cache")
+              << http::Header::TransferEncoding("chunked")
+              << http::Header::ContentType("image/jpp-stream");
+    head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
+
+    SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
+    string channel = to_string(client_info->base_id());
+
+    int chunk_len = 0;
+    size_t buf_len = cfg.max_chunk_size();
+    char *buf = new char[buf_len];
 
     while (!pclose) {
         bool accept_gzip = false;

@@ -78,7 +78,7 @@ namespace net {
           @return <code>true</code> if successful.
         */
         bool OpenUnix(int type = SOCK_STREAM) {
-            return ((sid = socket(PF_UNIX, type, 0)) != -1);
+            return (sid = socket(PF_UNIX, type, 0)) != -1;
         }
 
         /**
@@ -89,7 +89,7 @@ namespace net {
         */
         bool ListenAt(const Address &address, int nstack = 10) {
             int flags = 1;
-            setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
+            if (setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags)) != 0) return false;
             if (::bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
             return listen(sid, nstack) == 0;
         }
@@ -128,9 +128,8 @@ namespace net {
           Set the blocking mode of the send/receive operations.
           By default, this mode is true.
           @param state Blocking mode state to set.
-          @return A reference of the same object.
         */
-        Socket &SetBlockingMode(bool state = true);
+        bool SetBlockingMode(bool state = true);
 
         /**
           @return The blocking mode of the send/receive operations.

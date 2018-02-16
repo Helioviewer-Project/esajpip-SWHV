@@ -12,15 +12,14 @@
 
 namespace net {
 
-    Socket &Socket::SetBlockingMode(bool state) {
+    bool Socket::SetBlockingMode(bool state) {
         int cur = fcntl(sid, F_GETFL, 0);
 
         if (state) cur |= O_NONBLOCK;
         else if (cur & O_NONBLOCK)
             cur ^= O_NONBLOCK;
 
-        fcntl(sid, F_SETFL, cur);
-        return *this;
+        return fcntl(sid, F_SETFL, cur) != -1;
     }
 
     bool Socket::IsBlockingMode() {
