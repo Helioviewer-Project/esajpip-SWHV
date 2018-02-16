@@ -59,37 +59,6 @@ namespace data {
         }
 
         /**
-         * Removes the first bytes of the segment. Modifies the segment as
-         * if a number of bytes (specified by the parameter) was removed
-         * from the beginning of the segment.
-         * @param count Number of bytes to remove.
-         * @return <code>*this</code>.
-         */
-        FileSegment &RemoveFirst(uint64_t count) {
-            assert(length >= count);
-
-            offset += count;
-            length -= count;
-
-            return *this;
-        }
-
-        /**
-         * Removes the last bytes of the segment. Modifies the segment as
-         * if a number of bytes (specified by the parameter) was removed
-         * from the end of the segment.
-         * @param count Number of bytes to remove.
-         * @return <code>*this</code>.
-         */
-/*
-        FileSegment &RemoveLast(uint64_t count) {
-            assert(length >= count);
-
-            length -= count;
-            return *this;
-        }
-*/
-        /**
          * Returns <code>true</code> if the segment is contiguous to
          * another given segment, so the first byte of the given segment
          * is just the next byte after the last byte of the segment.
