@@ -159,6 +159,9 @@ namespace jpeg2000 {
         for (int i = 0; i <= params->num_levels; ++i) {
             if (cs_buf & 1) {
                 res = res && file->ReadReverse(&size_precinct);
+                if (!res)
+                    break;
+
                 height = 1 << ((size_precinct & 0xF0) >> 4);
                 width = 1 << (size_precinct & 0x0F);
                 params->precinct_size.emplace_back(width, height);

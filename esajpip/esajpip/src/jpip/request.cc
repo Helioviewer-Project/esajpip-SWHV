@@ -64,10 +64,13 @@ namespace jpip {
             }
         } else if (param == "stream") {
             if (stream >> x) {
+                x = CLAMP(x, 0, MAXC);
                 y = x;
 
-                if (stream.peek() == ':')
+                if (stream.peek() == ':') {
                     stream.ignore(1) >> y;
+                    y = CLAMP(y, 0, MAXC);
+                }
 
                 if (stream) {
                     if (x > y) { // not standard
@@ -93,10 +96,13 @@ namespace jpip {
                 GetCodedChar(stream, c);
                 if (c == '<') {
                     if (stream >> x) {
+                        x = CLAMP(x, 0, MAXC);
                         y = x;
 
-                        if (stream.peek() == '-')
+                        if (stream.peek() == '-') {
                             stream.ignore(1) >> y;
+                            y = CLAMP(y, 0, MAXC);
+                        }
 
                         GetCodedChar(stream, c);
                         if (c == '>') {
