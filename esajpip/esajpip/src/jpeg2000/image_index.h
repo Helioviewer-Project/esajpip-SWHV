@@ -114,7 +114,7 @@ namespace jpeg2000 {
         /**
          * Returns the path name of the image.
          */
-        string GetPathName() const {
+        const string &GetPathName() const {
             return path_name;
         }
 
@@ -123,7 +123,7 @@ namespace jpeg2000 {
          * a hyperlinked codestream.
          * @param num_codestream Codestream number.
          */
-        string GetPathName(int num_codestream) const {
+        const string &GetPathName(int num_codestream) const {
             return codestreams.empty() ? hyper_links[num_codestream]->path_name : path_name;
         }
 
