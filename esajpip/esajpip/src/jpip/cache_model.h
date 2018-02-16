@@ -73,7 +73,6 @@ namespace jpip {
                 tile_header = model.tile_header;
                 min_precinct = model.min_precinct;
                 precincts = model.precincts;
-
                 return *this;
             }
 
@@ -86,7 +85,6 @@ namespace jpip {
 
                 for (size_t i = 0; i < model.precincts.size(); ++i)
                     AddToPrecinct(model.min_precinct + i, model.precincts[i]);
-
                 return *this;
             }
 
@@ -252,7 +250,6 @@ namespace jpip {
          */
         Codestream &GetCodestream(int num_codestream) {
             if (num_codestream >= (int) codestreams.size()) codestreams.resize(num_codestream + 1);
-
             return codestreams[num_codestream];
         }
 

@@ -47,7 +47,6 @@ namespace jpeg2000 {
             component = packet.component;
             resolution = packet.resolution;
             precinct_xy = packet.precinct_xy;
-
             return *this;
         }
 

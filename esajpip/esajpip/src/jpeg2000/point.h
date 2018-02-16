@@ -46,7 +46,6 @@ namespace jpeg2000 {
         Point &operator=(const Point &p) {
             x = p.x;
             y = p.y;
-
             return *this;
         }
 
@@ -57,7 +56,6 @@ namespace jpeg2000 {
         Point &operator++() {
             x++;
             y++;
-
             return *this;
         }
 
@@ -68,7 +66,6 @@ namespace jpeg2000 {
         Point &operator--() {
             x--;
             y--;
-
             return *this;
         }
 
@@ -80,7 +77,6 @@ namespace jpeg2000 {
         Point &operator+=(int val) {
             x += val;
             y += val;
-
             return *this;
         }
 
@@ -92,7 +88,6 @@ namespace jpeg2000 {
         Point &operator-=(int val) {
             x -= val;
             y -= val;
-
             return *this;
         }
 
@@ -104,7 +99,6 @@ namespace jpeg2000 {
         Point &operator*=(int val) {
             x *= val;
             y *= val;
-
             return *this;
         }
 
@@ -116,7 +110,6 @@ namespace jpeg2000 {
         Point &operator/=(int val) {
             x /= val;
             y /= val;
-
             return *this;
         }
 

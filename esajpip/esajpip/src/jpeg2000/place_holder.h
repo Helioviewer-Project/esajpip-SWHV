@@ -55,7 +55,6 @@ namespace jpeg2000 {
             is_jp2c = place_holder.is_jp2c;
             header = place_holder.header;
             data_length = place_holder.data_length;
-
             return *this;
         }
 
@@ -64,7 +63,6 @@ namespace jpeg2000 {
             out << "JP2C: " << (place_holder.is_jp2c ? "Yes" : "No") << endl;
             out << "Header: " << place_holder.header << endl;
             out << "Data length: " << place_holder.data_length << endl;
-
             return out;
         }
 

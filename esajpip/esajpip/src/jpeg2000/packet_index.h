@@ -72,10 +72,7 @@ namespace jpeg2000 {
          */
         const PacketIndex &operator=(const PacketIndex &index) {
             offsets = index.offsets;
-            aux.clear();
-            for (size_t i = 0; i < index.aux.size(); ++i)
-                aux.push_back(index.aux[i]);
-
+            aux = index.aux;
             return *this;
         }
 

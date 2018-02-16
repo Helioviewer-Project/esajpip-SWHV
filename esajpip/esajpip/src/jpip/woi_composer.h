@@ -21,13 +21,13 @@ namespace jpip {
      */
     class WOIComposer {
     private:
-        Point pxy1;                ///< Upper-left corner of the WOI
-        Point pxy2;                ///< Bottom-right corner of the WOI
-        bool more_packets; ///< Flag to control the last packet
+        Point pxy1;            ///< Upper-left corner of the WOI
+        Point pxy2;            ///< Bottom-right corner of the WOI
+        bool more_packets;     ///< Flag to control the last packet
         int max_resolution;    ///< Maximum resolution
-        Size min_precinct_xy;      ///< Minimum precinct
-        Size max_precinct_xy;      ///< Maximum precinct
-        Packet current_packet;     ///< Current packet
+        Size min_precinct_xy;  ///< Minimum precinct
+        Size max_precinct_xy;  ///< Maximum precinct
+        Packet current_packet; ///< Current packet
 
     public:
         /**
@@ -82,7 +82,6 @@ namespace jpip {
             current_packet = composer.current_packet;
             min_precinct_xy = composer.min_precinct_xy;
             max_precinct_xy = composer.max_precinct_xy;
-
             return *this;
         }
 
@@ -139,7 +138,6 @@ namespace jpip {
                         }
                     }
                 }
-
                 return true;
             }
         }

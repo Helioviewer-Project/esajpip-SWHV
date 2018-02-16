@@ -52,10 +52,9 @@ namespace jpip {
          * Copy assignment.
          */
         WOI &operator=(const WOI &woi) {
-            this->size = woi.size;
-            this->position = woi.position;
-            this->resolution = woi.resolution;
-
+            size = woi.size;
+            position = woi.position;
+            resolution = woi.resolution;
             return *this;
         }
 
@@ -78,7 +77,6 @@ namespace jpip {
         friend ostream &operator<<(ostream &out, const WOI &woi) {
             out << "(" << woi.position.x << ", " << woi.position.y << ", "
                 << woi.size.x << ", " << woi.size.y << ", " << woi.resolution << ")";
-
             return out;
         }
 

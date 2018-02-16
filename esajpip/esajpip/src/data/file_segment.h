@@ -55,7 +55,6 @@ namespace data {
         FileSegment &operator=(const FileSegment &segment) {
             offset = segment.offset;
             length = segment.length;
-
             return *this;
         }
 
