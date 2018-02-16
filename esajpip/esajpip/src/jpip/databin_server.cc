@@ -7,9 +7,10 @@ namespace jpip {
         has_woi = false;
     }
 
-    bool DataBinServer::SetRequest(const IndexManager &index_manager, const ImageIndex::Ptr image_index, const Request &req) {
+    bool DataBinServer::SetRequest(IndexManager &index_manager, const Request &req) {
         bool res = true;
         bool reset_woi = false;
+        ImageIndex::Ptr image_index = index_manager.GetImage();
 
         data_writer.ClearPreviousIds();
 
@@ -50,8 +51,9 @@ namespace jpip {
         return res;
     }
 
-    bool DataBinServer::GenerateChunk(IndexManager &index_manager, const ImageIndex::Ptr image_index, char *buf, int *len, bool *last) {
+    bool DataBinServer::GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last) {
         int res;
+        ImageIndex::Ptr image_index = index_manager.GetImage();
 
         data_writer.SetBuffer(buf, min(pending, *len));
 

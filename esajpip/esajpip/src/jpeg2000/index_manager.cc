@@ -6,14 +6,14 @@
 namespace jpeg2000 {
     using namespace std;
 
-    bool IndexManager::OpenImage(string &path_image_file, ImageIndex::Ptr *image_index) {
+    bool IndexManager::OpenImage(string &path_image_file) {
         if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
         path_image_file = file_manager_.root_dir() + path_image_file;
 
         // Look for the image in the list
-        for (*image_index = index_list.begin(); *image_index != index_list.end(); ++(*image_index)) {
-            if ((*image_index)->path_name == path_image_file) {
-                (*image_index)->num_references++;
+        for (ImageIndex::Ptr image_index = index_list.begin(); image_index != index_list.end(); ++(image_index)) {
+            if (image_index->path_name == path_image_file) {
+                image_index->num_references++;
                 return true;
             }
         }
@@ -60,25 +60,23 @@ namespace jpeg2000 {
                 }
             }
         }
-
         // The node is added to the list
         index_list.push_back(index_node);
-        *image_index = --index_list.end();
 
         return true;
     }
 
-    bool IndexManager::CloseImage(ImageIndex::Ptr &image_index) {
-        TRACE("Closing the image '" << image_index->path_name << "'");
-
+    bool IndexManager::CloseImage() {
+        ImageIndex::Ptr image_index = GetImage();
         // Decrease the number of references
         image_index->num_references--;
 
         // If the number of references is zero, then the IndexNode is removed from the list
         if (image_index->num_references == 0) {
-            for (size_t i = 0; i < image_index->hyper_links.size(); ++i)
-                CloseImage(image_index->hyper_links[i]);
             index_list.erase(image_index);
+            for (list<ImageIndex>::iterator i = index_list.begin(); i != index_list.end(); ++i) {
+                CloseImage();
+            }
         }
         return true;
     }

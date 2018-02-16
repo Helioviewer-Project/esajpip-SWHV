@@ -29,6 +29,10 @@ namespace jpeg2000 {
         IndexManager() {
         }
 
+        ImageIndex::Ptr GetImage() {
+            return --index_list.end();
+        }
+
         /**
          * Initializes the object.
          * @param root_dir Root directory of the image repository.
@@ -39,26 +43,12 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns a pointer to the first image index.
-         */
-        ImageIndex::Ptr GetBegin() {
-            return index_list.begin();
-        }
-
-        /**
-         * Returns a pointer to the last image index.
-         */
-        ImageIndex::Ptr GetEnd() {
-            return index_list.end();
-        }
-
-        /**
          * Opens an image and adds its index to the list.
          * @param path_image_file Path of the image file.
          * @param image_index Receives the pointer to the image index created.
          * @return <code>true</code> if successful.
          */
-        bool OpenImage(string &path_image_file, ImageIndex::Ptr *image_index);
+        bool OpenImage(string &path_image_file);
 
         /**
          * Closes an image and removes its index
@@ -66,7 +56,7 @@ namespace jpeg2000 {
          * @param image_index Associated image index.
          * @return <code>true</code> if successful.
          */
-        bool CloseImage(ImageIndex::Ptr &image_index);
+        bool CloseImage();
 
         File::Ptr OpenFile(const string &path_file) {
             try {
@@ -78,13 +68,6 @@ namespace jpeg2000 {
                 file_map.insert(pair<const string, File::Ptr>(path_file, file));
                 return file;
             }
-        }
-
-        /**
-         * Returns the size of the list.
-         */
-        int GetSize() const {
-            return (int) index_list.size();
         }
 
         virtual ~IndexManager() {

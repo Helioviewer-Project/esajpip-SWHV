@@ -29,16 +29,16 @@ namespace jpeg2000 {
         vector<uint64_t> last_offset_PLT;
         vector<uint64_t> last_offset_packet;
 
-        string path_name;            ///< Image file name
-        Metadata meta_data;          ///< Image Metadata
-        int num_references;          ///< Number of references
-        vector<int> max_resolution;  ///< Maximum resolution number
+        string path_name;           ///< Image file name
+        Metadata meta_data;         ///< Image Metadata
+        int num_references;         ///< Number of references
+        vector<int> max_resolution; ///< Maximum resolution number
 
-        vector<PacketIndex> packet_indexes;    ///< Code-stream packet index
-        vector<CodestreamIndex> codestreams;    ///< Image code-streams
+        vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
+        vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        const CodingParameters *coding_parameters;            ///< Image coding parameters
-        vector<list<ImageIndex>::iterator> hyper_links;    ///< Image hyperlinks
+        const CodingParameters *coding_parameters;      ///< Image coding parameters
+        vector<list<ImageIndex>::iterator> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
