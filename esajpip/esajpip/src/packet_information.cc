@@ -1,7 +1,7 @@
 #include "trace.h"
 #include "app_config.h"
 #include "jpip/woi_composer.h"
-#include "jpeg2000/index_manager.h"
+#include "jpeg2000/file_manager.h"
 
 using namespace std;
 using namespace jpip;
@@ -28,8 +28,8 @@ int main(void) {
 
     string name_image_file;
 
-    IndexManager im;
-    im.Init(cfg.images_folder());
+    FileManager fm;
+    fm.Init(cfg.images_folder());
 
     int option;
     do {
@@ -49,7 +49,7 @@ int main(void) {
                 cin >> name_image_file;
 
                 while (name_image_file.compare("exit") != 0) {
-                    if (im.OpenImage(name_image_file)) cout << "Image file loaded..." << endl;
+                    if (fm.OpenImage(name_image_file)) cout << "Image file loaded..." << endl;
                     else cout << "Image file not loaded..." << endl;
 
                     cout << "Name image file (type 'exit' to finish): ";
@@ -60,8 +60,8 @@ int main(void) {
             case 2:
                 {
                     int wx, wy, ww, wh, wr, ind_codestream;
-                    const CodingParameters *cp = im.GetCodingParameters();
-                    const ImageIndex::Ptr it_node = im.GetImage();
+                    const CodingParameters *cp = fm.GetCodingParameters();
+                    const ImageIndex::Ptr it_node = fm.GetImage();
 
                     cout << "Number codestream [0-" << (it_node->GetNumCodestreams() - 1) << "]: ";
                     ui::read(ind_codestream, 0, (int) it_node->GetNumCodestreams() - 1);
@@ -96,7 +96,7 @@ int main(void) {
 
                     Packet packet;
                     while (woi_composer.GetNextPacket(cp, &packet))
-                        cout << cp->GetPrecinctDataBinId(packet) << "\t" << packet << "\t" << it_node->GetPacket(im, ind_codestream, packet) << endl;
+                        cout << cp->GetPrecinctDataBinId(packet) << "\t" << packet << "\t" << it_node->GetPacket(fm, ind_codestream, packet) << endl;
                     cout << string(60, '-') << endl;
                 }
                 break;

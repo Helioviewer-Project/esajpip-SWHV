@@ -5,7 +5,6 @@
 
 namespace jpeg2000 {
 
-    class IndexManager;
     /**
      * Manages the image files of a repository, allowing read their
      * indexing information, with a caching mechanism for efficiency.
@@ -170,7 +169,7 @@ namespace jpeg2000 {
             return &coding_parameters;
         }
 
-        bool OpenImage(string &path_image_file);
+        bool OpenImage(const string &image_file);
 
         File::Ptr OpenFile(const string &path_file) {
             try {
