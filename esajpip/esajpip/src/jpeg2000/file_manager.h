@@ -133,7 +133,6 @@ namespace jpeg2000 {
          * Initializes the object.
          */
         FileManager() {
-            root_dir_ = "./";
         }
 
         /**
@@ -144,9 +143,10 @@ namespace jpeg2000 {
         bool Init(const string &root_dir) {
             if (root_dir.empty()) return false;
             else {
-                root_dir_ = root_dir;
-                if (root_dir_.at(root_dir_.size() - 1) != '/')
-                    root_dir_ += '/';
+                if (root_dir.at(root_dir.size() - 1) == '/')
+                    root_dir_ = root_dir;
+                else
+                    root_dir_ = root_dir + '/';
                 return true;
             }
         }
