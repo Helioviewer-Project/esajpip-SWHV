@@ -110,7 +110,7 @@ namespace jpip {
 
                         if (res < 0) return false;
                         else if (res > 0) {
-                            if (current_idx != (int) codestreams.size() - 1) current_idx++;
+                            if (current_idx != codestreams.size() - 1) current_idx++;
                             else {
                                 if (!woi_composer.GetNextPacket(coding_parameters)) break;
                                 else current_idx = 0;

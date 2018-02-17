@@ -27,13 +27,13 @@ namespace jpip {
      */
     class DataBinServer {
     private:
-        WOI woi;            ///< Current WOI
-        int pending;        ///< Number of pending bytes
+        WOI woi;             ///< Current WOI
+        int pending;         ///< Number of pending bytes
         vector<int> codestreams;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         bool metareq;        ///< <code>true</code> if the last request contained a "metareq"
-        bool end_woi_;        ///< <code>true</code> if the WOI has been completely sent
-        int current_idx;    ///< Current codestream index
+        bool end_woi_;       ///< <code>true</code> if the WOI has been completely sent
+        size_t current_idx;  ///< Current codestream index
 
         /**
          * <code>true</code> if the end has been reached and the last write operation
@@ -41,9 +41,9 @@ namespace jpip {
          */
         bool eof;
 
-        CacheModel cache_model;        ///< Cache model of the client
-        WOIComposer woi_composer;    ///< WOI composer for determining the packets
-        DataBinWriter data_writer;    ///< Data-bin writer for generating the chunks
+        CacheModel cache_model;     ///< Cache model of the client
+        WOIComposer woi_composer;   ///< WOI composer for determining the packets
+        DataBinWriter data_writer;  ///< Data-bin writer for generating the chunks
 
         enum {
             MINIMUM_SPACE = 60        ///< Minimum space in the chunk
@@ -134,16 +134,6 @@ namespace jpip {
             current_idx = 0;
             eof = false;
         }
-
-        /**
-         * Returns <code>true</code> if the end of the WOI has been reached,
-         * that is, there is not more associated packets to send.
-         */
-/*
-        bool end_woi() const {
-            return end_woi_;
-        }
-*/
 
         /**
          * Resets the server assigning a new image to serve. It
