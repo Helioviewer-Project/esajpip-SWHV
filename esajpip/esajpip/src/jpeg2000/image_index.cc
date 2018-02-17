@@ -37,7 +37,7 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::BuildIndex(FileManager &file_manager, int ind_codestream, int r) {
-        File::Ptr file = file_manager.OpenFile(path_name);
+        File::Ptr file = file_manager.GetFile(path_name);
         // Check if PacketIndex has been created
         if (packet_indexes[ind_codestream].Size() == 0)
             packet_indexes[ind_codestream] = PacketIndex(file->GetSize());

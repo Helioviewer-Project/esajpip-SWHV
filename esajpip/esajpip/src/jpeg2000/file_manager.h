@@ -171,7 +171,7 @@ namespace jpeg2000 {
 
         bool OpenImage(const string &image_file);
 
-        File::Ptr OpenFile(const string &path_file) {
+        File::Ptr GetFile(const string &path_file) {
             try {
                 return file_map.at(path_file);
             } catch (...) {

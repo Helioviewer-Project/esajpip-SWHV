@@ -59,14 +59,14 @@ namespace jpeg2000 {
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
         if (extension == ".jp2") { // JP2 image
-            File::Ptr file = OpenFile(name_image_file);
+            File::Ptr file = GetFile(name_image_file);
             if (file == NULL) {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
             res = res && ReadJP2(file, image_info);
         } else if (extension == ".jpx") { // JPX image
-            File::Ptr file = OpenFile(name_image_file);
+            File::Ptr file = GetFile(name_image_file);
             if (file == NULL) {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;

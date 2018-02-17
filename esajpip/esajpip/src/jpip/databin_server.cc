@@ -61,15 +61,16 @@ namespace jpip {
             eof = false;
 
             if (!cache_model.IsFullMetadata()) {
-                File::Ptr file = file_manager.OpenFile(image_index->GetPathName());
+                File::Ptr file = file_manager.GetFile(image_index->GetPathName());
                 if (image_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
                 else {
                     int bin_offset = 0;
+                    size_t num_metadatas = image_index->GetNumMetadatas();
                     bool last_metadata;
 
-                    for (size_t i = 0; i < image_index->GetNumMetadatas(); ++i) {
-                        last_metadata = (i == image_index->GetNumMetadatas() - 1);
+                    for (size_t i = 0; i < num_metadatas; ++i) {
+                        last_metadata = i == num_metadatas - 1;
                         res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, image_index->GetMetadata(i), bin_offset, last_metadata);
                         bin_offset += image_index->GetMetadata(i).length;
 
@@ -85,7 +86,7 @@ namespace jpip {
 
             if (!eof) {
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    File::Ptr file = file_manager.OpenFile(image_index->GetPathName(codestreams[i]));
+                    File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
                     WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
                     WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
                 }
@@ -104,7 +105,7 @@ namespace jpip {
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        File::Ptr file = file_manager.OpenFile(image_index->GetPathName(codestreams[current_idx]));
+                        File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
                         res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
                         if (res < 0) return false;
