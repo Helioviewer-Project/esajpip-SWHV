@@ -169,7 +169,7 @@ namespace jpeg2000 {
             return &coding_parameters;
         }
 
-        bool OpenImage(const string &image_file);
+        bool OpenImage(string &path_image_file);
 
         File::Ptr GetFile(const string &path_file) {
             try {

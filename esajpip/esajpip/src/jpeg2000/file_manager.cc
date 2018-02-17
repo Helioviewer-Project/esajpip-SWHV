@@ -5,9 +5,8 @@ namespace jpeg2000 {
     using namespace std;
     using namespace data;
 
-    bool FileManager::OpenImage(const string &image_file) {
-        string path_image_file;
-        if (image_file[0] == '/') path_image_file = image_file.substr(1, image_file.size() - 1);
+    bool FileManager::OpenImage(string &path_image_file) {
+        if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
         path_image_file = root_dir_ + path_image_file;
 
         // Get image info
