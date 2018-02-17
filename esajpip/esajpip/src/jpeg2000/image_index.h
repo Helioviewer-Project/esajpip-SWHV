@@ -11,16 +11,11 @@
 namespace jpeg2000 {
     using namespace std;
 
-    class IndexManager;
-    /**
-     * Contains the indexing information of a JPEG2000 image file that
-     * is managed by the index manager. This class can be printed.
-     *
-     * @see IndexManager
-     */
+    class FileManager;
+
     class ImageIndex {
     private:
-        friend class IndexManager;
+        friend class FileManager;
 
         vector<int> last_plt;
         vector<int> last_packet;
@@ -60,7 +55,7 @@ namespace jpeg2000 {
          * @param max_index Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(IndexManager &index_manager, int ind_codestream, int max_index);
+        bool BuildIndex(FileManager &file_manager, int ind_codestream, int max_index);
 
         /**
          * Initializes the object.
@@ -159,7 +154,7 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        FileSegment GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset = NULL);
+        FileSegment GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, int *offset = NULL);
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl

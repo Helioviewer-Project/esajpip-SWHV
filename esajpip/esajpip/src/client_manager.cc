@@ -1,6 +1,6 @@
 #include "trace.h"
 #include "client_manager.h"
-#include "jpeg2000/index_manager.h"
+#include "jpeg2000/file_manager.h"
 #include "jpip/jpip.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
@@ -35,9 +35,9 @@ void ClientManager::Run(ClientInfo *client_info) {
     bool send_data = false;
     DataBinServer data_server;
 
-    IndexManager index_manager;
-    if (!index_manager.Init(cfg.images_folder())) {
-        ERROR("The index manager can not be initialized");
+    FileManager file_manager;
+    if (!file_manager.Init(cfg.images_folder())) {
+        ERROR("The file manager can not be initialized");
         return;
     }
 
@@ -139,12 +139,12 @@ void ClientManager::Run(ClientInfo *client_info) {
             } else {
                 string file_name = (req.mask.items.target ? req.parameters["target"] : req.object);
 
-                if (!index_manager.OpenImage(file_name))
+                if (!file_manager.OpenImage(file_name))
                     ERROR("The image file '" << file_name << "' can not be read");
                 else {
                     is_opened = true;
                     data_server.Reset();
-                    if (!data_server.SetRequest(index_manager, req))
+                    if (!data_server.SetRequest(file_manager, req))
                         ERROR("The server can not process the request");
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
@@ -167,7 +167,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (req.parameters["cid"] != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
-                } else if (!data_server.SetRequest(index_manager, req))
+                } else if (!data_server.SetRequest(file_manager, req))
                     ERROR("The server can not process the request");
                 else {
                     sock_stream << http::Response(200)
@@ -199,7 +199,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -212,7 +212,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(index_manager, buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;

@@ -12,8 +12,8 @@
 #include "jpip/cache_model.h"
 #include "jpip/woi_composer.h"
 #include "jpip/databin_writer.h"
+#include "jpeg2000/file_manager.h"
 #include "jpeg2000/image_index.h"
-#include "jpeg2000/index_manager.h"
 
 namespace jpip {
     using namespace std;
@@ -159,7 +159,7 @@ namespace jpip {
          * @param req Request.
          * @return <code>true</code> if successful.
          */
-        bool SetRequest(IndexManager &index_manager, const Request &req);
+        bool SetRequest(FileManager &file_manager, const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and
@@ -172,7 +172,7 @@ namespace jpip {
          * the last chunk of data associated to the last request.
          * @return <code>true</code> if successful.
          */
-        bool GenerateChunk(IndexManager &index_manager, char *buf, int *len, bool *last);
+        bool GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last);
 
         virtual ~DataBinServer() {
         }

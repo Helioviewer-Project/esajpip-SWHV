@@ -1,6 +1,5 @@
 #include "trace.h"
-#include "image_index.h"
-#include "index_manager.h"
+#include "file_manager.h"
 
 namespace jpeg2000 {
 
@@ -37,15 +36,15 @@ namespace jpeg2000 {
         packet_indexes.emplace_back();
     }
 
-    bool ImageIndex::BuildIndex(IndexManager &index_manager, int ind_codestream, int r) {
-        File::Ptr file = index_manager.OpenFile(path_name);
+    bool ImageIndex::BuildIndex(FileManager &file_manager, int ind_codestream, int r) {
+        File::Ptr file = file_manager.OpenFile(path_name);
         // Check if PacketIndex has been created
         if (packet_indexes[ind_codestream].Size() == 0)
             packet_indexes[ind_codestream] = PacketIndex(file->GetSize());
 
         // Check the upper top of the index (to build)
         int max_index;
-        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
+        const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
         if (r < coding_parameters->num_levels && coding_parameters->IsResolutionProgression()) {
             // The max_index is the last packet index of the resolution r
             Packet packet(0, r + 1, 0, Size(0, 0));
@@ -115,23 +114,23 @@ namespace jpeg2000 {
         }
     }
 
-    FileSegment ImageIndex::GetPacket(IndexManager &index_manager, int num_codestream, const Packet &packet, int *offset) {
+    FileSegment ImageIndex::GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, int *offset) {
         bool linked = !hyper_links.empty();
         if (linked) {
             if (packet.resolution > hyper_links[num_codestream]->max_resolution.back()) {
-                if (!hyper_links[num_codestream]->BuildIndex(index_manager, 0, packet.resolution))
+                if (!hyper_links[num_codestream]->BuildIndex(file_manager, 0, packet.resolution))
                     ERROR("The packet index could not be created");
                 hyper_links[num_codestream]->max_resolution.back() = packet.resolution;
             }
         } else {
             if (packet.resolution > max_resolution[num_codestream]) {
-                if (!BuildIndex(index_manager, num_codestream, packet.resolution))
+                if (!BuildIndex(file_manager, num_codestream, packet.resolution))
                     ERROR("The packet index could not be created");
                 max_resolution[num_codestream] = packet.resolution;
             }
         }
 
-        const CodingParameters *coding_parameters = index_manager.GetCodingParameters();
+        const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
         int idx = coding_parameters->GetProgressionIndex(packet);
         PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
         FileSegment segment = packet_index[idx];

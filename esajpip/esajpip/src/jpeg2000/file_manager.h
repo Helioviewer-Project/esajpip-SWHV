@@ -1,8 +1,7 @@
 #ifndef _JPEG2000_FILE_MANAGER_H_
 #define _JPEG2000_FILE_MANAGER_H_
 
-#include <sys/stat.h>
-#include "image_info.h"
+#include "image_index.h"
 
 namespace jpeg2000 {
 
@@ -14,6 +13,11 @@ namespace jpeg2000 {
     class FileManager {
     private:
         string root_dir_;    ///< Root directory of the repository
+
+        ImageIndex::Ptr image;
+        CodingParameters coding_parameters; ///< Image coding parameters
+
+        map<const string, File::Ptr> file_map;
 
         /**
          * Reads the header information. of a JP2/JPX box.
@@ -114,7 +118,16 @@ namespace jpeg2000 {
          * @param image_info Receives the image information.
          * @return <code>true</code> if successful.
          */
-        bool ReadJPX(IndexManager &index_manager, File::Ptr &file, ImageInfo *image_info);
+        bool ReadJPX(File::Ptr &file, ImageInfo *image_info);
+
+        /**
+         * Reads an image file and creates the associated cache file if
+         * it does not exist yet.
+         * @param name_image_file File name of the image.
+         * @param image_info Receives the information of the image.
+         * @return <code>true</code> if successful.
+         */
+        bool ReadImage(const string &name_image_file, ImageInfo *image_info);
 
     public:
         /**
@@ -142,18 +155,34 @@ namespace jpeg2000 {
         /**
          * Returns the root directory of the image repository.
          */
-        string root_dir() const {
+        const string &root_dir() const {
             return root_dir_;
         }
 
+        const ImageIndex::Ptr GetImage() const {
+            return image;
+        }
+
         /**
-         * Reads an image file and creates the associated cache file if
-         * it does not exist yet.
-         * @param name_image_file File name of the image.
-         * @param image_info Receives the information of the image.
-         * @return <code>true</code> if successful.
+         * Returns a pointer to the coding parameters.
          */
-        bool ReadImage(IndexManager &index_manager, const string &name_image_file, ImageInfo *image_info);
+        const CodingParameters *GetCodingParameters() const {
+            return &coding_parameters;
+        }
+
+        bool OpenImage(string &path_image_file);
+
+        File::Ptr OpenFile(const string &path_file) {
+            try {
+                return file_map.at(path_file);
+            } catch (...) {
+                File::Ptr file = File::Ptr(new File());
+                if (!file->Open(path_file))
+                    return File::Ptr();
+                file_map.insert(pair<const string, File::Ptr>(path_file, file));
+                return file;
+            }
+        }
 
         virtual ~FileManager() {
         }

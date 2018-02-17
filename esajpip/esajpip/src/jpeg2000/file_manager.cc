@@ -1,11 +1,36 @@
 #include "file_manager.h"
-#include "index_manager.h"
-
 
 namespace jpeg2000 {
 
     using namespace std;
     using namespace data;
+
+    bool FileManager::OpenImage(string &path_image_file) {
+        if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
+        path_image_file = root_dir_ + path_image_file;
+
+        // Get image info
+        ImageInfo image_info;
+        if (!ReadImage(path_image_file, &image_info)) {
+            ERROR("The image file '" << path_image_file << "' can not be read");
+            return false;
+        }
+        coding_parameters = image_info.coding_parameters;
+
+        image = ImageIndex::Ptr(new ImageIndex());
+        image->Init(path_image_file, image_info);
+
+        // Repeat the process with the image hyperlinks
+        if (!image_info.paths.empty()) {
+            image->hyper_links.resize(image_info.paths.size());
+            for (multimap<string, int>::const_iterator i = image_info.paths.begin(); i != image_info.paths.end(); ++i) {
+                ImageIndex::Ptr linked = ImageIndex::Ptr(new ImageIndex());
+                linked->Init(i->first, image_info, i->second);
+                image->hyper_links[i->second] = linked;
+            }
+        }
+        return true;
+    }
 
 #define EOC_MARKER 0xFFD9
 #define SOC_MARKER 0xFF4F
@@ -25,7 +50,7 @@ namespace jpeg2000 {
 #define URL__BOX_ID 0x75726C20
 #define FLST_BOX_ID 0x666C7374
 
-    bool FileManager::ReadImage(IndexManager &index_manager, const string &name_image_file, ImageInfo *image_info) {
+    bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
         bool res = true;
         // Get file extension
         string extension;
@@ -33,19 +58,19 @@ namespace jpeg2000 {
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
         if (extension == ".jp2") { // JP2 image
-            File::Ptr file = index_manager.OpenFile(name_image_file);
+            File::Ptr file = OpenFile(name_image_file);
             if (file == NULL) {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
             res = res && ReadJP2(file, image_info);
         } else if (extension == ".jpx") { // JPX image
-            File::Ptr file = index_manager.OpenFile(name_image_file);
+            File::Ptr file = OpenFile(name_image_file);
             if (file == NULL) {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
-            res = res && ReadJPX(index_manager, file, image_info);
+            res = res && ReadJPX(file, image_info);
         } else {
             ERROR("File type not supported...");
             return false;
@@ -274,7 +299,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadJPX(IndexManager &index_manager, File::Ptr &file, ImageInfo *image_info) {
+    bool FileManager::ReadJPX(File::Ptr &file, ImageInfo *image_info) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -366,7 +391,7 @@ namespace jpeg2000 {
         // Get image info of the hyperlinked images
         for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; ++i) {
             ImageInfo image_info_hyperlink;
-            res = res && ReadImage(index_manager, i->first, &image_info_hyperlink);
+            res = res && ReadImage(i->first, &image_info_hyperlink);
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
             image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
             image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
