@@ -4,7 +4,7 @@
 #include <vector>
 #include <iostream>
 #include <limits.h>
-#include "jpip/jpip.h"
+#include "jpip.h"
 
 namespace jpip {
     using namespace std;

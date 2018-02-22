@@ -64,15 +64,15 @@ namespace data {
          * is just the next byte after the last byte of the segment.
          */
         bool IsContiguousTo(const FileSegment &segment) const {
-            return ((offset + length) == segment.offset);
+            return offset + length == segment.offset;
         }
 
         bool operator==(const FileSegment &segment) const {
-            return ((offset == segment.offset) && (length == segment.length));
+            return offset == segment.offset && length == segment.length;
         }
 
         bool operator!=(const FileSegment &segment) const {
-            return ((offset != segment.offset) || (length != segment.length));
+            return offset != segment.offset || length != segment.length;
         }
 
         friend ostream &operator<<(ostream &out, const FileSegment &segment) {

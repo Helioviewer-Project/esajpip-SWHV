@@ -2,7 +2,7 @@
 #define _JPEG2000_META_DATA_H_
 
 #include <vector>
-#include "jpeg2000/place_holder.h"
+#include "place_holder.h"
 
 namespace jpeg2000 {
     using namespace data;

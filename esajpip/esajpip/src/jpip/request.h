@@ -4,12 +4,11 @@
 #include <vector>
 #include <string>
 #include <iostream>
-#include "jpip/woi.h"
-#include "jpip/cache_model.h"
+#include "woi.h"
+#include "cache_model.h"
 #include "http/request.h"
 #include "jpeg2000/point.h"
 #include "jpeg2000/coding_parameters.h"
-#include <cstring>
 
 namespace jpip {
     using namespace std;

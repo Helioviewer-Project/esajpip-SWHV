@@ -21,7 +21,6 @@ namespace jpip {
                 }
             }
         }
-
         return *this;
     }
 
@@ -59,7 +58,6 @@ namespace jpip {
                 if (eof) ptr = aux_ptr;
             }
         }
-
         return *this;
     }
 
@@ -99,7 +97,7 @@ namespace jpip {
                 /* OrigBH */
                 if (place_holder.header.length > 0) {
                     file.Seek(place_holder.header.offset);
-                    if ((ptr + place_holder.header.length) >= end) eof = true;
+                    if (ptr + place_holder.header.length >= end) eof = true;
                     else if (!file.Read(ptr, place_holder.header.length)) eof = true;
                     else ptr += place_holder.header.length;
                 }
@@ -115,13 +113,7 @@ namespace jpip {
                 }
             }
         }
-
         return *this;
-    }
-
-    DataBinWriter &DataBinWriter::WriteEmpty(uint64_t bin_id) {
-        File aux_file;
-        return this->Write(bin_id, 0, aux_file, FileSegment::Null, true);
     }
 
 }

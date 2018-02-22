@@ -1,9 +1,9 @@
 #ifndef _HTTP_PROTOCOL_H_
 #define _HTTP_PROTOCOL_H_
 
-#include <string>
-#include <iostream>
 #include <cassert>
+#include <iostream>
+#include <string>
 
 namespace http {
     using namespace std;

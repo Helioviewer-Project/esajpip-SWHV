@@ -2,7 +2,7 @@
 #define _JPEG2000_PACKET_INDEX_H_
 
 #include <vector>
-#include "data/vint_vector.h"
+//#include "data/vint_vector.h"
 #include "data/file_segment.h"
 
 namespace jpeg2000 {

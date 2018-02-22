@@ -7,11 +7,11 @@
 #include <vector>
 #include "trace.h"
 #include "data/file.h"
-#include "jpip/woi.h"
-#include "jpip/request.h"
-#include "jpip/cache_model.h"
-#include "jpip/woi_composer.h"
-#include "jpip/databin_writer.h"
+#include "woi.h"
+#include "request.h"
+#include "cache_model.h"
+#include "woi_composer.h"
+#include "databin_writer.h"
 #include "jpeg2000/file_manager.h"
 #include "jpeg2000/image_index.h"
 

@@ -164,13 +164,6 @@ namespace jpip {
                                         bool last_byte = false);
 
         /**
-         * Writes an empty segment.
-         * @param bin_id Data-bin identifier.
-         * @return The object itself.
-         */
-        DataBinWriter &WriteEmpty(uint64_t bin_id = 0);
-
-        /**
          * Returns the number of bytes written.
          */
         ptrdiff_t GetCount() const {
