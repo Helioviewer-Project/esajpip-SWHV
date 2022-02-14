@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
                         new_conn = listen_socket.Accept(&from_addr);
 
                         if (!new_conn.IsValid())
-                            ERROR("Problems accepting a new connection");
+                            ERROR("Problems accepting a new connection: " << strerror(errno));
                         else {
                             if (app_info->num_connections >= cfg.max_connections()) {
                                 LOG("Refusing a connection because the limit has been reached");
