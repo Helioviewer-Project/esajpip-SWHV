@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
                                                            << (int) new_conn << "]");
 
                                 if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
-                                    ERROR("The new socket can not be sent to the child process");
+                                    ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                                     new_conn.Close();
                                 } else {
                                     bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
