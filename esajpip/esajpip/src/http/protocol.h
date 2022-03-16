@@ -41,10 +41,12 @@ namespace http {
         /**
          * Copy constructor.
          */
+        /*
         Protocol(const Protocol &protocol) {
             majorVersion_ = protocol.majorVersion_;
             minorVersion_ = protocol.minorVersion_;
         }
+        */
 
         friend ostream &operator<<(ostream &out, const Protocol &protocol) {
             return out << "HTTP/" << protocol.majorVersion_ << "." << protocol.minorVersion_;
