@@ -45,7 +45,8 @@ bool TraceSystem::AppendToFile_(const char *name) {
                 file_layout = new log4cpp::PatternLayout();
                 file_layout->setConversionPattern("%d: %m %n");
 
-                file_appender = new log4cpp::FileAppender("FileAppender", fn_cad);
+                //file_appender = new log4cpp::FileAppender("FileAppender", fn_cad);
+                file_appender = new log4cpp::RollingFileAppender("RollingFileAppender", fn_cad, 1024 * 1024 * 1024);
                 file_appender->setLayout(file_layout);
 
                 category->setAppender(file_appender);

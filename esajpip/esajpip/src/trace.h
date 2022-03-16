@@ -7,7 +7,7 @@
 #define LOG4CPP_FIX_ERROR_COLLISION 1
 
 #include <log4cpp/Category.hh>
-#include <log4cpp/FileAppender.hh>
+#include <log4cpp/RollingFileAppender.hh>
 #include <log4cpp/PatternLayout.hh>
 #include <log4cpp/OstreamAppender.hh>
 
