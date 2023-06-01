@@ -9,7 +9,9 @@
 
 #include "z/zfilter.h"
 
-#define CORS "*"
+static const char *CORS = "*";
+static const char *NOCACHE = "no-cache";
+static const char *STS = "max-age=31536000; includeSubDomains;";
 
 using namespace std;
 using namespace net;
@@ -43,7 +45,8 @@ void ClientManager::Run(ClientInfo *client_info) {
 
     stringstream head_data, head_data_gzip;
     head_data << http::Header::AccessControlAllowOrigin(CORS)
-              << http::Header::CacheControl("no-cache")
+              << http::Header::StrictTransportSecurity(STS)
+              << http::Header::CacheControl(NOCACHE)
               << http::Header::TransferEncoding("chunked")
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
@@ -128,7 +131,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                 LOG("The channel " << channel << " has been closed");
                 sock_stream << http::Response(200)
                             << http::Header::AccessControlAllowOrigin(CORS)
-                            << http::Header::CacheControl("no-cache")
+                            << http::Header::StrictTransportSecurity(STS)
+                            << http::Header::CacheControl(NOCACHE)
                             << http::Header::ContentLength("0")
                             << http::Protocol::CRLF << flush;
             }
@@ -187,7 +191,8 @@ void ClientManager::Run(ClientInfo *client_info) {
             size_t err_msg_len = strlen(err_msg);
             sock_stream << http::Response(500)
                         << http::Header::AccessControlAllowOrigin(CORS)
-                        << http::Header::CacheControl("no-cache")
+                        << http::Header::StrictTransportSecurity(STS)
+                        << http::Header::CacheControl(NOCACHE)
                         << http::Header::ContentLength(to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
             if (err_msg_len) {
@@ -281,7 +286,8 @@ void ClientManager::RunBasic(ClientInfo *client_info) {
                     << http::Header("JPIP-tid", "T0")
                     << http::Header::AccessControlAllowOrigin(CORS)
                     << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                    << http::Header::CacheControl("no-cache")
+                    << http::Header::StrictTransportSecurity(STS)
+                    << http::Header::CacheControl(NOCACHE)
                     << http::Header::ContentLength(to_string(buf_len))
                     << http::Header::ContentType("image/jpp-stream")
                     << http::Protocol::CRLF;
