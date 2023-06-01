@@ -11,5 +11,6 @@ namespace http {
     const char HeaderName::TRANSFER_ENCODING[] = "Transfer-Encoding";
     const char HeaderName::ACCESS_CONTROL_ALLOW_ORIGIN[] = "Access-Control-Allow-Origin";
     const char HeaderName::ACCESS_CONTROL_EXPOSE_HEADERS[] = "Access-Control-Expose-Headers";
+    const char HeaderName::STRICT_TRANSPORT_SECURITY[] = "Strict-Transport-Security";
 
 }

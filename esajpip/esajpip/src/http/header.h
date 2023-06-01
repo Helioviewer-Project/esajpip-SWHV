@@ -28,6 +28,7 @@ namespace http {
         static const char TRANSFER_ENCODING[];             ///< The header <code>Transfer-Encoding</code>
         static const char ACCESS_CONTROL_ALLOW_ORIGIN[];   ///< The header <code>Access-Control-Allow-Origin</code>
         static const char ACCESS_CONTROL_EXPOSE_HEADERS[]; ///< The header <code>Access-Control-Expose-Headers</code>
+        static const char STRICT_TRANSPORT_SECURITY[];     ///< The header <code>Strict-Transport-Security</code>
     };
 
     /**
@@ -181,6 +182,11 @@ namespace http {
          * Predefined "Access-Control-Expose-Headers" header.
          */
         typedef HeaderBase<HeaderName::ACCESS_CONTROL_EXPOSE_HEADERS> AccessControlExposeHeaders;
+
+        /**
+         * Predefined "Strict-Transport-Security" header.
+         */
+        typedef HeaderBase<HeaderName::STRICT_TRANSPORT_SECURITY> StrictTransportSecurity;
 
         /**
          * Empty constructor.
