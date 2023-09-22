@@ -47,7 +47,8 @@ set(CORE_SRCS
     src/OmniThreads.cpp
     src/PThreads.cpp
     src/PortabilityImpl.cpp
-    src/AbortAppender.cpp)
+    src/AbortAppender.cpp
+    src/DailyRollingFileAppender.cpp)
 
 foreach(SRC ${CORE_SRCS})
     list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})

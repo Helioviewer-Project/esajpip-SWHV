@@ -40,12 +40,14 @@ namespace log4cpp {
             
         while (1) {
             va_list args_copy;
-
+/*
 #if defined(_MSC_VER) || defined(__BORLANDC__) || !(defined(__cplusplus) && (__cplusplus >= 201103L))
             args_copy = args;
 #else
             va_copy(args_copy, args);
 #endif
+*/
+            va_copy(args_copy, args);
 
             int n = VSNPRINTF(buffer, size, format, args_copy);
 
