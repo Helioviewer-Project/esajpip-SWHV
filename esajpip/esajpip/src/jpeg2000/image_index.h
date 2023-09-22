@@ -86,13 +86,6 @@ namespace jpeg2000 {
         typedef SHARED_PTR<ImageIndex> Ptr;
 
         /**
-         * Copy constructor.
-         */
-        ImageIndex(const ImageIndex &image_index) {
-            *this = image_index;
-        }
-
-        /**
          * Returns the number of codestreams.
          */
         size_t GetNumCodestreams() const {

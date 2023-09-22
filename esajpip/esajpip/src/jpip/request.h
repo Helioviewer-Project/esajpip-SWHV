@@ -62,18 +62,18 @@ namespace jpip {
              * Parameters mask.
              */
             struct {
-                int fsiz    : 1;
-                int roff    : 1;
-                int rsiz    : 1;
-                int metareq : 1;
-                int len     : 1;
-                int target  : 1;
-                int cid     : 1;
-                int cnew    : 1;
-                int cclose  : 1;
-                int model   : 1;
-                int stream  : 1;
-                int context : 1;
+                unsigned fsiz    : 1;
+                unsigned roff    : 1;
+                unsigned rsiz    : 1;
+                unsigned metareq : 1;
+                unsigned len     : 1;
+                unsigned target  : 1;
+                unsigned cid     : 1;
+                unsigned cnew    : 1;
+                unsigned cclose  : 1;
+                unsigned model   : 1;
+                unsigned stream  : 1;
+                unsigned context : 1;
             } items;
 
             /**
