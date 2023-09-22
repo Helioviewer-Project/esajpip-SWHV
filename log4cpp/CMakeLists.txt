@@ -1,5 +1,5 @@
 
-include_directories(. ${LOG4CPP}/include)
+include_directories(${LOG4CPP}/include)
 
 set(CORE_SRCS
     src/Appender.cpp
@@ -53,7 +53,7 @@ foreach(SRC ${CORE_SRCS})
     list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})
 endforeach()
 
-add_definitions(-DHAVE_CONFIG_H -DLOG4CPP_HAVE_SSTREAM)
+add_definitions(-DHAVE_CONFIG_H -DLOG4CPP_HAVE_SSTREAM -DLOG4CPP_HAVE_UNISTD_H)
 
 add_library(log4cpp SHARED ${LOG4CPP_SRCS})
 sidc_install_lib(log4cpp)
