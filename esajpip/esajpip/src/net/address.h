@@ -96,13 +96,12 @@ namespace net {
             memset(&sock_addr, 0, sizeof sock_addr);
 
             hostent *hp = NULL;
-            unsigned long addr;
+            struct in_addr addr;
 
-            if (inet_addr(path) == INADDR_NONE)
+            if (!inet_aton(path, &addr)) {
                 hp = gethostbyname(path);
-            else {
-                addr = inet_addr(path);
-                hp = gethostbyaddr((char *) &addr, sizeof addr, AF_INET);
+            } else {
+                hp = gethostbyaddr((const void *) &addr, sizeof addr, AF_INET);
             }
 
             if (hp != NULL) {
