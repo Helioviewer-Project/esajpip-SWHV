@@ -37,7 +37,7 @@ static bool child_lost = false;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
 
-static int ChildProcess();
+static int ChildProcess(const pthread_attr_t *pattr);
 
 static void *ClientThread(void *arg);
 
@@ -106,10 +106,14 @@ int main(int argc, char **argv) {
 
         poll_table.Add(father_socket, POLLIN);
 
+        pthread_attr_t pattr;
+        pthread_attr_init(&pattr);
+        pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
+
         father_begin:
 
         if (!fork())
-            return ChildProcess();
+            return ChildProcess(&pattr);
         else {
             signal(SIGCHLD, SIGCHLD_handler);
 
@@ -127,12 +131,12 @@ int main(int argc, char **argv) {
 
                         if (new_conn == -1 || !new_conn.IsValid()) {
                             ERROR("Problems accepting a new connection: " << strerror(errno));
-                            continue;
+                            // continue;
                         } else {
                             if (app_info->num_connections >= cfg.max_connections()) {
                                 LOG("Refusing a connection because the limit has been reached");
                                 new_conn.Close();
-                                continue;
+                                // continue;
                             } else {
                                 LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " ["
                                                            << (int) new_conn << "]");
@@ -140,7 +144,7 @@ int main(int argc, char **argv) {
                                 if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
                                     ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                                     new_conn.Close();
-                                    continue;
+                                    // continue;
                                 } else {
                                     bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
                                     poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
@@ -164,8 +168,8 @@ int main(int argc, char **argv) {
                         if (poll_table[i].revents) {
                             LOG("Closing the connection [" << poll_table[i].fd << "]");
                             app_info->num_connections--;
-                            close(poll_table[i].fd);
                             poll_table.RemoveAt(i);
+                            close(poll_table[i].fd);
                         }
                     }
 
@@ -174,6 +178,8 @@ int main(int argc, char **argv) {
                 }
             }
         }
+
+        pthread_attr_destroy(&pattr);
     }
 
     listen_socket.Close();
@@ -181,7 +187,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-static int ChildProcess() {
+static int ChildProcess(const pthread_attr_t *pattr) {
     int sock, father_sock;
     pthread_t service_tid;
     ClientInfo *client_info;
@@ -213,13 +219,11 @@ static int ChildProcess() {
 
         LOG("Creating a client thread for the old connection [" << sock << "]");
 
-        if (pthread_create(&service_tid, NULL, ClientThread, client_info) == -1) {
+        if (pthread_create(&service_tid, pattr, ClientThread, client_info) == -1) {
             ERROR("A new client thread for the old connection [" << sock << "] can not be created");
             delete client_info;
             return -1;
         }
-
-        pthread_detach(service_tid);
     }
 
     for (;;) {
@@ -228,13 +232,11 @@ static int ChildProcess() {
 
         LOG("Creating a client thread for the new connection [" << sock << "|" << father_sock << "]");
 
-        if (pthread_create(&service_tid, NULL, ClientThread, client_info) == -1) {
+        if (pthread_create(&service_tid, pattr, ClientThread, client_info) == -1) {
             LOG("A new client thread for the new connection [" << sock << "|" << father_sock << "] can not be created");
             delete client_info;
             return -1;
         }
-
-        pthread_detach(service_tid);
     }
 
     return 0;
@@ -254,5 +256,6 @@ static void *ClientThread(void *arg) {
         ERROR("The connection [" << sock << "] could not be closed");
 
     delete client_info;
-    pthread_exit(0);
+    pthread_exit(NULL);
+    return NULL;
 }
