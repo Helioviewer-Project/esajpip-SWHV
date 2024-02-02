@@ -129,14 +129,12 @@ int main(int argc, char **argv) {
                     if (poll_table[0].revents & POLLIN) {
                         new_conn = listen_socket.Accept(&from_addr);
 
-                        if (new_conn == -1 || !new_conn.IsValid()) {
+                        if (new_conn == -1 /* || !new_conn.IsValid() client thread will notice if valid*/) {
                             ERROR("Problems accepting a new connection: " << strerror(errno));
-                            // continue;
                         } else {
                             if (app_info->num_connections >= cfg.max_connections()) {
                                 LOG("Refusing a connection because the limit has been reached");
                                 new_conn.Close();
-                                // continue;
                             } else {
                                 LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " ["
                                                            << (int) new_conn << "]");
@@ -144,7 +142,6 @@ int main(int argc, char **argv) {
                                 if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
                                     ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                                     new_conn.Close();
-                                    // continue;
                                 } else {
                                     bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
                                     poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
@@ -158,8 +155,8 @@ int main(int argc, char **argv) {
                         if (father_socket.Receive(&fd, sizeof fd) == sizeof fd) {
                             LOG("Closing the connection [" << fd << "] from child");
                             app_info->num_connections--;
-                            poll_table.Remove(fd);
                             close(fd);
+                            poll_table.Remove(fd);
                         } else
                             ERROR("Could not receive descriptor");
                     }
@@ -168,8 +165,8 @@ int main(int argc, char **argv) {
                         if (poll_table[i].revents) {
                             LOG("Closing the connection [" << poll_table[i].fd << "]");
                             app_info->num_connections--;
-                            poll_table.RemoveAt(i);
                             close(poll_table[i].fd);
+                            poll_table.RemoveAt(i);
                         }
                     }
 
