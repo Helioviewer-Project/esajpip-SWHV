@@ -6,7 +6,6 @@
 
 #include <csignal>
 #include "trace.h"
-#include "version.h"
 #include "app_info.h"
 #include "app_config.h"
 #include "args_parser.h"
@@ -18,6 +17,7 @@
 using namespace std;
 using namespace net;
 
+#define SERVER_VERSION    "1.2"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
 #define CONFIG_FILE       "server.cfg"
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 
     app_info->father_pid = getpid();
 
-    cout << endl << SERVER_NAME << " " << VERSION << endl;
+    cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << cfgMark << cfg << endl;
 
     if (cfg.logging())
