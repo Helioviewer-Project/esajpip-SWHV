@@ -37,7 +37,7 @@ static bool child_lost = false;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
 
-static int ChildProcess(const pthread_attr_t *pattr);
+static int ChildProcess(const pthread_attr_t * pattr);
 
 static void *ClientThread(void *arg);
 
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
         pthread_attr_init(&pattr);
         pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
 
-        father_begin:
+      father_begin:
 
         if (!fork())
             return ChildProcess(&pattr);
@@ -129,24 +129,24 @@ int main(int argc, char **argv) {
                     if (poll_table[0].revents & POLLIN) {
                         new_conn = listen_socket.Accept(&from_addr);
 
-                        if (new_conn == -1 /* || !new_conn.IsValid() client thread will notice if valid*/) {
-                            ERROR("Problems accepting a new connection: " << strerror(errno));
+                        if (new_conn == -1) {
+                            ERROR("Error accepting a new connection: " << strerror(errno));
+                        /* } else if (!new_conn.IsValid()) {
+                            LOG("Peer closed connection");
+                            new_conn.Close(); */ // client thread will notice if valid
+                        } else if (app_info->num_connections >= cfg.max_connections()) {
+                            LOG("Connection refused because the limit has been reached");
+                            new_conn.Close();
                         } else {
-                            if (app_info->num_connections >= cfg.max_connections()) {
-                                LOG("Refusing a connection because the limit has been reached");
+                            LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
+
+                            if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
+                                ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                                 new_conn.Close();
                             } else {
-                                LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " ["
-                                                           << (int) new_conn << "]");
-
-                                if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
-                                    ERROR("The new socket can not be sent to the child process: " << strerror(errno));
-                                    new_conn.Close();
-                                } else {
-                                    bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
-                                    poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
-                                    app_info->num_connections++;
-                                }
+                                bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
+                                poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
+                                app_info->num_connections++;
                             }
                         }
                     }
