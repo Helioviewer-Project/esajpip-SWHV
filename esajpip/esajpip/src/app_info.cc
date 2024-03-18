@@ -9,6 +9,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <fcntl.h>
 
 #ifndef _SC_AVPHYS_PAGES
 #include <sys/sysctl.h>
