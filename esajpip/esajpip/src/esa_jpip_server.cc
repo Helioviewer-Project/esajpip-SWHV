@@ -224,7 +224,8 @@ static int ChildProcess(const pthread_attr_t *pattr) {
     }
 
     for (;;) {
-        child_socket.ReceiveDescriptor(&sock, &father_sock);
+        if (!child_socket.ReceiveDescriptor(&sock, &father_sock))
+            continue; // something is wrong
         client_info = new ClientInfo(base_id++, sock, father_sock);
 
         LOG("Creating a client thread for the new connection [" << sock << "|" << father_sock << "]");
