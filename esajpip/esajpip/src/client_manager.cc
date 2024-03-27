@@ -78,7 +78,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
         if (com_error) {
             if (sock_stream->IsValid())
-                LOG("Incorrect request received");
+                LOG("Incorrect request received: " << req_line);
             else
                 LOG("Connection closed by the client");
             break;
