@@ -80,7 +80,8 @@ void ClientManager::Run(ClientInfo *client_info) {
             g_free(req_line_escape);
 
             com_error = !req.Parse(req_line);
-        }
+        } else
+            req_line = "Error reading request";
 
         if (com_error) {
             if (sock_stream->IsValid())
