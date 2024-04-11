@@ -32,8 +32,8 @@ namespace http {
             istringstream in(line);
 
             if (in >> cad >> uri >> protocol) {
-                if (cad == "POST") type = Request::POST;
-                else if (cad == "GET") type = Request::GET;
+                /*if (cad == "POST") type = Request::POST;
+                else*/ if (cad == "GET") type = Request::GET;
 
                 if (type != Request::UNKNOWN) {
                     ParseURI(uri.substr(0, MAX_URI));
@@ -58,7 +58,7 @@ namespace http {
 
     ostream &operator<<(ostream &out, const Request &request) {
         if (request.type != Request::UNKNOWN) {
-            out << (request.type == Request::GET ? "GET" : "POST") << " " << request.object;
+            out << /*(request.type == Request::GET ?*/ "GET" /*: "POST")*/ << " " << request.object;
 
             if (!request.parameters.empty()) {
                 out << "?";

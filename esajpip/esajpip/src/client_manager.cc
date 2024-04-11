@@ -102,7 +102,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                          header.value.find("gzip") != string::npos)
                     accept_gzip = true;
             }
-
+            /*
             if (req.type == http::Request::POST) {
                 stringstream body;
                 sock_stream.clear();
@@ -111,7 +111,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     body.put((char) sock_stream.get());
 
                 req.ParseParameters(body);
-            }
+            }*/
             sock_stream.clear();
         }
 
