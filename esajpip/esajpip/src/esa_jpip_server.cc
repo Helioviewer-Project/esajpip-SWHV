@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     else if (!listen_socket.ListenAt(listen_addr))
         ERROR("The server listen socket can not be initialized");
     else {
-        LOG(SERVER_NAME << " started" << cfgMark);
+        LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
 
         signal(SIGCHLD, SIG_IGN);
 
