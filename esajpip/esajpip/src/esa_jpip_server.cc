@@ -26,8 +26,6 @@ using namespace net;
 #define POLLRDHUP         (0)
 #endif
 
-#define SNDBUF 524288
-
 static AppConfig cfg;
 static int base_id = 0;
 static AppInfo app_info;
@@ -144,7 +142,6 @@ int main(int argc, char **argv) {
                                 ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                                 new_conn.Close();
                             } else {
-                                bool ret = new_conn.SetNoDelay() || new_conn.SetSndBuf(SNDBUF);
                                 poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
                                 app_info->num_connections++;
                             }
@@ -243,11 +240,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 static void *ClientThread(void *arg) {
     ClientInfo *client_info = (ClientInfo *) arg;
 
-#ifndef BASIC_SERVER
     ClientManager(cfg, app_info).Run(client_info);
-#else
-    ClientManager(cfg, app_info).RunBasic(client_info);
-#endif
 
     int sock = client_info->father_sock();
     if (child_socket.SendTo(father_address, &sock, sizeof sock) != sizeof sock)

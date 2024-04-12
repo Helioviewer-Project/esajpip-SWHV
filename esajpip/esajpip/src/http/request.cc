@@ -32,8 +32,7 @@ namespace http {
             istringstream in(line);
 
             if (in >> cad >> uri >> protocol) {
-                /*if (cad == "POST") type = Request::POST;
-                else*/ if (cad == "GET") type = Request::GET;
+                if (cad == "GET") type = Request::GET;
 
                 if (type != Request::UNKNOWN) {
                     ParseURI(uri.substr(0, MAX_URI));

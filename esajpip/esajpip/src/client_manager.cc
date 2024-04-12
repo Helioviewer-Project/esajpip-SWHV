@@ -10,6 +10,9 @@
 #include "z/zfilter.h"
 #include <glib.h>
 
+#include <sys/socket.h>
+#include <sys/time.h>
+
 static const char *CORS = "*";
 static const char *NOCACHE = "no-cache";
 static const char *STS = "max-age=31536000; includeSubDomains;";
@@ -29,7 +32,29 @@ static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     }
 }
 
+static const int true_val = 1;
+static const int sndbuf_val = 524288;
+
 void ClientManager::Run(ClientInfo *client_info) {
+    int socket = client_info->sock();
+    int sockopt_ret = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val) |
+                      setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val);
+                   // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &true_val, sizeof true_val);
+    int time_out = cfg.com_time_out();
+    if (time_out > 0) {
+        struct timeval tv;
+        tv.tv_sec = time_out;
+        tv.tv_usec = 0;
+        sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+                       setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    }
+    if (sockopt_ret != 0) { // is there a point reporting error?
+        close(socket);
+        return;
+    }
+
+    ///
+
     bool com_error;
     string req_line, req_line_raw;
     jpip::Request req;
@@ -52,7 +77,7 @@ void ClientManager::Run(ClientInfo *client_info) {
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
-    SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
+    SocketStream sock_stream(socket, 512, 64 * 1024);
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -66,57 +91,30 @@ void ClientManager::Run(ClientInfo *client_info) {
         if (cfg.log_requests())
             LOGC(_BLUE, "Waiting for a request ...");
 
-        if (cfg.com_time_out() > 0) {
-            int poll_ret = sock_stream->WaitForInput(cfg.com_time_out() * 1000);
-            if (poll_ret <= 0) {
-                if (poll_ret < 0)
-                    LOG("Request wait error: " << strerror(errno));
-                else
-                    LOG("Communication time-out");
-                break;
-            }
-        }
-
         com_error = true;
         if (getline(sock_stream, req_line_raw).good()) {
             char *req_line_escape = g_strescape(req_line_raw.c_str(), NULL);
-            req_line = string(req_line_escape);
+            req_line.assign(req_line_escape);
             g_free(req_line_escape);
 
             com_error = !req.Parse(req_line);
         } else
-            req_line = "Error reading request";
+            req_line.assign(strerror(errno));
 
         if (com_error) {
-            if (sock_stream->IsValid())
-                LOG("Incorrect request received: " << req_line);
-            else
-                LOG("Connection closed by the client");
+            LOG("Request incorrect or read error: " << req_line);
             break;
         } else {
             if (cfg.log_requests())
                 LOGC(_BLUE, "Request: " << req_line);
 
             http::Header header;
-            int content_length = 0;
 
             while ((sock_stream >> header).good()) {
-                if (header == http::Header::ContentLength())
-                    content_length = atoi(header.value.c_str());
-                else if (header == http::Header::AcceptEncoding() &&
-                         header.value.find("gzip") != string::npos)
+                if (header == http::Header::AcceptEncoding() &&
+                    header.value.find("gzip") != string::npos)
                     accept_gzip = true;
             }
-            /*
-            if (req.type == http::Request::POST) {
-                stringstream body;
-                sock_stream.clear();
-
-                while (content_length--)
-                    body.put((char) sock_stream.get());
-
-                req.ParseParameters(body);
-            }*/
             sock_stream.clear();
         }
 
@@ -146,6 +144,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                             << http::Header::CacheControl(NOCACHE)
                             << http::Header::ContentLength("0")
                             << http::Protocol::CRLF << flush;
+                break; // break connection
             }
         } else if (req.mask.items.cnew) {
             if (is_opened) {
@@ -259,53 +258,5 @@ void ClientManager::Run(ClientInfo *client_info) {
     delete[] buf;
 
     sock_stream->Close();
-    close(client_info->sock());
-}
-
-void ClientManager::RunBasic(ClientInfo *client_info) {
-    jpip::Request req;
-    size_t buf_len = 5000;
-    char *buf = new char[buf_len];
-    SocketStream sock_stream(client_info->sock());
-
-    for (;;) {
-        LOG("Waiting for a request ...");
-
-        if (cfg.com_time_out() > 0) {
-            if (sock_stream->WaitForInput(cfg.com_time_out() * 1000) == 0) {
-                LOG("Communication time-out");
-                sock_stream->Close();
-                break;
-            }
-        }
-
-        if (!(sock_stream >> req).good()) {
-            if (sock_stream->IsValid())
-                LOG("Incorrect request received");
-            else
-                LOG("Connection closed by the client");
-            sock_stream->Close();
-            break;
-        } else {
-            http::Header header;
-            while ((sock_stream >> header).good());
-            sock_stream.clear();
-        }
-
-        sock_stream << http::Response(200)
-                    << http::Header("JPIP-cnew", "cid=C0,path=jpip,transport=http")
-                    << http::Header("JPIP-tid", "T0")
-                    << http::Header::AccessControlAllowOrigin(CORS)
-                    << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                    << http::Header::StrictTransportSecurity(STS)
-                    << http::Header::CacheControl(NOCACHE)
-                    << http::Header::ContentLength(to_string(buf_len))
-                    << http::Header::ContentType("image/jpp-stream")
-                    << http::Protocol::CRLF;
-        if (sock_stream.Send(buf, buf_len) != (ssize_t) buf_len)
-            ERROR("Could not send");
-        sock_stream << flush;
-    }
-
-    delete[] buf;
+    close(socket);
 }

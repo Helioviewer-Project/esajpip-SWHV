@@ -26,7 +26,6 @@ namespace http {
          */
         enum Type {
             GET,
-            // POST,
             UNKNOWN
         };
 

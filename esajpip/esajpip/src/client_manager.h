@@ -33,15 +33,6 @@ public:
      */
     void Run(ClientInfo *client_info);
 
-    /**
-     * Starts the handling of a client connection
-     * but it does not do anything. This method is
-     * used for testing the architecture of the
-     * server.
-     * @param client_info Client information.
-     */
-    void RunBasic(ClientInfo *client_info);
-
     virtual ~ClientManager() {
     }
 };

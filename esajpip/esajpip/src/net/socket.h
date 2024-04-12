@@ -214,24 +214,6 @@ namespace net {
         int WaitForOutput(int time_out = -1);
 
         /**
-         * Configures the parameter <code>TCP_NODELAY</code> of the
-         * socket.
-         * @param val New value for the parameter (1 by default).
-         * @return <code>true</code> if successful.
-         */
-        bool SetNoDelay(int val = 1) {
-            return !setsockopt(sid, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val);
-        }
-
-        bool SetKeepAlive(int val = 1) {
-            return !setsockopt(sid, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val));
-        }
-
-        bool SetSndBuf(int val) {
-            return !setsockopt(sid, SOL_SOCKET, SO_SNDBUF, &val, sizeof val);
-        }
-
-        /**
          * Receives a descriptor from a socket.
          * @param fd Variable to store the received descriptor.
          * @param aux Auxiliary information received attached.
