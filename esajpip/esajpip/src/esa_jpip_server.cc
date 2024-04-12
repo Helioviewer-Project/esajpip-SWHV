@@ -243,11 +243,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 static void *ClientThread(void *arg) {
     ClientInfo *client_info = (ClientInfo *) arg;
 
-#ifndef BASIC_SERVER
     ClientManager(cfg, app_info).Run(client_info);
-#else
-    ClientManager(cfg, app_info).RunBasic(client_info);
-#endif
 
     int sock = client_info->father_sock();
     if (child_socket.SendTo(father_address, &sock, sizeof sock) != sizeof sock)
