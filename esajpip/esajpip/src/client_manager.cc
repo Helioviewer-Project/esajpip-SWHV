@@ -40,8 +40,8 @@ void ClientManager::Run(ClientInfo *client_info) {
     int sockopt_ret = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val) |
                       setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val);
                    // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &true_val, sizeof true_val);
-    int time_out = cfg.com_time_out();
-    if (time_out > 0) {
+    int time_out;
+    if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
         struct timeval tv;
         tv.tv_sec = time_out;
         tv.tv_usec = 0;
