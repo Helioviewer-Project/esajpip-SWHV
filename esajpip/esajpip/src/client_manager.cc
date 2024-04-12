@@ -10,6 +10,9 @@
 #include "z/zfilter.h"
 #include <glib.h>
 
+#include <sys/socket.h>
+#include <sys/time.h>
+
 static const char *CORS = "*";
 static const char *NOCACHE = "no-cache";
 static const char *STS = "max-age=31536000; includeSubDomains;";
@@ -29,7 +32,29 @@ static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
     }
 }
 
+static const int true_val = 1;
+static const int sndbuf_val = 524288;
+
 void ClientManager::Run(ClientInfo *client_info) {
+    int socket = client_info->sock();
+    int sockopt_ret = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val) |
+                      setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val);
+                   // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &true_val, sizeof true_val);
+    int time_out = cfg.com_time_out();
+    if (time_out > 0) {
+        struct timeval tv;
+        tv.tv_sec = time_out;
+        tv.tv_usec = 0;
+        sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+                       setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    }
+    if (sockopt_ret != 0) { // is there a point reporting error?
+        close(socket);
+        return;
+    }
+
+    ///
+
     bool com_error;
     string req_line, req_line_raw;
     jpip::Request req;
@@ -52,7 +77,7 @@ void ClientManager::Run(ClientInfo *client_info) {
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
-    SocketStream sock_stream(client_info->sock(), 512, 64 * 1024);
+    SocketStream sock_stream(socket, 512, 64 * 1024);
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -66,32 +91,18 @@ void ClientManager::Run(ClientInfo *client_info) {
         if (cfg.log_requests())
             LOGC(_BLUE, "Waiting for a request ...");
 
-        if (cfg.com_time_out() > 0) {
-            int poll_ret = sock_stream->WaitForInput(cfg.com_time_out() * 1000);
-            if (poll_ret <= 0) {
-                if (poll_ret < 0)
-                    LOG("Request wait error: " << strerror(errno));
-                else
-                    LOG("Communication time-out");
-                break;
-            }
-        }
-
         com_error = true;
         if (getline(sock_stream, req_line_raw).good()) {
             char *req_line_escape = g_strescape(req_line_raw.c_str(), NULL);
-            req_line = string(req_line_escape);
+            req_line.assign(req_line_escape);
             g_free(req_line_escape);
 
             com_error = !req.Parse(req_line);
         } else
-            req_line = "Error reading request";
+            req_line.assign(strerror(errno));
 
         if (com_error) {
-            if (sock_stream->IsValid())
-                LOG("Incorrect request received: " << req_line);
-            else
-                LOG("Connection closed by the client");
+            LOG("Request incorrect or read error: " << req_line);
             break;
         } else {
             if (cfg.log_requests())
@@ -259,5 +270,5 @@ void ClientManager::Run(ClientInfo *client_info) {
     delete[] buf;
 
     sock_stream->Close();
-    close(client_info->sock());
+    close(socket);
 }
