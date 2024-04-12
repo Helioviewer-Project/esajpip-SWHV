@@ -144,7 +144,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                             << http::Header::CacheControl(NOCACHE)
                             << http::Header::ContentLength("0")
                             << http::Protocol::CRLF << flush;
-                break;
+                break; // break connection
             }
         } else if (req.mask.items.cnew) {
             if (is_opened) {
