@@ -102,7 +102,7 @@ void ClientManager::Run(ClientInfo *client_info) {
             req_line.assign(strerror(errno));
 
         if (com_error) {
-            LOG("Request incorrect or read error: " << req_line);
+            LOG("Bad request or read error: " << req_line);
             break;
         } else {
             if (cfg.log_requests())
