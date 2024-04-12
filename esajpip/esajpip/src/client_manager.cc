@@ -67,8 +67,12 @@ void ClientManager::Run(ClientInfo *client_info) {
             LOGC(_BLUE, "Waiting for a request ...");
 
         if (cfg.com_time_out() > 0) {
-            if (sock_stream->WaitForInput(cfg.com_time_out() * 1000) == 0) {
-                LOG("Communication time-out");
+            int poll_ret = sock_stream->WaitForInput(cfg.com_time_out() * 1000);
+            if (poll_ret <= 0) {
+                if (poll_ret < 0)
+                    LOG("Request wait error: " << strerror(errno));
+                else
+                    LOG("Communication time-out");
                 break;
             }
         }
