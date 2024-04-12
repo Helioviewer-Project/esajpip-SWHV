@@ -109,25 +109,12 @@ void ClientManager::Run(ClientInfo *client_info) {
                 LOGC(_BLUE, "Request: " << req_line);
 
             http::Header header;
-            int content_length = 0;
 
             while ((sock_stream >> header).good()) {
-                if (header == http::Header::ContentLength())
-                    content_length = atoi(header.value.c_str());
-                else if (header == http::Header::AcceptEncoding() &&
-                         header.value.find("gzip") != string::npos)
+                if (header == http::Header::AcceptEncoding() &&
+                    header.value.find("gzip") != string::npos)
                     accept_gzip = true;
             }
-            /*
-            if (req.type == http::Request::POST) {
-                stringstream body;
-                sock_stream.clear();
-
-                while (content_length--)
-                    body.put((char) sock_stream.get());
-
-                req.ParseParameters(body);
-            }*/
             sock_stream.clear();
         }
 
