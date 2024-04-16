@@ -23,13 +23,14 @@ namespace net {
         size_t out_len;
         char *in_buf;
         char *out_buf;
-        Socket socket;
 
     public:
         enum {
             INPUT_BUFFER_LENGTH = 500,
             OUTPUT_BUFFER_LENGTH = 500
         };
+
+        Socket socket;
 
         SocketBuffer(int sid,
                      size_t in_len = INPUT_BUFFER_LENGTH,

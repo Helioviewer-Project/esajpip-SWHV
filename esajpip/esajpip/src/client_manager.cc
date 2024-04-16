@@ -23,14 +23,28 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static int send_chunk(SocketStream &strm, const void *buf, size_t len) {
+static int SendChecked(Socket &socket, const void *buf, size_t len) {
+    if (socket.Send(buf, len) != (ssize_t) len) {
+        ERROR("Could not send");
+        return -1;
+    }
+    return 0;
+}
+
+static int SendStream(Socket &socket, stringstream &stream) {
+    const char *str = stream.str().c_str();
+    return SendChecked(socket, str, strlen(str));
+}
+
+static int send_chunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
-        strm << hex << len << dec << http::Protocol::CRLF;
-        if (strm.Send(buf, len) != (ssize_t) len) {
-            ERROR("Could not send");
+        stringstream stream;
+        stream << hex << len << dec << http::Protocol::CRLF;
+
+        if (SendStream(socket, stream) ||
+            SendChecked(socket, buf, len) ||
+            SendChecked(socket, http::Protocol::CRLF, strlen(http::Protocol::CRLF)))
             return -1;
-        }
-        strm << http::Protocol::CRLF;
     }
     return 0;
 }
@@ -40,21 +54,21 @@ static const int true_val = 1;
 static const int sndbuf_val = 524288;
 
 void ClientManager::Run(ClientInfo *client_info) {
-    int socket = client_info->sock();
-    int sockopt_ret = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
-                      // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
-                      setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
+    int fd = client_info->sock();
+    int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
+                      // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
+                      setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
     int time_out;
     if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
         struct timeval tv;
         tv.tv_sec = time_out;
         tv.tv_usec = 0;
-        sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
-                       setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+        sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+                       setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
     }
     if (sockopt_ret != 0) { // is there a point reporting error?
         LOG("setsockopt failed: " << strerror(errno));
-        close(socket);
+        close(fd);
         return;
     }
 
@@ -82,7 +96,7 @@ void ClientManager::Run(ClientInfo *client_info) {
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
-    SocketStream sock_stream(socket, 512, 64 * 1024);
+    SocketStream sock_stream(fd, 512, 64 * 1024);
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -227,7 +241,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (send_chunk(sock_stream, buf, chunk_len))
+                    if (send_chunk(sock_stream.socket, buf, chunk_len))
                         break;
                 }
             else {
@@ -250,13 +264,13 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    if (send_chunk(sock_stream, out, buf_len))
+                    if (send_chunk(sock_stream.socket, out, buf_len))
                         goto zend;
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
-                    send_chunk(sock_stream, out, nbytes);
+                    send_chunk(sock_stream.socket, out, nbytes);
 
               zend:
                 zfilter_del(obj);
@@ -269,5 +283,5 @@ void ClientManager::Run(ClientInfo *client_info) {
     delete[] buf;
 
     sock_stream->Close();
-    close(socket);
+    close(fd);
 }
