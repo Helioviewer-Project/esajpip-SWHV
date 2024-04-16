@@ -36,17 +36,18 @@ static int send_chunk(SocketStream &strm, const void *buf, size_t len) {
 }
 
 static const int true_val = 1;
+static const int false_val = 0;
 static const int sndbuf_val = 524288;
 
 void ClientManager::Run(ClientInfo *client_info) {
     int socket = client_info->sock();
-    int sockopt_ret = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val) |
-                      setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val);
-                   // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &true_val, sizeof true_val);
-    int time_out;
-    if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
+    int sockopt_ret = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
+                      setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
+                      setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
+    int timeout;
+    if (sockopt_ret == 0 && (timeout = cfg.com_time_out()) > 0) {
         struct timeval tv;
-        tv.tv_sec = time_out;
+        tv.tv_sec = timeout;
         tv.tv_usec = 0;
         sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
                        setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
@@ -255,7 +256,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (nbytes > 0)
                     send_chunk(sock_stream, out, nbytes);
 
-             zend:
+              zend:
                 zfilter_del(obj);
             }
 
