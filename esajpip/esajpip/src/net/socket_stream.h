@@ -51,7 +51,7 @@ namespace net {
 
                 while (pbase() + len < pptr()) {
                     n = socket.Send(pbase() + len, pptr() - pbase() - len);
-                    if (n > 0) len += n; // stop sending on zero write
+                    if (n >= 0) len += n;
                     else return -1;
                 }
 

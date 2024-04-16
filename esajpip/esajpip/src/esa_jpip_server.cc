@@ -189,7 +189,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
     app_info->child_iterations++;
     app_info->child_pid = getpid();
 
-    signal(SIGPIPE, SIG_IGN);
+    // signal(SIGPIPE, SIG_IGN);
 
 #ifdef _PLATFORM_LINUX
     prctl(PR_SET_PDEATHSIG, SIGHUP);
