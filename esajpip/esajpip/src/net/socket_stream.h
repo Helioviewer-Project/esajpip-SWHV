@@ -50,8 +50,8 @@ namespace net {
                 ssize_t n, len = 0;
 
                 while (pbase() + len < pptr()) {
-                    n = socket.Send(pbase() + len, pptr() - pbase() - len);
-                    if (n > 0) len += n; // stop sending on zero write
+                    n = socket.Send(pbase() + len, pptr() - pbase() - len, true);
+                    if (n >= 0) len += n;
                     else return -1;
                 }
 
