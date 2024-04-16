@@ -46,20 +46,15 @@ namespace net {
         }
 
         virtual int sync() {
-            if (pptr() > pbase()) {
-                ssize_t len = pptr() - pbase();
-                if (socket.Send(pbase(), len) < len)
-                    return -1;
-
-/*
+            if (pptr() != pbase()) {
                 ssize_t n, len = 0;
 
                 while (pbase() + len < pptr()) {
                     n = socket.Send(pbase() + len, pptr() - pbase() - len);
-                    if (n >= 0) len += n;
+                    if (n > 0) len += n; // stop sending on zero write
                     else return -1;
                 }
-*/
+
                 setp(out_buf, out_buf + out_len);
             }
 
