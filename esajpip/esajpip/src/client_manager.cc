@@ -23,13 +23,16 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static void send_chunk(SocketStream &strm, const void *buf, size_t len) {
+static int send_chunk(SocketStream &strm, const void *buf, size_t len) {
     if (len > 0) {
         strm << hex << len << dec << http::Protocol::CRLF;
-        if (strm.Send(buf, len) != (ssize_t) len)
-            { /* ERROR("Could not send"); */ }
+        if (strm.Send(buf, len) != (ssize_t) len) {
+            ERROR("Could not send");
+            return -1;
+        }
         strm << http::Protocol::CRLF;
     }
+    return 0;
 }
 
 static const int true_val = 1;
@@ -206,8 +209,10 @@ void ClientManager::Run(ClientInfo *client_info) {
                         << http::Header::ContentLength(to_string(err_msg_len))
                         << http::Protocol::CRLF << flush;
             if (err_msg_len) {
-                if (sock_stream->Send(err_msg, err_msg_len) != (ssize_t) err_msg_len)
-                    { /* ERROR("Could not send"); */ }
+                if (sock_stream->Send(err_msg, err_msg_len) != (ssize_t) err_msg_len) {
+                    ERROR("Could not send");
+                    break;
+                }
             }
         } else if (send_data) {
             if (!send_gzip)
@@ -219,7 +224,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    send_chunk(sock_stream, buf, chunk_len);
+                    if (send_chunk(sock_stream, buf, chunk_len))
+                        break;
                 }
             else {
                 void *obj = zfilter_new();
@@ -241,13 +247,15 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    send_chunk(sock_stream, out, buf_len);
+                    if (send_chunk(sock_stream, out, buf_len))
+                        goto zend;
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
                     send_chunk(sock_stream, out, nbytes);
 
+             zend:
                 zfilter_del(obj);
             }
 
