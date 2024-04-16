@@ -44,15 +44,16 @@ void ClientManager::Run(ClientInfo *client_info) {
     int sockopt_ret = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
                       setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
                       setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
-    int timeout;
-    if (sockopt_ret == 0 && (timeout = cfg.com_time_out()) > 0) {
+    int time_out;
+    if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
         struct timeval tv;
-        tv.tv_sec = timeout;
+        tv.tv_sec = time_out;
         tv.tv_usec = 0;
         sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
                        setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
     }
     if (sockopt_ret != 0) { // is there a point reporting error?
+        LOG("setsockopt failed: " << strerror(errno));
         close(socket);
         return;
     }
@@ -85,6 +86,7 @@ void ClientManager::Run(ClientInfo *client_info) {
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
+    int log_requests = cfg.log_requests();
     size_t buf_len = cfg.max_chunk_size();
     char *buf = new char[buf_len];
 
@@ -92,7 +94,7 @@ void ClientManager::Run(ClientInfo *client_info) {
         bool accept_gzip = false;
         bool send_gzip = false;
 
-        if (cfg.log_requests())
+        if (log_requests)
             LOGC(_BLUE, "Waiting for a request ...");
 
         com_error = true;
@@ -109,7 +111,7 @@ void ClientManager::Run(ClientInfo *client_info) {
             LOG("Bad request or read error: " << req_line);
             break;
         } else {
-            if (cfg.log_requests())
+            if (log_requests)
                 LOGC(_BLUE, "Request: " << req_line);
 
             http::Header header;
