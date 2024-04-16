@@ -36,13 +36,13 @@ static int send_chunk(SocketStream &strm, const void *buf, size_t len) {
 }
 
 static const int true_val = 1;
-static const int false_val = 0;
+// static const int false_val = 0;
 static const int sndbuf_val = 524288;
 
 void ClientManager::Run(ClientInfo *client_info) {
     int socket = client_info->sock();
     int sockopt_ret = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
-                      setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
+                      // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
                       setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
     int time_out;
     if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
