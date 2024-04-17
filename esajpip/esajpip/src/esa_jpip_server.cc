@@ -17,7 +17,7 @@
 using namespace std;
 using namespace net;
 
-#define SERVER_VERSION    "1.4.6"
+#define SERVER_VERSION    "1.5"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
 #define CONFIG_FILE       "server.cfg"
