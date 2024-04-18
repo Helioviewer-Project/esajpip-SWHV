@@ -41,7 +41,7 @@ static int SendStream(Socket &socket, ostringstream &stream) {
     return SendString(socket, stream.str().c_str());
 }
 
-static int send_chunk(Socket &socket, const void *buf, size_t len) {
+static int SendChunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
         ostringstream stream;
         stream << hex << len << dec << http::Protocol::CRLF;
@@ -252,7 +252,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (send_chunk(socket, buf, chunk_len))
+                    if (SendChunk(socket, buf, chunk_len))
                         break;
                 }
             else {
@@ -275,13 +275,13 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    if (send_chunk(socket, out, buf_len))
+                    if (SendChunk(socket, out, buf_len))
                         goto zend;
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
-                    send_chunk(socket, out, nbytes);
+                    SendChunk(socket, out, nbytes);
 
               zend:
                 zfilter_del(obj);
