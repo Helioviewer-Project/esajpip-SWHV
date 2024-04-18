@@ -37,6 +37,10 @@ static int SendString(Socket &socket, const char *str) {
     return SendChecked(socket, str, strlen(str));
 }
 
+static int SendStream(Socket &socket, ostringstream &stream) {
+    return SendString(socket, stream.str().c_str());
+}
+
 static int send_chunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
         ostringstream stream;
@@ -168,7 +172,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     << http::Header::CacheControl(NOCACHE)
                     << http::Header::ContentLength("0")
                     << http::Protocol::CRLF;
-                SendString(socket, msg.str().c_str());
+                SendStream(socket, msg);
                 break; // break connection
             }
         } else if (req.mask.items.cnew) {
@@ -195,7 +199,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                             << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
                             << http::Protocol::CRLF;
-                        SendString(socket, msg.str().c_str());
+                        SendStream(socket, msg);
                         send_data = true;
                     }
                 }
@@ -215,7 +219,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     msg << http::Response(200)
                         << (send_gzip ? head_data_gzip.str() : head_data.str())
                         << http::Protocol::CRLF;
-                    SendString(socket, msg.str().c_str());
+                    SendStream(socket, msg);
                     send_data = true;
                 }
             }
@@ -237,7 +241,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 << http::Protocol::CRLF;
             if (err_msg_len)
                 msg << err_msg;
-            SendString(socket, msg.str().c_str());
+            SendStream(socket, msg);
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
