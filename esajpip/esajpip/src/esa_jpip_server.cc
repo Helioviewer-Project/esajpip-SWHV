@@ -17,7 +17,7 @@
 using namespace std;
 using namespace net;
 
-#define SERVER_VERSION    "1.5"
+#define SERVER_VERSION    "1.6"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
 #define CONFIG_FILE       "server.cfg"
@@ -189,7 +189,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
     app_info->child_iterations++;
     app_info->child_pid = getpid();
 
-    // signal(SIGPIPE, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
 
 #ifdef _PLATFORM_LINUX
     prctl(PR_SET_PDEATHSIG, SIGHUP);

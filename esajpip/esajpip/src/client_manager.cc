@@ -13,6 +13,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+static const char *ZERO = "0\r\n\r\n";
+
 static const char *CORS = "*";
 static const char *NOCACHE = "no-cache";
 static const char *STS = "max-age=31536000; includeSubDomains;";
@@ -23,14 +25,31 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static int send_chunk(SocketStream &strm, const void *buf, size_t len) {
+static int SendChecked(Socket &socket, const void *buf, size_t len) {
+    if (socket.Send(buf, len) != (ssize_t) len) {
+        ERROR("Could not send");
+        return -1;
+    }
+    return 0;
+}
+
+static int SendString(Socket &socket, const char *str) {
+    return SendChecked(socket, str, strlen(str));
+}
+
+static int SendStream(Socket &socket, ostringstream &stream) {
+    return SendString(socket, stream.str().c_str());
+}
+
+static int SendChunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
-        strm << hex << len << dec << http::Protocol::CRLF;
-        if (strm.Send(buf, len) != (ssize_t) len) {
-            ERROR("Could not send");
+        ostringstream stream;
+        stream << hex << len << dec << http::Protocol::CRLF;
+
+        if (SendString(socket, stream.str().c_str()) ||
+            SendChecked(socket, buf, len) ||
+            SendString(socket, http::Protocol::CRLF))
             return -1;
-        }
-        strm << http::Protocol::CRLF;
     }
     return 0;
 }
@@ -40,21 +59,21 @@ static const int true_val = 1;
 static const int sndbuf_val = 524288;
 
 void ClientManager::Run(ClientInfo *client_info) {
-    int socket = client_info->sock();
-    int sockopt_ret = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
-                      // setsockopt(socket, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
-                      setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
+    int fd = client_info->sock();
+    int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
+                      // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
+                      setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
     int time_out;
     if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
         struct timeval tv;
         tv.tv_sec = time_out;
         tv.tv_usec = 0;
-        sockopt_ret |= setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
-                       setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+        sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+                       setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
     }
     if (sockopt_ret != 0) { // is there a point reporting error?
         LOG("setsockopt failed: " << strerror(errno));
-        close(socket);
+        close(fd);
         return;
     }
 
@@ -74,7 +93,7 @@ void ClientManager::Run(ClientInfo *client_info) {
         return;
     }
 
-    stringstream head_data, head_data_gzip;
+    ostringstream head_data, head_data_gzip;
     head_data << http::Header::AccessControlAllowOrigin(CORS)
               << http::Header::StrictTransportSecurity(STS)
               << http::Header::CacheControl(NOCACHE)
@@ -82,7 +101,8 @@ void ClientManager::Run(ClientInfo *client_info) {
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
-    SocketStream sock_stream(socket, 512, 64 * 1024);
+    Socket socket(fd);
+    SocketStream sock_stream(&socket, 1024);
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -144,12 +164,15 @@ void ClientManager::Run(ClientInfo *client_info) {
                 is_opened = false;
                 req.cache_model.Clear();
                 LOG("The channel " << channel << " has been closed");
-                sock_stream << http::Response(200)
-                            << http::Header::AccessControlAllowOrigin(CORS)
-                            << http::Header::StrictTransportSecurity(STS)
-                            << http::Header::CacheControl(NOCACHE)
-                            << http::Header::ContentLength("0")
-                            << http::Protocol::CRLF << flush;
+
+                ostringstream msg;
+                msg << http::Response(200)
+                    << http::Header::AccessControlAllowOrigin(CORS)
+                    << http::Header::StrictTransportSecurity(STS)
+                    << http::Header::CacheControl(NOCACHE)
+                    << http::Header::ContentLength("0")
+                    << http::Protocol::CRLF;
+                SendStream(socket, msg);
                 break; // break connection
             }
         } else if (req.mask.items.cnew) {
@@ -169,12 +192,14 @@ void ClientManager::Run(ClientInfo *client_info) {
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
-                        sock_stream << http::Response(200)
-                                    << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                    << http::Header("JPIP-tid", file_name)
-                                    << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                                    << (send_gzip ? head_data_gzip.str() : head_data.str())
-                                    << http::Protocol::CRLF << flush;
+                        ostringstream msg;
+                        msg << http::Response(200)
+                            << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                            << http::Header("JPIP-tid", file_name)
+                            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                            << (send_gzip ? head_data_gzip.str() : head_data.str())
+                            << http::Protocol::CRLF;
+                        SendStream(socket, msg);
                         send_data = true;
                     }
                 }
@@ -190,9 +215,11 @@ void ClientManager::Run(ClientInfo *client_info) {
                 } else if (!data_server.SetRequest(file_manager, req))
                     ERROR("The server can not process the request");
                 else {
-                    sock_stream << http::Response(200)
-                                << (send_gzip ? head_data_gzip.str() : head_data.str())
-                                << http::Protocol::CRLF << flush;
+                    ostringstream msg;
+                    msg << http::Response(200)
+                        << (send_gzip ? head_data_gzip.str() : head_data.str())
+                        << http::Protocol::CRLF;
+                    SendStream(socket, msg);
                     send_data = true;
                 }
             }
@@ -205,18 +232,16 @@ void ClientManager::Run(ClientInfo *client_info) {
 
         if (pclose) {
             size_t err_msg_len = strlen(err_msg);
-            sock_stream << http::Response(500)
-                        << http::Header::AccessControlAllowOrigin(CORS)
-                        << http::Header::StrictTransportSecurity(STS)
-                        << http::Header::CacheControl(NOCACHE)
-                        << http::Header::ContentLength(to_string(err_msg_len))
-                        << http::Protocol::CRLF << flush;
-            if (err_msg_len) {
-                if (sock_stream->Send(err_msg, err_msg_len) != (ssize_t) err_msg_len) {
-                    ERROR("Could not send");
-                    break;
-                }
-            }
+            ostringstream msg;
+            msg << http::Response(500)
+                << http::Header::AccessControlAllowOrigin(CORS)
+                << http::Header::StrictTransportSecurity(STS)
+                << http::Header::CacheControl(NOCACHE)
+                << http::Header::ContentLength(to_string(err_msg_len))
+                << http::Protocol::CRLF;
+            if (err_msg_len)
+                msg << err_msg;
+            SendStream(socket, msg);
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
@@ -227,7 +252,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (send_chunk(sock_stream, buf, chunk_len))
+                    if (SendChunk(socket, buf, chunk_len))
                         break;
                 }
             else {
@@ -250,24 +275,24 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    if (send_chunk(sock_stream, out, buf_len))
+                    if (SendChunk(socket, out, buf_len))
                         goto zend;
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
-                    send_chunk(sock_stream, out, nbytes);
+                    SendChunk(socket, out, nbytes);
 
               zend:
                 zfilter_del(obj);
             }
 
-            sock_stream << "0" << http::Protocol::CRLF << http::Protocol::CRLF << flush;
+            if (SendString(socket, ZERO))
+                break;
         }
     }
 
     delete[] buf;
 
-    sock_stream->Close();
-    close(socket);
+    socket.Close(); // closes fd
 }
