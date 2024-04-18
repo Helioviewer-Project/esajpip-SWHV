@@ -1,7 +1,6 @@
 #include "trace.h"
 #include "client_manager.h"
 #include "jpeg2000/file_manager.h"
-#include "jpip/jpip.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
 #include "http/response.h"
@@ -37,7 +36,7 @@ static int SendString(Socket &socket, const char *str) {
     return SendChecked(socket, str, strlen(str));
 }
 
-static int SendStream(Socket &socket, ostringstream &stream) {
+static int SendStream(Socket &socket, const ostringstream &stream) {
     return SendString(socket, stream.str().c_str());
 }
 
@@ -65,13 +64,13 @@ void ClientManager::Run(ClientInfo *client_info) {
                       setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
     int time_out;
     if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
-        struct timeval tv;
+        timeval tv;
         tv.tv_sec = time_out;
         tv.tv_usec = 0;
         sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
-                       setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
     }
-    if (sockopt_ret != 0) { // is there a point reporting error?
+    if (sockopt_ret != 0) {
         LOG("setsockopt failed: " << strerror(errno));
         close(fd);
         return;
@@ -95,10 +94,10 @@ void ClientManager::Run(ClientInfo *client_info) {
 
     ostringstream head_data, head_data_gzip;
     head_data << http::Header::AccessControlAllowOrigin(CORS)
-              << http::Header::StrictTransportSecurity(STS)
-              << http::Header::CacheControl(NOCACHE)
-              << http::Header::TransferEncoding("chunked")
-              << http::Header::ContentType("image/jpp-stream");
+            << http::Header::StrictTransportSecurity(STS)
+            << http::Header::CacheControl(NOCACHE)
+            << http::Header::TransferEncoding("chunked")
+            << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
     Socket socket(fd);
@@ -130,19 +129,18 @@ void ClientManager::Run(ClientInfo *client_info) {
         if (com_error) {
             LOG("Bad request or read error: " << req_line);
             break;
-        } else {
-            if (log_requests)
-                LOGC(_BLUE, "Request: " << req_line);
-
-            http::Header header;
-
-            while ((sock_stream >> header).good()) {
-                if (header == http::Header::AcceptEncoding() &&
-                    header.value.find("gzip") != string::npos)
-                    accept_gzip = true;
-            }
-            sock_stream.clear();
         }
+
+        if (log_requests)
+            LOGC(_BLUE, "Request: " << req_line);
+
+        http::Header header;
+        while ((sock_stream >> header).good()) {
+            if (header == http::Header::AcceptEncoding() &&
+                header.value.find("gzip") != string::npos)
+                accept_gzip = true;
+        }
+        sock_stream.clear();
 
         const char *err_msg = "";
         pclose = true;
@@ -167,11 +165,11 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                 ostringstream msg;
                 msg << http::Response(200)
-                    << http::Header::AccessControlAllowOrigin(CORS)
-                    << http::Header::StrictTransportSecurity(STS)
-                    << http::Header::CacheControl(NOCACHE)
-                    << http::Header::ContentLength("0")
-                    << http::Protocol::CRLF;
+                        << http::Header::AccessControlAllowOrigin(CORS)
+                        << http::Header::StrictTransportSecurity(STS)
+                        << http::Header::CacheControl(NOCACHE)
+                        << http::Header::ContentLength("0")
+                        << http::Protocol::CRLF;
                 SendStream(socket, msg);
                 break; // break connection
             }
@@ -180,7 +178,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 err_msg = "There already is a channel opened. Only one channel per client is supported";
                 LOG(err_msg);
             } else {
-                string file_name = (req.mask.items.target ? req.parameters["target"] : req.object);
+                string file_name = req.mask.items.target ? req.parameters["target"] : req.object;
 
                 if (!file_manager.OpenImage(file_name))
                     ERROR("The image file '" << file_name << "' can not be read");
@@ -194,11 +192,11 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                         ostringstream msg;
                         msg << http::Response(200)
-                            << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                            << http::Header("JPIP-tid", file_name)
-                            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                            << (send_gzip ? head_data_gzip.str() : head_data.str())
-                            << http::Protocol::CRLF;
+                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                                << http::Header("JPIP-tid", file_name)
+                                << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                                << (send_gzip ? head_data_gzip.str() : head_data.str())
+                                << http::Protocol::CRLF;
                         SendStream(socket, msg);
                         send_data = true;
                     }
@@ -217,8 +215,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                 else {
                     ostringstream msg;
                     msg << http::Response(200)
-                        << (send_gzip ? head_data_gzip.str() : head_data.str())
-                        << http::Protocol::CRLF;
+                            << (send_gzip ? head_data_gzip.str() : head_data.str())
+                            << http::Protocol::CRLF;
                     SendStream(socket, msg);
                     send_data = true;
                 }
@@ -234,16 +232,16 @@ void ClientManager::Run(ClientInfo *client_info) {
             size_t err_msg_len = strlen(err_msg);
             ostringstream msg;
             msg << http::Response(500)
-                << http::Header::AccessControlAllowOrigin(CORS)
-                << http::Header::StrictTransportSecurity(STS)
-                << http::Header::CacheControl(NOCACHE)
-                << http::Header::ContentLength(to_string(err_msg_len))
-                << http::Protocol::CRLF;
+                    << http::Header::AccessControlAllowOrigin(CORS)
+                    << http::Header::StrictTransportSecurity(STS)
+                    << http::Header::CacheControl(NOCACHE)
+                    << http::Header::ContentLength(to_string(err_msg_len))
+                    << http::Protocol::CRLF;
             if (err_msg_len)
                 msg << err_msg;
             SendStream(socket, msg);
         } else if (send_data) {
-            if (!send_gzip)
+            if (!send_gzip) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
@@ -255,7 +253,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     if (SendChunk(socket, buf, chunk_len))
                         break;
                 }
-            else {
+            } else {
                 void *obj = zfilter_new();
 
                 for (bool last = false; !last;) {
@@ -283,7 +281,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (nbytes > 0)
                     SendChunk(socket, out, nbytes);
 
-              zend:
+            zend:
                 zfilter_del(obj);
             }
 
