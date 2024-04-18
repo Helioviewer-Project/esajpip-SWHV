@@ -39,7 +39,7 @@ static int SendString(Socket &socket, const char *str) {
 
 static int send_chunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
-        stringstream stream;
+        ostringstream stream;
         stream << hex << len << dec << http::Protocol::CRLF;
 
         if (SendString(socket, stream.str().c_str()) ||
@@ -89,7 +89,7 @@ void ClientManager::Run(ClientInfo *client_info) {
         return;
     }
 
-    stringstream head_data, head_data_gzip;
+    ostringstream head_data, head_data_gzip;
     head_data << http::Header::AccessControlAllowOrigin(CORS)
               << http::Header::StrictTransportSecurity(STS)
               << http::Header::CacheControl(NOCACHE)
@@ -161,7 +161,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 req.cache_model.Clear();
                 LOG("The channel " << channel << " has been closed");
 
-                stringstream msg;
+                ostringstream msg;
                 msg << http::Response(200)
                     << http::Header::AccessControlAllowOrigin(CORS)
                     << http::Header::StrictTransportSecurity(STS)
@@ -188,7 +188,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
-                        stringstream msg;
+                        ostringstream msg;
                         msg << http::Response(200)
                             << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                             << http::Header("JPIP-tid", file_name)
@@ -211,7 +211,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 } else if (!data_server.SetRequest(file_manager, req))
                     ERROR("The server can not process the request");
                 else {
-                    stringstream msg;
+                    ostringstream msg;
                     msg << http::Response(200)
                         << (send_gzip ? head_data_gzip.str() : head_data.str())
                         << http::Protocol::CRLF;
@@ -228,7 +228,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
         if (pclose) {
             size_t err_msg_len = strlen(err_msg);
-            stringstream msg;
+            ostringstream msg;
             msg << http::Response(500)
                 << http::Header::AccessControlAllowOrigin(CORS)
                 << http::Header::StrictTransportSecurity(STS)
