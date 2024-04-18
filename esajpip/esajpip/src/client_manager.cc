@@ -44,7 +44,7 @@ static int send_chunk(Socket &socket, const void *buf, size_t len) {
 
         if (SendString(socket, stream.str().c_str()) ||
             SendChecked(socket, buf, len) ||
-            SendChecked(socket, http::Protocol::CRLF, strlen(http::Protocol::CRLF)))
+            SendString(socket, http::Protocol::CRLF))
             return -1;
     }
     return 0;
