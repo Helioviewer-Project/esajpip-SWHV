@@ -88,4 +88,4 @@ namespace http {
     };
 }
 
-#endif /* _REQUEST_H_ */
+#endif /* _HTTP_REQUEST_H_ */

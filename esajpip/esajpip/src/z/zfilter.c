@@ -30,7 +30,7 @@ static void _zfilter_init_(void) {
 
 void *zfilter_new(void) {
     GsfOutputMemory *sink = GSF_OUTPUT_MEMORY(gsf_output_memory_new());
-    return (void *) gsf_output_gzip_new(GSF_OUTPUT(sink), NULL);
+    return gsf_output_gzip_new(GSF_OUTPUT(sink), NULL);
 }
 
 int zfilter_write(void *obj, const void *data, size_t nbytes) {

@@ -112,64 +112,64 @@ int main(int argc, char **argv) {
 
         if (!fork())
             return ChildProcess(&pattr);
-        else {
-            signal(SIGCHLD, SIGCHLD_handler);
 
-            for (;;) {
-                res = poll_table.Poll();
+        // in father
+        signal(SIGCHLD, SIGCHLD_handler);
 
-                if (child_lost) {
-                    child_lost = false;
-                    goto father_begin;
-                }
+        for (;;) {
+            res = poll_table.Poll();
 
-                if (res > 0) {
-                    if (poll_table[0].revents & POLLIN) {
-                        new_conn = listen_socket.Accept(&from_addr);
+            if (child_lost) {
+                child_lost = false;
+                goto father_begin;
+            }
 
-                        if (new_conn == -1) {
-                            ERROR("Error accepting a new connection: " << strerror(errno));
-                        /* } else if (!new_conn.IsValid()) {
-                            LOG("Peer closed connection");
-                            new_conn.Close(); */ // client thread will notice if valid
-                        } else if (app_info->num_connections >= cfg.max_connections()) {
-                            LOG("Connection refused because the limit has been reached");
+            if (res > 0) {
+                if (poll_table[0].revents & POLLIN) {
+                    new_conn = listen_socket.Accept(&from_addr);
+
+                    if (new_conn == -1) {
+                        ERROR("Error accepting a new connection: " << strerror(errno));
+                    /* } else if (!new_conn.IsValid()) {
+                        LOG("Peer closed connection");
+                        new_conn.Close(); */ // client thread will notice if valid
+                    } else if (app_info->num_connections >= cfg.max_connections()) {
+                        LOG("Connection refused because the limit has been reached");
+                        new_conn.Close();
+                    } else {
+                        LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
+
+                        if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
+                            ERROR("The new socket can not be sent to the child process: " << strerror(errno));
                             new_conn.Close();
                         } else {
-                            LOG("New connection from " << from_addr.GetPath() << ":" << from_addr.GetPort() << " [" << (int) new_conn << "]");
-
-                            if (!father_socket.SendDescriptor(child_address, new_conn, new_conn)) {
-                                ERROR("The new socket can not be sent to the child process: " << strerror(errno));
-                                new_conn.Close();
-                            } else {
-                                poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
-                                app_info->num_connections++;
-                            }
+                            poll_table.Add(new_conn, POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
+                            app_info->num_connections++;
                         }
                     }
-
-                    if (poll_table[1].revents & POLLIN) {
-                        if (father_socket.Receive(&fd, sizeof fd) == sizeof fd) {
-                            LOG("Closing the connection [" << fd << "] from child");
-                            app_info->num_connections--;
-                            close(fd);
-                            poll_table.Remove(fd);
-                        } else
-                            ERROR("Could not receive descriptor");
-                    }
-
-                    for (int i = 2; i < poll_table.GetSize(); ++i) {
-                        if (poll_table[i].revents) {
-                            LOG("Closing the connection [" << poll_table[i].fd << "]");
-                            app_info->num_connections--;
-                            close(poll_table[i].fd);
-                            poll_table.RemoveAt(i);
-                        }
-                    }
-
-                    if (app_info->num_connections < 0)
-                        app_info->num_connections = 0;
                 }
+
+                if (poll_table[1].revents & POLLIN) {
+                    if (father_socket.Receive(&fd, sizeof fd) == sizeof fd) {
+                        LOG("Closing the connection [" << fd << "] from child");
+                        app_info->num_connections--;
+                        close(fd);
+                        poll_table.Remove(fd);
+                    } else
+                        ERROR("Could not receive descriptor");
+                }
+
+                for (int i = 2; i < poll_table.GetSize(); ++i) {
+                    if (poll_table[i].revents) {
+                        LOG("Closing the connection [" << poll_table[i].fd << "]");
+                        app_info->num_connections--;
+                        close(poll_table[i].fd);
+                        poll_table.RemoveAt(i);
+                    }
+                }
+
+                if (app_info->num_connections < 0)
+                    app_info->num_connections = 0;
             }
         }
 

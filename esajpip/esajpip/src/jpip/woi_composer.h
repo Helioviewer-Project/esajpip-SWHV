@@ -147,4 +147,4 @@ namespace jpip {
     };
 }
 
-#endif /* _JPIP_INDEX_MANAGER_H_ */
+#endif /* _JPIP_WOI_COMPOSER_H_ */

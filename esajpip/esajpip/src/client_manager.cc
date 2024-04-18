@@ -46,7 +46,7 @@ static int SendChunk(Socket &socket, const void *buf, size_t len) {
         ostringstream stream;
         stream << hex << len << dec << http::Protocol::CRLF;
 
-        if (SendString(socket, stream.str().c_str()) ||
+        if (SendStream(socket, stream) ||
             SendChecked(socket, buf, len) ||
             SendString(socket, http::Protocol::CRLF))
             return -1;
