@@ -17,7 +17,7 @@
 using namespace std;
 using namespace net;
 
-#define SERVER_VERSION    "1.6"
+#define SERVER_VERSION    "1.6.1"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
 #define CONFIG_FILE       "server.cfg"
@@ -165,7 +165,7 @@ father_begin:
 }
 
 static int ChildProcess(const pthread_attr_t *pattr) {
-    int sock, father_sock;
+    int sock;
     pthread_t service_tid;
     ClientInfo *client_info;
 
@@ -204,8 +204,11 @@ static int ChildProcess(const pthread_attr_t *pattr) {
     }
 
     for (;;) {
-        if (!child_socket.ReceiveDescriptor(&sock, &father_sock))
-            continue; // something is wrong
+        int father_sock;
+        if (!child_socket.ReceiveDescriptor(&sock, &father_sock)) {
+            ERROR("The new socket can not be received by the child process: " << strerror(errno));
+            continue;
+        }
         client_info = new ClientInfo(base_id++, sock, father_sock);
 
         LOG("Creating a client thread for the new connection [" << sock << "|" << father_sock << "]");

@@ -105,7 +105,7 @@ namespace net {
         cmsg->cmsg_level = SOL_SOCKET;
         cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
 
-        *(int *) CMSG_DATA(cmsg) = fd;
+        memcpy(CMSG_DATA(cmsg), &fd, sizeof fd);
 
         msg.msg_controllen = cmsg->cmsg_len;
         msg.msg_flags = 0;
@@ -149,7 +149,8 @@ namespace net {
         if (cmsg->cmsg_type != SCM_RIGHTS)
             return false;
 
-        *fd = *(int *) CMSG_DATA(cmsg);
+        memcpy(fd, CMSG_DATA(cmsg), sizeof *fd);
+
         return true;
     }
 
