@@ -97,7 +97,8 @@ void ClientManager::Run(ClientInfo *client_info) {
               << http::Header::ContentType("image/jpp-stream");
     head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
 
-    SocketStream sock_stream(fd, 512, 64 * 1024);
+    Socket socket(fd);
+    SocketStream sock_stream(&socket, 1024);
     string channel = to_string(client_info->base_id());
 
     int chunk_len = 0;
@@ -167,7 +168,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     << http::Header::CacheControl(NOCACHE)
                     << http::Header::ContentLength("0")
                     << http::Protocol::CRLF;
-                SendString(sock_stream.socket, msg.str().c_str());
+                SendString(socket, msg.str().c_str());
                 break; // break connection
             }
         } else if (req.mask.items.cnew) {
@@ -194,7 +195,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                             << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
                             << http::Protocol::CRLF;
-                        SendString(sock_stream.socket, msg.str().c_str());
+                        SendString(socket, msg.str().c_str());
                         send_data = true;
                     }
                 }
@@ -214,7 +215,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     msg << http::Response(200)
                         << (send_gzip ? head_data_gzip.str() : head_data.str())
                         << http::Protocol::CRLF;
-                    SendString(sock_stream.socket, msg.str().c_str());
+                    SendString(socket, msg.str().c_str());
                     send_data = true;
                 }
             }
@@ -236,7 +237,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 << http::Protocol::CRLF;
             if (err_msg_len)
                 msg << err_msg;
-            SendString(sock_stream.socket, msg.str().c_str());
+            SendString(socket, msg.str().c_str());
         } else if (send_data) {
             if (!send_gzip)
                 for (bool last = false; !last;) {
@@ -247,7 +248,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (send_chunk(sock_stream.socket, buf, chunk_len))
+                    if (send_chunk(socket, buf, chunk_len))
                         break;
                 }
             else {
@@ -270,25 +271,24 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    if (send_chunk(sock_stream.socket, out, buf_len))
+                    if (send_chunk(socket, out, buf_len))
                         goto zend;
                     nbytes -= buf_len;
                     out += buf_len;
                 }
                 if (nbytes > 0)
-                    send_chunk(sock_stream.socket, out, nbytes);
+                    send_chunk(socket, out, nbytes);
 
               zend:
                 zfilter_del(obj);
             }
 
-            if (SendString(sock_stream.socket, ZERO))
+            if (SendString(socket, ZERO))
                 break;
         }
     }
 
     delete[] buf;
 
-    sock_stream->Close();
-    close(fd);
+    socket.Close(); // closes fd
 }
