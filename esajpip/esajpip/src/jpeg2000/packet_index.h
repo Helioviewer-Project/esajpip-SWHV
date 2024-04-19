@@ -35,7 +35,7 @@ namespace jpeg2000 {
             /**
              * All the offsets must be greater than this value.
              */
-                    MINIMUM_OFFSET = 64
+                    MINIMUM_OFFSET = 8
         };
 
         /**
@@ -82,7 +82,7 @@ namespace jpeg2000 {
          * @return The object itself.
          */
         PacketIndex &Add(const FileSegment &segment) {
-            // assert(segment.offset >= MINIMUM_OFFSET);
+            assert(segment.offset >= MINIMUM_OFFSET);
 
             int last = aux.size() - 1;
 
