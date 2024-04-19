@@ -182,6 +182,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                 if (!file_manager.OpenImage(file_name)) {
                     ERROR("The image file '" << file_name << "' can not be read");
+                    pclose = true;
                 } else {
                     is_opened = true;
                     data_server.Reset();
