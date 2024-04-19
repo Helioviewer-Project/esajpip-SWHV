@@ -35,7 +35,7 @@ namespace jpeg2000 {
             /**
              * All the offsets must be greater than this value.
              */
-                    MINIMUM_OFFSET = 64
+                    MINIMUM_OFFSET = 8
         };
 
         /**
