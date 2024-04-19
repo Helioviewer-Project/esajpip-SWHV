@@ -108,7 +108,7 @@ namespace jpip {
                         File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
                         res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
-                        if (res < 0) return false;
+                        if (res < 0) continue; //return false;
                         else if (res > 0) {
                             if (current_idx != codestreams.size() - 1) current_idx++;
                             else {
