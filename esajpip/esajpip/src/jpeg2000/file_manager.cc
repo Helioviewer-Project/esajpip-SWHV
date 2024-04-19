@@ -75,7 +75,9 @@ namespace jpeg2000 {
             ERROR("File type not supported...");
             return false;
         }
-        image_info->coding_parameters.FillTotalPrecinctsVector();
+
+        if (res)
+            image_info->coding_parameters.FillTotalPrecinctsVector();
 
         return res;
     }
