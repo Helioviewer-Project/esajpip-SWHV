@@ -247,7 +247,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                     if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
-                        pclose = true;
+                        //pclose = true;
                         break;
                     }
                     if (SendChunk(socket, buf, chunk_len))
@@ -261,7 +261,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                     if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
-                        pclose = true;
+                        //pclose = true;
                         break;
                     }
 
