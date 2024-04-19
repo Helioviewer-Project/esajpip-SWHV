@@ -395,7 +395,8 @@ namespace jpeg2000 {
             ImageInfo image_info_hyperlink;
             res = res && ReadImage(i->first, &image_info_hyperlink);
             if (!res)
-                continue;
+                break;
+
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
             image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
             image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
