@@ -62,6 +62,8 @@ int main(int argc, char **argv) {
     if (cfg.logging())
         TraceSystem::AppendToFile(cfg.logging_folder() + SERVER_APP_NAME);
 
+    int max_connections = cfg.max_connections();
+
     Socket listen_socket;
     InetAddress listen_addr = cfg.address().empty()
                                   ? InetAddress(cfg.port())
@@ -82,7 +84,6 @@ int main(int argc, char **argv) {
         ERROR("The father unix socket can not be created");
         return -1;
     }
-
     if (!father_socket.BindTo(father_address.Reset())) {
         ERROR("The father unix socket can not be bound");
         return -1;
@@ -117,7 +118,7 @@ father_begin:
 
                 if (new_conn == -1) {
                     ERROR("Error accepting a new connection: " << strerror(errno));
-                } else if (app_info->num_connections >= cfg.max_connections()) {
+                } else if (app_info->num_connections >= max_connections) {
                     LOG("Connection refused because the limit has been reached");
                     new_conn.Close();
                 } else {
@@ -184,7 +185,6 @@ static int ChildProcess(const pthread_attr_t *pattr) {
         ERROR("The child unix socket can not be created");
         return -1;
     }
-
     if (!child_socket.BindTo(child_address.Reset())) {
         ERROR("The child unix socket can not be bound");
         return -1;
