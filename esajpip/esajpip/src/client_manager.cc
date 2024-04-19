@@ -180,16 +180,14 @@ void ClientManager::Run(ClientInfo *client_info) {
             } else {
                 string file_name = req.mask.items.target ? req.parameters["target"] : req.object;
 
-                if (!file_manager.OpenImage(file_name)) {
+                if (!file_manager.OpenImage(file_name))
                     ERROR("The image file '" << file_name << "' can not be read");
-                    break;
-                } else {
+                else {
                     is_opened = true;
                     data_server.Reset();
-                    if (!data_server.SetRequest(file_manager, req)) {
+                    if (!data_server.SetRequest(file_manager, req))
                         ERROR("The server can not process the request");
-                        break;
-                    } else {
+                    else {
                         LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
                         ostringstream msg;
@@ -212,10 +210,9 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (req.parameters["cid"] != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
-                } else if (!data_server.SetRequest(file_manager, req)) {
+                } else if (!data_server.SetRequest(file_manager, req))
                     ERROR("The server can not process the request");
-                    break;
-                } else {
+                else {
                     ostringstream msg;
                     msg << http::Response(200)
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
