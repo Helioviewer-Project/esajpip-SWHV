@@ -448,6 +448,7 @@ namespace jpeg2000 {
             size_t pos = path_file->find("./");
             if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
 
+            // attempt to undo possible URI character substitutions
             *path_file = std::regex_replace(*path_file, std::regex("%23"), "#");
         }
 
