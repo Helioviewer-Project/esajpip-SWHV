@@ -375,7 +375,8 @@ namespace jpeg2000 {
                     // Add the paths of the hyperlinked images to the paths vector
                     res = res && ReadUrlBox(file, length_box, &path_file);
                     //path_file=root_dir_ + path_file; /// OJOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-                    v_path_file.push_back(path_file);
+                    if (res)
+                        v_path_file.push_back(path_file);
                     break;
                 default:
                     res = res && file->Seek(length_box, SEEK_CUR);
@@ -438,15 +439,17 @@ namespace jpeg2000 {
         res = res && file->Read(path_char, length_box - 4);
         path_char[length_box - 4] = 0;
 
-        *path_file = path_char;
-        size_t found = path_file->find("file://") + 7;
-        *path_file = path_file->substr(found);
-        //*path_file = path_file->substr(found + 2);
-        // Replace "./" with the root_dir_
-        size_t pos = path_file->find("./");
-        if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
+        if (res) {
+            *path_file = path_char;
+            size_t found = path_file->find("file://") + 7;
+            *path_file = path_file->substr(found);
+            //*path_file = path_file->substr(found + 2);
+            // Replace "./" with the root_dir_
+            size_t pos = path_file->find("./");
+            if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
 
-        *path_file = std::regex_replace(*path_file, std::regex("%23"), "#");
+            *path_file = std::regex_replace(*path_file, std::regex("%23"), "#");
+        }
 
         return res;
     }
