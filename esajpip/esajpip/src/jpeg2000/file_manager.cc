@@ -1,5 +1,7 @@
 #include "file_manager.h"
 
+#include <regex>
+
 namespace jpeg2000 {
 
     using namespace std;
@@ -443,6 +445,8 @@ namespace jpeg2000 {
         // Replace "./" with the root_dir_
         size_t pos = path_file->find("./");
         if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
+
+        *path_file = std::regex_replace(*path_file, std::regex("%23"), "#");
 
         return res;
     }
