@@ -17,6 +17,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-only or commercial
 
+#include <alloca.h>
 #include "mongoose.h"
 
 #ifdef MG_ENABLE_LINES
