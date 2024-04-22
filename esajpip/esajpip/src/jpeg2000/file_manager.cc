@@ -1,6 +1,6 @@
 #include "file_manager.h"
 
-#include <regex>
+#include <glib.h>
 
 namespace jpeg2000 {
 
@@ -440,16 +440,18 @@ namespace jpeg2000 {
         path_char[length_box - 4] = 0;
 
         if (res) {
-            *path_file = path_char;
-            size_t found = path_file->find("file://") + 7;
-            *path_file = path_file->substr(found);
-            //*path_file = path_file->substr(found + 2);
+            string local_path = path_char;
+            size_t found = local_path.find("file://") + 7;
+            local_path = local_path.substr(found);
+            //local_path = local_path.substr(found + 2);
             // Replace "./" with the root_dir_
-            size_t pos = path_file->find("./");
-            if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
+            size_t pos = local_path.find("./");
+            if (pos != string::npos) local_path = local_path.substr(0, pos) + root_dir_ + local_path.substr(pos + 2);
 
-            // attempt to undo possible URI character substitutions
-            *path_file = std::regex_replace(*path_file, std::regex("%23"), "#");
+            // undo possible URI character substitutions
+            char *unescaped = g_uri_unescape_string(local_path.c_str(), NULL);
+            *path_file = unescaped;
+            g_free(unescaped);
         }
 
         return res;

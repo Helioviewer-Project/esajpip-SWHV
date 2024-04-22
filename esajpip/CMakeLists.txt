@@ -4,7 +4,7 @@ if(COMMAND cmake_policy)
 endif(COMMAND cmake_policy)
 
 include(FindPkgConfig)
-pkg_check_modules(PKG REQUIRED glib-2.0 libgsf-1)
+pkg_check_modules(PKG REQUIRED glib-2.0>=2.16 libgsf-1)
 
 configure_file(esajpip/server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
 
