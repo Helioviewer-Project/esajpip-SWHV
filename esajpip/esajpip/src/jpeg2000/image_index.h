@@ -29,7 +29,7 @@ namespace jpeg2000 {
         vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
         vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        vector<SHARED_PTR<ImageIndex>> hyper_links; ///< Image hyperlinks
+        vector<shared_ptr<ImageIndex>> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -83,7 +83,7 @@ namespace jpeg2000 {
         /**
          * Pointer of an object of this class.
          */
-        typedef SHARED_PTR<ImageIndex> Ptr;
+        typedef shared_ptr<ImageIndex> Ptr;
 
         /**
          * Returns the number of codestreams.
