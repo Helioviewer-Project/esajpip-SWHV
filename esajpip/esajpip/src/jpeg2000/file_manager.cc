@@ -447,7 +447,6 @@ namespace jpeg2000 {
         if (pos != string::npos) local_path = local_path.substr(0, pos) + root_dir_ + local_path.substr(pos + 2);
 
         char *unescaped = g_strcompress(local_path.c_str());
-        LOG("File URL " << local_path << " " << unescaped);
         *path_file = unescaped;
         g_free(unescaped);
 
