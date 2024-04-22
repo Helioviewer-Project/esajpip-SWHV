@@ -20,6 +20,7 @@ set(CORE_SRCS
     app_config.cc
     args_parser.cc
     client_manager.cc
+    mongoose/mongoose.c
     z/zfilter.c)
 
 foreach(SRC ${CORE_SRCS})
