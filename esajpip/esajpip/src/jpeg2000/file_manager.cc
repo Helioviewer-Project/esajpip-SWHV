@@ -1,7 +1,5 @@
 #include "file_manager.h"
 
-#include <glib.h>
-
 namespace jpeg2000 {
 
     using namespace std;
@@ -438,17 +436,13 @@ namespace jpeg2000 {
         res = res && file->Read(path_char, length_box - 4);
         path_char[length_box - 4] = 0;
 
-        string local_path = path_char;
-        size_t found = local_path.find("file://") + 7;
-        local_path = local_path.substr(found);
-        //local_path = local_path.substr(found + 2);
+        *path_file = path_char;
+        size_t found = path_file->find("file://") + 7;
+        *path_file = path_file->substr(found);
+        //*path_file = path_file->substr(found + 2);
         // Replace "./" with the root_dir_
-        size_t pos = local_path.find("./");
-        if (pos != string::npos) local_path = local_path.substr(0, pos) + root_dir_ + local_path.substr(pos + 2);
-
-        char *unescaped = g_strcompress(local_path.c_str());
-        *path_file = unescaped;
-        g_free(unescaped);
+        size_t pos = path_file->find("./");
+        if (pos != string::npos) *path_file = path_file->substr(0, pos) + root_dir_ + path_file->substr(pos + 2);
 
         return res;
     }
