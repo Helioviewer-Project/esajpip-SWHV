@@ -8,26 +8,6 @@
 
 /* ---------------------------------------------------------------------- */
 
-/* since glib 2.32 */
-#ifndef G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-#define G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-#endif
-
-#ifndef G_GNUC_END_IGNORE_DEPRECATIONS
-#define G_GNUC_END_IGNORE_DEPRECATIONS
-#endif
-
-static void _zfilter_init_(void) __attribute__ ((constructor));
-
-static void _zfilter_init_(void) {
-    G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
-    /* for glib < 2.36 */
-    g_type_init();
-    G_GNUC_END_IGNORE_DEPRECATIONS;
-}
-
-/* ---------------------------------------------------------------------- */
-
 void *zfilter_new(void) {
     GsfOutputMemory *sink = GSF_OUTPUT_MEMORY(gsf_output_memory_new());
     return gsf_output_gzip_new(GSF_OUTPUT(sink), NULL);

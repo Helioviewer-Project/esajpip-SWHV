@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "tr1_compat.h"
+#include <memory>
 
 #include "trace.h"
 
@@ -25,7 +25,7 @@ namespace data {
         /**
          * Safe pointer to this class.
          */
-        typedef SHARED_PTR<File> Ptr;
+        typedef shared_ptr<File> Ptr;
 
         File() {
             clear();
