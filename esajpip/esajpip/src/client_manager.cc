@@ -25,10 +25,26 @@ using namespace jpip;
 using namespace jpeg2000;
 
 static int SendChecked(Socket &socket, const void *buf, size_t len) {
-    if (socket.Send(buf, len) != (ssize_t) len) {
-        ERROR("Could not send");
-        return -1;
+    const char *data = static_cast<const char *>(buf);
+
+    while (len > 0) {
+        ssize_t sent = socket.Send(data, len);
+        if (sent < 0) {
+            if (errno == EINTR)
+                continue;
+
+            ERROR("Could not send: " << strerror(errno));
+            return -1;
+        }
+        if (sent == 0) {
+            ERROR("Could not send: connection closed");
+            return -1;
+        }
+
+        data += sent;
+        len -= sent;
     }
+
     return 0;
 }
 
@@ -250,8 +266,10 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (SendChunk(socket, buf, chunk_len))
+                    if (SendChunk(socket, buf, chunk_len)) {
+                        pclose = true;
                         break;
+                    }
                 }
             } else {
                 void *obj = zfilter_new();
@@ -273,19 +291,21 @@ void ClientManager::Run(ClientInfo *client_info) {
                 const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
 
                 while (nbytes > buf_len) {
-                    if (SendChunk(socket, out, buf_len))
+                    if (SendChunk(socket, out, buf_len)) {
+                        pclose = true;
                         goto zend;
+                    }
                     nbytes -= buf_len;
                     out += buf_len;
                 }
-                if (nbytes > 0)
-                    SendChunk(socket, out, nbytes);
+                if (nbytes > 0 && SendChunk(socket, out, nbytes))
+                    pclose = true;
 
             zend:
                 zfilter_del(obj);
             }
 
-            if (SendString(socket, ZERO))
+            if (pclose || SendString(socket, ZERO))
                 break;
         }
     }
