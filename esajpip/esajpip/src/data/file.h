@@ -61,7 +61,7 @@ namespace data {
             return Open(file_name.c_str());
         }
 
-        bool Seek(int _offset, int origin = SEEK_SET) {
+        bool Seek(uint64_t _offset, int origin = SEEK_SET) {
             assert(address != MAP_FAILED);
 
             size_t new_offset;
