@@ -24,6 +24,7 @@ namespace jpeg2000 {
 
         string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
+        CodingParameters coding_parameters; ///< Coding parameters
         vector<int> max_resolution; ///< Maximum resolution number
 
         vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
@@ -122,6 +123,10 @@ namespace jpeg2000 {
          */
         const FileSegment &GetMainHeader(int num_codestream) const {
             return codestreams.empty() ? hyper_links[num_codestream]->codestreams.back().header : codestreams[num_codestream].header;
+        }
+
+        const CodingParameters *GetCodingParameters(int num_codestream) const {
+            return codestreams.empty() ? &hyper_links[num_codestream]->coding_parameters : &coding_parameters;
         }
 
         /**

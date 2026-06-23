@@ -22,6 +22,7 @@ namespace jpeg2000 {
         multimap<string, int> paths;            ///< Paths of the hyperlinks (if any)
         CodingParameters coding_parameters;        ///< Coding parameters
         vector<CodestreamIndex> codestreams;    ///< Codestreams information
+        vector<CodingParameters> coding_parameters_hyperlinks; ///< Coding parameters of the hyperlinks
         vector<Metadata> meta_data_hyperlinks;    ///< Meta-data of the hyperlinks
 
         /**
@@ -45,6 +46,7 @@ namespace jpeg2000 {
             paths = info.paths;
             coding_parameters = info.coding_parameters;
             codestreams = info.codestreams;
+            coding_parameters_hyperlinks = info.coding_parameters_hyperlinks;
             meta_data_hyperlinks = info.meta_data_hyperlinks;
             return *this;
         }

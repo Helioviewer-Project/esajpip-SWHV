@@ -391,6 +391,7 @@ namespace jpeg2000 {
 
         if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
+            image_info->coding_parameters_hyperlinks.resize(image_info->paths.size());
             image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }
         // Get image info of the hyperlinked images
@@ -401,6 +402,7 @@ namespace jpeg2000 {
                 break;
 
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
+            image_info->coding_parameters_hyperlinks[i->second] = image_info_hyperlink.coding_parameters;
             image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
             image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
         }

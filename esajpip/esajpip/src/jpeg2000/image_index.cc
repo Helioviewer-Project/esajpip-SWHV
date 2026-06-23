@@ -7,6 +7,7 @@ namespace jpeg2000 {
         this->path_name = path_name;
 
         meta_data = image_info.meta_data;
+        coding_parameters = image_info.coding_parameters;
 
         if (image_info.paths.empty()) {
             codestreams = image_info.codestreams;
@@ -26,6 +27,7 @@ namespace jpeg2000 {
         this->path_name = path_name;
 
         meta_data = image_info.meta_data_hyperlinks[index];
+        coding_parameters = image_info.coding_parameters_hyperlinks[index];
         codestreams.push_back(image_info.codestreams[index]);
         max_resolution.push_back(-1);
 
@@ -44,7 +46,7 @@ namespace jpeg2000 {
 
         // Check the upper top of the index (to build)
         int max_index;
-        const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
+        const CodingParameters *coding_parameters = &this->coding_parameters;
         if (r < coding_parameters->num_levels && coding_parameters->IsResolutionProgression()) {
             // The max_index is the last packet index of the resolution r
             Packet packet(0, r + 1, 0, Size(0, 0));
@@ -142,7 +144,7 @@ namespace jpeg2000 {
             }
         }
 
-        const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
+        const CodingParameters *coding_parameters = GetCodingParameters(num_codestream);
         int idx = coding_parameters->GetProgressionIndex(packet);
         PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
         if (!packet_index.Get(idx, segment)) {

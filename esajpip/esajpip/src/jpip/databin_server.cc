@@ -10,11 +10,21 @@ namespace jpip {
     bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
         bool res = true;
         bool reset_woi = false;
-        const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
+        const ImageIndex::Ptr image_index = file_manager.GetImage();
 
         data_writer.ClearPreviousIds();
 
+        if (req.mask.items.stream || req.mask.items.context) {
+            if (codestreams != req.codestreams) {
+                codestreams = req.codestreams;
+                current_idx = 0;
+                reset_woi = true;
+            }
+        }
+
         if ((has_woi = req.mask.HasWOI())) {
+            int codestream = codestreams.empty() ? 0 : codestreams[current_idx];
+            const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
@@ -32,18 +42,12 @@ namespace jpip {
         if (req.mask.items.metareq)
             metareq = true;
 
-        if (req.mask.items.stream || req.mask.items.context) {
-            if (codestreams != req.codestreams) {
-                codestreams = req.codestreams;
-                current_idx = 0;
-                reset_woi = true;
-            }
-        }
-
         if (req.mask.items.len)
             pending = req.length_response;
 
         if (reset_woi) {
+            int codestream = codestreams.empty() ? 0 : codestreams[current_idx];
+            const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
             end_woi_ = false;
             woi_composer.Reset(coding_parameters, woi);
         }
@@ -96,10 +100,11 @@ namespace jpip {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters *coding_parameters = file_manager.GetCodingParameters();
+                    const CodingParameters *composer_parameters = image_index->GetCodingParameters(codestreams.front());
 
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
+                        const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
 
                         if (!image_index->GetPacket(file_manager, codestreams[current_idx], packet, &segment, &bin_offset))
                             return false;
@@ -122,7 +127,7 @@ namespace jpip {
                         else if (res > 0) {
                             if (current_idx != codestreams.size() - 1) current_idx++;
                             else {
-                                if (!woi_composer.GetNextPacket(coding_parameters)) break;
+                                if (!woi_composer.GetNextPacket(composer_parameters)) break;
                                 else current_idx = 0;
                             }
                         }
