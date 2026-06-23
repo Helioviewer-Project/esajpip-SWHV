@@ -101,14 +101,24 @@ namespace jpip {
                     while (data_writer && !eof) {
                         packet = woi_composer.GetCurrentPacket();
 
-                        segment = image_index->GetPacket(file_manager, codestreams[current_idx], packet, &bin_offset);
+                        if (!image_index->GetPacket(file_manager, codestreams[current_idx], packet, &segment, &bin_offset))
+                            return false;
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
                         File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
+                        if (segment.offset + segment.length > file->GetSize()) {
+                            ERROR("Invalid packet segment: codestream=" << codestreams[current_idx]
+                                  << ", packet=" << packet << ", segment=" << segment << ", file_size=" << file->GetSize());
+                            return false;
+                        }
                         res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
-                        if (res < 0) continue; //return false;
+                        if (res < 0) {
+                            ERROR("Could not write packet segment: codestream=" << codestreams[current_idx]
+                                  << ", bin=" << bin_id << ", packet=" << packet << ", segment=" << segment);
+                            return false;
+                        }
                         else if (res > 0) {
                             if (current_idx != codestreams.size() - 1) current_idx++;
                             else {

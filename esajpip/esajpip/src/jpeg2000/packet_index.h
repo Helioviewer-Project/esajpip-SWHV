@@ -125,18 +125,44 @@ namespace jpeg2000 {
          * @param i Item index.
          * @return File segment of the packet.
          */
-        FileSegment operator[](int i) const {
+        bool Get(int i, FileSegment *segment) const {
+            if (i < 0 || i >= (int) offsets.size())
+                return false;
+
             uint64_t off_i = offsets[i];
 
-            if (off_i < MINIMUM_OFFSET) return aux[off_i];
+            if (off_i < MINIMUM_OFFSET) {
+                if (off_i >= aux.size())
+                    return false;
+
+                *segment = aux[off_i];
+                return true;
+            }
             else {
+                if (i + 1 >= (int) offsets.size())
+                    return false;
+
                 uint64_t off_i1 = offsets[i + 1];
 
-                if (off_i1 < MINIMUM_OFFSET)
-                    off_i1 = aux[off_i1].offset;
+                if (off_i1 < MINIMUM_OFFSET) {
+                    if (off_i1 >= aux.size())
+                        return false;
 
-                return FileSegment(off_i, off_i1 - off_i);
+                    off_i1 = aux[off_i1].offset;
+                }
+
+                if (off_i1 < off_i)
+                    return false;
+
+                *segment = FileSegment(off_i, off_i1 - off_i);
+                return true;
             }
+        }
+
+        FileSegment operator[](int i) const {
+            FileSegment segment;
+            Get(i, &segment);
+            return segment;
         }
 
         virtual ~PacketIndex() {

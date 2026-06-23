@@ -47,7 +47,7 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        void GetOffsetPacket(File::Ptr &file, int ind_codestream, uint64_t length_packet);
+        bool GetOffsetPacket(File::Ptr &file, int ind_codestream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
@@ -147,7 +147,7 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        FileSegment GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, int *offset = NULL);
+        bool GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, FileSegment *segment, int *offset = NULL);
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
