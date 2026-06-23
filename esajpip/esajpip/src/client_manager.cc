@@ -266,6 +266,11 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
+                    if (chunk_len <= 0 && !last) {
+                        ERROR("No JPIP data chunk was generated before response completion");
+                        pclose = true;
+                        break;
+                    }
                     if (SendChunk(socket, buf, chunk_len)) {
                         pclose = true;
                         break;
@@ -279,6 +284,11 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                     if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
+                        pclose = true;
+                        break;
+                    }
+                    if (chunk_len <= 0 && !last) {
+                        ERROR("No JPIP data chunk was generated before response completion");
                         pclose = true;
                         break;
                     }
