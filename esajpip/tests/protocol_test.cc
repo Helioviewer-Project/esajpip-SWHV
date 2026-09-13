@@ -1,8 +1,10 @@
 #include <cstdlib>
+#include <cstdio>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include "data/file.h"
 #include "data/file_segment.h"
@@ -70,7 +72,7 @@ static void CheckHTTPResponse() {
 }
 
 static void CheckJPIPMessages() {
-    char buf[16];
+    char buf[128];
     data::File file;
     jpip::DataBinWriter writer;
     writer.SetBuffer(buf, sizeof buf)
@@ -85,9 +87,72 @@ static void CheckJPIPMessages() {
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "The JPIP message format changed");
 }
 
+static void CheckCoalescedJPIPMessages() {
+    char path[] = "/tmp/esajpip-protocol-XXXXXX";
+    int fd = mkstemp(path);
+    Check(fd >= 0, "Could not create payload file");
+    char payload[200];
+    for (size_t i = 0; i < sizeof payload; ++i)
+        payload[i] = i + 1;
+    Check(write(fd, payload, sizeof payload) == sizeof payload, "Could not write payload file");
+    close(fd);
+
+    data::File file;
+    Check(file.Open(path), "Could not open payload file");
+    remove(path);
+
+    char buf[128];
+    jpip::DataBinWriter writer;
+    writer.SetBuffer(buf, sizeof buf)
+          .SetCodestream(0)
+          .SetDataBinClass(jpip::DataBinClass::MAIN_HEADER)
+          .Write(0, 0, file, data::FileSegment(0, 2), false)
+          .Write(0, 2, file, data::FileSegment(2, 3), true)
+          .WriteEOR(jpip::EOR::WINDOW_DONE);
+
+    const unsigned char expected[] = {0x70, 0x06, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5, 0x00, 0x02, 0x00};
+    Check(writer.GetCount() == sizeof expected, "Wrong coalesced JPIP message length");
+    for (size_t i = 0; i < sizeof expected; ++i)
+        Check(static_cast<unsigned char>(buf[i]) == expected[i], "Wrong coalesced JPIP message");
+
+    char growing_buf[256];
+    jpip::DataBinWriter growing_writer;
+    growing_writer.SetBuffer(growing_buf, sizeof growing_buf)
+                  .SetCodestream(0)
+                  .SetDataBinClass(jpip::DataBinClass::MAIN_HEADER)
+                  .Write(0, 0, file, data::FileSegment(0, 100), false)
+                  .Write(0, 100, file, data::FileSegment(100, 50), true)
+                  .WriteEOR(jpip::EOR::WINDOW_DONE);
+
+    Check(growing_writer.GetCount() == 159, "Wrong growing JPIP message length");
+    const unsigned char growing_header[] = {0x70, 0x06, 0x00, 0x00, 0x81, 0x16};
+    for (size_t i = 0; i < sizeof growing_header; ++i)
+        Check(static_cast<unsigned char>(growing_buf[i]) == growing_header[i], "Wrong growing JPIP header");
+    for (size_t i = 0; i < 150; ++i)
+        Check(growing_buf[sizeof growing_header + i] == payload[i], "Wrong shifted JPIP payload");
+
+    char class_buf[128];
+    jpip::DataBinWriter class_writer;
+    class_writer.SetBuffer(class_buf, sizeof class_buf)
+                .SetCodestream(0)
+                .SetDataBinClass(jpip::DataBinClass::MAIN_HEADER)
+                .Write(0, 0, file, data::FileSegment(0, 2), true)
+                .SetDataBinClass(jpip::DataBinClass::META_DATA)
+                .Write(0, 0, file, data::FileSegment(2, 3), true)
+                .WriteEOR(jpip::EOR::WINDOW_DONE);
+
+    const unsigned char class_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2,
+                                            0x50, 0x08, 0x00, 0x03, 3, 4, 5,
+                                            0x00, 0x02, 0x00};
+    Check(class_writer.GetCount() == sizeof class_expected, "Wrong mixed-class JPIP message length");
+    for (size_t i = 0; i < sizeof class_expected; ++i)
+        Check(static_cast<unsigned char>(class_buf[i]) == class_expected[i], "Wrong mixed-class JPIP message");
+}
+
 int main() {
     CheckJHVRequests();
     CheckHTTPResponse();
     CheckJPIPMessages();
+    CheckCoalescedJPIPMessages();
     return EXIT_SUCCESS;
 }

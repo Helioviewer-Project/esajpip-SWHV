@@ -1,6 +1,7 @@
 #ifndef _JPIP_DATABIN_WRITER_H_
 #define _JPIP_DATABIN_WRITER_H_
 
+#include <cstddef>
 #include <cstdint>
 #include "jpip.h"
 #include "data/file.h"
@@ -35,6 +36,19 @@ namespace jpip {
         int codestream_idx;            ///< Current codestream index number
         int prev_databin_class;        ///< Previous data-bin class
         int prev_codestream_idx;    ///< Previous codestream index number
+
+        char *msg_start;
+        size_t msg_header_len;
+        uint64_t msg_bin;
+        uint64_t msg_offset;
+        uint64_t msg_len;
+        bool msg_last;
+
+        bool BeginMessage(uint64_t bin_id, uint64_t bin_offset,
+                          uint64_t bin_length, bool last_byte);
+        void FinishMessage();
+        size_t HeaderLength(uint64_t bin_id, uint64_t bin_offset,
+                            uint64_t bin_length) const;
 
         /**
          * Writes a value into the buffer.
@@ -83,6 +97,12 @@ namespace jpip {
             codestream_idx = -1;
             prev_databin_class = -1;
             prev_codestream_idx = -1;
+            msg_start = NULL;
+            msg_header_len = 0;
+            msg_bin = 0;
+            msg_offset = 0;
+            msg_len = 0;
+            msg_last = false;
             ini = ptr = end = NULL;
         }
 
@@ -96,6 +116,7 @@ namespace jpip {
             eof = false;
             ini = ptr = buf;
             end = ini + buf_len;
+            msg_start = NULL;
 
             return *this;
         }
@@ -121,6 +142,8 @@ namespace jpip {
          */
         DataBinWriter &SetCodestream(int value) {
             if (value < 0) value = 0;
+            if (codestream_idx != value)
+                FinishMessage();
             codestream_idx = value;
             return *this;
         }
@@ -131,6 +154,8 @@ namespace jpip {
          * @return The object itself.
          */
         DataBinWriter &SetDataBinClass(int databin_class) {
+            if (this->databin_class != databin_class)
+                FinishMessage();
             this->databin_class = databin_class;
             return *this;
         }
@@ -166,7 +191,8 @@ namespace jpip {
         /**
          * Returns the number of bytes written.
          */
-        ptrdiff_t GetCount() const {
+        ptrdiff_t GetCount() {
+            FinishMessage();
             return ptr - ini;
         }
 
@@ -183,6 +209,7 @@ namespace jpip {
          * @return The object itself.
          */
         DataBinWriter &WriteEOR(int reason) {
+            FinishMessage();
             if ((ptr + 3) > end) eof = true;
             else {
                 *ptr++ = 0;
