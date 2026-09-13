@@ -185,7 +185,7 @@ namespace jpip {
                 }
 
                 amount = INT_MAX;
-                if (in.peek() == ':') {
+                if (in.rdbuf()->sgetc() == ':') {
                     if (in.ignore(1).peek() != 'L') in >> amount;
                     else {
                         ERROR("Number of layers can not be used for model updating");

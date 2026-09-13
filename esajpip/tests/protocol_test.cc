@@ -50,6 +50,16 @@ static void CheckJHVRequests() {
     Check(req.round_direction == jpip::Request::CLOSEST, "Wrong frame rounding mode");
     Check(req.length_response == 2097152, "Wrong frame response limit");
 
+    Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
+          "Could not parse terminal cache model");
+    Check(req.mask.items.model, "Missing terminal cache model");
+    Check(req.cache_model.GetMetadata(0) == INT_MAX, "Wrong terminal metadata model");
+
+    Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
+          "Could not parse terminal partial cache model");
+    Check(req.mask.items.model, "Missing terminal partial cache model");
+    Check(req.cache_model.GetMetadata(0) == 446, "Wrong terminal partial metadata model");
+
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.mask.items.cclose && req.parameters["cclose"] == "7", "Missing close field");
     Check(req.codestreams.empty(), "A reused request retained its codestreams");
