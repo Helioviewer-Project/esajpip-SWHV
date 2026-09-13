@@ -1,6 +1,4 @@
 
-include_directories(${LOG4CPP}/include)
-
 set(CORE_SRCS
     src/Appender.cpp
     src/AppenderSkeleton.cpp
@@ -54,7 +52,12 @@ foreach(SRC ${CORE_SRCS})
     list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})
 endforeach()
 
-add_definitions(-DHAVE_CONFIG_H -DLOG4CPP_HAVE_SSTREAM -DLOG4CPP_HAVE_UNISTD_H -DLOG4CPP_HAVE_SNPRINTF)
-
 add_library(log4cpp SHARED ${LOG4CPP_SRCS})
+target_compile_definitions(log4cpp PRIVATE
+    HAVE_CONFIG_H
+    LOG4CPP_HAVE_SNPRINTF
+    LOG4CPP_HAVE_SSTREAM
+    LOG4CPP_HAVE_UNISTD_H)
+target_include_directories(log4cpp PRIVATE ${LOG4CPP}/include)
+target_link_libraries(log4cpp PRIVATE Threads::Threads)
 sidc_install_lib(log4cpp)
