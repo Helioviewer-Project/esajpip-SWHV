@@ -5,7 +5,7 @@
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
 #include "http/response.h"
-#include "net/socket_stream.h"
+#include "net/socket.h"
 
 #include <glib.h>
 #include <zlib.h>
@@ -27,6 +27,47 @@ using namespace net;
 using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
+
+class SocketReader {
+private:
+    Socket &socket;
+    char buf[1024];
+    size_t pos = 0;
+    size_t len = 0;
+
+public:
+    enum Result {
+        LINE,
+        CLOSED,
+        INCOMPLETE,
+        ERROR
+    };
+
+    explicit SocketReader(Socket &_socket) : socket(_socket) {
+    }
+
+    Result ReadLine(string &line) {
+        line.clear();
+        for (;;) {
+            const char *newline = static_cast<const char *>(memchr(buf + pos, '\n', len - pos));
+            if (newline != NULL) {
+                line.append(buf + pos, newline - (buf + pos));
+                pos = newline - buf + 1;
+                return LINE;
+            }
+
+            line.append(buf + pos, len - pos);
+            ssize_t received = socket.Receive(buf, sizeof buf);
+            if (received <= 0) {
+                if (received < 0)
+                    return ERROR;
+                return line.empty() ? CLOSED : INCOMPLETE;
+            }
+            pos = 0;
+            len = received;
+        }
+    }
+};
 
 static int SendAll(Socket &socket, iovec *buffers, int count) {
     while (count > 0) {
@@ -193,7 +234,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
     head_data_gzip << head_data.str() << "Content-Encoding: gzip" << Protocol::CRLF;
 
     Socket socket(fd);
-    SocketStream sock_stream(&socket, 1024);
+    SocketReader reader(socket);
     string channel = to_string(base_id);
 
     int log_requests = cfg.log_requests();
@@ -208,12 +249,12 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
             LOGC(_BLUE, "Waiting for a request ...");
 
         req_line_raw.clear();
-        errno = 0;
-        if (!getline(sock_stream, req_line_raw).good()) {
-            if (req_line_raw.empty() && errno == 0)
+        SocketReader::Result read_result = reader.ReadLine(req_line_raw);
+        if (read_result != SocketReader::LINE) {
+            if (read_result == SocketReader::CLOSED)
                 break;
 
-            if (errno != 0)
+            if (read_result == SocketReader::ERROR)
                 LOG("Request read error: " << strerror(errno));
             else {
                 char *escaped = g_strescape(req_line_raw.c_str(), NULL);
@@ -236,12 +277,16 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
             LOGC(_BLUE, "Request: " << req_line);
 
         http::Header header;
-        while ((sock_stream >> header).good()) {
+        string header_line;
+        while (reader.ReadLine(header_line) == SocketReader::LINE) {
+            if (!header_line.empty() && header_line.back() == '\r')
+                header_line.pop_back();
+            if (header_line.empty() || !header.Parse(header_line))
+                break;
             if (header.Is("Accept-Encoding") &&
                 header.value.find("gzip") != string::npos)
                 accept_gzip = true;
         }
-        sock_stream.clear();
 
         const char *err_msg = "";
         pclose = true;

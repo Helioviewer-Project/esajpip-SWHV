@@ -14,6 +14,7 @@ namespace http {
         Header() = default;
         Header(const std::string &_name, const std::string &_value);
 
+        bool Parse(const std::string &line);
         bool Is(const char *header_name) const;
 
         friend std::ostream &operator<<(std::ostream &out, const Header &header);

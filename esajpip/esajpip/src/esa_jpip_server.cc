@@ -11,7 +11,7 @@
 #include "args_parser.h"
 #include "client_manager.h"
 #include "net/poll_table.h"
-#include "net/socket_stream.h"
+#include "net/socket.h"
 
 using namespace std;
 using namespace net;
