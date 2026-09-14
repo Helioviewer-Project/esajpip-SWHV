@@ -40,24 +40,6 @@ namespace jpeg2000 {
             this->data_length = data_length;
         }
 
-        /**
-         * Copy constructor.
-         */
-        PlaceHolder(const PlaceHolder &place_holder) {
-            *this = place_holder;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        PlaceHolder &operator=(const PlaceHolder &place_holder) {
-            id = place_holder.id;
-            is_jp2c = place_holder.is_jp2c;
-            header = place_holder.header;
-            data_length = place_holder.data_length;
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const PlaceHolder &place_holder) {
             out << "Id: " << place_holder.id << endl;
             out << "JP2C: " << (place_holder.is_jp2c ? "Yes" : "No") << endl;

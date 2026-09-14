@@ -29,23 +29,6 @@ namespace jpeg2000 {
         CodestreamIndex() {
         }
 
-        /**
-         * Copy constructor.
-         */
-        CodestreamIndex(const CodestreamIndex &index) {
-            *this = index;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        const CodestreamIndex &operator=(const CodestreamIndex &index) {
-            header = index.header;
-            packets = index.packets;
-            PLT_markers = index.PLT_markers;
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const CodestreamIndex &index) {
             out << "Header: " << index.header << endl;
             out << "Packets: ";

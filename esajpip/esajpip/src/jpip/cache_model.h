@@ -59,24 +59,6 @@ namespace jpip {
             }
 
             /**
-             * Copy constructor.
-             */
-            Codestream(const Codestream &model) {
-                *this = model;
-            }
-
-            /**
-             * Copy assignment.
-             */
-            Codestream &operator=(const Codestream &model) {
-                header = model.header;
-                tile_header = model.tile_header;
-                min_precinct = model.min_precinct;
-                precincts = model.precincts;
-                return *this;
-            }
-
-            /**
              * Add the content of the given codestream cache model.
              */
             Codestream &operator+=(const Codestream &model) {
@@ -212,23 +194,6 @@ namespace jpip {
          */
         CacheModel() {
             full_meta = false;
-        }
-
-        /**
-         * Copy constructor.
-         */
-        CacheModel(const CacheModel &model) {
-            *this = model;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        CacheModel &operator=(const CacheModel &model) {
-            full_meta = model.full_meta;
-            meta_data = model.meta_data;
-            codestreams = model.codestreams;
-            return *this;
         }
 
         /**

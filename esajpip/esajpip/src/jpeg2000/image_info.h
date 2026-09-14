@@ -33,26 +33,6 @@ namespace jpeg2000 {
         ImageInfo() {
         }
 
-        /**
-         * Copy constructor.
-         */
-        ImageInfo(const ImageInfo &info) {
-            *this = info;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        const ImageInfo &operator=(const ImageInfo &info) {
-            meta_data = info.meta_data;
-            paths = info.paths;
-            coding_parameters = info.coding_parameters;
-            codestreams = info.codestreams;
-            coding_parameters_hyperlinks = info.coding_parameters_hyperlinks;
-            meta_data_hyperlinks = info.meta_data_hyperlinks;
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const ImageInfo &info) {
             out << "Coding parameters: " << endl
                 << "---------------------- " << endl

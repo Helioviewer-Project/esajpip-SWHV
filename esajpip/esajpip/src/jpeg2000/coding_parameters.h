@@ -100,30 +100,9 @@ namespace jpeg2000 {
         }
 
         /**
-         * Copy constructor.
-         */
-        CodingParameters(const CodingParameters &cod_params) {
-            *this = cod_params;
-        }
-
-        /**
          * Fills the vector <code>total_precincts</code>.
          */
         void FillTotalPrecinctsVector();
-
-        /**
-         * Copy assignment.
-         */
-        CodingParameters &operator=(const CodingParameters &cod_params) {
-            size = cod_params.size;
-            num_levels = cod_params.num_levels;
-            num_layers = cod_params.num_layers;
-            progression = cod_params.progression;
-            num_components = cod_params.num_components;
-            precinct_size = cod_params.precinct_size;
-            total_precincts = cod_params.total_precincts;
-            return *this;
-        }
 
         friend ostream &operator<<(ostream &out, const CodingParameters &params) {
             out << "Progression: " <<

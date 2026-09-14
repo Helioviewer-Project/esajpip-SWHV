@@ -39,13 +39,6 @@ namespace jpip {
         }
 
         /**
-         * Copy constructor.
-         */
-        WOIComposer(const WOIComposer &composer) {
-            *this = composer;
-        }
-
-        /**
          * Resets the packets navigation and starts a new one. Sets the
          * current packet to the first packet of the WOI, assuming a
          * LRCP order.
@@ -69,20 +62,6 @@ namespace jpip {
             if (max_precinct_xy.y != 0) max_precinct_xy.y--;
 
             current_packet.precinct_xy = min_precinct_xy;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        WOIComposer &operator=(const WOIComposer &composer) {
-            pxy1 = composer.pxy1;
-            pxy2 = composer.pxy2;
-            more_packets = composer.more_packets;
-            max_resolution = composer.max_resolution;
-            current_packet = composer.current_packet;
-            min_precinct_xy = composer.min_precinct_xy;
-            max_precinct_xy = composer.max_precinct_xy;
-            return *this;
         }
 
         /**

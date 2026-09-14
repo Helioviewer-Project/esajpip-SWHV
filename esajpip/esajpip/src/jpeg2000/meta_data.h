@@ -35,23 +35,6 @@ namespace jpeg2000 {
         Metadata() {
         }
 
-        /**
-         * Copy constructor.
-         */
-        Metadata(const Metadata &info) {
-            *this = info;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        Metadata &operator=(const Metadata &info) {
-            meta_data = info.meta_data;
-            bins = info.bins;
-            place_holders = info.place_holders;
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const Metadata &info) {
             out << endl << "Meta-data: ";
             for (size_t i = 0; i < info.meta_data.size(); ++i)

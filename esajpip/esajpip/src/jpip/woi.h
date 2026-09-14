@@ -42,23 +42,6 @@ namespace jpip {
         }
 
         /**
-         * Copy constructor.
-         */
-        WOI(const WOI &woi) {
-            *this = woi;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        WOI &operator=(const WOI &woi) {
-            size = woi.size;
-            position = woi.position;
-            resolution = woi.resolution;
-            return *this;
-        }
-
-        /**
          * Returns <code>true</code> if the two given WOIs
          * are equal.
          */
