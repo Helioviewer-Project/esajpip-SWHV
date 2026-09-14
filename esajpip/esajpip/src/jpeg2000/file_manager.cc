@@ -55,31 +55,27 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadImage(const string &name_image_file, ImageIndex *image_index) {
-        bool res = true;
         // Get file extension
         string extension;
         size_t pos = name_image_file.find_last_of(".");
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
-        if (extension == ".jp2") { // JP2 image
-            File *file = GetFile(name_image_file);
-            if (!file) {
-                ERROR("Unable to open file: '" << name_image_file << "'...");
-                return false;
-            }
-            res = res && ReadJP2(file, image_index);
-        } else if (extension == ".jpx") { // JPX image
-            File *file = GetFile(name_image_file);
-            if (!file) {
-                ERROR("Unable to open file: '" << name_image_file << "'...");
-                return false;
-            }
-            res = res && ReadJPX(file, image_index);
-        } else {
+        if (extension != ".jp2" && extension != ".jpx") {
             ERROR("File type not supported...");
             return false;
         }
 
+        File file;
+        if (!file.Open(name_image_file)) {
+            ERROR("Unable to open file: '" << name_image_file << "'...");
+            return false;
+        }
+
+        bool res;
+        if (extension == ".jp2")
+            res = ReadJP2(&file, image_index);
+        else
+            res = ReadJPX(&file, image_index);
         if (res && image_index->hyper_links.empty())
             image_index->coding_parameters.FillPrecinctCounts();
 
@@ -549,7 +545,6 @@ namespace jpeg2000 {
         for (size_t i = 0; i < paths.size() && res; ++i) {
             ImageIndex linked_image(paths[i]);
             res = ReadImage(paths[i], &linked_image);
-            file_map.erase(paths[i]);
             if (!res)
                 break;
 
