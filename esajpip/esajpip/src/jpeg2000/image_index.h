@@ -29,12 +29,20 @@ namespace jpeg2000 {
             explicit Stream(CodestreamIndex &&_codestream);
         };
 
+        struct Link {
+            string path_name;
+            CodingParameters coding_parameters;
+            Stream stream;
+
+            Link(ImageInfo &image_info, int index);
+        };
+
         string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
         CodingParameters coding_parameters; ///< Coding parameters
         vector<Stream> streams;
 
-        vector<ImageIndex> hyper_links; ///< Image hyperlinks
+        vector<Link> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -43,7 +51,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(File *file, Stream &stream, uint64_t *length_packet);
+        static bool GetPLTLength(File *file, Stream &stream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
@@ -52,23 +60,22 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        bool GetOffsetPacket(Stream &stream, uint64_t length_packet);
+        static bool GetOffsetPacket(Stream &stream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
          * @param stream Codestream index.
-         * @param max_index Maximum resolution level.
+         * @param r Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(File *file, Stream &stream, int max_index);
+        static bool BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r);
 
         ImageIndex(const string &path_name, ImageInfo &image_info);
 
-        ImageIndex(ImageInfo &image_info, int index);
+        ImageIndex(const ImageIndex &) = delete;
+        ImageIndex &operator=(const ImageIndex &) = delete;
 
     public:
-        ImageIndex(ImageIndex &&) = default;
-
         /**
          * Returns the number of codestreams.
          */
@@ -109,7 +116,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const FileSegment &GetMainHeader(int num_codestream) const {
-            return streams.empty() ? hyper_links[num_codestream].streams.back().codestream.header : streams[num_codestream].codestream.header;
+            return streams.empty() ? hyper_links[num_codestream].stream.codestream.header : streams[num_codestream].codestream.header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
@@ -159,8 +166,18 @@ namespace jpeg2000 {
                 for (int j = 0; j < info_node.streams[i].packet_index.Size(); ++j)
                     out << j << " - " << info_node.streams[i].packet_index[j] << endl;
             out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
-            for (size_t i = 0; i < info_node.hyper_links.size(); ++i)
-                out << "Hyperlinks: " << endl << "----------- " << endl << info_node.hyper_links[i] << endl << "----------- " << endl;
+            for (size_t i = 0; i < info_node.hyper_links.size(); ++i) {
+                const Link &link = info_node.hyper_links[i];
+                out << "Hyperlink: " << endl << "----------- " << endl
+                    << "Image file name: " << link.path_name << endl
+                    << "Max resolution: " << link.stream.max_resolution << endl
+                    << "Codestream index: " << endl << "----------------- " << endl
+                    << link.stream.codestream << endl << endl
+                    << "Packet index: " << endl << "------------- " << endl;
+                for (int j = 0; j < link.stream.packet_index.Size(); ++j)
+                    out << j << " - " << link.stream.packet_index[j] << endl;
+                out << "----------- " << endl;
+            }
 
             out << endl << "Meta-data: ";
             out << endl << info_node.meta_data << endl;
