@@ -87,7 +87,7 @@ namespace net {
           @param nstack Maximum number of clients in listening stack.
           @return <code>true</code> if successful.
         */
-        bool ListenAt(const Address &address, int nstack = 10) {
+        bool ListenAt(const InetAddress &address, int nstack = 10) {
             int flags = 1;
             if (setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags)) != 0) return false;
             if (::bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
@@ -95,22 +95,11 @@ namespace net {
         }
 
         /**
-          Connects the socket to a server.
-          @param to_address Address to connect.
-          @return <code>true</code> if successful.
-        */
-/*
-        bool ConnectTo(const Address &to_address) {
-            return (connect(sid, to_address.GetSockAddr(), to_address.GetSize()) == 0);
-        }
-*/
-
-        /**
          * Binds the socket to the specified address.
          * @param address Address to bind.
          * @return <code>true</code> if successful.
          */
-        bool BindTo(const Address &address) {
+        bool BindTo(const UnixAddress &address) {
             return !::bind(sid, address.GetSockAddr(), address.GetSize());
         }
 
@@ -119,7 +108,7 @@ namespace net {
           @param from_address Pointer to store the client address.
           @return The integer identifier (file descriptor) of the new socket.
         */
-        int Accept(Address *from_address) {
+        int Accept(InetAddress *from_address) {
             socklen_t len = from_address->GetSize();
             return accept(sid, from_address->GetSockAddr(), &len);
         }
@@ -139,7 +128,7 @@ namespace net {
           @param len Number of bytes to sent.
           @return The number of sent bytes.
         */
-        ssize_t SendTo(const Address &address, const void *buf, size_t len);
+        ssize_t SendTo(const UnixAddress &address, const void *buf, size_t len);
 
         /**
          * Sends a descriptor through the socket.
@@ -148,7 +137,7 @@ namespace net {
          * @param aux Auxiliary information to send attached.
          * @return true if successful.
          */
-        bool SendDescriptor(const Address &address, int fd, int aux = 0);
+        bool SendDescriptor(const UnixAddress &address, int fd, int aux = 0);
 
         /**
          * Receives a descriptor from a socket.

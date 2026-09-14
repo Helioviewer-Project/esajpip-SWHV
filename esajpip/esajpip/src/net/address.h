@@ -15,46 +15,11 @@ namespace net {
     using namespace std;
 
     /**
-     * Abstract base class to wrap the <code>sockaddr</code>
-     * derived structures. This class is the base of the
-     * address classes.
-     *
-     * @see InetAddress
-     * @see UnixAddress
-     */
-    class Address {
-    public:
-        /**
-         * Empty constructor.
-         */
-        Address() {
-        }
-
-        /**
-         * Returns a pointer to a <code>sockaddr</code> structure.
-         */
-        virtual sockaddr *GetSockAddr() const = 0;
-
-        /**
-         * Returns the size in bytes of the <code>sockaddr</code>
-         * structure returned by the previous method.
-         */
-        virtual socklen_t GetSize() const = 0;
-
-        /**
-         * Empty destructor.
-         */
-        virtual ~Address() {
-        }
-    };
-
-    /**
      * Class to identify and handle an Internet address. The
      * used internal address structure is <code>sockaddr_in</code>.
      *
-     * @see Address
      */
-    class InetAddress : public Address {
+    class InetAddress {
     private:
         sockaddr_in sock_addr;    ///< Internal address structure
 
@@ -65,13 +30,6 @@ namespace net {
         InetAddress() {
             memset(&sock_addr, 0, sizeof sock_addr);
             sock_addr.sin_family = AF_INET;
-        }
-
-        /**
-         * Copy constructor.
-         */
-        InetAddress(const InetAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
         }
 
         /**
@@ -119,27 +77,11 @@ namespace net {
             }
         }
 
-        /**
-         * Copy assignment.
-         */
-        InetAddress &operator=(const InetAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
-            return *this;
-        }
-
-        /**
-         * Overloaded from the base class to use the
-         * internal address structure.
-         */
-        virtual sockaddr *GetSockAddr() const {
+        sockaddr *GetSockAddr() const {
             return (sockaddr *) &sock_addr;
         }
 
-        /**
-         * Overloaded from the base class to use the
-         * internal address structure.
-         */
-        virtual socklen_t GetSize() const {
+        socklen_t GetSize() const {
             return sizeof sock_addr;
         }
 
@@ -162,9 +104,8 @@ namespace net {
      * Class to identify and handle an UNIX address. The
      * used internal address structure is <code>sockaddr_un</code>.
      *
-     * @see Address
      */
-    class UnixAddress : public Address {
+    class UnixAddress {
     private:
         sockaddr_un sock_addr;    ///< Internal address structure
 
@@ -178,13 +119,6 @@ namespace net {
         }
 
         /**
-         * Copy constructor.
-         */
-        UnixAddress(const UnixAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
-        }
-
-        /**
          * Initializes the address with given path.
          * @param path Address path.
          */
@@ -195,14 +129,6 @@ namespace net {
         }
 
         /**
-         * Copy assignment.
-         */
-        UnixAddress &operator=(const UnixAddress &address) {
-            memcpy(&sock_addr, &(address.sock_addr), sizeof sock_addr);
-            return *this;
-        }
-
-        /**
          * Removes the file associated to the UNIX address.
          */
         UnixAddress &Reset() {
@@ -210,19 +136,11 @@ namespace net {
             return *this;
         }
 
-        /**
-         * Overloaded from the base class to use the
-         * internal address structure.
-         */
-        virtual sockaddr *GetSockAddr() const {
+        sockaddr *GetSockAddr() const {
             return (sockaddr *) &sock_addr;
         }
 
-        /**
-         * Overloaded from the base class to use the
-         * internal address structure.
-         */
-        virtual socklen_t GetSize() const {
+        socklen_t GetSize() const {
             return sizeof sock_addr;
         }
 

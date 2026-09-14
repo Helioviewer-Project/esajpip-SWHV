@@ -9,11 +9,11 @@ namespace net {
         return recv(sid, buf, len, 0);
     }
 
-    ssize_t Socket::SendTo(const Address &address, const void *buf, size_t len) {
+    ssize_t Socket::SendTo(const UnixAddress &address, const void *buf, size_t len) {
         return sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
     }
 
-    bool Socket::SendDescriptor(const Address &address, int fd, int aux) {
+    bool Socket::SendDescriptor(const UnixAddress &address, int fd, int aux) {
         msghdr msg;
         cmsghdr *cmsg;
         alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
