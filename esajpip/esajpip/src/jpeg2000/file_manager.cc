@@ -31,6 +31,7 @@ namespace jpeg2000 {
                 image->hyper_links[i->second] = linked;
             }
         }
+        ClearFiles();
         return true;
     }
 
@@ -397,7 +398,8 @@ namespace jpeg2000 {
         // Get image info of the hyperlinked images
         for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; ++i) {
             ImageInfo image_info_hyperlink;
-            res = res && ReadImage(i->first, &image_info_hyperlink);
+            res = ReadImage(i->first, &image_info_hyperlink);
+            file_map.erase(i->first);
             if (!res)
                 break;
 
