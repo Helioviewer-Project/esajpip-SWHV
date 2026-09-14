@@ -437,12 +437,10 @@ namespace jpeg2000 {
         // Get the path of the hyperlinked image
         res = res && file->Seek(4, SEEK_CUR);
 
-        char path_char[length_box - 3];
-        res = res && file->Read(path_char, length_box - 4);
-        path_char[length_box - 4] = 0;
+        string local_path(length_box - 4, '\0');
+        res = res && file->Read(&local_path[0], local_path.size());
 
         if (res) {
-            string local_path = path_char;
             size_t found = local_path.find("file://") + 7;
             local_path = local_path.substr(found);
             //local_path = local_path.substr(found + 2);
