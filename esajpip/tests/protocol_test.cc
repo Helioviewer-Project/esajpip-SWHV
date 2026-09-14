@@ -16,6 +16,7 @@
 #include "jpip/jpip.h"
 #include "jpip/request.h"
 #include "jpip/woi_composer.h"
+#include "net/address.h"
 
 using namespace std;
 
@@ -84,6 +85,12 @@ static void CheckJHVRequests() {
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.mask.items.cclose && req.parameters["cclose"] == "7", "Missing close field");
     Check(req.codestreams.empty(), "A reused request retained its codestreams");
+}
+
+static void CheckInetAddress() {
+    net::InetAddress address("127.0.0.1", 8099);
+    Check(address.GetPath() == "127.0.0.1", "Wrong numeric Internet address");
+    Check(address.GetPort() == 8099, "Wrong Internet port");
 }
 
 static void CheckHTTPResponse() {
@@ -230,6 +237,7 @@ static void CheckMetadataPlaceHolder() {
 }
 
 int main() {
+    CheckInetAddress();
     CheckJHVRequests();
     CheckHTTPResponse();
     CheckWOIPackets();

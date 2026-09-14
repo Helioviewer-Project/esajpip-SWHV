@@ -95,19 +95,27 @@ namespace net {
         InetAddress(const char *path, uint16_t port) {
             memset(&sock_addr, 0, sizeof sock_addr);
 
-            hostent *hp = NULL;
             struct in_addr addr;
+            bool found = inet_aton(path, &addr);
+            if (!found) {
+                addrinfo hints;
+                memset(&hints, 0, sizeof hints);
+                hints.ai_family = AF_INET;
+                hints.ai_socktype = SOCK_STREAM;
 
-            if (!inet_aton(path, &addr)) {
-                hp = gethostbyname(path);
-            } else {
-                hp = gethostbyaddr((const void *) &addr, sizeof addr, AF_INET);
+                addrinfo *resolved = NULL;
+                if (getaddrinfo(path, NULL, &hints, &resolved) == 0 && resolved != NULL) {
+                    addr = ((sockaddr_in *) resolved->ai_addr)->sin_addr;
+                    found = true;
+                }
+                if (resolved != NULL)
+                    freeaddrinfo(resolved);
             }
 
-            if (hp != NULL) {
+            if (found) {
                 sock_addr.sin_family = AF_INET;
                 sock_addr.sin_port = htons(port);
-                sock_addr.sin_addr.s_addr = *((unsigned long *) hp->h_addr);
+                sock_addr.sin_addr = addr;
             }
         }
 
