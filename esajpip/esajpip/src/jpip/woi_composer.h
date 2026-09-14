@@ -67,20 +67,17 @@ namespace jpip {
         /**
          * Returns the current packet.
          */
-        Packet GetCurrentPacket() const {
+        const Packet &GetCurrentPacket() const {
             return current_packet;
         }
 
         /**
          * Moves to the next packet of the WOI.
-         * @param packet Pointer to store the current packet (not the next one).
          * @return <code>true</code> if successful.
          */
-        bool GetNextPacket(const CodingParameters *coding_parameters, Packet *packet = NULL) {
+        bool GetNextPacket(const CodingParameters *coding_parameters) {
             if (!more_packets) return false;
             else {
-                if (packet) *packet = current_packet;
-
                 if (current_packet.precinct_xy.x < max_precinct_xy.x) current_packet.precinct_xy.x++;
                 else {
                     current_packet.precinct_xy.x = min_precinct_xy.x;

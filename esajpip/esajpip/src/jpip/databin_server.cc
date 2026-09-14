@@ -100,14 +100,13 @@ namespace jpip {
                 }
 
                 if (has_woi) {
-                    Packet packet;
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
                     const CodingParameters *composer_parameters = image_index->GetCodingParameters(codestreams.front());
 
                     while (data_writer && !eof) {
-                        packet = woi_composer.GetCurrentPacket();
+                        const Packet &packet = woi_composer.GetCurrentPacket();
                         const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
 
                         File *file = files[current_idx];
