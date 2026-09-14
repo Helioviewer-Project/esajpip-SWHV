@@ -290,15 +290,32 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
 
         http::Header header;
         string header_line;
-        while (reader.ReadLine(header_line) == SocketReader::LINE) {
+        bool headers_complete = false;
+        for (;;) {
+            SocketReader::Result header_result = reader.ReadLine(header_line);
+            if (header_result != SocketReader::LINE) {
+                if (header_result == SocketReader::ERROR)
+                    LOG("Header read error: " << strerror(errno));
+                else if (header_result == SocketReader::INCOMPLETE)
+                    LOG("Incomplete HTTP header");
+                break;
+            }
             if (!header_line.empty() && header_line.back() == '\r')
                 header_line.pop_back();
-            if (header_line.empty() || !header.Parse(header_line))
+            if (header_line.empty()) {
+                headers_complete = true;
                 break;
+            }
+            if (!header.Parse(header_line)) {
+                LOG("Invalid HTTP header");
+                break;
+            }
             if (header.Is("Accept-Encoding") &&
                 header.value.find("gzip") != string::npos)
                 accept_gzip = true;
         }
+        if (!headers_complete)
+            break;
 
         const char *err_msg = "";
         pclose = true;
@@ -339,19 +356,23 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 if (!file_manager.OpenImage(file_name)) {
                     ERROR("The image file '" << file_name << "' can not be read");
                 } else {
-                    is_opened = true;
-                    data_server.SetRequest(file_manager, req);
-                    LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
+                    if (!data_server.SetRequest(file_manager, req)) {
+                        err_msg = "Invalid JPIP request for the selected image";
+                        LOG(err_msg);
+                    } else {
+                        is_opened = true;
+                        LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
-                    ostringstream msg;
-                    msg << http::Response(200, "OK")
-                            << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                            << http::Header("JPIP-tid", file_name)
-                            << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
-                            << (send_gzip ? head_data_gzip : head_data)
-                            << http::Protocol::CRLF;
-                    SendStream(socket, msg);
-                    send_data = true;
+                        ostringstream msg;
+                        msg << http::Response(200, "OK")
+                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                                << http::Header("JPIP-tid", file_name)
+                                << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
+                                << (send_gzip ? head_data_gzip : head_data)
+                                << http::Protocol::CRLF;
+                        SendStream(socket, msg);
+                        send_data = true;
+                    }
                 }
             }
         } else if (req.mask.items.cid) {
@@ -363,9 +384,13 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
                 } else {
-                    data_server.SetRequest(file_manager, req);
-                    SendOK(socket, send_gzip ? head_data_gzip : head_data);
-                    send_data = true;
+                    if (!data_server.SetRequest(file_manager, req)) {
+                        err_msg = "Invalid JPIP request for the selected image";
+                        LOG(err_msg);
+                    } else {
+                        SendOK(socket, send_gzip ? head_data_gzip : head_data);
+                        send_data = true;
+                    }
                 }
             }
         } else {

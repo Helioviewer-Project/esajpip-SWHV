@@ -16,6 +16,9 @@ namespace jpip {
     using namespace jpeg2000;
 
     class Request {
+    private:
+        bool valid;
+
     public:
         enum Type {
             GET,
@@ -143,6 +146,7 @@ namespace jpip {
         Request() {
             type = GET;
             object = "/";
+            valid = true;
             length_response = 0;
             round_direction = CLOSEST;
             codestreams.reserve(100);

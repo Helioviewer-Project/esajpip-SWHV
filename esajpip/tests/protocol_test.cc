@@ -74,12 +74,12 @@ static void CheckJHVRequests() {
     Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
     Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
 
-    Check(req.Parse("GET /jpip?model=M-1 HTTP/1.1"), "Could not parse request with negative metadata ID");
-    Check(!req.mask.items.model, "Accepted negative metadata ID");
-    Check(req.Parse("GET /jpip?model=P-1 HTTP/1.1"), "Could not parse request with negative precinct ID");
-    Check(!req.mask.items.model, "Accepted negative precinct ID");
-    Check(req.Parse("GET /jpip?model=M0:-1 HTTP/1.1"), "Could not parse request with negative model length");
-    Check(!req.mask.items.model, "Accepted negative model length");
+    Check(!req.Parse("GET /jpip?model=M-1 HTTP/1.1"), "Accepted negative metadata ID");
+    Check(!req.Parse("GET /jpip?model=P-1 HTTP/1.1"), "Accepted negative precinct ID");
+    Check(!req.Parse("GET /jpip?model=M0:-1 HTTP/1.1"), "Accepted negative model length");
+    Check(!req.Parse("GET /jpip?model= HTTP/1.1"), "Accepted empty cache model");
+    Check(!req.Parse("GET /jpip?model=M0% HTTP/1.1"), "Accepted truncated cache-model escape");
+    Check(!req.Parse("GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
 
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.mask.items.cclose && req.parameters["cclose"] == "7", "Missing close field");
@@ -147,6 +147,10 @@ static void CheckCacheModel() {
         Check(model.GetDataBin(bin_class, 2, 3) == 0, "Nonempty initial cache model");
         Check(model.AddToDataBin(bin_class, 2, 3, 17) == 17, "Wrong cache-model increment");
         Check(model.GetDataBin(bin_class, 2, 3) == 17, "Wrong cached data-bin length");
+        Check(model.AddToDataBin(bin_class, 2, 3, INT_MAX - 18) == INT_MAX - 1,
+              "Wrong large cache-model increment");
+        Check(model.AddToDataBin(bin_class, 2, 3, 2) == INT_MAX,
+              "Cache-model increment overflowed");
         Check(model.AddToDataBin(bin_class, 2, 3, 0, true) == INT_MAX,
               "Incomplete terminal cache model");
     }

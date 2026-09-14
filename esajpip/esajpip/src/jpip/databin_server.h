@@ -148,7 +148,7 @@ namespace jpip {
          * generating the chunks of data.
          * @param req Request.
          */
-        void SetRequest(FileManager &file_manager, const Request &req);
+        bool SetRequest(FileManager &file_manager, const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and

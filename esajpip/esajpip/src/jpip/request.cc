@@ -14,6 +14,7 @@ namespace jpip {
         string method, uri;
 
         type = UNKNOWN;
+        valid = true;
         if (line.empty())
             return false;
 
@@ -23,7 +24,7 @@ namespace jpip {
 
         type = GET;
         ParseURI(uri.substr(0, MAX_URI));
-        return true;
+        return valid;
     }
 
     void Request::ParseURI(const string &uri) {
@@ -92,12 +93,13 @@ namespace jpip {
                 TRACE("JPIP parameter: rsiz=" << woi_size.x << "," << woi_size.y);
             }
         } else if (param == "len") {
-            if (stream >> x) {
+            if ((stream >> x) && x >= 0) {
                 length_response = x;
                 mask.items.len = 1;
 
                 TRACE("JPIP parameter: len=" << length_response);
-            }
+            } else
+                valid = false;
         } else if (param == "stream") {
             if (stream >> x) {
                 x = CLAMP(x, 0, MAXC);
@@ -124,6 +126,8 @@ namespace jpip {
         } else if (param == "model") {
             if (ParseModel(stream))
                 mask.items.model = 1;
+            else
+                valid = false;
         } else if (param == "context") {
             char jpxl_param[5];
             stream.get(jpxl_param, 5);
@@ -189,7 +193,8 @@ namespace jpip {
         cache_model.Clear();
 
         while (in.good()) {
-            GetCodedChar(in, c);
+            if (!GetCodedChar(in, c))
+                break;
 
             if (c == ',') continue;
             else if (c == '&') {

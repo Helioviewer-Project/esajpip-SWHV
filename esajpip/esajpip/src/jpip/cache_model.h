@@ -41,6 +41,12 @@ namespace jpip {
              */
             int min_precinct;
 
+            static int AddAmount(int current, int amount) {
+                if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)
+                    return INT_MAX;
+                return current + amount;
+            }
+
         public:
             /**
              * Initializes all the members to zero.
@@ -86,8 +92,8 @@ namespace jpip {
              */
             int AddToMainHeader(int amount, bool complete = false) {
                 if (header != INT_MAX) {
-                    if (complete || (amount == INT_MAX)) header = INT_MAX;
-                    else header += amount;
+                    if (complete) header = INT_MAX;
+                    else header = AddAmount(header, amount);
                 }
                 return header;
             }
@@ -101,8 +107,8 @@ namespace jpip {
              */
             int AddToTileHeader(int amount, bool complete = false) {
                 if (tile_header != INT_MAX) {
-                    if (complete || (amount == INT_MAX)) tile_header = INT_MAX;
-                    else tile_header += amount;
+                    if (complete) tile_header = INT_MAX;
+                    else tile_header = AddAmount(tile_header, amount);
                 }
                 return tile_header;
             }
@@ -135,8 +141,8 @@ namespace jpip {
                     if (n >= (int) precincts.size()) precincts.resize(n + 1, 0);
                     int &p = precincts[n];
                     if (p != INT_MAX) {
-                        if (complete || (amount == INT_MAX)) p = INT_MAX;
-                        else p += amount;
+                        if (complete) p = INT_MAX;
+                        else p = AddAmount(p, amount);
                     }
                     return p;
                 }
@@ -180,6 +186,12 @@ namespace jpip {
          * Amounts for the codestreams.
          */
         vector<Codestream> codestreams;
+
+        static int AddAmount(int current, int amount) {
+            if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)
+                return INT_MAX;
+            return current + amount;
+        }
 
     public:
         /**
@@ -235,8 +247,8 @@ namespace jpip {
             if (full_meta) return INT_MAX;
             else {
                 if (GetMetadata(id) != INT_MAX) {
-                    if (complete || (amount == INT_MAX)) meta_data[id] = INT_MAX;
-                    else meta_data[id] += amount;
+                    if (complete) meta_data[id] = INT_MAX;
+                    else meta_data[id] = AddAmount(meta_data[id], amount);
                 }
                 return meta_data[id];
             }
