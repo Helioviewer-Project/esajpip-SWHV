@@ -367,7 +367,8 @@ namespace jpeg2000 {
         }
         image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
-        assert(v_data_reference.size() == v_path_file.size());
+        if (!res || v_data_reference.size() != v_path_file.size())
+            return false;
         image_info->paths = std::move(v_path_file);
 
         if (!image_info->paths.empty()) {
@@ -398,6 +399,9 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadUrlBox(File *file, uint64_t length_box, string *path_file) {
+        if (length_box < 5)
+            return false;
+
         bool res = true;
         // Get the path of the hyperlinked image
         res = res && file->Seek(4, SEEK_CUR);
