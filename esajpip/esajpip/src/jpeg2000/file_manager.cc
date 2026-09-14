@@ -406,6 +406,7 @@ namespace jpeg2000 {
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
         vector<CodestreamIndex> codestreams;
+        size_t num_codestreams = 0;
         vector<pair<uint32_t, uint64_t>> containers;
         containers.emplace_back(0, file->GetSize());
 
@@ -433,20 +434,21 @@ namespace jpeg2000 {
             uint64_t box_end = file->GetOffset() + length_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
-                    codestreams.emplace_back();
+                    num_codestreams++;
                     if (length_box != 0)
                         containers.emplace_back(type_box, box_end);
                     break;
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    if (codestreams.empty()) {
+                    if (num_codestreams == 0 || codestreams.size() >= num_codestreams) {
                         res = false;
                         break;
                     }
+                    codestreams.emplace_back();
                     res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
                                                 &codestreams.back());
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
-                            PlaceHolder(codestreams.size() - 1, true,
+                            PlaceHolder(num_codestreams - 1, true,
                                         FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
@@ -510,7 +512,7 @@ namespace jpeg2000 {
         }
         image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
 
-        if (!res || containers.size() != 1 || codestreams.empty() ||
+        if (!res || containers.size() != 1 || num_codestreams == 0 ||
             v_path_file.size() != num_data_references)
             return false;
 
@@ -532,12 +534,16 @@ namespace jpeg2000 {
 
         // Resolve the linked codestreams.
         if (paths.empty()) {
-            image_index->streams.reserve(codestreams.size());
+            if (codestreams.size() != num_codestreams)
+                return false;
+            image_index->streams.reserve(num_codestreams);
             for (CodestreamIndex &codestream : codestreams)
                 image_index->streams.emplace_back(std::move(codestream));
             return true;
         }
 
+        if (paths.size() != num_codestreams)
+            return false;
         vector<CodestreamIndex>().swap(codestreams);
         image_index->hyper_links.reserve(paths.size());
         for (size_t i = 0; i < paths.size() && res; ++i) {
