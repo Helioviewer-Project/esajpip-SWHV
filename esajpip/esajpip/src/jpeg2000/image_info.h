@@ -25,7 +25,6 @@ namespace jpeg2000 {
         CodingParameters coding_parameters;        ///< Coding parameters
         vector<CodestreamIndex> codestreams;    ///< Codestreams information
         vector<CodingParameters> coding_parameters_hyperlinks; ///< Coding parameters of the hyperlinks
-        vector<Metadata> meta_data_hyperlinks;    ///< Meta-data of the hyperlinks
 
         /**
          * Empty constructor.
@@ -52,9 +51,6 @@ namespace jpeg2000 {
             }
             out << endl << "Meta-data: ";
             out << info.meta_data << endl << endl;
-            out << endl << "Meta-data-hyperlinks: ";
-            for (size_t i = 0; i < info.meta_data_hyperlinks.size(); ++i)
-                out << info.meta_data_hyperlinks[i] << " ";
 
             return out;
         }

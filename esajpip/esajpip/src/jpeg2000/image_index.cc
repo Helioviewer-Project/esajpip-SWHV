@@ -28,7 +28,6 @@ namespace jpeg2000 {
     ImageIndex::ImageIndex(ImageInfo &image_info, int index) {
         path_name = std::move(image_info.paths[index]);
 
-        meta_data = std::move(image_info.meta_data_hyperlinks[index]);
         coding_parameters = std::move(image_info.coding_parameters_hyperlinks[index]);
         codestreams.push_back(std::move(image_info.codestreams[index]));
         max_resolution.push_back(-1);

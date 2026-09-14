@@ -373,7 +373,6 @@ namespace jpeg2000 {
         if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
             image_info->coding_parameters_hyperlinks.resize(image_info->paths.size());
-            image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }
         // Get image info of the hyperlinked images
         for (size_t i = 0; i < image_info->paths.size() && res; ++i) {
@@ -385,7 +384,6 @@ namespace jpeg2000 {
 
             image_info->coding_parameters_hyperlinks[i] = std::move(image_info_hyperlink.coding_parameters);
             image_info->codestreams[i] = std::move(image_info_hyperlink.codestreams.back());
-            image_info->meta_data_hyperlinks[i] = std::move(image_info_hyperlink.meta_data);
         }
         return res;
     }
