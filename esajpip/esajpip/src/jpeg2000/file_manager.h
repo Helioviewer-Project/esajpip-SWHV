@@ -16,8 +16,6 @@ namespace jpeg2000 {
         string root_dir_;    ///< Root directory of the repository
 
         ImageIndex::Ptr image;
-        CodingParameters coding_parameters; ///< Image coding parameters
-
         map<string, File::Ptr> file_map;
 
         /**
@@ -153,13 +151,6 @@ namespace jpeg2000 {
 
         const ImageIndex::Ptr GetImage() const {
             return image;
-        }
-
-        /**
-         * Returns a pointer to the coding parameters.
-         */
-        const CodingParameters *GetCodingParameters() const {
-            return &coding_parameters;
         }
 
         bool OpenImage(string &path_image_file);

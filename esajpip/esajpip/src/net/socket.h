@@ -125,64 +125,21 @@ namespace net {
         }
 
         /**
-          Set the blocking mode of the send/receive operations.
-          By default, this mode is true.
-          @param state Blocking mode state to set.
-        */
-        bool SetBlockingMode(bool state = true);
-
-        /**
-          @return The blocking mode of the send/receive operations.
-        */
-        bool IsBlockingMode();
-
-        /**
-          Receives a number of bytes. This methods allows to prevent
-          blocking, without having into account the default blocking
-          mode stablished.
+          Receives a number of bytes.
           @param buf Buffer where to store the received bytes.
           @param len Length of the buffer.
-          @param prevent_block true if blocking will be prevented.
           @return The number of received bytes.
         */
-        ssize_t Receive(void *buf, size_t len, bool prevent_block = false);
+        ssize_t Receive(void *buf, size_t len);
 
         /**
-          Receives a number of bytes. This methods allows to prevent
-          blocking, without having into account the default blocking
-          mode stablished.
-          @param address Pointer to store the from address.
-          @param buf Buffer where to store the received bytes.
-          @param len Length of the buffer.
-          @param prevent_block true if blocking will be prevented.
-          @return The number of received bytes.
-        */
-        ssize_t ReceiveFrom(Address *address, void *buf, size_t len,
-                        bool prevent_block = false);
-
-        /**
-          Sends a number of bytes. This methods allows to prevent
-          blocking, without having into account the default blocking
-          mode stablished.
-          @param buf Buffer with the bytes to sent.
-          @param len Number of bytes to sent.
-          @param prevent_block true if blocking will be prevented.
-          @return The number of sent bytes.
-        */
-        ssize_t Send(const void *buf, size_t len, bool prevent_block = false);
-
-        /**
-          Sends a number of bytes to a specific address. This methods
-          allows to prevent blocking, without having into account the
-          default blocking mode established.
+          Sends a number of bytes to a specific address.
           @param address Address to send the bytes.
           @param buf Buffer with the bytes to sent.
           @param len Number of bytes to sent.
-          @param prevent_block true if blocking will be prevented.
           @return The number of sent bytes.
         */
-        ssize_t SendTo(const Address &address, const void *buf, size_t len,
-                   bool prevent_block = false);
+        ssize_t SendTo(const Address &address, const void *buf, size_t len);
 
         /**
          * Sends a descriptor through the socket.
@@ -192,26 +149,6 @@ namespace net {
          * @return true if successful.
          */
         bool SendDescriptor(const Address &address, int fd, int aux = 0);
-
-        /**
-         * Returns <code>true</code> if the sockets is valid, that is,
-         * if after a polling regarding error status is not successful.
-         */
-        bool IsValid();
-
-        /**
-         * Waits until input data is available (<code>POLLIN</code>).
-         * @param time_out Time out (infinite by default).
-         * @return The value returned by the <code>poll</code> function.
-         */
-        int WaitForInput(int time_out = -1);
-
-        /**
-         * Waits until output data can be sent (<code>POLLOUT</code>).
-         * @param time_out Time out (infinite by default).
-         * @return The value returned by the <code>poll</code> function.
-         */
-        int WaitForOutput(int time_out = -1);
 
         /**
          * Receives a descriptor from a socket.
