@@ -122,12 +122,12 @@ void ClientManager::Run(ClientInfo *client_info) {
     }
 
     ostringstream head_data, head_data_gzip;
-    head_data << http::Header::AccessControlAllowOrigin(CORS)
-            << http::Header::StrictTransportSecurity(STS)
-            << http::Header::CacheControl(NOCACHE)
-            << http::Header::TransferEncoding("chunked")
-            << http::Header::ContentType("image/jpp-stream");
-    head_data_gzip << head_data.str() << http::Header::ContentEncoding("gzip");
+    head_data << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
+              << "Strict-Transport-Security: " << STS << Protocol::CRLF
+              << "Cache-Control: " << NOCACHE << Protocol::CRLF
+              << "Transfer-Encoding: chunked" << Protocol::CRLF
+              << "Content-Type: image/jpp-stream" << Protocol::CRLF;
+    head_data_gzip << head_data.str() << "Content-Encoding: gzip" << Protocol::CRLF;
 
     Socket socket(fd);
     SocketStream sock_stream(&socket, 1024);
@@ -175,7 +175,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
         http::Header header;
         while ((sock_stream >> header).good()) {
-            if (header == http::Header::AcceptEncoding() &&
+            if (header.Is("Accept-Encoding") &&
                 header.value.find("gzip") != string::npos)
                 accept_gzip = true;
         }
@@ -202,10 +202,10 @@ void ClientManager::Run(ClientInfo *client_info) {
 
                 ostringstream msg;
                 msg << http::Response(200)
-                        << http::Header::AccessControlAllowOrigin(CORS)
-                        << http::Header::StrictTransportSecurity(STS)
-                        << http::Header::CacheControl(NOCACHE)
-                        << http::Header::ContentLength("0")
+                        << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
+                        << "Strict-Transport-Security: " << STS << Protocol::CRLF
+                        << "Cache-Control: " << NOCACHE << Protocol::CRLF
+                        << "Content-Length: 0" << Protocol::CRLF
                         << http::Protocol::CRLF;
                 SendStream(socket, msg);
                 break; // break connection
@@ -228,7 +228,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     msg << http::Response(200)
                             << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                             << http::Header("JPIP-tid", file_name)
-                            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                            << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
                             << http::Protocol::CRLF;
                     SendStream(socket, msg);
@@ -264,10 +264,10 @@ void ClientManager::Run(ClientInfo *client_info) {
             size_t err_msg_len = strlen(err_msg);
             ostringstream msg;
             msg << http::Response(500)
-                    << http::Header::AccessControlAllowOrigin(CORS)
-                    << http::Header::StrictTransportSecurity(STS)
-                    << http::Header::CacheControl(NOCACHE)
-                    << http::Header::ContentLength(to_string(err_msg_len))
+                    << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
+                    << "Strict-Transport-Security: " << STS << Protocol::CRLF
+                    << "Cache-Control: " << NOCACHE << Protocol::CRLF
+                    << "Content-Length: " << err_msg_len << Protocol::CRLF
                     << http::Protocol::CRLF;
             if (err_msg_len)
                 msg << err_msg;
