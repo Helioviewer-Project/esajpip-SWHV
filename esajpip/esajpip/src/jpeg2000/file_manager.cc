@@ -48,7 +48,7 @@ namespace jpeg2000 {
     static bool SkipMarker(File *file, uint64_t limit) {
         uint16_t length = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&length) || length < 2 ||
-            length - 2 > limit - file->GetOffset())
+            static_cast<uint64_t>(length) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(length - 2, SEEK_CUR);
         return true;
@@ -171,7 +171,7 @@ namespace jpeg2000 {
     bool FileManager::ReadSIZMarker(File *file, uint64_t limit, CodingParameters *params) {
         uint16_t lsiz = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < 41 ||
-            lsiz - 2 > limit - file->GetOffset())
+            static_cast<uint64_t>(lsiz) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(2, SEEK_CUR); // Rsiz
 
@@ -216,7 +216,7 @@ namespace jpeg2000 {
         uint8_t cb_height = 0;
         uint8_t transform = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < 12 ||
-            lcod - 2 > limit - file->GetOffset() ||
+            static_cast<uint64_t>(lcod) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&cs_buf) || !file->ReadReverse(&progression) ||
             !file->ReadReverse(&quality_layers) || !file->ReadReverse(&mct) ||
             !file->ReadReverse(&transform_levels) || !file->ReadReverse(&cb_width) ||
@@ -280,7 +280,7 @@ namespace jpeg2000 {
         // Get Lplt
         uint16_t lplt = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < 4 ||
-            lplt - 2 > limit - file->GetOffset())
+            static_cast<uint64_t>(lplt) - 2 > limit - file->GetOffset())
             return false;
 
         // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
