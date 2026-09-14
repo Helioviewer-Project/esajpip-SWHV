@@ -135,6 +135,24 @@ static void CheckHTTPHeaders() {
     Check(!end_of_headers.good() && end_of_headers.eof(), "Did not recognize the end of HTTP headers");
 }
 
+static void CheckCacheModel() {
+    jpip::CacheModel model;
+    const int classes[] = {
+        jpip::DataBinClass::META_DATA,
+        jpip::DataBinClass::MAIN_HEADER,
+        jpip::DataBinClass::TILE_HEADER,
+        jpip::DataBinClass::PRECINCT
+    };
+
+    for (int bin_class : classes) {
+        Check(model.GetDataBin(bin_class, 2, 3) == 0, "Nonempty initial cache model");
+        Check(model.AddToDataBin(bin_class, 2, 3, 17) == 17, "Wrong cache-model increment");
+        Check(model.GetDataBin(bin_class, 2, 3) == 17, "Wrong cached data-bin length");
+        Check(model.AddToDataBin(bin_class, 2, 3, 0, true) == INT_MAX,
+              "Incomplete terminal cache model");
+    }
+}
+
 static void CheckWOIPackets() {
     jpeg2000::CodingParameters coding_parameters;
     coding_parameters.size = jpeg2000::Size(1, 1);
@@ -288,6 +306,7 @@ static void CheckMetadataPlaceHolder() {
 int main() {
     CheckInetAddress();
     CheckJHVRequests();
+    CheckCacheModel();
     CheckHTTPHeaders();
     CheckHTTPResponse();
     CheckWOIPackets();

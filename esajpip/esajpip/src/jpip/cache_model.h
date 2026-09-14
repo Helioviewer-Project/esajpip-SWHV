@@ -1,6 +1,7 @@
 #ifndef _JPIP_CACHE_MODEL_H_
 #define _JPIP_CACHE_MODEL_H_
 
+#include <cassert>
 #include <vector>
 #include <iostream>
 #include <limits.h>
@@ -8,14 +9,6 @@
 
 namespace jpip {
     using namespace std;
-
-    /**
-     * Template class that is specialized for allowing basic operations
-     * (add and get) with cache models depending on the data-bin classes.
-     */
-    template<int BIN_CLASS>
-    struct DataBinSelector {
-    };
 
     /**
      * The cache model of a JPIP client is handled using this class.
@@ -249,30 +242,35 @@ namespace jpip {
             }
         }
 
-        /**
-         * Returns the amount of a data-bin item using the class
-         * <code>DataBinSelector</code>.
-         * @param num_codestream Index number of the associated codestream.
-         * @param id Index number of the data-bin.
-         */
-        template<int BIN_CLASS>
-        int GetDataBin(int num_codestream, int id) {
-            return DataBinSelector<BIN_CLASS>::Get(*this, num_codestream, id);
+        int GetDataBin(int bin_class, int num_codestream, int id) {
+            switch (bin_class) {
+                case DataBinClass::META_DATA:
+                    return GetMetadata(id);
+                case DataBinClass::MAIN_HEADER:
+                    return GetCodestream(num_codestream).GetMainHeader();
+                case DataBinClass::TILE_HEADER:
+                    return GetCodestream(num_codestream).GetTileHeader();
+                case DataBinClass::PRECINCT:
+                    return GetCodestream(num_codestream).GetPrecinct(id);
+            }
+            assert(false);
+            return 0;
         }
 
-        /**
-         * Increases the amount of a data-bin item using the
-         * class <code>DataBinSelector</code>.
-         * @param num_codestream Index number of the associated codestream.
-         * @param id Index number of the data-bin.
-         * @param amount Amount increment.
-         * @param complete <code>true</code> if the data-bin is complete
-         * after the increment.
-         * @return the new amount value.
-         */
-        template<int BIN_CLASS>
-        int AddToDataBin(int num_codestream, int id, int amount, bool complete = false) {
-            return DataBinSelector<BIN_CLASS>::AddTo(*this, num_codestream, id, amount, complete);
+        int AddToDataBin(int bin_class, int num_codestream, int id, int amount,
+                         bool complete = false) {
+            switch (bin_class) {
+                case DataBinClass::META_DATA:
+                    return AddToMetadata(id, amount, complete);
+                case DataBinClass::MAIN_HEADER:
+                    return GetCodestream(num_codestream).AddToMainHeader(amount, complete);
+                case DataBinClass::TILE_HEADER:
+                    return GetCodestream(num_codestream).AddToTileHeader(amount, complete);
+                case DataBinClass::PRECINCT:
+                    return GetCodestream(num_codestream).AddToPrecinct(id, amount, complete);
+            }
+            assert(false);
+            return 0;
         }
 
         /**
@@ -307,50 +305,6 @@ namespace jpip {
             codestreams.clear();
         }
 
-    };
-
-    template<>
-    struct DataBinSelector<DataBinClass::META_DATA> {
-        static int Get(CacheModel &model, int num_codestream, int id) {
-            return model.GetMetadata(id);
-        }
-
-        static int AddTo(CacheModel &model, int num_codestream, int id, int amount, bool complete) {
-            return model.AddToMetadata(id, amount, complete);
-        }
-    };
-
-    template<>
-    struct DataBinSelector<DataBinClass::MAIN_HEADER> {
-        static int Get(CacheModel &model, int num_codestream, int id) {
-            return model.GetCodestream(num_codestream).GetMainHeader();
-        }
-
-        static int AddTo(CacheModel &model, int num_codestream, int id, int amount, bool complete) {
-            return model.GetCodestream(num_codestream).AddToMainHeader(amount, complete);
-        }
-    };
-
-    template<>
-    struct DataBinSelector<DataBinClass::TILE_HEADER> {
-        static int Get(CacheModel &model, int num_codestream, int id) {
-            return model.GetCodestream(num_codestream).GetTileHeader();
-        }
-
-        static int AddTo(CacheModel &model, int num_codestream, int id, int amount, bool complete) {
-            return model.GetCodestream(num_codestream).AddToTileHeader(amount, complete);
-        }
-    };
-
-    template<>
-    struct DataBinSelector<DataBinClass::PRECINCT> {
-        static int Get(CacheModel &model, int num_codestream, int id) {
-            return model.GetCodestream(num_codestream).GetPrecinct(id);
-        }
-
-        static int AddTo(CacheModel &model, int num_codestream, int id, int amount, bool complete) {
-            return model.GetCodestream(num_codestream).AddToPrecinct(id, amount, complete);
-        }
     };
 }
 

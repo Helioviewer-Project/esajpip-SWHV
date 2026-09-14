@@ -64,7 +64,7 @@ namespace jpip {
          */
         template<int BIN_CLASS>
         int WriteSegment(File *file, int num_codestream, int id, const FileSegment &segment, int offset = 0, bool last = true) {
-            int cached = cache_model.GetDataBin<BIN_CLASS>(num_codestream, id);
+            int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
             if (cached != INT_MAX && seg_cached <= (int) segment.length) {
@@ -88,7 +88,7 @@ namespace jpip {
                     data_writer.SetDataBinClass(BIN_CLASS);
 
                     if (!data_writer.Write(id, cached, *file, part, last)) res = -1;
-                    else cache_model.AddToDataBin<BIN_CLASS>(num_codestream, id, part.length, last);
+                    else cache_model.AddToDataBin(BIN_CLASS, num_codestream, id, part.length, last);
                 }
             }
             return res;
@@ -106,7 +106,7 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         int WritePlaceHolder(File *file, int num_codestream, int id, const PlaceHolder &place_holder, int offset = 0, bool last = false) {
-            int cached = cache_model.GetDataBin<DataBinClass::META_DATA>(num_codestream, id);
+            int cached = cache_model.GetDataBin(DataBinClass::META_DATA, num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
             if (cached != INT_MAX && seg_cached < place_holder.length()) {
@@ -121,7 +121,8 @@ namespace jpip {
 
                     if (!data_writer.WritePlaceHolder(id, cached, *file, place_holder, last)) res = -1;
                     else
-                        cache_model.AddToDataBin<DataBinClass::META_DATA>(num_codestream, id, place_holder.length(), last);
+                        cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,
+                                                 place_holder.length(), last);
                 }
             }
             return res;
