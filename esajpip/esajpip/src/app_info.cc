@@ -60,7 +60,7 @@ AppInfo &AppInfo::Update() {
         size_t len = sizeof(physmem);
         static int mib[2] = {CTL_HW, HW_PHYSMEM};
 
-        sysctl(mib, sizeof(mib) * sizeof(mib[0]), &physmem, &len, NULL, 0);
+        sysctl(mib, sizeof(mib) / sizeof(mib[0]), &physmem, &len, NULL, 0);
         available_memory_ = (double) physmem;
     }
 #endif

@@ -1,7 +1,6 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <cassert>
 #include <cstring>
 #include "socket.h"
 #include "poll_table.h"
@@ -83,9 +82,7 @@ namespace net {
     bool Socket::SendDescriptor(const Address &address, int fd, int aux) {
         msghdr msg;
         cmsghdr *cmsg;
-        char ccmsg[50];
-
-        assert(sizeof(ccmsg) >= CMSG_SPACE(sizeof(int)));
+        alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
 
         struct iovec iov;
         memset(&iov, 0, sizeof iov);
@@ -116,9 +113,7 @@ namespace net {
     bool Socket::ReceiveDescriptor(int *fd, int *aux) {
         msghdr msg;
         cmsghdr *cmsg;
-        char ccmsg[50];
-
-        assert(sizeof(ccmsg) >= CMSG_SPACE(sizeof(int)));
+        alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
 
         int aux2;
         iovec iov;
