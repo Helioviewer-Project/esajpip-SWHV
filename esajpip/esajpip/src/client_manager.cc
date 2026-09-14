@@ -108,6 +108,17 @@ static int SendStream(Socket &socket, const ostringstream &stream) {
     return SendAll(socket, str.data(), str.size());
 }
 
+static int SendOK(Socket &socket, const string &headers) {
+    static const char status[] = "HTTP/1.1 200 OK\r\n";
+    static const char end_headers[] = "\r\n";
+    iovec buffers[] = {
+        {const_cast<char *>(status), sizeof status - 1},
+        {const_cast<char *>(headers.data()), headers.size()},
+        {const_cast<char *>(end_headers), sizeof end_headers - 1}
+    };
+    return SendAll(socket, buffers, 3);
+}
+
 static int SendChunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
         char header[2 * sizeof(size_t) + 3];
@@ -225,13 +236,14 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
         return;
     }
 
-    ostringstream head_data, head_data_gzip;
-    head_data << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
-              << "Strict-Transport-Security: " << STS << Protocol::CRLF
-              << "Cache-Control: " << NOCACHE << Protocol::CRLF
-              << "Transfer-Encoding: chunked" << Protocol::CRLF
-              << "Content-Type: image/jpp-stream" << Protocol::CRLF;
-    head_data_gzip << head_data.str() << "Content-Encoding: gzip" << Protocol::CRLF;
+    ostringstream header_stream;
+    header_stream << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
+                  << "Strict-Transport-Security: " << STS << Protocol::CRLF
+                  << "Cache-Control: " << NOCACHE << Protocol::CRLF
+                  << "Transfer-Encoding: chunked" << Protocol::CRLF
+                  << "Content-Type: image/jpp-stream" << Protocol::CRLF;
+    const string head_data = header_stream.str();
+    const string head_data_gzip = head_data + "Content-Encoding: gzip" + Protocol::CRLF;
 
     Socket socket(fd);
     SocketReader reader(socket);
@@ -336,7 +348,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                             << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                             << http::Header("JPIP-tid", file_name)
                             << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
-                            << (send_gzip ? head_data_gzip.str() : head_data.str())
+                            << (send_gzip ? head_data_gzip : head_data)
                             << http::Protocol::CRLF;
                     SendStream(socket, msg);
                     send_data = true;
@@ -352,11 +364,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                     LOG(err_msg);
                 } else {
                     data_server.SetRequest(file_manager, req);
-                    ostringstream msg;
-                    msg << http::Response(200, "OK")
-                            << (send_gzip ? head_data_gzip.str() : head_data.str())
-                            << http::Protocol::CRLF;
-                    SendStream(socket, msg);
+                    SendOK(socket, send_gzip ? head_data_gzip : head_data);
                     send_data = true;
                 }
             }
