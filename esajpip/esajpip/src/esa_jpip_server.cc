@@ -9,7 +9,6 @@
 #include "app_info.h"
 #include "app_config.h"
 #include "args_parser.h"
-#include "client_info.h"
 #include "client_manager.h"
 #include "net/poll_table.h"
 #include "net/socket_stream.h"
@@ -34,6 +33,12 @@ static PollTable poll_table;
 static bool child_lost = false;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
+
+struct ClientInfo {
+    int base_id;
+    int sock;
+    int father_sock;
+};
 
 static int ChildProcess(const pthread_attr_t *pattr);
 
@@ -192,7 +197,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 
     for (int i = 2; i < poll_table.GetSize(); ++i) {
         sock = poll_table[i].fd;
-        client_info = new ClientInfo(0, sock, sock);
+        client_info = new ClientInfo{0, sock, sock};
 
         LOG("Creating a client thread for the old connection [" << sock << "]");
 
@@ -209,7 +214,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
             ERROR("The new socket can not be received by the child process: " << strerror(errno));
             continue;
         }
-        client_info = new ClientInfo(base_id++, sock, father_sock);
+        client_info = new ClientInfo{base_id++, sock, father_sock};
 
         LOG("Creating a client thread for the new connection [" << sock << "|" << father_sock << "]");
 
@@ -226,9 +231,9 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 static void *ClientThread(void *arg) {
     ClientInfo *client_info = (ClientInfo *) arg;
 
-    ClientManager(cfg).Run(client_info);
+    RunClient(cfg, client_info->sock, client_info->base_id);
 
-    int sock = client_info->father_sock();
+    int sock = client_info->father_sock;
     if (child_socket.SendTo(father_address, &sock, sizeof sock) != sizeof sock)
         ERROR("The connection [" << sock << "] could not be closed");
 

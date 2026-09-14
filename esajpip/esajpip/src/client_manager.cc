@@ -88,8 +88,7 @@ static const int true_val = 1;
 // static const int false_val = 0;
 static const int sndbuf_val = 524288;
 
-void ClientManager::Run(ClientInfo *client_info) {
-    int fd = client_info->sock();
+void RunClient(const AppConfig &cfg, int fd, int base_id) {
     int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
                       // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
                       setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
@@ -132,7 +131,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
     Socket socket(fd);
     SocketStream sock_stream(&socket, 1024);
-    string channel = to_string(client_info->base_id());
+    string channel = to_string(base_id);
 
     int chunk_len = 0;
     int log_requests = cfg.log_requests();
