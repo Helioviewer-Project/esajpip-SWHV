@@ -377,10 +377,23 @@ namespace jpeg2000 {
         }
         image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
-        if (!res || v_path_file.size() != num_data_references ||
-            v_data_reference.size() != v_path_file.size())
+        if (!res || v_path_file.size() != num_data_references)
             return false;
-        image_info->paths = std::move(v_path_file);
+
+        bool sequential_references = v_data_reference.size() == v_path_file.size();
+        for (size_t i = 0; i < v_data_reference.size(); ++i) {
+            if (v_data_reference[i] == 0 || v_data_reference[i] > v_path_file.size())
+                return false;
+            if (v_data_reference[i] != i + 1)
+                sequential_references = false;
+        }
+        if (sequential_references)
+            image_info->paths = std::move(v_path_file);
+        else {
+            image_info->paths.reserve(v_data_reference.size());
+            for (uint16_t reference : v_data_reference)
+                image_info->paths.push_back(v_path_file[reference - 1]);
+        }
 
         if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
