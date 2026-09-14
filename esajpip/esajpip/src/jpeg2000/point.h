@@ -34,22 +34,6 @@ namespace jpeg2000 {
         }
 
         /**
-         * Copy constructor.
-         */
-        Point(const Point &p) {
-            *this = p;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        Point &operator=(const Point &p) {
-            x = p.x;
-            y = p.y;
-            return *this;
-        }
-
-        /**
          * Increments by one the two values.
          * @return The object itself.
          */
@@ -194,9 +178,6 @@ namespace jpeg2000 {
         friend ostream &operator<<(ostream &out, const Point &point) {
             out << "(" << point.x << ", " << point.y << ")";
             return out;
-        }
-
-        virtual ~Point() {
         }
     };
 

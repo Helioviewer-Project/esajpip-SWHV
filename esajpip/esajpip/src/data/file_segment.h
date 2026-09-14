@@ -43,22 +43,6 @@ namespace data {
         }
 
         /**
-         * Copy constructor.
-         */
-        FileSegment(const FileSegment &segment) {
-            *this = segment;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        FileSegment &operator=(const FileSegment &segment) {
-            offset = segment.offset;
-            length = segment.length;
-            return *this;
-        }
-
-        /**
          * Returns <code>true</code> if the segment is contiguous to
          * another given segment, so the first byte of the given segment
          * is just the next byte after the last byte of the segment.
@@ -78,9 +62,6 @@ namespace data {
         friend ostream &operator<<(ostream &out, const FileSegment &segment) {
             out << "[" << segment.offset << ":" << segment.length << "]";
             return out;
-        }
-
-        virtual ~FileSegment() {
         }
     };
 }

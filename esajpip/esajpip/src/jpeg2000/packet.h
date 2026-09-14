@@ -32,32 +32,11 @@ namespace jpeg2000 {
             this->precinct_xy = precinct_xy;
         }
 
-        /**
-         * Copy constructor.
-         */
-        Packet(const Packet &packet) {
-            *this = packet;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        const Packet &operator=(const Packet &packet) {
-            layer = packet.layer;
-            component = packet.component;
-            resolution = packet.resolution;
-            precinct_xy = packet.precinct_xy;
-            return *this;
-        }
-
         friend ostream &operator<<(ostream &out, const Packet &packet) {
             out << packet.layer << "\t" << packet.resolution << "\t" << packet.component << "\t"
                 << packet.precinct_xy.y << "\t" << packet.precinct_xy.x;
 
             return out;
-        }
-
-        virtual ~Packet() {
         }
     };
 }
