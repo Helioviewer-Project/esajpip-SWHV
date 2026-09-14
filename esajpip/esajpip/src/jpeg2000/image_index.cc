@@ -5,7 +5,7 @@
 
 namespace jpeg2000 {
 
-    void ImageIndex::Init(const string &path_name, ImageInfo &image_info) {
+    ImageIndex::ImageIndex(const string &path_name, ImageInfo &image_info) {
         this->path_name = path_name;
 
         meta_data = std::move(image_info.meta_data);
@@ -25,7 +25,7 @@ namespace jpeg2000 {
         }
     }
 
-    void ImageIndex::Init(ImageInfo &image_info, int index) {
+    ImageIndex::ImageIndex(ImageInfo &image_info, int index) {
         path_name = std::move(image_info.paths[index]);
 
         meta_data = std::move(image_info.meta_data_hyperlinks[index]);

@@ -59,26 +59,9 @@ namespace jpeg2000 {
          */
         bool BuildIndex(FileManager &file_manager, int ind_codestream, int max_index);
 
-        /**
-         * Initializes the object.
-         * @param path_name Path name of the image.
-         * @param image_info Indexing image information.
-         */
-        void Init(const string &path_name, ImageInfo &image_info);
+        ImageIndex(const string &path_name, ImageInfo &image_info);
 
-        /**
-         * Initializes the object.
-         * @param image_info Indexing image information.
-         * @param index Image index.
-         */
-        void Init(ImageInfo &image_info, int index);
-
-        /**
-         * Empty constructor. Only the index manager can
-         * use this constructor.
-         */
-        ImageIndex() {
-        }
+        ImageIndex(ImageInfo &image_info, int index);
 
     public:
         /**
