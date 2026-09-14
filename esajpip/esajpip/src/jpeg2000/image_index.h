@@ -4,8 +4,14 @@
 //#define SHOW_TRACES
 #include "trace.h"
 
+#include <ostream>
+#include <string>
 #include <vector>
-#include "image_info.h"
+
+#include "coding_parameters.h"
+#include "codestream_index.h"
+#include "data/file.h"
+#include "meta_data.h"
 #include "packet_index.h"
 
 namespace jpeg2000 {
@@ -34,7 +40,8 @@ namespace jpeg2000 {
             CodingParameters coding_parameters;
             Stream stream;
 
-            explicit Link(ImageInfo::Link &&link);
+            Link(string &&_path, CodingParameters &&_params,
+                 CodestreamIndex &&_codestream);
         };
 
         string path_name;           ///< Image file name
@@ -70,7 +77,7 @@ namespace jpeg2000 {
          */
         static bool BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r);
 
-        ImageIndex(const string &path_name, ImageInfo &image_info);
+        explicit ImageIndex(const string &_path);
 
         ImageIndex(const ImageIndex &) = delete;
         ImageIndex &operator=(const ImageIndex &) = delete;

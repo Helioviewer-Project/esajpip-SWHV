@@ -10,25 +10,14 @@ namespace jpeg2000 {
               codestream(std::move(_codestream)) {
     }
 
-    ImageIndex::Link::Link(ImageInfo::Link &&link)
-            : path_name(std::move(link.path_name)),
-              coding_parameters(std::move(link.coding_parameters)),
-              stream(std::move(link.codestream)) {
+    ImageIndex::Link::Link(string &&_path, CodingParameters &&_params,
+                           CodestreamIndex &&_codestream)
+            : path_name(std::move(_path)),
+              coding_parameters(std::move(_params)),
+              stream(std::move(_codestream)) {
     }
 
-    ImageIndex::ImageIndex(const string &path_name, ImageInfo &image_info) {
-        this->path_name = path_name;
-
-        meta_data = std::move(image_info.meta_data);
-        coding_parameters = std::move(image_info.coding_parameters);
-
-        streams.reserve(image_info.codestreams.size());
-        for (CodestreamIndex &codestream : image_info.codestreams)
-            streams.emplace_back(std::move(codestream));
-
-        hyper_links.reserve(image_info.links.size());
-        for (ImageInfo::Link &link : image_info.links)
-            hyper_links.emplace_back(std::move(link));
+    ImageIndex::ImageIndex(const string &_path) : path_name(_path) {
     }
 
     bool ImageIndex::BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r) {

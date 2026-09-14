@@ -100,27 +100,27 @@ namespace jpeg2000 {
         /**
          * Reads the information of a JP2 image file.
          * @param file Image file.
-         * @param image_info Receives the image information.
+         * @param image_index Receives the image information.
          * @return <code>true</code> if successful.
          */
-        bool ReadJP2(File *file, ImageInfo *image_info);
+        bool ReadJP2(File *file, ImageIndex *image_index);
 
         /**
          * Reads the information of a JPX image file.
          * @param file Image file.
-         * @param image_info Receives the image information.
+         * @param image_index Receives the image information.
          * @return <code>true</code> if successful.
          */
-        bool ReadJPX(File *file, ImageInfo *image_info);
+        bool ReadJPX(File *file, ImageIndex *image_index);
 
         /**
          * Reads an image file and creates the associated cache file if
          * it does not exist yet.
          * @param name_image_file File name of the image.
-         * @param image_info Receives the information of the image.
+         * @param image_index Receives the information of the image.
          * @return <code>true</code> if successful.
          */
-        bool ReadImage(const string &name_image_file, ImageInfo *image_info);
+        bool ReadImage(const string &name_image_file, ImageIndex *image_index);
 
     public:
         /**

@@ -16,14 +16,13 @@ namespace jpeg2000 {
         if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
         path_image_file = root_dir_ + path_image_file;
 
-        // Get image info
-        ImageInfo image_info;
-        if (!ReadImage(path_image_file, &image_info)) {
+        unique_ptr<ImageIndex> image_index(new ImageIndex(path_image_file));
+        if (!ReadImage(path_image_file, image_index.get())) {
             ERROR("The image file '" << path_image_file << "' can not be read");
             ClearFiles();
             return false;
         }
-        image.reset(new ImageIndex(path_image_file, image_info));
+        image = std::move(image_index);
         ClearFiles();
         return true;
     }
@@ -38,7 +37,6 @@ namespace jpeg2000 {
 #define SOD_MARKER 0xFF93
 
 #define JP2C_BOX_ID 0x6A703263
-#define XML__BOX_ID 0x786D6C20
 #define ASOC_BOX_ID 0x61736F63
 #define NLST_BOX_ID 0x6E6C7374
 #define JPCH_BOX_ID 0x6A706368
@@ -56,7 +54,7 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadImage(const string &name_image_file, ImageInfo *image_info) {
+    bool FileManager::ReadImage(const string &name_image_file, ImageIndex *image_index) {
         bool res = true;
         // Get file extension
         string extension;
@@ -69,21 +67,21 @@ namespace jpeg2000 {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
-            res = res && ReadJP2(file, image_info);
+            res = res && ReadJP2(file, image_index);
         } else if (extension == ".jpx") { // JPX image
             File *file = GetFile(name_image_file);
             if (!file) {
                 ERROR("Unable to open file: '" << name_image_file << "'...");
                 return false;
             }
-            res = res && ReadJPX(file, image_info);
+            res = res && ReadJPX(file, image_index);
         } else {
             ERROR("File type not supported...");
             return false;
         }
 
-        if (res && image_info->links.empty())
-            image_info->coding_parameters.FillTotalPrecinctsVector();
+        if (res && image_index->hyper_links.empty())
+            image_index->coding_parameters.FillTotalPrecinctsVector();
 
         return res;
     }
@@ -351,7 +349,7 @@ namespace jpeg2000 {
         return *length_box <= limit - file->GetOffset();
     }
 
-    bool FileManager::ReadJP2(File *file, ImageInfo *image_info) {
+    bool FileManager::ReadJP2(File *file, ImageIndex *image_index) {
         bool res = true;
         bool codestream = false;
         // Get boxes
@@ -360,7 +358,7 @@ namespace jpeg2000 {
         uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         //int metadata_bin=1;
 
-        image_info->codestreams.emplace_back();
+        image_index->streams.emplace_back(CodestreamIndex());
         while (file->GetOffset() != file->GetSize() && res) {
             pini_box = file->GetOffset();
             plen = pini_box - pini;
@@ -372,33 +370,22 @@ namespace jpeg2000 {
                     if (codestream)
                         return false;
                     codestream = true;
-                    image_info->meta_data.meta_data.emplace_back(pini, plen);
-                    res = res && ReadCodestream(file, length_box, &image_info->coding_parameters,
-                                                &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
+                    image_index->meta_data.meta_data.emplace_back(pini, plen);
+                    res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
+                                                &image_index->streams.back().codestream);
+                    image_index->meta_data.place_holders.emplace_back(image_index->streams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
                     break;
-
-                    /*case XML__BOX_ID:
-                      TRACE("XML box...");
-                      image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
-                      // Get meta_data info
-                      res = res && file->Seek(length_box, SEEK_CUR);
-                      image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
-                      metadata_bin++;
-                      pini=file->GetOffset();
-                      plen=0;
-                      break;*/
 
                 default:
                     res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
+        image_index->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
         return res && codestream;
     }
 
-    bool FileManager::ReadJPX(File *file, ImageInfo *image_info) {
+    bool FileManager::ReadJPX(File *file, ImageIndex *image_index) {
         bool res = true;
         // Get boxes
         uint32_t type_box;
@@ -414,6 +401,7 @@ namespace jpeg2000 {
         int num_flst = 0;
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
+        vector<CodestreamIndex> codestreams;
         vector<pair<uint32_t, uint64_t>> containers;
         containers.emplace_back(0, file->GetSize());
 
@@ -441,32 +429,32 @@ namespace jpeg2000 {
             uint64_t box_end = file->GetOffset() + length_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
-                    image_info->codestreams.emplace_back();
+                    codestreams.emplace_back();
                     if (length_box != 0)
                         containers.emplace_back(type_box, box_end);
                     break;
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    if (image_info->codestreams.empty()) {
+                    if (codestreams.empty()) {
                         res = false;
                         break;
                     }
-                    image_info->meta_data.meta_data.emplace_back(pini, plen);
-                    res = res && ReadCodestream(file, length_box, &image_info->coding_parameters,
-                                                &image_info->codestreams.back());
-                    image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
+                    image_index->meta_data.meta_data.emplace_back(pini, plen);
+                    res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
+                                                &codestreams.back());
+                    image_index->meta_data.place_holders.emplace_back(codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
                     break;
                 case ASOC_BOX_ID: TRACE("ASOC box...");
                     res = res && file->Seek(length_box, SEEK_CUR);
-                    image_info->meta_data.meta_data.emplace_back(pini, plen);
-                    image_info->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
-                    image_info->meta_data.place_holders.emplace_back(image_info->meta_data.bins.size(), false,
+                    image_index->meta_data.meta_data.emplace_back(pini, plen);
+                    image_index->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
+                    image_index->meta_data.place_holders.emplace_back(image_index->meta_data.bins.size(), false,
                                                                       FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
                     break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
-                    image_info->meta_data.meta_data.emplace_back(pini, plen);
+                    image_index->meta_data.meta_data.emplace_back(pini, plen);
                     num_flst = 0;
                     pini_ftbl = pini_box;
                     plen_ftbl = plen_box;
@@ -483,7 +471,7 @@ namespace jpeg2000 {
                         break;
                     }
                     num_flst++;
-                    image_info->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
+                    image_index->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
                     v_data_reference.push_back(data_reference);
                     fragments.push_back(fragment);
                     pini = file->GetOffset();
@@ -510,9 +498,9 @@ namespace jpeg2000 {
                     res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
+        image_index->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
-        if (!res || containers.size() != 1 || image_info->codestreams.empty() ||
+        if (!res || containers.size() != 1 || codestreams.empty() ||
             v_path_file.size() != num_data_references)
             return false;
 
@@ -532,22 +520,28 @@ namespace jpeg2000 {
                 paths.push_back(v_path_file[reference - 1]);
         }
 
-        // Get image info of the hyperlinked images
-        if (!paths.empty())
-            vector<CodestreamIndex>().swap(image_info->codestreams);
-        image_info->links.reserve(paths.size());
+        // Resolve the linked codestreams.
+        if (paths.empty()) {
+            image_index->streams.reserve(codestreams.size());
+            for (CodestreamIndex &codestream : codestreams)
+                image_index->streams.emplace_back(std::move(codestream));
+            return true;
+        }
+
+        vector<CodestreamIndex>().swap(codestreams);
+        image_index->hyper_links.reserve(paths.size());
         for (size_t i = 0; i < paths.size() && res; ++i) {
-            ImageInfo image_info_hyperlink;
-            res = ReadImage(paths[i], &image_info_hyperlink);
+            ImageIndex linked_image(paths[i]);
+            res = ReadImage(paths[i], &linked_image);
             file_map.erase(paths[i]);
             if (!res)
                 break;
 
-            if (image_info_hyperlink.codestreams.empty() || image_info_hyperlink.codestreams.back().packets.empty()) {
+            if (linked_image.streams.empty() || linked_image.streams.back().codestream.packets.empty()) {
                 res = false;
                 break;
             }
-            const CodestreamIndex &codestream = image_info_hyperlink.codestreams.back();
+            const CodestreamIndex &codestream = linked_image.streams.back().codestream;
             const FileSegment &last_packet_data = codestream.packets.back();
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
@@ -556,11 +550,9 @@ namespace jpeg2000 {
                 break;
             }
 
-            image_info->links.emplace_back();
-            ImageInfo::Link &link = image_info->links.back();
-            link.path_name = std::move(paths[i]);
-            link.coding_parameters = std::move(image_info_hyperlink.coding_parameters);
-            link.codestream = std::move(image_info_hyperlink.codestreams.back());
+            image_index->hyper_links.emplace_back(std::move(paths[i]),
+                                                  std::move(linked_image.coding_parameters),
+                                                  std::move(linked_image.streams.back().codestream));
         }
         return res;
     }
