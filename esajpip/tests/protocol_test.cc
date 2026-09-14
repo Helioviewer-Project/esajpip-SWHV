@@ -15,6 +15,7 @@
 #include "jpip/databin_writer.h"
 #include "jpip/jpip.h"
 #include "jpip/request.h"
+#include "jpip/woi_composer.h"
 
 using namespace std;
 
@@ -99,6 +100,23 @@ static void CheckHTTPResponse() {
           "Transfer-Encoding: chunked\r\n"
           "Content-Type: image/jpp-stream\r\n\r\n",
           "The JHV response headers changed");
+}
+
+static void CheckWOIPackets() {
+    jpeg2000::CodingParameters coding_parameters;
+    coding_parameters.size = jpeg2000::Size(1, 1);
+    coding_parameters.num_levels = 0;
+    coding_parameters.num_layers = 2;
+    coding_parameters.num_components = 2;
+    coding_parameters.precinct_size.emplace_back(1, 1);
+
+    jpip::WOIComposer composer;
+    composer.Reset(&coding_parameters, jpip::WOI(jpeg2000::Point(0, 0), jpeg2000::Size(1, 1), 0));
+
+    int packets = 1;
+    while (composer.GetNextPacket(&coding_parameters))
+        packets++;
+    Check(packets == 4, "WOI navigation repeated the final packet");
 }
 
 static void CheckJPIPMessages() {
@@ -214,6 +232,7 @@ static void CheckMetadataPlaceHolder() {
 int main() {
     CheckJHVRequests();
     CheckHTTPResponse();
+    CheckWOIPackets();
     CheckJPIPMessages();
     CheckCoalescedJPIPMessages();
     CheckMetadataPlaceHolder();

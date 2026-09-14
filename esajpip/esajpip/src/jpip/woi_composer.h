@@ -73,7 +73,7 @@ namespace jpip {
 
         /**
          * Moves to the next packet of the WOI.
-         * @return <code>true</code> if successful.
+         * @return <code>true</code> if another packet is available.
          */
         bool GetNextPacket(const CodingParameters *coding_parameters) {
             if (!more_packets) return false;
@@ -98,7 +98,7 @@ namespace jpip {
                                 if (current_packet.layer < (coding_parameters->num_layers - 1)) current_packet.layer++;
                                 else {
                                     more_packets = false;
-                                    return true;
+                                    return false;
                                 }
                             }
 
