@@ -213,16 +213,15 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadPLTMarker(File *file, CodestreamIndex *index) {
-        bool res = true;
-        // Get PLT offset
-        uint64_t PLT_offset = file->GetOffset() + 3;
         // Get Lplt
         uint16_t lplt = 0;
-        res = res && file->ReadReverse(&lplt);
-        res = res && file->Seek(lplt - 2, SEEK_CUR);
+        if (!file->ReadReverse(&lplt) || lplt < 4 || lplt - 2 > file->GetSize() - file->GetOffset())
+            return false;
+
         // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
-        index->PLT_markers.emplace_back(PLT_offset, lplt - 3);
-        return res;
+        index->PLT_markers.emplace_back(file->GetOffset() + 1, lplt - 3);
+        file->Seek(lplt - 2, SEEK_CUR);
+        return true;
     }
 
     bool FileManager::ReadSODMarker(File *file, CodestreamIndex *index) {
