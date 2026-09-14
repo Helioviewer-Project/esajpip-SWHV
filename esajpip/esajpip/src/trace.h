@@ -18,10 +18,7 @@
 class TraceSystem {
 private:
     log4cpp::Category *category;
-    log4cpp::Appender *appender;
-    log4cpp::PatternLayout *layout;
     log4cpp::Appender *file_appender;
-    log4cpp::PatternLayout *file_layout;
 
     static TraceSystem traceSystem;
 

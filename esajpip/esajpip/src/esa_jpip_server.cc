@@ -16,7 +16,7 @@
 using namespace std;
 using namespace net;
 
-#define SERVER_VERSION    "1.9.0-rc1"
+#define SERVER_VERSION    "1.9.0-rc2"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
 #define CONFIG_FILE       "server.cfg"
@@ -30,7 +30,7 @@ static int base_id = 0;
 static AppInfo app_info;
 static Socket child_socket;
 static PollTable poll_table;
-static bool child_lost = false;
+static volatile sig_atomic_t child_lost = 0;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
 
@@ -46,7 +46,7 @@ static void *ClientThread(void *arg);
 
 static void SIGCHLD_handler(int signal) {
     wait(NULL);
-    child_lost = true;
+    child_lost = 1;
 }
 
 int main(int argc, char **argv) {
@@ -97,8 +97,14 @@ int main(int argc, char **argv) {
     poll_table.Add(father_socket, POLLIN);
 
     pthread_attr_t pattr;
-    pthread_attr_init(&pattr);
-    pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
+    int pthread_error = pthread_attr_init(&pattr);
+    if (pthread_error != 0)
+        return CERR("The client thread attributes can not be initialized: " << strerror(pthread_error));
+    pthread_error = pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
+    if (pthread_error != 0) {
+        pthread_attr_destroy(&pattr);
+        return CERR("Detached client threads can not be configured: " << strerror(pthread_error));
+    }
 
 father_begin:
 
@@ -112,7 +118,7 @@ father_begin:
         int res = poll_table.Poll();
 
         if (child_lost) {
-            child_lost = false;
+            child_lost = 0;
             goto father_begin;
         }
 
@@ -150,13 +156,14 @@ father_begin:
                     ERROR("Could not receive descriptor");
             }
 
-            for (int i = 2; i < poll_table.GetSize(); ++i) {
+            for (int i = 2; i < poll_table.GetSize();) {
                 if (poll_table[i].revents) {
                     LOG("Closing the connection [" << poll_table[i].fd << "]");
                     app_info->num_connections--;
                     close(poll_table[i].fd);
                     poll_table.RemoveAt(i);
-                }
+                } else
+                    i++;
             }
 
             if (app_info->num_connections < 0)
@@ -201,10 +208,16 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 
         LOG("Creating a client thread for the old connection [" << sock << "]");
 
-        if (pthread_create(&service_tid, pattr, ClientThread, client_info) == -1) {
-            ERROR("A new client thread for the old connection [" << sock << "] can not be created");
+        int pthread_error = pthread_create(&service_tid, pattr, ClientThread, client_info);
+        if (pthread_error != 0) {
+            ERROR("A new client thread for the old connection [" << sock << "] can not be created: "
+                  << strerror(pthread_error));
+            close(sock);
+            if (child_socket.SendTo(father_address, &client_info->father_sock,
+                                    sizeof client_info->father_sock) != sizeof client_info->father_sock)
+                ERROR("The failed connection [" << client_info->father_sock << "] could not be closed");
             delete client_info;
-            return -1;
+            continue;
         }
     }
 
@@ -218,10 +231,15 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 
         LOG("Creating a client thread for the new connection [" << sock << "|" << father_sock << "]");
 
-        if (pthread_create(&service_tid, pattr, ClientThread, client_info) == -1) {
-            LOG("A new client thread for the new connection [" << sock << "|" << father_sock << "] can not be created");
+        int pthread_error = pthread_create(&service_tid, pattr, ClientThread, client_info);
+        if (pthread_error != 0) {
+            ERROR("A new client thread for the new connection [" << sock << "|" << father_sock
+                  << "] can not be created: " << strerror(pthread_error));
+            close(sock);
+            if (child_socket.SendTo(father_address, &father_sock, sizeof father_sock) != sizeof father_sock)
+                ERROR("The failed connection [" << father_sock << "] could not be closed");
             delete client_info;
-            return -1;
+            continue;
         }
     }
 

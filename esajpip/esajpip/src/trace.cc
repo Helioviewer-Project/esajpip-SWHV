@@ -6,10 +6,10 @@ TraceSystem TraceSystem::traceSystem;
 
 TraceSystem::TraceSystem() {
 #ifndef SILENT_MODE
-    layout = new log4cpp::PatternLayout();
+    log4cpp::PatternLayout *layout = new log4cpp::PatternLayout();
     layout->setConversionPattern("%d: %m %n");
 
-    appender = new log4cpp::OstreamAppender("OstreamAppender", &cout);
+    log4cpp::Appender *appender = new log4cpp::OstreamAppender("OstreamAppender", &cout);
     appender->setLayout(layout);
 
     category = &(log4cpp::Category::getInstance("Category"));
@@ -17,7 +17,6 @@ TraceSystem::TraceSystem() {
     category->setAppender(appender);
 
     file_appender = NULL;
-    file_layout = new log4cpp::PatternLayout();
 #endif
 }
 
@@ -42,10 +41,9 @@ bool TraceSystem::AppendToFile_(const char *name) {
             else {
                 snprintf(fn_cad, sizeof(fn_cad), "%s.%s.log", name, tm_cad);
 
-                file_layout = new log4cpp::PatternLayout();
+                log4cpp::PatternLayout *file_layout = new log4cpp::PatternLayout();
                 file_layout->setConversionPattern("%d: %m %n");
 
-                //file_appender = new log4cpp::FileAppender("FileAppender", fn_cad);
                 file_appender = new log4cpp::RollingFileAppender("RollingFileAppender", fn_cad, 1024 * 1024 * 1024);
                 file_appender->setLayout(file_layout);
 

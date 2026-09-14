@@ -74,21 +74,21 @@ public:
     /**
      * Returns the listening address.
      */
-    string address() const {
+    const string &address() const {
         return address_;
     }
 
     /**
      * Returns the folder of the images.
      */
-    string images_folder() const {
+    const string &images_folder() const {
         return images_folder_;
     }
 
     /**
      * Returns the folder used for the logging files.
      */
-    string logging_folder() const {
+    const string &logging_folder() const {
         return logging_folder_;
     }
 

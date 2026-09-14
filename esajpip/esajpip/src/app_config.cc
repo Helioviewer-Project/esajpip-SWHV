@@ -32,6 +32,12 @@ bool AppConfig::Load(const char *file_name) {
         root["general"].lookupValue("logging", logging_);
         root["general"].lookupValue("log_requests", log_requests_);
         root["general"].lookupValue("max_chunk_size", max_chunk_size_);
+
+        if (port_ <= 0 || port_ > UINT16_MAX || images_folder_.empty() ||
+            max_chunk_size_ < 128 || max_connections_ <= 0 || com_time_out_ < -1 ||
+            (logging_ != 0 && logging_ != 1) ||
+            (log_requests_ != 0 && log_requests_ != 1))
+            return false;
     } catch (...) {
         return false;
     }
