@@ -75,7 +75,7 @@ namespace jpip {
         msg_start = NULL;
     }
 
-    DataBinWriter &DataBinWriter::WriteVBAS(uint64_t value) {
+    void DataBinWriter::WriteVBAS(uint64_t value) {
         if (!eof) {
             if (ptr >= end) eof = true;
             else {
@@ -94,11 +94,10 @@ namespace jpip {
                 }
             }
         }
-        return *this;
     }
 
-    DataBinWriter &DataBinWriter::WriteHeader(uint64_t bin_id, uint64_t bin_offset,
-                                              uint64_t bin_length, bool last_byte) {
+    void DataBinWriter::WriteHeader(uint64_t bin_id, uint64_t bin_offset,
+                                    uint64_t bin_length, bool last_byte) {
         if (!eof) {
             if (ptr >= end) eof = true;
             else {
@@ -131,10 +130,10 @@ namespace jpip {
                 if (eof) ptr = aux_ptr;
             }
         }
-        return *this;
     }
 
-    DataBinWriter &DataBinWriter::Write(uint64_t bin_id, uint64_t bin_offset, File &file, const FileSegment &segment, bool last_byte) {
+    void DataBinWriter::Write(uint64_t bin_id, uint64_t bin_offset, File &file,
+                              const FileSegment &segment, bool last_byte) {
         if (BeginMessage(bin_id, bin_offset, segment.length, last_byte)) {
             char *aux_ptr = ptr;
             if (segment.length > 0) {
@@ -151,11 +150,11 @@ namespace jpip {
             }
         }
 
-        return *this;
     }
 
-    DataBinWriter &DataBinWriter::WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
-                                                   File &file, const PlaceHolder &place_holder, bool last_byte) {
+    void DataBinWriter::WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
+                                         File &file, const PlaceHolder &place_holder,
+                                         bool last_byte) {
         if (BeginMessage(bin_id, bin_offset, place_holder.length(), last_byte)) {
             char *aux_ptr = ptr;
             if ((ptr + place_holder.length()) > end) eof = true;
@@ -186,7 +185,6 @@ namespace jpip {
                 }
             }
         }
-        return *this;
     }
 
 }

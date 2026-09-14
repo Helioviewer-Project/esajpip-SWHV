@@ -53,10 +53,9 @@ namespace jpip {
         /**
          * Writes a value into the buffer.
          * @param value Value to write.
-         * @return The object itself.
          */
         template<typename T>
-        DataBinWriter &WriteValue(T value) {
+        void WriteValue(T value) {
             if (!eof) {
                 if ((ptr + sizeof(T)) > end) eof = true;
                 else {
@@ -64,16 +63,13 @@ namespace jpip {
                         *ptr++ = (value >> (8 * i)) & 0xFF;
                 }
             }
-
-            return *this;
         }
 
         /**
          * Writes a new integer value into the buffer coded as VBAS.
          * @param value Value to write.
-         * @return The object itself.
          */
-        DataBinWriter &WriteVBAS(uint64_t value);
+        void WriteVBAS(uint64_t value);
 
         /**
          * Writes a data-bin header into the buffer.
@@ -82,10 +78,9 @@ namespace jpip {
          * @param bin_length Data-bin length.
          * @param last_byte <code>true</code> if the data related
          * to this header contains the last byte of the data-bin.
-         * @return The object itself.
          */
-        DataBinWriter &WriteHeader(uint64_t bin_id, uint64_t bin_offset,
-                                   uint64_t bin_length, bool last_byte = false);
+        void WriteHeader(uint64_t bin_id, uint64_t bin_offset,
+                         uint64_t bin_length, bool last_byte = false);
 
     public:
         /**
@@ -110,54 +105,44 @@ namespace jpip {
          * Sets the associated memory buffer.
          * @param buf Memory buffer.
          * @param buf_len Length of the memory buffer.
-         * @return The object itself.
          */
-        DataBinWriter &SetBuffer(char *buf, int buf_len) {
+        void SetBuffer(char *buf, int buf_len) {
             eof = false;
             ini = ptr = buf;
             end = ini + buf_len;
             msg_start = NULL;
-
-            return *this;
         }
 
         /**
          * Clears the previous identifiers of data-bin
          * class and codestream index numbers.
-         * @return The object itself.
          */
-        DataBinWriter &ClearPreviousIds() {
+        void ClearPreviousIds() {
             databin_class = -1;
             codestream_idx = -1;
             prev_databin_class = -1;
             prev_codestream_idx = -1;
-
-            return *this;
         }
 
         /**
          * Sets the current codestream.
          * @param value Index number of the codestream.
-         * @return The object itself.
          */
-        DataBinWriter &SetCodestream(int value) {
+        void SetCodestream(int value) {
             if (value < 0) value = 0;
             if (codestream_idx != value)
                 FinishMessage();
             codestream_idx = value;
-            return *this;
         }
 
         /**
          * Sets the current data-bin class.
          * @param databin_class Data-bin class.
-         * @return The object itself.
          */
-        DataBinWriter &SetDataBinClass(int databin_class) {
+        void SetDataBinClass(int databin_class) {
             if (this->databin_class != databin_class)
                 FinishMessage();
             this->databin_class = databin_class;
-            return *this;
         }
 
         /**
@@ -168,11 +153,9 @@ namespace jpip {
          * @param segment File segment of the data.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
-         * @return The object itself.
          */
-        DataBinWriter &Write(uint64_t bin_id, uint64_t bin_offset,
-                             File &file, const FileSegment &segment,
-                             bool last_byte = false);
+        void Write(uint64_t bin_id, uint64_t bin_offset, File &file,
+                   const FileSegment &segment, bool last_byte = false);
 
         /**
          * Writes a place-holder segment into the buffer.
@@ -182,11 +165,9 @@ namespace jpip {
          * @param place_holder Place-holder information.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
-         * @return The object itself.
          */
-        DataBinWriter &WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
-                                        File &file, const PlaceHolder &place_holder,
-                                        bool last_byte = false);
+        void WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset, File &file,
+                              const PlaceHolder &place_holder, bool last_byte = false);
 
         /**
          * Returns the number of bytes written.
@@ -206,9 +187,8 @@ namespace jpip {
         /**
          * Writes a EOR message into the buffer.
          * @param reason Reason of the message.
-         * @return The object itself.
          */
-        DataBinWriter &WriteEOR(int reason) {
+        void WriteEOR(int reason) {
             FinishMessage();
             if ((ptr + 3) > end) eof = true;
             else {
@@ -216,15 +196,12 @@ namespace jpip {
                 *ptr++ = (char) reason;
                 *ptr++ = 0;
             }
-
-            return *this;
         }
 
         /**
-         * Returns the <code>EOF</code> status of the
-         * object.
+         * Returns whether the writer remains valid.
          */
-        operator bool() const {
+        bool IsValid() const {
             return !eof;
         }
 

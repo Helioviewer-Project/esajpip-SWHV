@@ -105,7 +105,7 @@ namespace jpip {
                     bool last_packet;
                     const CodingParameters *composer_parameters = image_index->GetCodingParameters(codestreams.front());
 
-                    while (data_writer && !eof) {
+                    while (data_writer.IsValid() && !eof) {
                         const Packet &packet = woi_composer.GetCurrentPacket();
                         const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
 
