@@ -390,12 +390,16 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadFlstBox(File *file, uint64_t length_box, uint16_t *data_reference) {
-        bool res = true;
-        // Get the path of the hyperlinked image
-        res = res && file->Seek(14, SEEK_CUR);
-        res = res && file->ReadReverse(data_reference);
+        if (length_box != 16)
+            return false;
 
-        return res;
+        uint16_t num_fragments = 0;
+        if (!file->ReadReverse(&num_fragments) || num_fragments != 1)
+            return false;
+
+        // Skip the fragment offset and length
+        file->Seek(12, SEEK_CUR);
+        return file->ReadReverse(data_reference);
     }
 
     bool FileManager::ReadUrlBox(File *file, uint64_t length_box, string *path_file) {
