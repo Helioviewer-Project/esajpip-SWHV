@@ -2,7 +2,6 @@
 #define _JPEG2000_PACKET_INDEX_H_
 
 #include <vector>
-//#include "data/vint_vector.h"
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
@@ -10,18 +9,12 @@ namespace jpeg2000 {
 
     /**
      * Class used for indexing the packets of a codestream image.
-     * The class <code>vint_vector</code> is used internally to
-     * store the offsets of the packets with the minimum required
-     * bytes.
-     *
-     * @see data::vint_vector
      */
     class PacketIndex {
     private:
         /**
          * Vector of packet offsets.
          */
-        //vint_vector offsets;
         vector<uint32_t> offsets;
 
         /**
@@ -41,39 +34,14 @@ namespace jpeg2000 {
         /**
          * Empty constructor.
          */
-        PacketIndex() {
-        }
+        PacketIndex() = default;
 
         /**
          * Initializes the object.
          * @param max_offset Maximum value for an offset.
          */
-        PacketIndex(uint64_t max_offset) {
+        explicit PacketIndex(uint64_t max_offset) {
             assert(max_offset <= UINT32_MAX);
-/*            assert(max_offset > 0);
-
-            int num_bytes = 0;
-            while (max_offset > 0) {
-                max_offset >>= 8;
-                num_bytes++;
-            }
-            offsets.set_num_bytes(num_bytes);
-*/        }
-
-        /**
-         * Copy constructor.
-         */
-        PacketIndex(const PacketIndex &index) {
-            *this = index;
-        }
-
-        /**
-         * Copy assignment.
-         */
-        const PacketIndex &operator=(const PacketIndex &index) {
-            offsets = index.offsets;
-            aux = index.aux;
-            return *this;
         }
 
         /**
@@ -110,14 +78,6 @@ namespace jpeg2000 {
          */
         int Size() const {
             return offsets.size();
-        }
-
-        /**
-         * Clears the content.
-         */
-        void Clear() {
-            offsets.clear();
-            aux.clear();
         }
 
         /**
@@ -165,8 +125,6 @@ namespace jpeg2000 {
             return segment;
         }
 
-        virtual ~PacketIndex() {
-        }
     };
 }
 
