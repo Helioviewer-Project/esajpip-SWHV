@@ -57,7 +57,7 @@ namespace jpeg2000 {
          * @param max_index Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(FileManager &file_manager, int ind_codestream, int max_index);
+        bool BuildIndex(File *file, int ind_codestream, int max_index);
 
         ImageIndex(const string &path_name, ImageInfo &image_info);
 
@@ -138,7 +138,7 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        bool GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, FileSegment *segment, int *offset = NULL);
+        bool GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset = NULL);
 
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl

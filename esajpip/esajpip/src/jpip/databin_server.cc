@@ -92,10 +92,11 @@ namespace jpip {
             }
 
             if (!eof) {
+                vector<File *> files(codestreams.size());
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    File *file = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
-                    WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
-                    WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
+                    files[i] = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
+                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
+                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0, FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -109,12 +110,12 @@ namespace jpip {
                         packet = woi_composer.GetCurrentPacket();
                         const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
 
-                        if (!image_index->GetPacket(file_manager, codestreams[current_idx], packet, &segment, &bin_offset))
+                        File *file = files[current_idx];
+                        if (!image_index->GetPacket(file, codestreams[current_idx], packet, &segment, &bin_offset))
                             return false;
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        File *file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
                         if (segment.offset + segment.length > file->GetSize()) {
                             ERROR("Invalid packet segment: codestream=" << codestreams[current_idx]
                                   << ", packet=" << packet << ", segment=" << segment << ", file_size=" << file->GetSize());

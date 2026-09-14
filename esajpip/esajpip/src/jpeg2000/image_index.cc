@@ -1,5 +1,5 @@
 #include "trace.h"
-#include "file_manager.h"
+#include "image_index.h"
 
 #include <utility>
 
@@ -40,8 +40,7 @@ namespace jpeg2000 {
         packet_indexes.emplace_back();
     }
 
-    bool ImageIndex::BuildIndex(FileManager &file_manager, int ind_codestream, int r) {
-        File *file = file_manager.GetFile(path_name);
+    bool ImageIndex::BuildIndex(File *file, int ind_codestream, int r) {
         // Check if PacketIndex has been created
         if (packet_indexes[ind_codestream].Size() == 0)
             packet_indexes[ind_codestream] = PacketIndex(file->GetSize());
@@ -126,11 +125,11 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool ImageIndex::GetPacket(FileManager &file_manager, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
+    bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
         bool linked = !hyper_links.empty();
         if (linked) {
             if (packet.resolution > hyper_links[num_codestream]->max_resolution.back()) {
-                if (!hyper_links[num_codestream]->BuildIndex(file_manager, 0, packet.resolution)) {
+                if (!hyper_links[num_codestream]->BuildIndex(file, 0, packet.resolution)) {
                     ERROR("The packet index could not be created");
                     return false;
                 }
@@ -138,7 +137,7 @@ namespace jpeg2000 {
             }
         } else {
             if (packet.resolution > max_resolution[num_codestream]) {
-                if (!BuildIndex(file_manager, num_codestream, packet.resolution)) {
+                if (!BuildIndex(file, num_codestream, packet.resolution)) {
                     ERROR("The packet index could not be created");
                     return false;
                 }
