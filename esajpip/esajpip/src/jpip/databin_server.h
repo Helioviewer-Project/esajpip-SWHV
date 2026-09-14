@@ -32,6 +32,8 @@ namespace jpip {
         vector<int> codestreams;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         size_t current_idx;  ///< Current codestream index
+        size_t meta_idx;
+        int meta_offset;
 
         /**
          * <code>true</code> if the end has been reached and the last write operation
@@ -134,6 +136,8 @@ namespace jpip {
             pending = 0;
             has_woi = false;
             current_idx = 0;
+            meta_idx = 0;
+            meta_offset = 0;
             eof = false;
         }
 

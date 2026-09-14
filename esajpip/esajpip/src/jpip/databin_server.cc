@@ -57,21 +57,24 @@ namespace jpip {
                 if (image_index->GetNumMetadatas() <= 0)
                     WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
                 else {
-                    int bin_offset = 0;
                     size_t num_metadatas = image_index->GetNumMetadatas();
-                    bool last_metadata;
-
-                    for (size_t i = 0; i < num_metadatas; ++i) {
-                        last_metadata = i == num_metadatas - 1;
-                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, image_index->GetMetadata(i), bin_offset, last_metadata);
-                        bin_offset += image_index->GetMetadata(i).length;
+                    while (meta_idx < num_metadatas) {
+                        const FileSegment &metadata = image_index->GetMetadata(meta_idx);
+                        bool last_metadata = meta_idx == num_metadatas - 1;
+                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, metadata, meta_offset, last_metadata);
 
                         if (last_metadata) {
-                            if (res > 0) cache_model.SetFullMetadata();
-                        } else {
-                            if (WritePlaceHolder(file, 0, 0, image_index->GetPlaceHolder(i), bin_offset) <= 0) break;
-                            bin_offset += image_index->GetPlaceHolder(i).length();
+                            if (res > 0)
+                                cache_model.SetFullMetadata();
+                            break;
                         }
+
+                        int placeholder_offset = meta_offset + metadata.length;
+                        const PlaceHolder &placeholder = image_index->GetPlaceHolder(meta_idx);
+                        if (WritePlaceHolder(file, 0, 0, placeholder, placeholder_offset) <= 0)
+                            break;
+                        meta_offset = placeholder_offset + placeholder.length();
+                        meta_idx++;
                     }
                 }
             }
