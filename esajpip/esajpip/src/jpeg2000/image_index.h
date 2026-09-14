@@ -49,7 +49,7 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        bool GetOffsetPacket(File *file, int ind_codestream, uint64_t length_packet);
+        bool GetOffsetPacket(int ind_codestream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.

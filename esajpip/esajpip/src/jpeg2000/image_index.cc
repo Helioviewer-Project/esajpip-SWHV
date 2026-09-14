@@ -66,7 +66,7 @@ namespace jpeg2000 {
             res = GetPLTLength(file, ind_codestream, &length_packet);
             if (!res)
                 break;
-            res = GetOffsetPacket(file, ind_codestream, length_packet);
+            res = GetOffsetPacket(ind_codestream, length_packet);
         }
 
         return res;
@@ -103,20 +103,23 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool ImageIndex::GetOffsetPacket(File *file, int ind_codestream, uint64_t length_packet) {
-        uint64_t offset;
+    bool ImageIndex::GetOffsetPacket(int ind_codestream, uint64_t length_packet) {
         vector<FileSegment> &packets = codestreams[ind_codestream].packets;
         if (last_packet[ind_codestream] >= (int) packets.size())
             return false;
+        const FileSegment &packet_data = packets[last_packet[ind_codestream]];
 
-        if (last_offset_packet[ind_codestream] == 0) offset = packets[last_packet[ind_codestream]].offset;
-        else offset = last_offset_packet[ind_codestream];
+        uint64_t offset = last_offset_packet[ind_codestream];
+        if (offset == 0)
+            offset = packet_data.offset;
+        uint64_t used = offset - packet_data.offset;
+        if (used > packet_data.length || length_packet > packet_data.length - used)
+            return false;
 
         packet_indexes[ind_codestream].Add(FileSegment(offset, length_packet));
         last_offset_packet[ind_codestream] = offset + length_packet;
 
-        if (last_offset_packet[ind_codestream] ==
-            (packets[last_packet[ind_codestream]].offset + packets[last_packet[ind_codestream]].length)) {
+        if (last_offset_packet[ind_codestream] == packet_data.offset + packet_data.length) {
             last_packet[ind_codestream]++;
             last_offset_packet[ind_codestream] = 0;
         }
