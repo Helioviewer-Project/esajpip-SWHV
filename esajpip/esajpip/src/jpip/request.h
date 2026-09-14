@@ -2,10 +2,8 @@
 #define _JPIP_REQUEST_H_
 
 #include <iosfwd>
-#include <map>
 #include <string>
 #include <vector>
-#include "http/protocol.h"
 #include "woi.h"
 #include "cache_model.h"
 #include "jpeg2000/point.h"
@@ -20,15 +18,9 @@ namespace jpip {
         bool valid;
 
     public:
-        enum Type {
-            GET,
-            UNKNOWN
-        };
-
-        Type type;
         string object;
-        http::Protocol protocol;
-        map<string, string> parameters;
+        string target;
+        string channel;
 
         bool Parse(const string &line);
         void ParseURI(const string &uri);
@@ -61,9 +53,6 @@ namespace jpip {
          * @param value String to store the parameter value.
          */
         void ParseParameter(istream &stream, const string &param, string &value);
-
-        friend istream &operator>>(istream &in, Request &request);
-        friend ostream &operator<<(ostream &out, const Request &request);
 
         /**
          * Union used to control the presence of the different
@@ -144,7 +133,6 @@ namespace jpip {
          * Empty constructor.
          */
         Request() {
-            type = GET;
             object = "/";
             valid = true;
             length_response = 0;

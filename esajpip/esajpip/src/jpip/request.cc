@@ -11,18 +11,17 @@
 namespace jpip {
 
     bool Request::Parse(const string &line) {
-        string method, uri;
+        string method, uri, protocol;
 
-        type = UNKNOWN;
         valid = true;
         if (line.empty())
             return false;
 
         istringstream in(line);
-        if (!(in >> method >> uri >> protocol) || method != "GET")
+        if (!(in >> method >> uri >> protocol) || method != "GET" ||
+            (protocol.compare(0, 8, "HTTP/1.0") && protocol.compare(0, 8, "HTTP/1.1")))
             return false;
 
-        type = GET;
         ParseURI(uri.substr(0, MAX_URI));
         return valid;
     }
@@ -38,14 +37,13 @@ namespace jpip {
 
         mask.Clear();
         codestreams.clear();
-        parameters.clear();
+        target.clear();
+        channel.clear();
 
         while (stream.good()) {
             value.clear();
             getline(stream, param, '=');
             ParseParameter(stream, param, value);
-            if (stream)
-                parameters[param] = value;
         }
     }
 
@@ -163,6 +161,11 @@ namespace jpip {
 
         getline(stream, value, '&');
 
+        if (param == "target")
+            target = value;
+        else if (param == "cid" || param == "cclose")
+            channel = value;
+
         if (!value.empty()) { TRACE("JPIP parameter: " << param << "=" << value); }
     }
 
@@ -266,38 +269,4 @@ namespace jpip {
         return in;
     }
 
-    istream &operator>>(istream &in, Request &request) {
-        string line;
-
-        if (getline(in, line)) {
-            TRACE("HTTP Request: " << line);
-            if (!request.Parse(line))
-                in.setstate(istream::failbit);
-        }
-        return in;
-    }
-
-    ostream &operator<<(ostream &out, const Request &request) {
-        if (request.type == Request::UNKNOWN)
-            return out;
-
-        out << "GET " << request.object;
-        if (!request.parameters.empty()) {
-            out << "?";
-            map<string, string>::const_iterator i = request.parameters.begin();
-            if (!i->second.empty())
-                out << i->first << "=" << i->second;
-            else
-                out << i->first;
-
-            while (++i != request.parameters.end()) {
-                out << "&";
-                if (!i->second.empty())
-                    out << i->first << "=" << i->second;
-                else
-                    out << i->first;
-            }
-        }
-        return out << " " << request.protocol << http::Protocol::CRLF;
-    }
 }

@@ -329,7 +329,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 err_msg = "Close request received but there is not any channel opened";
                 LOG(err_msg);
                 /* Only one channel per client supported */
-            } else if (req.parameters["cclose"] != "*" && req.parameters["cclose"] != channel) {
+            } else if (req.channel != "*" && req.channel != channel) {
                 err_msg = "Close request received related to another channel";
                 LOG(err_msg);
             } else {
@@ -351,7 +351,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 err_msg = "There already is a channel opened. Only one channel per client is supported";
                 LOG(err_msg);
             } else {
-                string file_name = req.mask.items.target ? req.parameters["target"] : req.object;
+                string file_name = req.mask.items.target ? req.target : req.object;
 
                 if (!file_manager.OpenImage(file_name)) {
                     ERROR("The image file '" << file_name << "' can not be read");
@@ -380,7 +380,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 err_msg = "Request received but no channel is opened";
                 LOG(err_msg);
             } else {
-                if (req.parameters["cid"] != channel) {
+                if (req.channel != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
                 } else {

@@ -32,12 +32,17 @@ static void CheckJHVRequests() {
     Check(req.Parse("GET /movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512 HTTP/1.1"),
           "Could not parse JHV channel request");
     Check(req.object == "/movie.jpx", "Wrong channel target");
-    Check(req.mask.items.cnew && req.parameters["cnew"] == "http", "Missing cnew field");
+    Check(req.mask.items.cnew, "Missing cnew field");
     Check(req.mask.items.len && req.length_response == 512, "Wrong channel response limit");
+
+    Check(req.Parse("GET /jpip?target=movie.jpx&cnew=http&len=512 HTTP/1.1"),
+          "Could not parse target-form channel request");
+    Check(req.mask.items.target && req.target == "movie.jpx", "Missing target field");
 
     Check(req.Parse("GET /jpip?stream=0&metareq=[*]!!&len=2000000&cid=7 HTTP/1.1"),
           "Could not parse JHV metadata request");
-    Check(req.mask.items.cid && req.parameters["cid"] == "7", "Missing channel ID");
+    Check(req.mask.items.cid && req.channel == "7", "Missing channel ID");
+    Check(req.target.empty(), "Previous target was retained");
     Check(req.mask.items.metareq, "Missing metadata request");
     Check(req.codestreams == vector<int>(1, 0), "Wrong metadata codestream");
     Check(req.length_response == 2000000, "Wrong metadata response limit");
@@ -82,8 +87,12 @@ static void CheckJHVRequests() {
     Check(!req.Parse("GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
 
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
-    Check(req.mask.items.cclose && req.parameters["cclose"] == "7", "Missing close field");
+    Check(req.mask.items.cclose && req.channel == "7", "Missing close field");
     Check(req.codestreams.empty(), "A reused request retained its codestreams");
+
+    Check(req.Parse("GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
+          "Could not reuse request for a new channel");
+    Check(req.channel.empty(), "Previous channel ID was retained");
 }
 
 static void CheckInetAddress() {
