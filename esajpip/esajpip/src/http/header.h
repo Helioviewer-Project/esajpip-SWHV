@@ -115,20 +115,32 @@ namespace http {
             string line;
 
             if (getline(in, line)) {
-                size_t line_size = line.size();
-                if (line_size <= 0) in.setstate(istream::eofbit);
-                else if ((line[0] == '\r') || (line[0] == '\n')) in.setstate(istream::eofbit);
-                else {
-                    size_t pos = line.find(':');
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
 
-                    if (pos == string::npos) in.setstate(istream::failbit);
-                    else {
-                        header.name = line.substr(0, pos);
-
-                        if ((pos += 2) >= line_size) in.setstate(istream::failbit);
-                        else header.value = line.substr(pos, line_size - pos - 1);
-                    }
+                if (line.empty()) {
+                    in.setstate(istream::eofbit);
+                    return in;
                 }
+
+                size_t colon = line.find(':');
+                if (colon == string::npos) {
+                    in.setstate(istream::failbit);
+                    return in;
+                }
+
+                size_t value_begin = colon + 1;
+                while (value_begin < line.size() &&
+                       (line[value_begin] == ' ' || line[value_begin] == '\t'))
+                    value_begin++;
+
+                size_t value_end = line.size();
+                while (value_end > value_begin &&
+                       (line[value_end - 1] == ' ' || line[value_end - 1] == '\t'))
+                    value_end--;
+
+                header.name = line.substr(0, colon);
+                header.value = line.substr(value_begin, value_end - value_begin);
             }
 
             return in;
