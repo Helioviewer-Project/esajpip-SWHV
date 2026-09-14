@@ -107,7 +107,6 @@ void ClientManager::Run(ClientInfo *client_info) {
 
     ///
 
-    bool com_error;
     string req_line, req_line_raw;
     jpip::Request req;
     bool pclose = false;
@@ -145,18 +144,28 @@ void ClientManager::Run(ClientInfo *client_info) {
         if (log_requests)
             LOGC(_BLUE, "Waiting for a request ...");
 
-        com_error = true;
-        if (getline(sock_stream, req_line_raw).good()) {
-            char *req_line_escape = g_strescape(req_line_raw.c_str(), NULL);
-            req_line.assign(req_line_escape);
-            g_free(req_line_escape);
+        req_line_raw.clear();
+        errno = 0;
+        if (!getline(sock_stream, req_line_raw).good()) {
+            if (req_line_raw.empty() && errno == 0)
+                break;
 
-            com_error = !req.Parse(req_line);
-        } else
-            req_line.assign(strerror(errno));
+            if (errno != 0)
+                LOG("Request read error: " << strerror(errno));
+            else {
+                char *escaped = g_strescape(req_line_raw.c_str(), NULL);
+                LOG("Incomplete request line: " << escaped);
+                g_free(escaped);
+            }
+            break;
+        }
 
-        if (com_error) {
-            LOG("Bad request or read error: " << req_line);
+        char *escaped = g_strescape(req_line_raw.c_str(), NULL);
+        req_line.assign(escaped);
+        g_free(escaped);
+
+        if (!req.Parse(req_line)) {
+            LOG("Bad request: " << req_line);
             break;
         }
 
