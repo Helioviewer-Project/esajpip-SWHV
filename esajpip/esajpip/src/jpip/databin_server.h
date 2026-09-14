@@ -31,8 +31,6 @@ namespace jpip {
         int pending;         ///< Number of pending bytes
         vector<int> codestreams;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
-        bool metareq;        ///< <code>true</code> if the last request contained a "metareq"
-        bool end_woi_;       ///< <code>true</code> if the WOI has been completely sent
         size_t current_idx;  ///< Current codestream index
 
         /**
@@ -135,27 +133,16 @@ namespace jpip {
         DataBinServer() {
             pending = 0;
             has_woi = false;
-            end_woi_ = false;
-            metareq = false;
             current_idx = 0;
             eof = false;
         }
 
         /**
-         * Resets the server assigning a new image to serve. It
-         * also resets the maintained cache model.
-         * @param image_index Pointer to the new image index to use.
-         * @return <code>true</code> if successful.
-         */
-        void Reset();
-
-        /**
          * Sets the new current request to take into account for
          * generating the chunks of data.
          * @param req Request.
-         * @return <code>true</code> if successful.
          */
-        bool SetRequest(FileManager &file_manager, const Request &req);
+        void SetRequest(FileManager &file_manager, const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and

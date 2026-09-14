@@ -2,13 +2,7 @@
 
 namespace jpip {
 
-    void DataBinServer::Reset() {
-        metareq = false;
-        has_woi = false;
-    }
-
-    bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
-        bool res = true;
+    void DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
         bool reset_woi = false;
         const ImageIndex::Ptr image_index = file_manager.GetImage();
 
@@ -39,20 +33,14 @@ namespace jpip {
         if (req.mask.items.model)
             cache_model += req.cache_model;
 
-        if (req.mask.items.metareq)
-            metareq = true;
-
         if (req.mask.items.len)
             pending = req.length_response;
 
         if (reset_woi) {
             int codestream = codestreams.empty() ? 0 : codestreams[current_idx];
             const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
-            end_woi_ = false;
             woi_composer.Reset(coding_parameters, woi);
         }
-
-        return res;
     }
 
     bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last) {
@@ -137,7 +125,6 @@ namespace jpip {
 
             if (!eof) {
                 data_writer.WriteEOR(EOR::WINDOW_DONE);
-                end_woi_ = true;
                 pending = 0;
             } else {
                 pending -= data_writer.GetCount();

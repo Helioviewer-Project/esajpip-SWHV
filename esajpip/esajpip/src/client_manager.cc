@@ -200,22 +200,18 @@ void ClientManager::Run(ClientInfo *client_info) {
                     ERROR("The image file '" << file_name << "' can not be read");
                 } else {
                     is_opened = true;
-                    data_server.Reset();
-                    if (!data_server.SetRequest(file_manager, req)) {
-                        ERROR("The server can not process the request");
-                    } else {
-                        LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
+                    data_server.SetRequest(file_manager, req);
+                    LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
-                        ostringstream msg;
-                        msg << http::Response(200)
-                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                << http::Header("JPIP-tid", file_name)
-                                << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
-                                << (send_gzip ? head_data_gzip.str() : head_data.str())
-                                << http::Protocol::CRLF;
-                        SendStream(socket, msg);
-                        send_data = true;
-                    }
+                    ostringstream msg;
+                    msg << http::Response(200)
+                            << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
+                            << http::Header("JPIP-tid", file_name)
+                            << http::Header::AccessControlExposeHeaders("JPIP-cnew,JPIP-tid")
+                            << (send_gzip ? head_data_gzip.str() : head_data.str())
+                            << http::Protocol::CRLF;
+                    SendStream(socket, msg);
+                    send_data = true;
                 }
             }
         } else if (req.mask.items.cid) {
@@ -226,9 +222,8 @@ void ClientManager::Run(ClientInfo *client_info) {
                 if (req.parameters["cid"] != channel) {
                     err_msg = "Request related to another channel";
                     LOG(err_msg);
-                } else if (!data_server.SetRequest(file_manager, req)) {
-                    ERROR("The server can not process the request");
                 } else {
+                    data_server.SetRequest(file_manager, req);
                     ostringstream msg;
                     msg << http::Response(200)
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
