@@ -92,11 +92,16 @@ namespace jpip {
             }
 
             if (!eof) {
-                vector<File *> files(codestreams.size());
+                if (files.empty()) {
+                    files.resize(codestreams.size());
+                    for (size_t i = 0; i < codestreams.size(); ++i)
+                        files[i] = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
+                }
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    files[i] = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
-                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
-                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0, FileSegment::Null);
+                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0,
+                                                            image_index->GetMainHeader(codestreams[i]));
+                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0,
+                                                            FileSegment::Null);
                 }
 
                 if (has_woi) {
@@ -153,7 +158,10 @@ namespace jpip {
         *len = data_writer.GetCount();
         *last = (pending <= 0);
 
-        if (*last) cache_model.Pack();
+        if (*last) {
+            cache_model.Pack();
+            vector<File *>().swap(files);
+        }
 
         return true;
     }

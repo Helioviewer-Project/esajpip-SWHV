@@ -30,6 +30,7 @@ namespace jpip {
         WOI woi;             ///< Current WOI
         int pending;         ///< Number of pending bytes
         vector<int> codestreams;
+        vector<File *> files;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
