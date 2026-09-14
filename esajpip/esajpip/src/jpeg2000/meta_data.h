@@ -20,6 +20,11 @@ namespace jpeg2000 {
         vector<FileSegment> meta_data;
 
         /**
+         * Contents of boxes referenced by place-holders in meta-data bin 0.
+         */
+        vector<FileSegment> bins;
+
+        /**
          * Associated place-holders.
          */
         vector<PlaceHolder> place_holders;
@@ -42,6 +47,7 @@ namespace jpeg2000 {
          */
         Metadata &operator=(const Metadata &info) {
             meta_data = info.meta_data;
+            bins = info.bins;
             place_holders = info.place_holders;
             return *this;
         }
@@ -50,6 +56,10 @@ namespace jpeg2000 {
             out << endl << "Meta-data: ";
             for (size_t i = 0; i < info.meta_data.size(); ++i)
                 out << info.meta_data[i] << " ";
+
+            out << endl << "Meta-data bins: ";
+            for (size_t i = 0; i < info.bins.size(); ++i)
+                out << info.bins[i] << " ";
 
             out << endl << "Place Holders: ";
             for (size_t i = 0; i < info.place_holders.size(); ++i)

@@ -316,7 +316,6 @@ namespace jpeg2000 {
         vector<uint16_t> v_data_reference;
         vector<string> v_path_file;
         int pini = 0, plen = 0, pini_box = 0, plen_box = 0;
-        //int metadata_bin=1;
         int num_flst = 0, pini_ftbl = 0, plen_ftbl = 0;
 
         while (file->GetOffset() != file->GetSize() && res) {
@@ -335,24 +334,15 @@ namespace jpeg2000 {
                     pini = file->GetOffset();
                     plen = 0;
                     break;
-                    /*case ASOC_BOX_ID:
-                      TRACE("ASOC box...");
-                      image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
-                      res = res && file->Seek(length_box, SEEK_CUR);
-                      image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
-                      metadata_bin++;
-                      pini=file->GetOffset();
-                      plen=0;
-                      break;
-                    case XML__BOX_ID:
-                      TRACE("XML box...");
-                    image_info->meta_data.meta_data.push_back(FileSegment(pini,plen));
+                case ASOC_BOX_ID: TRACE("ASOC box...");
                     res = res && file->Seek(length_box, SEEK_CUR);
-                    image_info->meta_data.place_holders.push_back(PlaceHolder(metadata_bin, false, FileSegment(pini_box, plen_box), length_box));
-                    metadata_bin++;
-                    pini=file->GetOffset();
-                    plen=0;
-                    break;*/
+                    image_info->meta_data.meta_data.emplace_back(pini, plen);
+                    image_info->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
+                    image_info->meta_data.place_holders.emplace_back(image_info->meta_data.bins.size(), false,
+                                                                      FileSegment(pini_box, plen_box), length_box);
+                    pini = file->GetOffset();
+                    plen = 0;
+                    break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
                     image_info->meta_data.meta_data.emplace_back(pini, plen);

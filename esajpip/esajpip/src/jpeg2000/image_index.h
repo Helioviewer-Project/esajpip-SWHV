@@ -100,6 +100,10 @@ namespace jpeg2000 {
             return meta_data.meta_data.size();
         }
 
+        size_t GetNumMetadataBins() const {
+            return meta_data.bins.size();
+        }
+
         /**
          * Returns the path name of the image.
          */
@@ -135,6 +139,10 @@ namespace jpeg2000 {
          */
         const FileSegment &GetMetadata(size_t num_metadata) const {
             return meta_data.meta_data[num_metadata];
+        }
+
+        const FileSegment &GetMetadataBin(size_t num_metadata) const {
+            return meta_data.bins[num_metadata];
         }
 
         /**

@@ -70,7 +70,7 @@ namespace jpeg2000 {
          * Returns the length of the place-holder.
          */
         int length() const {
-            return (44 + header.length);
+            return ((is_jp2c ? 44 : 20) + header.length);
         }
 
         virtual ~PlaceHolder() {

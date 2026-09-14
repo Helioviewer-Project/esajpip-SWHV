@@ -54,9 +54,10 @@ namespace jpip {
 
             if (!cache_model.IsFullMetadata()) {
                 File::Ptr file = file_manager.GetFile(image_index->GetPathName());
-                if (image_index->GetNumMetadatas() <= 0)
-                    WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null);
-                else {
+                if (!meta_bin0_done && image_index->GetNumMetadatas() <= 0) {
+                    if (WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null) > 0)
+                        meta_bin0_done = true;
+                } else if (!meta_bin0_done) {
                     size_t num_metadatas = image_index->GetNumMetadatas();
                     while (meta_idx < num_metadatas) {
                         const FileSegment &metadata = image_index->GetMetadata(meta_idx);
@@ -65,7 +66,7 @@ namespace jpip {
 
                         if (last_metadata) {
                             if (res > 0)
-                                cache_model.SetFullMetadata();
+                                meta_bin0_done = true;
                             break;
                         }
 
@@ -77,6 +78,17 @@ namespace jpip {
                         meta_idx++;
                     }
                 }
+
+                while (meta_bin0_done && !eof && meta_bin_idx < image_index->GetNumMetadataBins()) {
+                    res = WriteSegment<DataBinClass::META_DATA>(file, 0, meta_bin_idx + 1,
+                                                                image_index->GetMetadataBin(meta_bin_idx));
+                    if (res <= 0)
+                        break;
+                    meta_bin_idx++;
+                }
+
+                if (meta_bin0_done && meta_bin_idx == image_index->GetNumMetadataBins())
+                    cache_model.SetFullMetadata();
             }
 
             if (!eof) {

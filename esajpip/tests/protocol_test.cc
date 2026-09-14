@@ -11,6 +11,7 @@
 #include "http/header.h"
 #include "http/request.h"
 #include "http/response.h"
+#include "jpeg2000/place_holder.h"
 #include "jpip/databin_writer.h"
 #include "jpip/jpip.h"
 #include "jpip/request.h"
@@ -159,10 +160,43 @@ static void CheckCoalescedJPIPMessages() {
         Check(static_cast<unsigned char>(class_buf[i]) == class_expected[i], "Wrong mixed-class JPIP message");
 }
 
+static void CheckMetadataPlaceHolder() {
+    char path[] = "/tmp/esajpip-placeholder-XXXXXX";
+    int fd = mkstemp(path);
+    Check(fd >= 0, "Could not create box-header file");
+    const unsigned char header[] = {0x00, 0x00, 0x00, 0x10, 'a', 's', 'o', 'c'};
+    Check(write(fd, header, sizeof header) == sizeof header, "Could not write box header");
+    close(fd);
+
+    data::File file;
+    Check(file.Open(path), "Could not open box-header file");
+    remove(path);
+
+    char buf[64];
+    jpip::DataBinWriter writer;
+    jpeg2000::PlaceHolder place_holder(7, false, data::FileSegment(0, sizeof header), 8);
+    writer.SetBuffer(buf, sizeof buf)
+          .SetCodestream(0)
+          .SetDataBinClass(jpip::DataBinClass::META_DATA)
+          .WritePlaceHolder(0, 0, file, place_holder, true);
+
+    const unsigned char expected[] = {
+        0x70, 0x08, 0x00, 0x00, 0x1c,
+        0x00, 0x00, 0x00, 0x1c, 'p', 'h', 'l', 'd',
+        0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
+        0x00, 0x00, 0x00, 0x10, 'a', 's', 'o', 'c'
+    };
+    Check(writer.GetCount() == sizeof expected, "Wrong metadata place-holder length");
+    for (size_t i = 0; i < sizeof expected; ++i)
+        Check(static_cast<unsigned char>(buf[i]) == expected[i], "Wrong metadata place-holder");
+}
+
 int main() {
     CheckJHVRequests();
     CheckHTTPResponse();
     CheckJPIPMessages();
     CheckCoalescedJPIPMessages();
+    CheckMetadataPlaceHolder();
     return EXIT_SUCCESS;
 }

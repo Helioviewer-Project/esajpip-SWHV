@@ -173,9 +173,11 @@ namespace jpip {
                     else ptr += place_holder.header.length;
                 }
 
-                /* EquivID */ WriteValue<uint64_t>(0);
-                /* EquivBH */ WriteValue<uint64_t>(0);
-                /* CSID    */ WriteValue<uint64_t>(place_holder.is_jp2c ? place_holder.id : 0);
+                if (place_holder.is_jp2c) {
+                    /* EquivID */ WriteValue<uint64_t>(0);
+                    /* EquivBH */ WriteValue<uint64_t>(0);
+                    /* CSID    */ WriteValue<uint64_t>(place_holder.id);
+                }
 
                 if (eof) ptr = aux_ptr;
                 else {

@@ -34,6 +34,8 @@ namespace jpip {
         size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
         int meta_offset;
+        size_t meta_bin_idx;
+        bool meta_bin0_done;
 
         /**
          * <code>true</code> if the end has been reached and the last write operation
@@ -138,6 +140,8 @@ namespace jpip {
             current_idx = 0;
             meta_idx = 0;
             meta_offset = 0;
+            meta_bin_idx = 0;
+            meta_bin0_done = false;
             eof = false;
         }
 
