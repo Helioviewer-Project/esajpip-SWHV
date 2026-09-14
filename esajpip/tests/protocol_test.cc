@@ -174,9 +174,8 @@ static void CheckJPIPMessages() {
     data::File file;
     jpip::DataBinWriter writer;
     writer.SetBuffer(buf, sizeof buf);
-    writer.SetCodestream(0);
-    writer.SetDataBinClass(jpip::DataBinClass::MAIN_HEADER);
-    writer.Write(0, 0, file, data::FileSegment::Null, true);
+    writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                 data::FileSegment::Null, true);
     writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     const unsigned char expected[] = {0x70, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00};
@@ -202,10 +201,10 @@ static void CheckCoalescedJPIPMessages() {
     char buf[128];
     jpip::DataBinWriter writer;
     writer.SetBuffer(buf, sizeof buf);
-    writer.SetCodestream(0);
-    writer.SetDataBinClass(jpip::DataBinClass::MAIN_HEADER);
-    writer.Write(0, 0, file, data::FileSegment(0, 2), false);
-    writer.Write(0, 2, file, data::FileSegment(2, 3), true);
+    writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                 data::FileSegment(0, 2), false);
+    writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 2, file,
+                 data::FileSegment(2, 3), true);
     writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     const unsigned char expected[] = {0x70, 0x06, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5, 0x00, 0x02, 0x00};
@@ -216,10 +215,10 @@ static void CheckCoalescedJPIPMessages() {
     char growing_buf[256];
     jpip::DataBinWriter growing_writer;
     growing_writer.SetBuffer(growing_buf, sizeof growing_buf);
-    growing_writer.SetCodestream(0);
-    growing_writer.SetDataBinClass(jpip::DataBinClass::MAIN_HEADER);
-    growing_writer.Write(0, 0, file, data::FileSegment(0, 100), false);
-    growing_writer.Write(0, 100, file, data::FileSegment(100, 50), true);
+    growing_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                         data::FileSegment(0, 100), false);
+    growing_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
+                         data::FileSegment(100, 50), true);
     growing_writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     Check(growing_writer.GetCount() == 159, "Wrong growing JPIP message length");
@@ -232,11 +231,10 @@ static void CheckCoalescedJPIPMessages() {
     char class_buf[128];
     jpip::DataBinWriter class_writer;
     class_writer.SetBuffer(class_buf, sizeof class_buf);
-    class_writer.SetCodestream(0);
-    class_writer.SetDataBinClass(jpip::DataBinClass::MAIN_HEADER);
-    class_writer.Write(0, 0, file, data::FileSegment(0, 2), true);
-    class_writer.SetDataBinClass(jpip::DataBinClass::META_DATA);
-    class_writer.Write(0, 0, file, data::FileSegment(2, 3), true);
+    class_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                       data::FileSegment(0, 2), true);
+    class_writer.Write(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
+                       data::FileSegment(2, 3), true);
     class_writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     const unsigned char class_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2,
@@ -246,12 +244,27 @@ static void CheckCoalescedJPIPMessages() {
     for (size_t i = 0; i < sizeof class_expected; ++i)
         Check(static_cast<unsigned char>(class_buf[i]) == class_expected[i], "Wrong mixed-class JPIP message");
 
+    char stream_buf[128];
+    jpip::DataBinWriter stream_writer;
+    stream_writer.SetBuffer(stream_buf, sizeof stream_buf);
+    stream_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                        data::FileSegment(0, 1), true);
+    stream_writer.Write(jpip::DataBinClass::MAIN_HEADER, 1, 0, 0, file,
+                        data::FileSegment(1, 1), true);
+
+    const unsigned char stream_expected[] = {0x70, 0x06, 0x00, 0x00, 0x01, 1,
+                                             0x70, 0x06, 0x01, 0x00, 0x01, 2};
+    Check(stream_writer.GetCount() == sizeof stream_expected,
+          "Wrong mixed-codestream JPIP message length");
+    for (size_t i = 0; i < sizeof stream_expected; ++i)
+        Check(static_cast<unsigned char>(stream_buf[i]) == stream_expected[i],
+              "Wrong mixed-codestream JPIP message");
+
     char exact_buf[7];
     jpip::DataBinWriter exact_writer;
     exact_writer.SetBuffer(exact_buf, sizeof exact_buf);
-    exact_writer.SetCodestream(0);
-    exact_writer.SetDataBinClass(jpip::DataBinClass::MAIN_HEADER);
-    exact_writer.Write(0, 0, file, data::FileSegment(0, 2), true);
+    exact_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                       data::FileSegment(0, 2), true);
 
     const unsigned char exact_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2};
     Check(exact_writer.GetCount() == sizeof exact_expected, "Did not fill the JPIP buffer exactly");
@@ -275,9 +288,8 @@ static void CheckMetadataPlaceHolder() {
     jpip::DataBinWriter writer;
     jpeg2000::PlaceHolder place_holder(7, false, data::FileSegment(0, sizeof header), 8);
     writer.SetBuffer(buf, sizeof buf);
-    writer.SetCodestream(0);
-    writer.SetDataBinClass(jpip::DataBinClass::META_DATA);
-    writer.WritePlaceHolder(0, 0, file, place_holder, true);
+    writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
+                            place_holder, true);
 
     const unsigned char expected[] = {
         0x70, 0x08, 0x00, 0x00, 0x1c,
@@ -293,9 +305,8 @@ static void CheckMetadataPlaceHolder() {
     char exact_buf[sizeof expected];
     jpip::DataBinWriter exact_writer;
     exact_writer.SetBuffer(exact_buf, sizeof exact_buf);
-    exact_writer.SetCodestream(0);
-    exact_writer.SetDataBinClass(jpip::DataBinClass::META_DATA);
-    exact_writer.WritePlaceHolder(0, 0, file, place_holder, true);
+    exact_writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
+                                  place_holder, true);
 
     Check(exact_writer.GetCount() == sizeof expected, "Did not fill the place-holder buffer exactly");
     for (size_t i = 0; i < sizeof expected; ++i)

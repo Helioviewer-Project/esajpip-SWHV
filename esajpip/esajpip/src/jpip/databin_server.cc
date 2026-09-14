@@ -6,7 +6,7 @@ namespace jpip {
         bool reset_woi = false;
         ImageIndex *image_index = file_manager.GetImage();
 
-        data_writer.ClearPreviousIds();
+        data_writer.StartResponse();
 
         if (req.mask.items.stream || req.mask.items.context) {
             if (codestreams != req.codestreams) {

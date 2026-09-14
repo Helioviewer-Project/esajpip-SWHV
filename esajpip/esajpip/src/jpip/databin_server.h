@@ -85,10 +85,8 @@ namespace jpip {
                         res = 0;
                     }
 
-                    data_writer.SetCodestream(num_codestream);
-                    data_writer.SetDataBinClass(BIN_CLASS);
-
-                    data_writer.Write(id, cached, *file, part, last);
+                    data_writer.Write(BIN_CLASS, num_codestream, id, cached,
+                                      *file, part, last);
                     if (!data_writer.IsValid()) res = -1;
                     else cache_model.AddToDataBin(BIN_CLASS, num_codestream, id, part.length, last);
                 }
@@ -118,10 +116,9 @@ namespace jpip {
                     eof = true;
                     res = 0;
                 } else {
-                    data_writer.SetCodestream(num_codestream);
-                    data_writer.SetDataBinClass(DataBinClass::META_DATA);
-
-                    data_writer.WritePlaceHolder(id, cached, *file, place_holder, last);
+                    data_writer.WritePlaceHolder(DataBinClass::META_DATA,
+                                                   num_codestream, id, cached,
+                                                   *file, place_holder, last);
                     if (!data_writer.IsValid()) res = -1;
                     else
                         cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,

@@ -14,28 +14,34 @@ namespace jpip {
     size_t DataBinWriter::HeaderLength(uint64_t bin_id, uint64_t bin_offset,
                                        uint64_t bin_length) const {
         int pres = 1;
-        if (prev_databin_class != databin_class)
+        if (prev_databin_class != msg_databin_class)
             pres = 2;
-        if (prev_codestream_idx != codestream_idx)
+        if (prev_codestream_idx != msg_codestream_idx)
             pres = 3;
 
         size_t length = 1;
         if (bin_id >= 16)
             length += VBASLength(bin_id);
         if (pres >= 2)
-            length += VBASLength(databin_class);
+            length += VBASLength(msg_databin_class);
         if (pres == 3)
-            length += VBASLength(codestream_idx);
+            length += VBASLength(msg_codestream_idx);
         return length + VBASLength(bin_offset) + VBASLength(bin_length);
     }
 
-    bool DataBinWriter::BeginMessage(uint64_t bin_id, uint64_t bin_offset,
+    bool DataBinWriter::BeginMessage(int databin_class, int codestream_idx,
+                                     uint64_t bin_id, uint64_t bin_offset,
                                      uint64_t bin_length, bool last_byte) {
-        if (msg_start != NULL && !msg_last && msg_bin == bin_id &&
-            msg_offset + msg_len == bin_offset)
+        if (codestream_idx < 0)
+            codestream_idx = 0;
+        if (msg_start != NULL && msg_databin_class == databin_class &&
+            msg_codestream_idx == codestream_idx && !msg_last &&
+            msg_bin == bin_id && msg_offset + msg_len == bin_offset)
             return true;
 
         FinishMessage();
+        msg_databin_class = databin_class;
+        msg_codestream_idx = codestream_idx;
         size_t header_len = HeaderLength(bin_id, bin_offset, bin_length);
         if ((ptr + header_len) > end) {
             eof = true;
@@ -70,8 +76,8 @@ namespace jpip {
         WriteHeader(msg_bin, msg_offset, msg_len, msg_last);
         ptr += payload_len;
 
-        prev_databin_class = databin_class;
-        prev_codestream_idx = codestream_idx;
+        prev_databin_class = msg_databin_class;
+        prev_codestream_idx = msg_codestream_idx;
         msg_start = NULL;
     }
 
@@ -104,8 +110,8 @@ namespace jpip {
                 char *aux_ptr = ptr;
 
                 int pres = 1;
-                if (prev_databin_class != databin_class) pres = 2;
-                if (prev_codestream_idx != codestream_idx) pres = 3;
+                if (prev_databin_class != msg_databin_class) pres = 2;
+                if (prev_codestream_idx != msg_codestream_idx) pres = 3;
 
                 uint8_t first_b = (uint8_t) (pres << 5);
                 if (last_byte) first_b |= (uint8_t) (1 << 4);
@@ -120,8 +126,8 @@ namespace jpip {
                 }
 
                 if (pres >= 2) {
-                    WriteVBAS((uint64_t) databin_class);
-                    if (pres == 3) WriteVBAS((uint64_t) codestream_idx);
+                    WriteVBAS((uint64_t) msg_databin_class);
+                    if (pres == 3) WriteVBAS((uint64_t) msg_codestream_idx);
                 }
 
                 WriteVBAS(bin_offset);
@@ -132,9 +138,11 @@ namespace jpip {
         }
     }
 
-    void DataBinWriter::Write(uint64_t bin_id, uint64_t bin_offset, File &file,
+    void DataBinWriter::Write(int databin_class, int codestream_idx,
+                              uint64_t bin_id, uint64_t bin_offset, File &file,
                               const FileSegment &segment, bool last_byte) {
-        if (BeginMessage(bin_id, bin_offset, segment.length, last_byte)) {
+        if (BeginMessage(databin_class, codestream_idx, bin_id, bin_offset,
+                         segment.length, last_byte)) {
             char *aux_ptr = ptr;
             if (segment.length > 0) {
                 file.Seek(segment.offset);
@@ -152,10 +160,12 @@ namespace jpip {
 
     }
 
-    void DataBinWriter::WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset,
+    void DataBinWriter::WritePlaceHolder(int databin_class, int codestream_idx,
+                                         uint64_t bin_id, uint64_t bin_offset,
                                          File &file, const PlaceHolder &place_holder,
                                          bool last_byte) {
-        if (BeginMessage(bin_id, bin_offset, place_holder.length(), last_byte)) {
+        if (BeginMessage(databin_class, codestream_idx, bin_id, bin_offset,
+                         place_holder.length(), last_byte)) {
             char *aux_ptr = ptr;
             if ((ptr + place_holder.length()) > end) eof = true;
             else {

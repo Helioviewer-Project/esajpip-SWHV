@@ -32,19 +32,20 @@ namespace jpip {
         char *ptr;            ///< Current position of the buffer
         char *end;            ///< Pointer to the end of the buffer
 
-        int databin_class;            ///< Current data-bin class
-        int codestream_idx;            ///< Current codestream index number
         int prev_databin_class;        ///< Previous data-bin class
         int prev_codestream_idx;    ///< Previous codestream index number
 
         char *msg_start;
+        int msg_databin_class;
+        int msg_codestream_idx;
         size_t msg_header_len;
         uint64_t msg_bin;
         uint64_t msg_offset;
         uint64_t msg_len;
         bool msg_last;
 
-        bool BeginMessage(uint64_t bin_id, uint64_t bin_offset,
+        bool BeginMessage(int databin_class, int codestream_idx,
+                          uint64_t bin_id, uint64_t bin_offset,
                           uint64_t bin_length, bool last_byte);
         void FinishMessage();
         size_t HeaderLength(uint64_t bin_id, uint64_t bin_offset,
@@ -88,11 +89,11 @@ namespace jpip {
          */
         DataBinWriter() {
             eof = true;
-            databin_class = -1;
-            codestream_idx = -1;
             prev_databin_class = -1;
             prev_codestream_idx = -1;
             msg_start = NULL;
+            msg_databin_class = -1;
+            msg_codestream_idx = -1;
             msg_header_len = 0;
             msg_bin = 0;
             msg_offset = 0;
@@ -114,39 +115,17 @@ namespace jpip {
         }
 
         /**
-         * Clears the previous identifiers of data-bin
-         * class and codestream index numbers.
+         * Starts a new response with no previous data-bin identifiers.
          */
-        void ClearPreviousIds() {
-            databin_class = -1;
-            codestream_idx = -1;
+        void StartResponse() {
             prev_databin_class = -1;
             prev_codestream_idx = -1;
         }
 
         /**
-         * Sets the current codestream.
-         * @param value Index number of the codestream.
-         */
-        void SetCodestream(int value) {
-            if (value < 0) value = 0;
-            if (codestream_idx != value)
-                FinishMessage();
-            codestream_idx = value;
-        }
-
-        /**
-         * Sets the current data-bin class.
-         * @param databin_class Data-bin class.
-         */
-        void SetDataBinClass(int databin_class) {
-            if (this->databin_class != databin_class)
-                FinishMessage();
-            this->databin_class = databin_class;
-        }
-
-        /**
          * Writes a data-bin segment into the buffer.
+         * @param databin_class Data-bin class.
+         * @param codestream_idx Codestream index number.
          * @param bin_id Data-bin identifier.
          * @param bin_offset Data-bin offset.
          * @param file File from where to read the data.
@@ -154,11 +133,14 @@ namespace jpip {
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
          */
-        void Write(uint64_t bin_id, uint64_t bin_offset, File &file,
-                   const FileSegment &segment, bool last_byte = false);
+        void Write(int databin_class, int codestream_idx, uint64_t bin_id,
+                   uint64_t bin_offset, File &file, const FileSegment &segment,
+                   bool last_byte = false);
 
         /**
          * Writes a place-holder segment into the buffer.
+         * @param databin_class Data-bin class.
+         * @param codestream_idx Codestream index number.
          * @param bin_id Data-bin identifier.
          * @param bin_offset Data-bin offset.
          * @param file File from where to read the data.
@@ -166,7 +148,8 @@ namespace jpip {
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
          */
-        void WritePlaceHolder(uint64_t bin_id, uint64_t bin_offset, File &file,
+        void WritePlaceHolder(int databin_class, int codestream_idx,
+                              uint64_t bin_id, uint64_t bin_offset, File &file,
                               const PlaceHolder &place_holder, bool last_byte = false);
 
         /**
