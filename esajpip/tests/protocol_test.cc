@@ -61,6 +61,13 @@ static void CheckJHVRequests() {
     Check(req.mask.items.model, "Missing terminal partial cache model");
     Check(req.cache_model.GetMetadata(0) == 446, "Wrong terminal partial metadata model");
 
+    Check(req.Parse("GET /jpip?model=M-1 HTTP/1.1"), "Could not parse request with negative metadata ID");
+    Check(!req.mask.items.model, "Accepted negative metadata ID");
+    Check(req.Parse("GET /jpip?model=P-1 HTTP/1.1"), "Could not parse request with negative precinct ID");
+    Check(!req.mask.items.model, "Accepted negative precinct ID");
+    Check(req.Parse("GET /jpip?model=M0:-1 HTTP/1.1"), "Could not parse request with negative model length");
+    Check(!req.mask.items.model, "Accepted negative model length");
+
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.mask.items.cclose && req.parameters["cclose"] == "7", "Missing close field");
     Check(req.codestreams.empty(), "A reused request retained its codestreams");

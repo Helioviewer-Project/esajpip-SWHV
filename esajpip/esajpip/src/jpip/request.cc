@@ -180,14 +180,15 @@ namespace jpip {
                 if ((c == 'H') && (in.peek() == 'm')) {
                     in.ignore(1);
                     c = 'h';
-                } else {
-                    in >> id;
-                }
+                } else if (!(in >> id) || id < 0)
+                    in.setstate(istream::failbit);
 
                 amount = INT_MAX;
                 if (in.rdbuf()->sgetc() == ':') {
-                    if (in.ignore(1).peek() != 'L') in >> amount;
-                    else {
+                    if (in.ignore(1).peek() != 'L') {
+                        if (!(in >> amount) || amount < 0)
+                            in.setstate(istream::failbit);
+                    } else {
                         ERROR("Number of layers can not be used for model updating");
                         in.setstate(istream::failbit);
                     }
