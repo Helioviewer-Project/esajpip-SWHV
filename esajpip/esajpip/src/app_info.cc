@@ -116,23 +116,6 @@ AppInfo &AppInfo::Update() {
 #endif
     }
 
-    {
-        time_ = 0;
-
-        string line, cpu;
-        unsigned long t1, t2;
-        ifstream fin("/proc/stat");
-
-        if (getline(fin, line)) {
-            istringstream str(line);
-
-            if (str >> cpu >> t1 >> t2) {
-                time_ = t1 * t2;
-                while (str >> t2) time_ += t2;
-            }
-        }
-    }
-
     return *this;
 }
 

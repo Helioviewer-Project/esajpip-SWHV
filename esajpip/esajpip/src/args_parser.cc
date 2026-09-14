@@ -12,7 +12,7 @@
 
 using namespace std;
 
-bool ArgsParser::Parse(int argc, char **argv) {
+bool ParseArgs(AppInfo &app_info, int argc, char **argv) {
     if (argc <= 1) return true;
     else {
         bool res = false;

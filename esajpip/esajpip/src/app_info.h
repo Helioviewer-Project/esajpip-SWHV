@@ -44,7 +44,6 @@ private:
     bool is_running_;                ///< <code>true</code> if the application is running
     int num_threads_;                ///< Number of active threads
     double child_memory_;            ///< Memory used by the child process
-    unsigned long time_;            ///< Time spent by the father
     double father_memory_;        ///< Memory used by the father process
     double available_memory_;        ///< Available memory in the system
     unsigned long child_time_;    ///< Time spend by the child
@@ -79,7 +78,6 @@ public:
         child_time_ = 0;
         data_ptr = NULL;
         num_threads_ = 0;
-        time_ = 0;
     }
 
     /**
@@ -158,13 +156,6 @@ public:
      */
     unsigned long child_time() const {
         return child_time_;
-    }
-
-    /**
-     * Returns the time spent by the father process.
-     */
-    unsigned long time() const {
-        return time_;
     }
 
     Data *operator->() const {

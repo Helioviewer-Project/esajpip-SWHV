@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         return CERR("The shared information can not be set");
     if (!cfg.Load(CONFIG_FILE))
         return CERR("The configuration file '" << CONFIG_FILE << "' can not be read");
-    if (!ArgsParser(app_info).Parse(argc, argv))
+    if (!ParseArgs(app_info, argc, argv))
         return -1;
     if (app_info.is_running())
         return CERR("The server is already running");
