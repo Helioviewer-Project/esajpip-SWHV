@@ -1,6 +1,7 @@
 #ifndef _DATA_FILE_H_
 #define _DATA_FILE_H_
 
+#include <algorithm>
 #include <cstdio>
 #include <cassert>
 #include <errno.h>
@@ -12,8 +13,6 @@
 #include <unistd.h>
 
 #include "trace.h"
-
-#define MIN(a,b) (((a) < (b)) ? (a) : (b))
 
 namespace data {
     using namespace std;
@@ -65,7 +64,7 @@ namespace data {
                 new_offset = _offset;
             else // SEEK_CUR
                 new_offset = offset + _offset;
-            offset = MIN(new_offset, size);
+            offset = std::min(new_offset, size);
             return true;
         }
 
@@ -94,14 +93,13 @@ namespace data {
          * @return <code>true</code> if successful.
          */
         template<typename T>
-        bool Read(T *value, int num_bytes = sizeof(T)) {
+        bool Read(T *value, size_t num_bytes = sizeof(T)) {
             assert(address != MAP_FAILED);
-            int to_read = num_bytes;
-            if (offset + to_read > size)
-                to_read = size - offset;
-            memcpy(value, address + offset, to_read);
-            offset += to_read;
-            return to_read == num_bytes;
+            if (num_bytes > size - offset)
+                return false;
+            memcpy(value, address + offset, num_bytes);
+            offset += num_bytes;
+            return true;
         }
 
         /**
@@ -112,17 +110,15 @@ namespace data {
          * @return <code>true</code> if successful.
          */
         template<typename T>
-        bool ReadReverse(T *value, int num_bytes = sizeof(T)) {
+        bool ReadReverse(T *value, size_t num_bytes = sizeof(T)) {
             assert(address != MAP_FAILED);
-            for (char *ptr = ((char *) value) + (num_bytes - 1); num_bytes-- > 0; ptr--) {
-                if (offset < size) {
-                    *ptr = *(address + offset);
-                    offset++;
-                } else
-                    return false;
-            }
-
-           return true;
+            if (num_bytes > size - offset)
+                return false;
+            char *bytes = (char *) value;
+            for (size_t i = 0; i < num_bytes; ++i)
+                bytes[num_bytes - i - 1] = address[offset + i];
+            offset += num_bytes;
+            return true;
         }
 
         ~File() {
