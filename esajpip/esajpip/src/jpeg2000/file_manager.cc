@@ -284,7 +284,6 @@ namespace jpeg2000 {
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
-                    plen = 0;
                     break;
 
                     /*case XML__BOX_ID:
@@ -332,7 +331,6 @@ namespace jpeg2000 {
                     res = res && ReadCodestream(file, &image_info->coding_parameters, &image_info->codestreams.back());
                     image_info->meta_data.place_holders.emplace_back(image_info->codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
-                    plen = 0;
                     break;
                 case ASOC_BOX_ID: TRACE("ASOC box...");
                     res = res && file->Seek(length_box, SEEK_CUR);
@@ -341,7 +339,6 @@ namespace jpeg2000 {
                     image_info->meta_data.place_holders.emplace_back(image_info->meta_data.bins.size(), false,
                                                                       FileSegment(pini_box, plen_box), length_box);
                     pini = file->GetOffset();
-                    plen = 0;
                     break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
@@ -359,7 +356,6 @@ namespace jpeg2000 {
                     image_info->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
                     v_data_reference.push_back(data_reference);
                     pini = file->GetOffset();
-                    plen = 0;
                     break;
                 case DBTL_BOX_ID: TRACE("DBTL box...");
                     res = res && file->Seek(2, SEEK_CUR);
@@ -397,20 +393,6 @@ namespace jpeg2000 {
             image_info->coding_parameters_hyperlinks[i] = image_info_hyperlink.coding_parameters;
             image_info->codestreams[i] = image_info_hyperlink.codestreams.back();
             image_info->meta_data_hyperlinks[i] = image_info_hyperlink.meta_data;
-        }
-        return res;
-    }
-
-    bool FileManager::ReadNlstBox(File::Ptr &file, int *num_codestream, int length_box) {
-        bool res = true;
-        // Get the codestream number
-        uint32_t an;
-        while (res && (length_box > 0)) {
-            res = res && file->ReadReverse(&an);
-            if ((an >> 24) == 1) {
-                *num_codestream = an & 0x00FFFFFF;
-            }
-            length_box -= 4;
         }
         return res;
     }

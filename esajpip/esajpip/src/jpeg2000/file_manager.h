@@ -79,15 +79,6 @@ namespace jpeg2000 {
         bool ReadSODMarker(File::Ptr &file, CodestreamIndex *index);
 
         /**
-         * Reads the information of a NLST box.
-         * @param file Image file.
-         * @param num_codestream Receives the number of codestream read.
-         * @param length_box Box length in bytes.
-         * @return <code>true</code> if successful.
-         */
-        bool ReadNlstBox(File::Ptr &file, int *num_codestream, int length_box);
-
-        /**
          * Reads the information of a FLST box.
          * @param file Image file.
          * @param length_box Box length in bytes.

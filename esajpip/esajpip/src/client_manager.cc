@@ -196,8 +196,6 @@ void ClientManager::Run(ClientInfo *client_info) {
                 err_msg = "Close request received related to another channel";
                 LOG(err_msg);
             } else {
-                pclose = false;
-                is_opened = false;
                 req.cache_model.Clear();
                 LOG("The channel " << channel << " has been closed");
 

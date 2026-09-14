@@ -110,9 +110,6 @@ namespace jpip {
             int res = 1, seg_cached = cached - offset;
 
             if (cached != INT_MAX && seg_cached < place_holder.length()) {
-                if (seg_cached < 0)
-                    seg_cached = 0;
-
                 int free = data_writer.GetFree() - MINIMUM_SPACE - place_holder.length();
 
                 if (free <= 0) {
