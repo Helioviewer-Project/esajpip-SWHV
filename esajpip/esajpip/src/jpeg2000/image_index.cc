@@ -127,27 +127,20 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
         bool linked = !hyper_links.empty();
-        if (linked) {
-            if (packet.resolution > hyper_links[num_codestream]->max_resolution.back()) {
-                if (!hyper_links[num_codestream]->BuildIndex(file, 0, packet.resolution)) {
-                    ERROR("The packet index could not be created");
-                    return false;
-                }
-                hyper_links[num_codestream]->max_resolution.back() = packet.resolution;
+        ImageIndex *index = linked ? hyper_links[num_codestream].get() : this;
+        int i = linked ? 0 : num_codestream;
+
+        if (packet.resolution > index->max_resolution[i]) {
+            if (!index->BuildIndex(file, i, packet.resolution)) {
+                ERROR("The packet index could not be created");
+                return false;
             }
-        } else {
-            if (packet.resolution > max_resolution[num_codestream]) {
-                if (!BuildIndex(file, num_codestream, packet.resolution)) {
-                    ERROR("The packet index could not be created");
-                    return false;
-                }
-                max_resolution[num_codestream] = packet.resolution;
-            }
+            index->max_resolution[i] = packet.resolution;
         }
 
-        const CodingParameters *coding_parameters = GetCodingParameters(num_codestream);
+        const CodingParameters *coding_parameters = &index->coding_parameters;
         int idx = coding_parameters->GetProgressionIndex(packet);
-        PacketIndex &packet_index = linked ? hyper_links[num_codestream]->packet_indexes[0] : packet_indexes[num_codestream];
+        PacketIndex &packet_index = index->packet_indexes[i];
         if (!packet_index.Get(idx, segment)) {
             ERROR("Invalid packet index: codestream=" << num_codestream << ", index=" << idx << ", size=" << packet_index.Size() << ", packet=" << packet);
             return false;
