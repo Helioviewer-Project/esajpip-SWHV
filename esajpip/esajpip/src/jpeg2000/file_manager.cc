@@ -235,26 +235,27 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadBoxHeader(File *file, uint32_t *type_box, uint64_t *length_box) {
-        bool res = true;
         // Get L, if it is not 0 or 1, then box length is L
         uint32_t L = 0;
-        res = res && file->ReadReverse(&L);
-        *length_box = L - 8;
         // Get T (box type)
-        uint32_t T = 0;
-        res = res && file->ReadReverse(&T);
-        *type_box = T;
+        if (!file->ReadReverse(&L) || !file->ReadReverse(type_box))
+            return false;
+
         // XL indicates the box length
         if (L == 1) {
             uint64_t XL = 0;
-            res = res && file->ReadReverse(&XL);
+            if (!file->ReadReverse(&XL) || XL < 16)
+                return false;
             *length_box = XL - 16;
-        }
+        } else if (L == 0) {
             // Box length = eof_offset - offset
-        else if (L == 0) {
             *length_box = file->GetSize() - file->GetOffset();
+        } else {
+            if (L < 8)
+                return false;
+            *length_box = L - 8;
         }
-        return res;
+        return *length_box <= file->GetSize() - file->GetOffset();
     }
 
     bool FileManager::ReadJP2(File *file, ImageInfo *image_info) {
