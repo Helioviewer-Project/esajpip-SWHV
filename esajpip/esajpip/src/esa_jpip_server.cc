@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         return CERR("The shared information can not be set");
     if (!cfg.Load(CONFIG_FILE))
         return CERR("The configuration file '" << CONFIG_FILE << "' can not be read");
-    if (!ArgsParser(cfg, app_info).Parse(argc, argv))
+    if (!ArgsParser(app_info).Parse(argc, argv))
         return -1;
     if (app_info.is_running())
         return CERR("The server is already running");
@@ -226,7 +226,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
 static void *ClientThread(void *arg) {
     ClientInfo *client_info = (ClientInfo *) arg;
 
-    ClientManager(cfg, app_info).Run(client_info);
+    ClientManager(cfg).Run(client_info);
 
     int sock = client_info->father_sock();
     if (child_socket.SendTo(father_address, &sock, sizeof sock) != sizeof sock)

@@ -2,7 +2,6 @@
 #define _ARGS_PARSER_H_
 
 #include "app_info.h"
-#include "app_config.h"
 
 /**
  * Class that allows to parse and handle the application
@@ -10,16 +9,14 @@
  */
 class ArgsParser {
 private:
-    AppConfig &cfg;        ///< Application configuration
     AppInfo &app_info;    ///< Application run-time information
 
 public:
     /**
      * Initializes the object.
-     * @param _cfg Application configuration.
      * @param _app_info Application run-time information.
      */
-    ArgsParser(AppConfig &_cfg, AppInfo &_app_info) : cfg(_cfg), app_info(_app_info) {
+    explicit ArgsParser(AppInfo &_app_info) : app_info(_app_info) {
     }
 
     /**
