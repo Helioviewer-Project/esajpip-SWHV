@@ -15,11 +15,7 @@ namespace jpeg2000 {
      */
     class CodingParameters {
     private:
-        /**
-         * Contains the number of precincts of each
-         * resolution level.
-         */
-        vector<int> total_precincts;
+        int total_precincts;
 
         /**
          * Returns the index of a packet according to the RPCL progression.
@@ -31,7 +27,7 @@ namespace jpeg2000 {
          */
         int GetProgressionIndexRPCL(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
-            return (total_precincts[r] * num_components * num_layers) +
+            return (resolutions[r].first_precinct * num_components * num_layers) +
                    (py * precinct_point.x * num_components * num_layers) +
                    (px * num_components * num_layers) + (c * num_layers) + l;
         }
@@ -46,7 +42,7 @@ namespace jpeg2000 {
          */
         int GetProgressionIndexRLCP(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
-            return (total_precincts[r] * num_components * num_layers) +
+            return (resolutions[r].first_precinct * num_components * num_layers) +
                    (l * num_components * precinct_point.x * precinct_point.y) +
                    (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
         }
@@ -61,11 +57,21 @@ namespace jpeg2000 {
          */
         int GetProgressionIndexLRCP(int l, int r, int c, int px, int py) const {
             Size precinct_point = GetPrecincts(r, size);
-            return (l * total_precincts[num_levels + 1] * num_components) + (num_components * total_precincts[r]) +
+            return (l * total_precincts * num_components) +
+                   (num_components * resolutions[r].first_precinct) +
                    (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
         }
 
     public:
+        struct Resolution {
+            Size precinct_size;
+            int first_precinct;
+
+            Resolution(int _width, int _height)
+                    : precinct_size(_width, _height), first_precinct(0) {
+            }
+        };
+
         Size size;                ///< Image size
         int num_levels;            ///< Number of resolution levels
         int num_layers;            ///< Number of quality layers
@@ -75,7 +81,7 @@ namespace jpeg2000 {
         /**
          * Precinct sizes of each resolution level.
          */
-        vector<Size> precinct_size;
+        vector<Resolution> resolutions;
 
         /**
          * All the progression orders defined in the JPEG2000
@@ -97,12 +103,10 @@ namespace jpeg2000 {
             num_layers = 0;
             progression = 0;
             num_components = 0;
+            total_precincts = 0;
         }
 
-        /**
-         * Fills the vector <code>total_precincts</code>.
-         */
-        void FillTotalPrecinctsVector();
+        void FillPrecinctCounts();
 
         friend ostream &operator<<(ostream &out, const CodingParameters &params) {
             out << "Progression: " <<
@@ -114,8 +118,8 @@ namespace jpeg2000 {
                 << "Size: " << params.size << endl << "Num. of levels: " << params.num_levels << endl
                 << "Num. of layers: " << params.num_layers << endl
                 << "Num. of components: " << params.num_components << endl << "Precinct size: { ";
-            for (size_t i = 0; i < params.precinct_size.size(); ++i)
-                out << params.precinct_size[i] << " ";
+            for (size_t i = 0; i < params.resolutions.size(); ++i)
+                out << params.resolutions[i].precinct_size << " ";
             out << "}" << endl;
             return out;
         }
@@ -134,8 +138,8 @@ namespace jpeg2000 {
          */
         Size GetPrecincts(int r, const Size &point) const {
             return Size(
-                    (int) ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) precinct_size[r].x),
-                    (int) ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) precinct_size[r].y)
+                    (int) ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) resolutions[r].precinct_size.x),
+                    (int) ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) resolutions[r].precinct_size.y)
             );
         }
 
@@ -145,8 +149,6 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetProgressionIndex(const Packet &packet) const {
-            //if (total_precincts.empty())
-            //    FillTotalPrecinctsVector();
             switch (progression) {
                 case LRCP_PROGRESSION:
                     return GetProgressionIndexLRCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
@@ -166,10 +168,9 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetPrecinctDataBinId(const Packet &packet) const {
-            //if (total_precincts.empty())
-            //    FillTotalPrecinctsVector();
             Size precinct_point = GetPrecincts(packet.resolution, size);
-            int s = total_precincts[packet.resolution] + (precinct_point.x * packet.precinct_xy.y) +
+            int s = resolutions[packet.resolution].first_precinct +
+                    (precinct_point.x * packet.precinct_xy.y) +
                     packet.precinct_xy.x;
             return (packet.component + (s * num_components));
         }

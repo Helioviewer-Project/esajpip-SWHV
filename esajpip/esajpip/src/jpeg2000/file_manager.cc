@@ -81,7 +81,7 @@ namespace jpeg2000 {
         }
 
         if (res && image_index->hyper_links.empty())
-            image_index->coding_parameters.FillTotalPrecinctsVector();
+            image_index->coding_parameters.FillPrecinctCounts();
 
         return res;
     }
@@ -239,7 +239,7 @@ namespace jpeg2000 {
         params->num_levels = transform_levels;
         int height, width;
         uint8_t size_precinct;
-        params->precinct_size.clear();
+        params->resolutions.clear();
         for (int i = 0; i <= params->num_levels; ++i) {
             if (cs_buf & 1) {
                 if (!file->ReadReverse(&size_precinct))
@@ -247,11 +247,12 @@ namespace jpeg2000 {
 
                 height = 1 << ((size_precinct & 0xF0) >> 4);
                 width = 1 << (size_precinct & 0x0F);
-                params->precinct_size.emplace_back(width, height);
+                params->resolutions.emplace_back(width, height);
             } else {
                 height = (int) ceil((double) params->size.y / (1L << i));
                 width = (int) ceil((double) params->size.x / (1L << i));
-                params->precinct_size.insert(params->precinct_size.begin(), Size(width, height));
+                params->resolutions.insert(params->resolutions.begin(),
+                                           CodingParameters::Resolution(width, height));
             }
         }
         return true;

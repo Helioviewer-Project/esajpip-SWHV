@@ -158,7 +158,8 @@ static void CheckWOIPackets() {
     coding_parameters.num_levels = 0;
     coding_parameters.num_layers = 2;
     coding_parameters.num_components = 2;
-    coding_parameters.precinct_size.emplace_back(1, 1);
+    coding_parameters.resolutions.emplace_back(1, 1);
+    coding_parameters.FillPrecinctCounts();
 
     jpip::WOIComposer composer;
     composer.Reset(&coding_parameters, jpip::WOI(jpeg2000::Point(0, 0), jpeg2000::Size(1, 1), 0));
@@ -167,6 +168,27 @@ static void CheckWOIPackets() {
     while (composer.GetNextPacket(&coding_parameters))
         packets++;
     Check(packets == 4, "WOI navigation repeated the final packet");
+}
+
+static void CheckProgressionIndexes() {
+    jpeg2000::CodingParameters params;
+    params.size = jpeg2000::Size(8, 8);
+    params.num_levels = 2;
+    params.num_layers = 2;
+    params.num_components = 3;
+    params.resolutions.emplace_back(1, 1);
+    params.resolutions.emplace_back(2, 2);
+    params.resolutions.emplace_back(4, 4);
+    params.FillPrecinctCounts();
+
+    jpeg2000::Packet packet(1, 1, 2, jpeg2000::Size(1, 1));
+    params.progression = jpeg2000::CodingParameters::LRCP_PROGRESSION;
+    Check(params.GetProgressionIndex(packet) == 59, "Wrong LRCP packet index");
+    params.progression = jpeg2000::CodingParameters::RLCP_PROGRESSION;
+    Check(params.GetProgressionIndex(packet) == 47, "Wrong RLCP packet index");
+    params.progression = jpeg2000::CodingParameters::RPCL_PROGRESSION;
+    Check(params.GetProgressionIndex(packet) == 47, "Wrong RPCL packet index");
+    Check(params.GetPrecinctDataBinId(packet) == 23, "Wrong precinct data-bin ID");
 }
 
 static void CheckJPIPMessages() {
@@ -320,6 +342,7 @@ int main() {
     CheckHTTPHeaders();
     CheckHTTPResponse();
     CheckWOIPackets();
+    CheckProgressionIndexes();
     CheckJPIPMessages();
     CheckCoalescedJPIPMessages();
     CheckMetadataPlaceHolder();

@@ -2,17 +2,12 @@
 
 namespace jpeg2000 {
 
-    void CodingParameters::FillTotalPrecinctsVector() {
-        int pa = 0;
-        Size precinct_point;
-
-        total_precincts.clear();
-        total_precincts.push_back(pa);
-
+    void CodingParameters::FillPrecinctCounts() {
+        total_precincts = 0;
         for (int i = 0; i <= num_levels; ++i) {
-            precinct_point = GetPrecincts(i, size);
-            pa += precinct_point.x * precinct_point.y;
-            total_precincts.push_back(pa);
+            resolutions[i].first_precinct = total_precincts;
+            Size precincts = GetPrecincts(i, size);
+            total_precincts += precincts.x * precincts.y;
         }
     }
 
