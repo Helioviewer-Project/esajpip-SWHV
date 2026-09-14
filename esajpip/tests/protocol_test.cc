@@ -61,6 +61,18 @@ static void CheckJHVRequests() {
     Check(req.mask.items.model, "Missing terminal partial cache model");
     Check(req.cache_model.GetMetadata(0) == 446, "Wrong terminal partial metadata model");
 
+    Check(req.Parse("GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
+          "Could not parse request with an empty frame size");
+    jpeg2000::CodingParameters coding_parameters;
+    coding_parameters.size = jpeg2000::Size(4096, 4096);
+    coding_parameters.num_levels = 5;
+    jpip::WOI woi;
+    woi.size = req.woi_size;
+    woi.position = req.woi_position;
+    req.GetResolution(&coding_parameters, &woi);
+    Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
+    Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
+
     Check(req.Parse("GET /jpip?model=M-1 HTTP/1.1"), "Could not parse request with negative metadata ID");
     Check(!req.mask.items.model, "Accepted negative metadata ID");
     Check(req.Parse("GET /jpip?model=P-1 HTTP/1.1"), "Could not parse request with negative precinct ID");

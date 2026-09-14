@@ -153,7 +153,7 @@ namespace jpip {
             else if (round_direction == Request::ROUNDDOWN)
                 woi->resolution = coding_parameters->GetRoundDownResolution(resolution_size, &res_image_size);
 
-            if (resolution_size != res_image_size) {
+            if (resolution_size.x > 0 && resolution_size.y > 0 && resolution_size != res_image_size) {
                 woi->position.x = (int) ceil((double) (woi->position.x * res_image_size.x) / resolution_size.x);
                 woi->position.y = (int) ceil((double) (woi->position.y * res_image_size.y) / resolution_size.y);
                 woi->size.x = (int) ceil((double) (woi->size.x * res_image_size.x) / resolution_size.x);

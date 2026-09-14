@@ -68,6 +68,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/http/protocol.cc
         ${ESAJPIP_TOP}/http/request.cc
         ${ESAJPIP_TOP}/http/response.cc
+        ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
         ${ESAJPIP_TOP}/jpip/jpip.cc
         ${ESAJPIP_TOP}/jpip/request.cc
