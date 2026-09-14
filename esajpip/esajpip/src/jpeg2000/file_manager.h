@@ -174,8 +174,6 @@ namespace jpeg2000 {
             file_map.clear();
         }
 
-        virtual ~FileManager() {
-        }
     };
 }
 

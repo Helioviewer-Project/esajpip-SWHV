@@ -185,7 +185,7 @@ namespace jpeg2000 {
             return out;
         }
 
-        virtual ~ImageIndex() {
+        ~ImageIndex() {
             TRACE("Destroying the image index of '" << path_name << "'");
         }
     };

@@ -127,8 +127,6 @@ public:
         return com_time_out_;
     }
 
-    virtual ~AppConfig() {
-    }
 };
 
 #endif /* _APP_CONFIG_H_ */

@@ -342,8 +342,6 @@ namespace jpip {
             codestreams.clear();
         }
 
-        virtual ~CacheModel() {
-        }
     };
 
     template<>

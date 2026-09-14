@@ -142,8 +142,6 @@ namespace jpip {
             }
         }
 
-        virtual ~WOIComposer() {
-        }
     };
 }
 

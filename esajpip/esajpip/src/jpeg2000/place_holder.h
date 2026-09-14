@@ -73,8 +73,6 @@ namespace jpeg2000 {
             return ((is_jp2c ? 44 : 20) + header.length);
         }
 
-        virtual ~PlaceHolder() {
-        }
     };
 }
 

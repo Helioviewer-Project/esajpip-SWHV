@@ -222,8 +222,6 @@ namespace jpeg2000 {
          */
         int GetRoundDownResolution(const Size &res_size, Size *res_image_size) const;
 
-        virtual ~CodingParameters() {
-        }
     };
 }
 

@@ -106,8 +106,6 @@ namespace net {
             return fds[n];
         }
 
-        virtual ~PollTable() {
-        }
     };
 }
 

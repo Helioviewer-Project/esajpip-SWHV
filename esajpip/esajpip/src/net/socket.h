@@ -169,8 +169,7 @@ namespace net {
         /**
           The destructor does not closes the socket!.
         */
-        virtual ~Socket() {
-        }
+        ~Socket() = default;
     };
 }
 

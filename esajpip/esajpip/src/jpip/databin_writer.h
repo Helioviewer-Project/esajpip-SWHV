@@ -228,8 +228,6 @@ namespace jpip {
             return !eof;
         }
 
-        virtual ~DataBinWriter() {
-        }
     };
 }
 

@@ -68,8 +68,6 @@ namespace jpeg2000 {
             return out;
         }
 
-        virtual ~Metadata() {
-        }
     };
 }
 

@@ -27,7 +27,7 @@ private:
 
     TraceSystem();
 
-    virtual ~TraceSystem();
+    ~TraceSystem();
 
     bool AppendToFile_(const char *name);
 

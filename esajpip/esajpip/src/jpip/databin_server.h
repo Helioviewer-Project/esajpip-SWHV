@@ -162,8 +162,6 @@ namespace jpip {
          */
         bool GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last);
 
-        virtual ~DataBinServer() {
-        }
     };
 }
 
