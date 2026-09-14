@@ -1,16 +1,18 @@
 #include "trace.h"
 #include "file_manager.h"
 
+#include <utility>
+
 namespace jpeg2000 {
 
-    void ImageIndex::Init(const string &path_name, const ImageInfo &image_info) {
+    void ImageIndex::Init(const string &path_name, ImageInfo &image_info) {
         this->path_name = path_name;
 
-        meta_data = image_info.meta_data;
-        coding_parameters = image_info.coding_parameters;
+        meta_data = std::move(image_info.meta_data);
+        coding_parameters = std::move(image_info.coding_parameters);
 
         if (image_info.paths.empty()) {
-            codestreams = image_info.codestreams;
+            codestreams = std::move(image_info.codestreams);
             max_resolution.resize(codestreams.size(), -1);
 
             for (size_t i = 0; i < codestreams.size(); ++i) {
@@ -23,12 +25,12 @@ namespace jpeg2000 {
         }
     }
 
-    void ImageIndex::Init(const string &path_name, const ImageInfo &image_info, int index) {
-        this->path_name = path_name;
+    void ImageIndex::Init(ImageInfo &image_info, int index) {
+        path_name = std::move(image_info.paths[index]);
 
-        meta_data = image_info.meta_data_hyperlinks[index];
-        coding_parameters = image_info.coding_parameters_hyperlinks[index];
-        codestreams.push_back(image_info.codestreams[index]);
+        meta_data = std::move(image_info.meta_data_hyperlinks[index]);
+        coding_parameters = std::move(image_info.coding_parameters_hyperlinks[index]);
+        codestreams.push_back(std::move(image_info.codestreams[index]));
         max_resolution.push_back(-1);
 
         last_plt.push_back(0);

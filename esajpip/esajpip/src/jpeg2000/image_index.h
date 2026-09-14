@@ -63,15 +63,14 @@ namespace jpeg2000 {
          * @param path_name Path name of the image.
          * @param image_info Indexing image information.
          */
-        void Init(const string &path_name, const ImageInfo &image_info);
+        void Init(const string &path_name, ImageInfo &image_info);
 
         /**
          * Initializes the object.
-         * @param path_name Path name of the image.
          * @param image_info Indexing image information.
          * @param index Image index.
          */
-        void Init(const string &path_name, const ImageInfo &image_info, int index);
+        void Init(ImageInfo &image_info, int index);
 
         /**
          * Empty constructor. Only the index manager can

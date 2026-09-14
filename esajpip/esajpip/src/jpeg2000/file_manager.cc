@@ -27,7 +27,7 @@ namespace jpeg2000 {
             image->hyper_links.resize(image_info.paths.size());
             for (size_t i = 0; i < image_info.paths.size(); ++i) {
                 ImageIndex::Ptr linked = ImageIndex::Ptr(new ImageIndex());
-                linked->Init(image_info.paths[i], image_info, i);
+                linked->Init(image_info, i);
                 image->hyper_links[i] = linked;
             }
         }
@@ -79,7 +79,7 @@ namespace jpeg2000 {
             return false;
         }
 
-        if (res)
+        if (res && image_info->paths.empty())
             image_info->coding_parameters.FillTotalPrecinctsVector();
 
         return res;
@@ -387,10 +387,9 @@ namespace jpeg2000 {
             if (!res)
                 break;
 
-            image_info->coding_parameters = image_info_hyperlink.coding_parameters;
-            image_info->coding_parameters_hyperlinks[i] = image_info_hyperlink.coding_parameters;
-            image_info->codestreams[i] = image_info_hyperlink.codestreams.back();
-            image_info->meta_data_hyperlinks[i] = image_info_hyperlink.meta_data;
+            image_info->coding_parameters_hyperlinks[i] = std::move(image_info_hyperlink.coding_parameters);
+            image_info->codestreams[i] = std::move(image_info_hyperlink.codestreams.back());
+            image_info->meta_data_hyperlinks[i] = std::move(image_info_hyperlink.meta_data);
         }
         return res;
     }
