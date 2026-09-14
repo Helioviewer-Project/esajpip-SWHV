@@ -13,7 +13,6 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/data/file_segment.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/http/protocol.cc
-    ${ESAJPIP_TOP}/http/response.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
     ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
     ${ESAJPIP_TOP}/jpeg2000/image_index.cc
@@ -63,7 +62,6 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/data/file_segment.cc
         ${ESAJPIP_TOP}/http/header.cc
         ${ESAJPIP_TOP}/http/protocol.cc
-        ${ESAJPIP_TOP}/http/response.cc
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
         ${ESAJPIP_TOP}/jpip/jpip.cc

@@ -94,7 +94,7 @@ static void CheckInetAddress() {
 
 static void CheckHTTPResponse() {
     ostringstream out;
-    out << http::Response(200)
+    out << http::Response(200, "OK")
         << http::Header("JPIP-cnew", "cid=7,path=jpip,transport=http")
         << http::Header("Transfer-Encoding", "chunked")
         << http::Header("Content-Type", "image/jpp-stream")

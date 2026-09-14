@@ -201,7 +201,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 LOG("The channel " << channel << " has been closed");
 
                 ostringstream msg;
-                msg << http::Response(200)
+                msg << http::Response(200, "OK")
                         << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
                         << "Strict-Transport-Security: " << STS << Protocol::CRLF
                         << "Cache-Control: " << NOCACHE << Protocol::CRLF
@@ -225,7 +225,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                     LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
 
                     ostringstream msg;
-                    msg << http::Response(200)
+                    msg << http::Response(200, "OK")
                             << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                             << http::Header("JPIP-tid", file_name)
                             << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
@@ -246,7 +246,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 } else {
                     data_server.SetRequest(file_manager, req);
                     ostringstream msg;
-                    msg << http::Response(200)
+                    msg << http::Response(200, "OK")
                             << (send_gzip ? head_data_gzip.str() : head_data.str())
                             << http::Protocol::CRLF;
                     SendStream(socket, msg);
@@ -263,7 +263,7 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
         if (pclose) {
             size_t err_msg_len = strlen(err_msg);
             ostringstream msg;
-            msg << http::Response(500)
+            msg << http::Response(500, "Internal Server Error")
                     << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
                     << "Strict-Transport-Security: " << STS << Protocol::CRLF
                     << "Cache-Control: " << NOCACHE << Protocol::CRLF
