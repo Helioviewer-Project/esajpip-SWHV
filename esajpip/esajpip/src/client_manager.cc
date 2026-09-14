@@ -9,10 +9,12 @@
 #include "z/zfilter.h"
 #include <glib.h>
 
+#include <cstdio>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 
-static const char *ZERO = "0\r\n\r\n";
+static const char ZERO[] = "0\r\n\r\n";
 
 static const char *CORS = "*";
 static const char *NOCACHE = "no-cache";
@@ -24,11 +26,9 @@ using namespace http;
 using namespace jpip;
 using namespace jpeg2000;
 
-static int SendChecked(Socket &socket, const void *buf, size_t len) {
-    const char *data = static_cast<const char *>(buf);
-
-    while (len > 0) {
-        ssize_t sent = socket.Send(data, len);
+static int SendAll(Socket &socket, iovec *buffers, int count) {
+    while (count > 0) {
+        ssize_t sent = writev(socket, buffers, count);
         if (sent < 0) {
             if (errno == EINTR)
                 continue;
@@ -41,29 +41,42 @@ static int SendChecked(Socket &socket, const void *buf, size_t len) {
             return -1;
         }
 
-        data += sent;
-        len -= sent;
+        while (count > 0 && sent >= static_cast<ssize_t>(buffers->iov_len)) {
+            sent -= buffers->iov_len;
+            buffers++;
+            count--;
+        }
+        if (sent > 0) {
+            buffers->iov_base = static_cast<char *>(buffers->iov_base) + sent;
+            buffers->iov_len -= sent;
+        }
     }
 
     return 0;
 }
 
-static int SendString(Socket &socket, const char *str) {
-    return SendChecked(socket, str, strlen(str));
+static int SendAll(Socket &socket, const void *buf, size_t len) {
+    iovec buffer = {const_cast<void *>(buf), len};
+    return SendAll(socket, &buffer, 1);
 }
 
 static int SendStream(Socket &socket, const ostringstream &stream) {
-    return SendString(socket, stream.str().c_str());
+    string str = stream.str();
+    return SendAll(socket, str.data(), str.size());
 }
 
 static int SendChunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
-        ostringstream stream;
-        stream << hex << len << dec << http::Protocol::CRLF;
+        char header[2 * sizeof(size_t) + 3];
+        int header_len = snprintf(header, sizeof header, "%zx\r\n", len);
+        char trailer[] = "\r\n";
+        iovec buffers[] = {
+            {header, static_cast<size_t>(header_len)},
+            {const_cast<void *>(buf), len},
+            {trailer, 2}
+        };
 
-        if (SendStream(socket, stream) ||
-            SendChecked(socket, buf, len) ||
-            SendString(socket, http::Protocol::CRLF))
+        if (SendAll(socket, buffers, 3))
             return -1;
     }
     return 0;
@@ -310,7 +323,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 zfilter_del(obj);
             }
 
-            if (pclose || SendString(socket, ZERO))
+            if (pclose || SendAll(socket, ZERO, sizeof ZERO - 1))
                 break;
             file_manager.ClearFiles();
         }
