@@ -12,8 +12,7 @@ namespace jpeg2000 {
      * codestream. The indexed information is the segment of
      * the main header, the contiguous segments of packets
      * (usually the data of each tile-part) and the segments
-     * of the existing PLT markers. This class can be printed
-     * and serialized.
+     * of the existing PLT markers.
      *
      * @see data::FileSegment
      */
@@ -27,19 +26,6 @@ namespace jpeg2000 {
          * Empty constructor.
          */
         CodestreamIndex() {
-        }
-
-        friend ostream &operator<<(ostream &out, const CodestreamIndex &index) {
-            out << "Header: " << index.header << endl;
-            out << "Packets: ";
-            for (size_t i = 0; i < index.packets.size(); ++i)
-                out << index.packets[i] << " ";
-            out << endl << "PLT-markers: ";
-            for (size_t i = 0; i < index.PLT_markers.size(); ++i)
-                out << index.PLT_markers[i] << " ";
-            out << endl;
-
-            return out;
         }
 
     };

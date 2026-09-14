@@ -9,8 +9,7 @@ namespace jpeg2000 {
 
     /**
      * Contains the indexing information associated to the
-     * meta-data of a JPEG2000 image file. This class can
-     * be printed and serialized.
+     * meta-data of a JPEG2000 image file.
      */
     class Metadata {
     public:
@@ -30,19 +29,6 @@ namespace jpeg2000 {
          * Contents of boxes referenced by place-holders in meta-data bin 0.
          */
         vector<FileSegment> bins;
-
-        friend ostream &operator<<(ostream &out, const Metadata &info) {
-            out << endl << "Meta-data bin 0: ";
-            for (size_t i = 0; i < info.bin0.size(); ++i)
-                out << info.bin0[i].data << " " << info.bin0[i].placeholder << " ";
-            out << info.tail;
-
-            out << endl << "Meta-data bins: ";
-            for (size_t i = 0; i < info.bins.size(); ++i)
-                out << info.bins[i] << " ";
-
-            return out;
-        }
 
     };
 }

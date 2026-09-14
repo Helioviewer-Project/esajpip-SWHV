@@ -4,7 +4,6 @@
 //#define SHOW_TRACES
 #include "trace.h"
 
-#include <ostream>
 #include <string>
 #include <vector>
 
@@ -131,39 +130,6 @@ namespace jpeg2000 {
          * offset of the packet.
          */
         bool GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset = NULL);
-
-        friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
-            out << "Image file name: " << info_node.path_name << endl
-                << "Max resolution: ";
-            for (size_t i = 0; i < info_node.streams.size(); ++i)
-                out << info_node.streams[i].max_resolution << "  ";
-            out << endl;
-
-            for (size_t i = 0; i < info_node.streams.size(); ++i)
-                out << "Codestream index: " << endl << "----------------- " << endl << info_node.streams[i].codestream << endl << endl;
-            out << "Packet indexes: " << endl << "--------------- " << endl;
-            for (size_t i = 0; i < info_node.streams.size(); ++i)
-                for (int j = 0; j < info_node.streams[i].packet_index.Size(); ++j)
-                    out << j << " - " << info_node.streams[i].packet_index[j] << endl;
-            out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
-            for (size_t i = 0; i < info_node.hyper_links.size(); ++i) {
-                const Link &link = info_node.hyper_links[i];
-                out << "Hyperlink: " << endl << "----------- " << endl
-                    << "Image file name: " << link.path_name << endl
-                    << "Max resolution: " << link.stream.max_resolution << endl
-                    << "Codestream index: " << endl << "----------------- " << endl
-                    << link.stream.codestream << endl << endl
-                    << "Packet index: " << endl << "------------- " << endl;
-                for (int j = 0; j < link.stream.packet_index.Size(); ++j)
-                    out << j << " - " << link.stream.packet_index[j] << endl;
-                out << "----------- " << endl;
-            }
-
-            out << endl << "Meta-data: ";
-            out << endl << info_node.meta_data << endl;
-
-            return out;
-        }
 
         ~ImageIndex() {
             TRACE("Destroying the image index of '" << path_name << "'");

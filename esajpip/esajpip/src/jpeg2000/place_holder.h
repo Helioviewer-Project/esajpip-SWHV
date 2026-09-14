@@ -7,8 +7,7 @@ namespace jpeg2000 {
     using namespace data;
 
     /**
-     * Contains the information of a place-holder. This class
-     * can be printed and serialized.
+     * Contains the information of a place-holder.
      */
     class PlaceHolder {
     public:
@@ -38,14 +37,6 @@ namespace jpeg2000 {
             this->is_jp2c = is_jp2c;
             this->header = header;
             this->data_length = data_length;
-        }
-
-        friend ostream &operator<<(ostream &out, const PlaceHolder &place_holder) {
-            out << "Id: " << place_holder.id << endl;
-            out << "JP2C: " << (place_holder.is_jp2c ? "Yes" : "No") << endl;
-            out << "Header: " << place_holder.header << endl;
-            out << "Data length: " << place_holder.data_length << endl;
-            return out;
         }
 
         /**

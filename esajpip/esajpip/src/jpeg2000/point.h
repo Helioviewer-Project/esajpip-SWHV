@@ -1,15 +1,13 @@
 #ifndef _JPEG2000_POINT_H_
 #define _JPEG2000_POINT_H_
 
-#include <iostream>
-
 namespace jpeg2000 {
     using namespace std;
 
     /**
      * Represents a couple of integer values that can
      * be used to identify a coordinate as well as a
-     * size. This class can be printed and serialized.
+     * size.
      */
     class Point {
     public:
@@ -175,10 +173,6 @@ namespace jpeg2000 {
             return ((a.x != b.x) || (a.y != b.y));
         }
 
-        friend ostream &operator<<(ostream &out, const Point &point) {
-            out << "(" << point.x << ", " << point.y << ")";
-            return out;
-        }
     };
 
     /**

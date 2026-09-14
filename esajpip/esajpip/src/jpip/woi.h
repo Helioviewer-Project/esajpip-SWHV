@@ -1,7 +1,6 @@
 #ifndef _JPIP_WOI_H_
 #define _JPIP_WOI_H_
 
-#include <iostream>
 #include "jpeg2000/point.h"
 
 namespace jpip {
@@ -11,8 +10,7 @@ namespace jpip {
     /**
      * Class that identifies a WOI (Window Of Interest). This term
      * refers, from the point of view of the JPIP protocol, to a
-     * rectangular region of an image, for a resolution level. This
-     * class can be printed.
+     * rectangular region of an image, for a resolution level.
      *
      * @see Point
      */
@@ -55,12 +53,6 @@ namespace jpip {
          */
         friend bool operator!=(const WOI &a, const WOI &b) {
             return !(a == b);
-        }
-
-        friend ostream &operator<<(ostream &out, const WOI &woi) {
-            out << "(" << woi.position.x << ", " << woi.position.y << ", "
-                << woi.size.x << ", " << woi.size.y << ", " << woi.resolution << ")";
-            return out;
         }
 
     };

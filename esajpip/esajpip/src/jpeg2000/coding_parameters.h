@@ -11,7 +11,6 @@
 namespace jpeg2000 {
     /**
      * Contains the coding parameters of a JPEG2000 image codestream.
-     * This class can be serialized and printed.
      */
     class CodingParameters {
     private:
@@ -107,22 +106,6 @@ namespace jpeg2000 {
         }
 
         void FillPrecinctCounts();
-
-        friend ostream &operator<<(ostream &out, const CodingParameters &params) {
-            out << "Progression: " <<
-                (params.progression == LRCP_PROGRESSION ? "LRCP" :
-                 (params.progression == RLCP_PROGRESSION ? "RLCP" :
-                  (params.progression == RPCL_PROGRESSION ? "RPCL" :
-                   (params.progression == PCRL_PROGRESSION ? "PCRL" :
-                    (params.progression == CPRL_PROGRESSION ? "CPRL" : "UNKOWN"))))) << endl
-                << "Size: " << params.size << endl << "Num. of levels: " << params.num_levels << endl
-                << "Num. of layers: " << params.num_layers << endl
-                << "Num. of components: " << params.num_components << endl << "Precinct size: { ";
-            for (size_t i = 0; i < params.resolutions.size(); ++i)
-                out << params.resolutions[i].precinct_size << " ";
-            out << "}" << endl;
-            return out;
-        }
 
         /**
          * Returns <code>true</code> if the progression is RLCP or RPCL.

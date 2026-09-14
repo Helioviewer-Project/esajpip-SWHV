@@ -1,6 +1,8 @@
 #ifndef _JPEG2000_PACKET_H_
 #define _JPEG2000_PACKET_H_
 
+#include <ostream>
+
 #include "point.h"
 
 namespace jpeg2000 {
