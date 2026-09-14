@@ -19,16 +19,16 @@ namespace jpeg2000 {
             ERROR("The image file '" << path_image_file << "' can not be read");
             return false;
         }
-        image = ImageIndex::Ptr(new ImageIndex());
+        image = unique_ptr<ImageIndex>(new ImageIndex());
         image->Init(path_image_file, image_info);
 
         // Repeat the process with the image hyperlinks
         if (!image_info.paths.empty()) {
             image->hyper_links.resize(image_info.paths.size());
             for (size_t i = 0; i < image_info.paths.size(); ++i) {
-                ImageIndex::Ptr linked = ImageIndex::Ptr(new ImageIndex());
+                unique_ptr<ImageIndex> linked(new ImageIndex());
                 linked->Init(image_info, i);
-                image->hyper_links[i] = linked;
+                image->hyper_links[i] = std::move(linked);
             }
         }
         ClearFiles();

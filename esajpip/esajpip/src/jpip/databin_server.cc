@@ -4,7 +4,7 @@ namespace jpip {
 
     void DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
         bool reset_woi = false;
-        const ImageIndex::Ptr image_index = file_manager.GetImage();
+        ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.ClearPreviousIds();
 
@@ -45,7 +45,7 @@ namespace jpip {
 
     bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last) {
         int res;
-        const ImageIndex::Ptr image_index = file_manager.GetImage();
+        ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.SetBuffer(buf, min(pending, *len));
 

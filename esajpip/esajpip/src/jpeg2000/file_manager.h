@@ -17,7 +17,7 @@ namespace jpeg2000 {
     private:
         string root_dir_;    ///< Root directory of the repository
 
-        ImageIndex::Ptr image;
+        unique_ptr<ImageIndex> image;
         map<string, unique_ptr<File>> file_map;
 
         /**
@@ -151,8 +151,8 @@ namespace jpeg2000 {
             return root_dir_;
         }
 
-        const ImageIndex::Ptr GetImage() const {
-            return image;
+        ImageIndex *GetImage() {
+            return image.get();
         }
 
         bool OpenImage(string &path_image_file);
