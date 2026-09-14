@@ -25,6 +25,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/trace.cc)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
+esajpip_enable_warnings(esajpip)
 set_target_properties(esajpip PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 11
@@ -68,6 +69,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/jpip/jpip.cc
         ${ESAJPIP_TOP}/jpip/request.cc
         ${ESAJPIP_TOP}/trace.cc)
+    esajpip_enable_warnings(protocol_test)
     set_target_properties(protocol_test PROPERTIES
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
@@ -79,4 +81,29 @@ if(BUILD_TESTING)
         ${LOG4CPP}/include)
     target_link_libraries(protocol_test PRIVATE log4cpp Threads::Threads)
     add_test(NAME protocol COMMAND protocol_test)
+
+    add_executable(jpeg2000_test
+        tests/jpeg2000_test.cc
+        ${ESAJPIP_TOP}/data/file_segment.cc
+        ${ESAJPIP_TOP}/http/protocol.cc
+        ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
+        ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
+        ${ESAJPIP_TOP}/jpeg2000/image_index.cc
+        ${ESAJPIP_TOP}/jpip/databin_server.cc
+        ${ESAJPIP_TOP}/jpip/databin_writer.cc
+        ${ESAJPIP_TOP}/jpip/jpip.cc
+        ${ESAJPIP_TOP}/jpip/request.cc
+        ${ESAJPIP_TOP}/trace.cc)
+    esajpip_enable_warnings(jpeg2000_test)
+    set_target_properties(jpeg2000_test PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES)
+    target_compile_definitions(jpeg2000_test PRIVATE _NO_READPROC NO_COLORS LOG4CPP_HAVE_SSTREAM)
+    target_include_directories(jpeg2000_test PRIVATE
+        ${ESAJPIP_TOP}
+        ${CMAKE_BINARY_DIR}/log4cpp/include
+        ${LOG4CPP}/include)
+    target_link_libraries(jpeg2000_test PRIVATE PkgConfig::PKG log4cpp Threads::Threads)
+    add_test(NAME jpeg2000 COMMAND jpeg2000_test)
 endif()
