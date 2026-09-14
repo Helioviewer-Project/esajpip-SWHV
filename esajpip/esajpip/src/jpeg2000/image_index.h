@@ -17,46 +17,50 @@ namespace jpeg2000 {
     private:
         friend class FileManager;
 
-        vector<int> last_plt;
-        vector<int> last_packet;
-        vector<uint64_t> last_offset_PLT;
-        vector<uint64_t> last_offset_packet;
+        struct Stream {
+            int last_plt;
+            int last_packet;
+            uint64_t last_offset_PLT;
+            uint64_t last_offset_packet;
+            int max_resolution;
+            PacketIndex packet_index;
+            CodestreamIndex codestream;
+
+            explicit Stream(CodestreamIndex &&_codestream);
+        };
 
         string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
         CodingParameters coding_parameters; ///< Coding parameters
-        vector<int> max_resolution; ///< Maximum resolution number
-
-        vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
-        vector<CodestreamIndex> codestreams; ///< Image code-streams
+        vector<Stream> streams;
 
         vector<ImageIndex> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
          * @param file File where to read the data from.
-         * @param ind_codestream Codestream index.
+         * @param stream Codestream index.
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        bool GetPLTLength(File *file, int ind_codestream, uint64_t *length_packet);
+        bool GetPLTLength(File *file, Stream &stream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
          * @param file File where to read the data from.
-         * @param ind_codestream Codestream index.
+         * @param stream Codestream index.
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        bool GetOffsetPacket(int ind_codestream, uint64_t length_packet);
+        bool GetOffsetPacket(Stream &stream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
-         * @param ind_codestream Codestream index.
+         * @param stream Codestream index.
          * @param max_index Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        bool BuildIndex(File *file, int ind_codestream, int max_index);
+        bool BuildIndex(File *file, Stream &stream, int max_index);
 
         ImageIndex(const string &path_name, ImageInfo &image_info);
 
@@ -69,7 +73,7 @@ namespace jpeg2000 {
          * Returns the number of codestreams.
          */
         size_t GetNumCodestreams() const {
-            return codestreams.empty() ? hyper_links.size() : codestreams.size();
+            return streams.empty() ? hyper_links.size() : streams.size();
         }
 
         /**
@@ -96,7 +100,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number.
          */
         const string &GetPathName(int num_codestream) const {
-            return codestreams.empty() ? hyper_links[num_codestream].path_name : path_name;
+            return streams.empty() ? hyper_links[num_codestream].path_name : path_name;
         }
 
         /**
@@ -105,11 +109,11 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const FileSegment &GetMainHeader(int num_codestream) const {
-            return codestreams.empty() ? hyper_links[num_codestream].codestreams.back().header : codestreams[num_codestream].header;
+            return streams.empty() ? hyper_links[num_codestream].streams.back().codestream.header : streams[num_codestream].codestream.header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
-            return codestreams.empty() ? &hyper_links[num_codestream].coding_parameters : &coding_parameters;
+            return streams.empty() ? &hyper_links[num_codestream].coding_parameters : &coding_parameters;
         }
 
         /**
@@ -144,16 +148,16 @@ namespace jpeg2000 {
         friend ostream &operator<<(ostream &out, const ImageIndex &info_node) {
             out << "Image file name: " << info_node.path_name << endl
                 << "Max resolution: ";
-            for (size_t i = 0; i < info_node.max_resolution.size(); ++i)
-                out << info_node.max_resolution[i] << "  ";
+            for (size_t i = 0; i < info_node.streams.size(); ++i)
+                out << info_node.streams[i].max_resolution << "  ";
             out << endl;
 
-            for (size_t i = 0; i < info_node.codestreams.size(); ++i)
-                out << "Codestream index: " << endl << "----------------- " << endl << info_node.codestreams[i] << endl << endl;
+            for (size_t i = 0; i < info_node.streams.size(); ++i)
+                out << "Codestream index: " << endl << "----------------- " << endl << info_node.streams[i].codestream << endl << endl;
             out << "Packet indexes: " << endl << "--------------- " << endl;
-            for (size_t i = 0; i < info_node.packet_indexes.size(); ++i)
-                for (int j = 0; j < info_node.packet_indexes[i].Size(); ++j)
-                    out << j << " - " << info_node.packet_indexes[i][j] << endl;
+            for (size_t i = 0; i < info_node.streams.size(); ++i)
+                for (int j = 0; j < info_node.streams[i].packet_index.Size(); ++j)
+                    out << j << " - " << info_node.streams[i].packet_index[j] << endl;
             out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
             for (size_t i = 0; i < info_node.hyper_links.size(); ++i)
                 out << "Hyperlinks: " << endl << "----------- " << endl << info_node.hyper_links[i] << endl << "----------- " << endl;

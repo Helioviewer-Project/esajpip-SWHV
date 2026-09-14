@@ -5,6 +5,11 @@
 
 namespace jpeg2000 {
 
+    ImageIndex::Stream::Stream(CodestreamIndex &&_codestream)
+            : last_plt(0), last_packet(0), last_offset_PLT(0), last_offset_packet(0), max_resolution(-1),
+              codestream(std::move(_codestream)) {
+    }
+
     ImageIndex::ImageIndex(const string &path_name, ImageInfo &image_info) {
         this->path_name = path_name;
 
@@ -12,16 +17,9 @@ namespace jpeg2000 {
         coding_parameters = std::move(image_info.coding_parameters);
 
         if (image_info.paths.empty()) {
-            codestreams = std::move(image_info.codestreams);
-            max_resolution.resize(codestreams.size(), -1);
-
-            for (size_t i = 0; i < codestreams.size(); ++i) {
-                last_plt.push_back(0);
-                last_packet.push_back(0);
-                last_offset_PLT.push_back(0);
-                last_offset_packet.push_back(0);
-                packet_indexes.emplace_back();
-            }
+            streams.reserve(image_info.codestreams.size());
+            for (CodestreamIndex &codestream : image_info.codestreams)
+                streams.emplace_back(std::move(codestream));
         }
     }
 
@@ -29,20 +27,13 @@ namespace jpeg2000 {
         path_name = std::move(image_info.paths[index]);
 
         coding_parameters = std::move(image_info.coding_parameters_hyperlinks[index]);
-        codestreams.push_back(std::move(image_info.codestreams[index]));
-        max_resolution.push_back(-1);
-
-        last_plt.push_back(0);
-        last_packet.push_back(0);
-        last_offset_PLT.push_back(0);
-        last_offset_packet.push_back(0);
-        packet_indexes.emplace_back();
+        streams.emplace_back(std::move(image_info.codestreams[index]));
     }
 
-    bool ImageIndex::BuildIndex(File *file, int ind_codestream, int r) {
+    bool ImageIndex::BuildIndex(File *file, Stream &stream, int r) {
         // Check if PacketIndex has been created
-        if (packet_indexes[ind_codestream].Size() == 0)
-            packet_indexes[ind_codestream] = PacketIndex(file->GetSize());
+        if (stream.packet_index.Size() == 0)
+            stream.packet_index = PacketIndex(file->GetSize());
 
         // Check the upper top of the index (to build)
         int max_index;
@@ -62,24 +53,24 @@ namespace jpeg2000 {
 
         uint64_t length_packet = 0;
         bool res = true;
-        while (res && packet_indexes[ind_codestream].Size() <= max_index) {
-            res = GetPLTLength(file, ind_codestream, &length_packet);
+        while (res && stream.packet_index.Size() <= max_index) {
+            res = GetPLTLength(file, stream, &length_packet);
             if (!res)
                 break;
-            res = GetOffsetPacket(ind_codestream, length_packet);
+            res = GetOffsetPacket(stream, length_packet);
         }
 
         return res;
     }
 
-    bool ImageIndex::GetPLTLength(File *file, int ind_codestream, uint64_t *length_packet) {
-        vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
-        if (last_plt[ind_codestream] >= (int) plt.size())
+    bool ImageIndex::GetPLTLength(File *file, Stream &stream, uint64_t *length_packet) {
+        vector<FileSegment> &plt = stream.codestream.PLT_markers;
+        if (stream.last_plt >= (int) plt.size())
             return false;
-        const FileSegment &marker = plt[last_plt[ind_codestream]];
+        const FileSegment &marker = plt[stream.last_plt];
 
         // Get packet plt offset
-        uint64_t offset = last_offset_PLT[ind_codestream];
+        uint64_t offset = stream.last_offset_PLT;
         if (offset == 0)
             offset = marker.offset;
         file->Seek(offset);
@@ -95,53 +86,54 @@ namespace jpeg2000 {
             *length_packet = (*length_packet << 7) | (buf_packet & (uint8_t) 127);
         } while (buf_packet & (uint8_t) 128);
 
-        last_offset_PLT[ind_codestream] = file->GetOffset();
-        if (last_offset_PLT[ind_codestream] == marker.offset + marker.length) {
-            last_plt[ind_codestream]++;
-            last_offset_PLT[ind_codestream] = 0;
+        stream.last_offset_PLT = file->GetOffset();
+        if (stream.last_offset_PLT == marker.offset + marker.length) {
+            stream.last_plt++;
+            stream.last_offset_PLT = 0;
         }
         return true;
     }
 
-    bool ImageIndex::GetOffsetPacket(int ind_codestream, uint64_t length_packet) {
-        vector<FileSegment> &packets = codestreams[ind_codestream].packets;
-        if (last_packet[ind_codestream] >= (int) packets.size())
+    bool ImageIndex::GetOffsetPacket(Stream &stream, uint64_t length_packet) {
+        vector<FileSegment> &packets = stream.codestream.packets;
+        if (stream.last_packet >= (int) packets.size())
             return false;
-        const FileSegment &packet_data = packets[last_packet[ind_codestream]];
+        const FileSegment &packet_data = packets[stream.last_packet];
 
-        uint64_t offset = last_offset_packet[ind_codestream];
+        uint64_t offset = stream.last_offset_packet;
         if (offset == 0)
             offset = packet_data.offset;
         uint64_t used = offset - packet_data.offset;
         if (used > packet_data.length || length_packet > packet_data.length - used)
             return false;
 
-        packet_indexes[ind_codestream].Add(FileSegment(offset, length_packet));
-        last_offset_packet[ind_codestream] = offset + length_packet;
+        stream.packet_index.Add(FileSegment(offset, length_packet));
+        stream.last_offset_packet = offset + length_packet;
 
-        if (last_offset_packet[ind_codestream] == packet_data.offset + packet_data.length) {
-            last_packet[ind_codestream]++;
-            last_offset_packet[ind_codestream] = 0;
+        if (stream.last_offset_packet == packet_data.offset + packet_data.length) {
+            stream.last_packet++;
+            stream.last_offset_packet = 0;
         }
         return true;
     }
 
     bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
         bool linked = !hyper_links.empty();
-        ImageIndex *index = linked ? &hyper_links[num_codestream] : this;
+        ImageIndex &index = linked ? hyper_links[num_codestream] : *this;
         int i = linked ? 0 : num_codestream;
+        Stream &stream = index.streams[i];
 
-        if (packet.resolution > index->max_resolution[i]) {
-            if (!index->BuildIndex(file, i, packet.resolution)) {
+        if (packet.resolution > stream.max_resolution) {
+            if (!index.BuildIndex(file, stream, packet.resolution)) {
                 ERROR("The packet index could not be created");
                 return false;
             }
-            index->max_resolution[i] = packet.resolution;
+            stream.max_resolution = packet.resolution;
         }
 
-        const CodingParameters *coding_parameters = &index->coding_parameters;
+        const CodingParameters *coding_parameters = &index.coding_parameters;
         int idx = coding_parameters->GetProgressionIndex(packet);
-        PacketIndex &packet_index = index->packet_indexes[i];
+        PacketIndex &packet_index = stream.packet_index;
         if (!packet_index.Get(idx, segment)) {
             ERROR("Invalid packet index: codestream=" << num_codestream << ", index=" << idx << ", size=" << packet_index.Size() << ", packet=" << packet);
             return false;
