@@ -7,8 +7,8 @@
 #include "http/response.h"
 #include "net/socket_stream.h"
 
-#include "z/zfilter.h"
 #include <glib.h>
+#include <zlib.h>
 
 #include <cstdio>
 #include <vector>
@@ -84,6 +84,69 @@ static int SendChunk(Socket &socket, const void *buf, size_t len) {
     return 0;
 }
 
+static bool SendData(Socket &socket, DataBinServer &data_server,
+                     FileManager &file_manager, vector<char> &buf, bool gzip) {
+    z_stream zstream = {};
+    vector<unsigned char> zbuf;
+    if (gzip) {
+        if (deflateInit2(&zstream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                         MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+            ERROR("Could not initialize gzip compression");
+            return false;
+        }
+        zbuf.resize(buf.size());
+        zstream.next_out = zbuf.data();
+        zstream.avail_out = zbuf.size();
+    }
+
+    bool success = true;
+    for (bool last = false; !last && success;) {
+        int chunk_len = buf.size();
+        if (!data_server.GenerateChunk(file_manager, buf.data(), &chunk_len, &last)) {
+            ERROR("A new data chunk could not be generated");
+            success = false;
+            break;
+        }
+        if (chunk_len <= 0 && !last) {
+            ERROR("No JPIP data chunk was generated before response completion");
+            success = false;
+            break;
+        }
+
+        if (!gzip) {
+            success = SendChunk(socket, buf.data(), chunk_len) == 0;
+            continue;
+        }
+
+        zstream.next_in = reinterpret_cast<Bytef *>(buf.data());
+        zstream.avail_in = chunk_len;
+        int flush = last ? Z_FINISH : Z_NO_FLUSH;
+        int result;
+        do {
+            result = deflate(&zstream, flush);
+            if (result != Z_OK && result != Z_STREAM_END) {
+                ERROR("Could not compress JPIP data");
+                success = false;
+                break;
+            }
+
+            if (zstream.avail_out == 0 || result == Z_STREAM_END) {
+                size_t length = zbuf.size() - zstream.avail_out;
+                if (length > 0 && SendChunk(socket, zbuf.data(), length)) {
+                    success = false;
+                    break;
+                }
+                zstream.next_out = zbuf.data();
+                zstream.avail_out = zbuf.size();
+            }
+        } while (zstream.avail_in > 0 || (last && result != Z_STREAM_END));
+    }
+
+    if (gzip)
+        deflateEnd(&zstream);
+    return success;
+}
+
 static const int true_val = 1;
 // static const int false_val = 0;
 static const int sndbuf_val = 524288;
@@ -133,7 +196,6 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
     SocketStream sock_stream(&socket, 1024);
     string channel = to_string(base_id);
 
-    int chunk_len = 0;
     int log_requests = cfg.log_requests();
     size_t buf_len = cfg.max_chunk_size();
     vector<char> buf(buf_len);
@@ -273,65 +335,8 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                 msg << err_msg;
             SendStream(socket, msg);
         } else if (send_data) {
-            if (!send_gzip) {
-                for (bool last = false; !last;) {
-                    chunk_len = buf_len;
-
-                    if (!data_server.GenerateChunk(file_manager, buf.data(), &chunk_len, &last)) {
-                        ERROR("A new data chunk could not be generated");
-                        pclose = true;
-                        break;
-                    }
-                    if (chunk_len <= 0 && !last) {
-                        ERROR("No JPIP data chunk was generated before response completion");
-                        pclose = true;
-                        break;
-                    }
-                    if (SendChunk(socket, buf.data(), chunk_len)) {
-                        pclose = true;
-                        break;
-                    }
-                }
-            } else {
-                void *obj = zfilter_new();
-
-                for (bool last = false; !last;) {
-                    chunk_len = buf_len;
-
-                    if (!data_server.GenerateChunk(file_manager, buf.data(), &chunk_len, &last)) {
-                        ERROR("A new data chunk could not be generated");
-                        pclose = true;
-                        break;
-                    }
-                    if (chunk_len <= 0 && !last) {
-                        ERROR("No JPIP data chunk was generated before response completion");
-                        pclose = true;
-                        break;
-                    }
-
-                    if (chunk_len > 0)
-                        zfilter_write(obj, buf.data(), chunk_len);
-                }
-
-                size_t nbytes;
-                const uint8_t *out = (uint8_t *) zfilter_bytes(obj, &nbytes);
-
-                while (nbytes > buf_len) {
-                    if (SendChunk(socket, out, buf_len)) {
-                        pclose = true;
-                        goto zend;
-                    }
-                    nbytes -= buf_len;
-                    out += buf_len;
-                }
-                if (nbytes > 0 && SendChunk(socket, out, nbytes))
-                    pclose = true;
-
-            zend:
-                zfilter_del(obj);
-            }
-
-            if (pclose || SendAll(socket, ZERO, sizeof ZERO - 1))
+            if (!SendData(socket, data_server, file_manager, buf, send_gzip) ||
+                SendAll(socket, ZERO, sizeof ZERO - 1))
                 break;
             file_manager.ClearFiles();
         }

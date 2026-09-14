@@ -1,6 +1,7 @@
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36 libgsf-1)
+find_package(ZLIB REQUIRED)
+pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36)
 
 configure_file(esajpip/server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
 
@@ -21,8 +22,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpip/jpip.cc
     ${ESAJPIP_TOP}/jpip/request.cc
     ${ESAJPIP_TOP}/net/socket.cc
-    ${ESAJPIP_TOP}/trace.cc
-    ${ESAJPIP_TOP}/z/zfilter.c)
+    ${ESAJPIP_TOP}/trace.cc)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
 set_target_properties(esajpip PROPERTIES
@@ -41,6 +41,7 @@ target_link_libraries(esajpip PRIVATE
     PkgConfig::PKG
     config
     log4cpp
+    ZLIB::ZLIB
     Threads::Threads)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
