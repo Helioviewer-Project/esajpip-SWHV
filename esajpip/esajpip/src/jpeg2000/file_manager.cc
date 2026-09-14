@@ -310,6 +310,8 @@ namespace jpeg2000 {
         vector<string> v_path_file;
         int pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         int num_flst = 0, pini_ftbl = 0, plen_ftbl = 0;
+        uint16_t num_data_references = 0;
+        bool has_data_reference_box = false;
 
         while (file->GetOffset() != file->GetSize() && res) {
             pini_box = file->GetOffset();
@@ -343,7 +345,10 @@ namespace jpeg2000 {
                     break;
                     // 'flst' box assumed to be contained within a 'ftbl' superbox
                 case FLST_BOX_ID: TRACE("FLST box...");
-                    res = res && ReadFlstBox(file, length_box, &data_reference);
+                    if (!ReadFlstBox(file, length_box, &data_reference)) {
+                        res = false;
+                        break;
+                    }
                     if (num_flst)
                         image_info->meta_data.meta_data.emplace_back(0, 0);
                     num_flst++;
@@ -352,7 +357,12 @@ namespace jpeg2000 {
                     pini = file->GetOffset();
                     break;
                 case DBTL_BOX_ID: TRACE("DBTL box...");
-                    res = res && file->Seek(2, SEEK_CUR);
+                    if (has_data_reference_box || length_box < 2)
+                        res = false;
+                    else {
+                        res = file->ReadReverse(&num_data_references);
+                        has_data_reference_box = true;
+                    }
                     break;
                 case URL__BOX_ID: TRACE("URL box...");
                     // Add the paths of the hyperlinked images to the paths vector
@@ -367,7 +377,8 @@ namespace jpeg2000 {
         }
         image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
-        if (!res || v_data_reference.size() != v_path_file.size())
+        if (!res || v_path_file.size() != num_data_references ||
+            v_data_reference.size() != v_path_file.size())
             return false;
         image_info->paths = std::move(v_path_file);
 
