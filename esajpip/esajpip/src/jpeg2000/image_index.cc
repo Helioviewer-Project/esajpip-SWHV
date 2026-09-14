@@ -73,35 +73,34 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::GetPLTLength(File *file, int ind_codestream, uint64_t *length_packet) {
-        bool res = true;
         vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
         if (last_plt[ind_codestream] >= (int) plt.size())
             return false;
+        const FileSegment &marker = plt[last_plt[ind_codestream]];
 
         // Get packet plt offset
-        if (last_offset_PLT[ind_codestream] == 0)
-            res = res && file->Seek(plt[last_plt[ind_codestream]].offset);
-        else res = res && file->Seek(last_offset_PLT[ind_codestream]);
+        uint64_t offset = last_offset_PLT[ind_codestream];
+        if (offset == 0)
+            offset = marker.offset;
+        file->Seek(offset);
 
         // Get packet length
         uint8_t buf_packet = 0;
-        uint8_t length_packet_partial;
-        uint8_t partial = 1;
 
         *length_packet = 0;
-        while (partial) {
-            res = res && file->Read(&buf_packet);
-            partial = buf_packet & (uint8_t) 128; // To get if the packet is final or not
-            length_packet_partial = buf_packet & (uint8_t) 127; // To get the packet length
-            *length_packet = (*length_packet << 7) | length_packet_partial;
-        }
+        do {
+            if (file->GetOffset() >= marker.offset + marker.length ||
+                !file->Read(&buf_packet) || *length_packet > (UINT64_MAX >> 7))
+                return false;
+            *length_packet = (*length_packet << 7) | (buf_packet & (uint8_t) 127);
+        } while (buf_packet & (uint8_t) 128);
 
         last_offset_PLT[ind_codestream] = file->GetOffset();
-        if (last_offset_PLT[ind_codestream] == plt[last_plt[ind_codestream]].offset + plt[last_plt[ind_codestream]].length) {
+        if (last_offset_PLT[ind_codestream] == marker.offset + marker.length) {
             last_plt[ind_codestream]++;
             last_offset_PLT[ind_codestream] = 0;
         }
-        return res;
+        return true;
     }
 
     bool ImageIndex::GetOffsetPacket(File *file, int ind_codestream, uint64_t length_packet) {
