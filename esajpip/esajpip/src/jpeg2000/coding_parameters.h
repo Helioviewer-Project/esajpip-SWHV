@@ -80,7 +80,7 @@ namespace jpeg2000 {
         /**
          * Precinct sizes of each resolution level.
          */
-        vector<Resolution> resolutions;
+        std::vector<Resolution> resolutions;
 
         /**
          * All the progression orders defined in the JPEG2000

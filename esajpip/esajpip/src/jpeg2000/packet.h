@@ -34,7 +34,7 @@ namespace jpeg2000 {
             this->precinct_xy = precinct_xy;
         }
 
-        friend ostream &operator<<(ostream &out, const Packet &packet) {
+        friend std::ostream &operator<<(std::ostream &out, const Packet &packet) {
             out << packet.layer << "\t" << packet.resolution << "\t" << packet.component << "\t"
                 << packet.precinct_xy.y << "\t" << packet.precinct_xy.x;
 

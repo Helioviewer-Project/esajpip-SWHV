@@ -2,8 +2,6 @@
 #define _JPEG2000_POINT_H_
 
 namespace jpeg2000 {
-    using namespace std;
-
     /**
      * Represents a couple of integer values that can
      * be used to identify a coordinate as well as a
@@ -32,78 +30,6 @@ namespace jpeg2000 {
         }
 
         /**
-         * Increments by one the two values.
-         * @return The object itself.
-         */
-        Point &operator++() {
-            x++;
-            y++;
-            return *this;
-        }
-
-        /**
-         * Decrements by one the two values.
-         * @return The object itself.
-         */
-        Point &operator--() {
-            x--;
-            y--;
-            return *this;
-        }
-
-        /**
-         * Increments the two values.
-         * @param val Value to increment.
-         * @return The object itself.
-         */
-        Point &operator+=(int val) {
-            x += val;
-            y += val;
-            return *this;
-        }
-
-        /**
-         * Decrements the two values.
-         * @param val Value to decrement.
-         * @return The object itself.
-         */
-        Point &operator-=(int val) {
-            x -= val;
-            y -= val;
-            return *this;
-        }
-
-        /**
-         * Multiplies the two values by one value.
-         * @param val Value to multiply.
-         * @return The object itself.
-         */
-        Point &operator*=(int val) {
-            x *= val;
-            y *= val;
-            return *this;
-        }
-
-        /**
-         * Divides the two values by one value.
-         * @param val Value to divide.
-         * @return The object itself.
-         */
-        Point &operator/=(int val) {
-            x /= val;
-            y /= val;
-            return *this;
-        }
-
-        /**
-         * Returns the sum of a point with an integer value.
-         * The value is added to the two values of the point.
-         */
-        friend Point operator+(const Point &a, int value) {
-            return Point(a.x + value, a.y + value);
-        }
-
-        /**
          * Returns the subtraction of a point with an integer value.
          * The value is subtracted from the two values of the point.
          */
@@ -120,43 +46,11 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns the division of a point with an integer value.
-         * The value is divided to the two values of the point.
-         */
-        friend Point operator/(const Point &a, int value) {
-            return Point(a.x / value, a.y / value);
-        }
-
-        /**
          * Returns the sum of two points. The operation is
          * applied each value of each point.
          */
         friend Point operator+(const Point &a, const Point &b) {
             return Point(a.x + b.x, a.y + b.y);
-        }
-
-        /**
-         * Returns the subtraction of two points. The operation is
-         * applied each value of each point.
-         */
-        friend Point operator-(const Point &a, const Point &b) {
-            return Point(a.x - b.x, a.y - b.y);
-        }
-
-        /**
-         * Returns the multiplication of two points. The operation is
-         * applied each value of each point.
-         */
-        friend Point operator*(const Point &a, const Point &b) {
-            return Point(a.x * b.x, a.y * b.y);
-        }
-
-        /**
-         * Returns the division of two points. The operation is
-         * applied each value of each point.
-         */
-        friend Point operator/(const Point &a, const Point &b) {
-            return Point(a.x / b.x, a.y / b.y);
         }
 
         /**
