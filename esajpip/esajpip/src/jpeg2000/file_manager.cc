@@ -370,10 +370,12 @@ namespace jpeg2000 {
                     if (codestream)
                         return false;
                     codestream = true;
-                    image_index->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
                                                 &image_index->streams.back().codestream);
-                    image_index->meta_data.place_holders.emplace_back(image_index->streams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
+                    image_index->meta_data.bin0.emplace_back(
+                            FileSegment(pini, plen),
+                            PlaceHolder(image_index->streams.size() - 1, true,
+                                        FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
 
@@ -381,7 +383,7 @@ namespace jpeg2000 {
                     res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_index->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
+        image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
         return res && codestream;
     }
 
@@ -398,6 +400,7 @@ namespace jpeg2000 {
         vector<string> v_path_file;
         uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         uint64_t pini_ftbl = 0, plen_ftbl = 0;
+        FileSegment ftbl_metadata;
         int num_flst = 0;
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
@@ -438,26 +441,29 @@ namespace jpeg2000 {
                         res = false;
                         break;
                     }
-                    image_index->meta_data.meta_data.emplace_back(pini, plen);
                     res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
                                                 &codestreams.back());
-                    image_index->meta_data.place_holders.emplace_back(codestreams.size() - 1, true, FileSegment(pini_box, plen_box), length_box);
+                    image_index->meta_data.bin0.emplace_back(
+                            FileSegment(pini, plen),
+                            PlaceHolder(codestreams.size() - 1, true,
+                                        FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
                 case ASOC_BOX_ID: TRACE("ASOC box...");
                     res = res && file->Seek(length_box, SEEK_CUR);
-                    image_index->meta_data.meta_data.emplace_back(pini, plen);
                     image_index->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
-                    image_index->meta_data.place_holders.emplace_back(image_index->meta_data.bins.size(), false,
-                                                                      FileSegment(pini_box, plen_box), length_box);
+                    image_index->meta_data.bin0.emplace_back(
+                            FileSegment(pini, plen),
+                            PlaceHolder(image_index->meta_data.bins.size(), false,
+                                        FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
-                    image_index->meta_data.meta_data.emplace_back(pini, plen);
                     num_flst = 0;
                     pini_ftbl = pini_box;
                     plen_ftbl = plen_box;
+                    ftbl_metadata = FileSegment(pini, plen);
                     if (length_box < 8)
                         res = false;
                     else
@@ -471,7 +477,10 @@ namespace jpeg2000 {
                         break;
                     }
                     num_flst++;
-                    image_index->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
+                    image_index->meta_data.bin0.emplace_back(
+                            ftbl_metadata,
+                            PlaceHolder(v_data_reference.size(), true,
+                                        FileSegment(pini_ftbl, plen_ftbl), 0));
                     v_data_reference.push_back(data_reference);
                     fragments.push_back(fragment);
                     pini = file->GetOffset();
@@ -498,7 +507,7 @@ namespace jpeg2000 {
                     res = res && file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_index->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
+        image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
 
         if (!res || containers.size() != 1 || codestreams.empty() ||
             v_path_file.size() != num_data_references)

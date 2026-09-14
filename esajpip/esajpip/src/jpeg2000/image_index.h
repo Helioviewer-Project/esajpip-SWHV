@@ -90,15 +90,8 @@ namespace jpeg2000 {
             return streams.empty() ? hyper_links.size() : streams.size();
         }
 
-        /**
-         * Returns the number of meta-data blocks.
-         */
-        size_t GetNumMetadatas() const {
-            return meta_data.meta_data.size();
-        }
-
-        size_t GetNumMetadataBins() const {
-            return meta_data.bins.size();
+        const Metadata &GetMetadata() const {
+            return meta_data;
         }
 
         /**
@@ -128,26 +121,6 @@ namespace jpeg2000 {
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
             return streams.empty() ? &hyper_links[num_codestream].coding_parameters : &coding_parameters;
-        }
-
-        /**
-         * Returns the file segment of a meta-data block.
-         * @param num_metadata Meta-data number.
-         */
-        const FileSegment &GetMetadata(size_t num_metadata) const {
-            return meta_data.meta_data[num_metadata];
-        }
-
-        const FileSegment &GetMetadataBin(size_t num_metadata) const {
-            return meta_data.bins[num_metadata];
-        }
-
-        /**
-         * Returns the information of a place-holder.
-         * @param num_placeholder Place-holder number.
-         */
-        const PlaceHolder &GetPlaceHolder(size_t num_placeholder) const {
-            return meta_data.place_holders[num_placeholder];
         }
 
         /**

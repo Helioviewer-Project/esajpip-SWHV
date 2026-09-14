@@ -54,40 +54,38 @@ namespace jpip {
 
             if (!cache_model.IsFullMetadata()) {
                 File *file = file_manager.GetFile(image_index->GetPathName());
-                if (!meta_bin0_done && image_index->GetNumMetadatas() <= 0) {
-                    if (WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null) > 0)
-                        meta_bin0_done = true;
-                } else if (!meta_bin0_done) {
-                    size_t num_metadatas = image_index->GetNumMetadatas();
-                    while (meta_idx < num_metadatas) {
-                        const FileSegment &metadata = image_index->GetMetadata(meta_idx);
-                        bool last_metadata = meta_idx == num_metadatas - 1;
-                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0, metadata, meta_offset, last_metadata);
-
-                        if (last_metadata) {
-                            if (res > 0)
-                                meta_bin0_done = true;
+                const Metadata &metadata = image_index->GetMetadata();
+                if (!meta_bin0_done) {
+                    while (meta_idx < metadata.bin0.size()) {
+                        const Metadata::Part &part = metadata.bin0[meta_idx];
+                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0,
+                                                                    part.data, meta_offset, false);
+                        if (res <= 0)
                             break;
-                        }
 
-                        int placeholder_offset = meta_offset + metadata.length;
-                        const PlaceHolder &placeholder = image_index->GetPlaceHolder(meta_idx);
-                        if (WritePlaceHolder(file, 0, 0, placeholder, placeholder_offset) <= 0)
+                        int placeholder_offset = meta_offset + part.data.length;
+                        if (WritePlaceHolder(file, 0, 0, part.placeholder,
+                                             placeholder_offset) <= 0)
                             break;
-                        meta_offset = placeholder_offset + placeholder.length();
+                        meta_offset = placeholder_offset + part.placeholder.length();
                         meta_idx++;
                     }
+
+                    if (!eof && meta_idx == metadata.bin0.size() &&
+                        WriteSegment<DataBinClass::META_DATA>(file, 0, 0,
+                                                              metadata.tail, meta_offset) > 0)
+                        meta_bin0_done = true;
                 }
 
-                while (meta_bin0_done && !eof && meta_bin_idx < image_index->GetNumMetadataBins()) {
+                while (meta_bin0_done && !eof && meta_bin_idx < metadata.bins.size()) {
                     res = WriteSegment<DataBinClass::META_DATA>(file, 0, meta_bin_idx + 1,
-                                                                image_index->GetMetadataBin(meta_bin_idx));
+                                                                metadata.bins[meta_bin_idx]);
                     if (res <= 0)
                         break;
                     meta_bin_idx++;
                 }
 
-                if (meta_bin0_done && meta_bin_idx == image_index->GetNumMetadataBins())
+                if (meta_bin0_done && meta_bin_idx == metadata.bins.size())
                     cache_model.SetFullMetadata();
             }
 

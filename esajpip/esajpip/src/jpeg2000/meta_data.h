@@ -14,39 +14,32 @@ namespace jpeg2000 {
      */
     class Metadata {
     public:
-        /**
-         * File segments of all the meta-data blocks.
-         */
-        vector<FileSegment> meta_data;
+        struct Part {
+            FileSegment data;
+            PlaceHolder placeholder;
+
+            Part(const FileSegment &_data, const PlaceHolder &_placeholder)
+                    : data(_data), placeholder(_placeholder) {
+            }
+        };
+
+        vector<Part> bin0;
+        FileSegment tail;
 
         /**
          * Contents of boxes referenced by place-holders in meta-data bin 0.
          */
         vector<FileSegment> bins;
 
-        /**
-         * Associated place-holders.
-         */
-        vector<PlaceHolder> place_holders;
-
-        /**
-         * Empty constructor.
-         */
-        Metadata() {
-        }
-
         friend ostream &operator<<(ostream &out, const Metadata &info) {
-            out << endl << "Meta-data: ";
-            for (size_t i = 0; i < info.meta_data.size(); ++i)
-                out << info.meta_data[i] << " ";
+            out << endl << "Meta-data bin 0: ";
+            for (size_t i = 0; i < info.bin0.size(); ++i)
+                out << info.bin0[i].data << " " << info.bin0[i].placeholder << " ";
+            out << info.tail;
 
             out << endl << "Meta-data bins: ";
             for (size_t i = 0; i < info.bins.size(); ++i)
                 out << info.bins[i] << " ";
-
-            out << endl << "Place Holders: ";
-            for (size_t i = 0; i < info.place_holders.size(); ++i)
-                out << info.place_holders[i] << " ";
 
             return out;
         }
