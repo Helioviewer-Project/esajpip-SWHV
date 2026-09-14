@@ -15,6 +15,7 @@
 - Store linked JPX paths in codestream order and simplify cached-file lookup and
   URL handling.
 - Modernize the CMake build and add focused protocol tests.
+- Update the bundled log4cpp to 1.1.6 and libconfig to 1.8.2.
 - Remove unused request state, dependencies, and packet-index code.
 
 ### Fixed
@@ -22,3 +23,4 @@
 - Accept a JPIP cache-model descriptor at the end of a query string.
 - Treat an orderly client disconnect as normal EOF while retaining distinct
   diagnostics for read errors, incomplete request lines, and invalid requests.
+- Pass the correct MIB element count to `sysctl` on macOS.

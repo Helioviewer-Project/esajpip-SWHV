@@ -52,12 +52,18 @@ foreach(SRC ${CORE_SRCS})
     list(APPEND LOG4CPP_SRCS ${LOG4CPP}/${SRC})
 endforeach()
 
+set(LOG4CPP_VERSION 1.1.6)
+include(${LOG4CPP}/cmake/auto-configure-log4cpp.cmake)
+
 add_library(log4cpp SHARED ${LOG4CPP_SRCS})
+set_target_properties(log4cpp PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES)
 target_compile_definitions(log4cpp PRIVATE
-    HAVE_CONFIG_H
-    LOG4CPP_HAVE_SNPRINTF
-    LOG4CPP_HAVE_SSTREAM
-    LOG4CPP_HAVE_UNISTD_H)
-target_include_directories(log4cpp PRIVATE ${LOG4CPP}/include)
+    HAVE_CONFIG_H)
+target_include_directories(log4cpp PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+    ${LOG4CPP}/include)
 target_link_libraries(log4cpp PRIVATE Threads::Threads)
 sidc_install_lib(log4cpp)

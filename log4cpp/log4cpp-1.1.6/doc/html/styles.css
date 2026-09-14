@@ -1,0 +1,93 @@
+#headerdiv {
+    background-color: rgb(240, 240, 240);
+    text-align: center;
+    margin: 10px;
+}
+
+.briefline {
+    font-size: x-small;
+    background-color: rgb(220, 220, 220);
+    padding: 5px 10px;
+    border-style: dotted;
+    border-width: 1px;
+    border-color: rgb(190, 190, 190);
+    margin: 10px;
+}
+
+.delimiter {
+    clear: both;
+    display: none;
+    visibility: hidden;
+}
+
+body {
+    margin: 0px;
+    padding: 0px;
+    font-family: Verdana, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+}
+
+DT {
+    font-weight: bold;
+}
+
+#projectpage {
+    margin: 0px;
+    padding: 0px;
+}
+
+.lightbackground {
+    background-color: rgb(240, 240, 240);
+}
+
+#navigationpanel h5 {
+    color: black;
+    border-bottom: 1px solid rgb(190, 190, 190);
+    margin: 1px;
+    padding: 1px;
+    font-size: small;
+}
+
+#navigationpanel {
+    padding: 5px;
+    margin: 10px;
+    width: 180px;
+    float: left;
+    border: 1px solid rgb(150, 150, 150);
+}
+
+#navigationpanel ul {
+    margin: 1px;
+    padding: 1px;
+    font-size: small;
+}
+
+#navigationpanel li {
+    list-style-type: none;
+    padding-left: 15px;
+    font-size: smaller;
+}
+
+.chapter {
+    padding: 4px;
+    margin: 0px;
+}
+
+.chapter h2 {
+    color: darkblue;
+    background-color: rgb(240, 240, 240);
+    border-bottom: 1px solid rgb(190, 190, 190);
+}
+
+#contentpanel {
+    margin-right: 20px;
+    margin-left: 220px;
+}
+
+.code {
+    padding: 12px;
+    margin: 10px;
+    background-color: rgb(240, 240, 240);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}

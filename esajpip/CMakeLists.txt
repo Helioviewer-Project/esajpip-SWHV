@@ -37,6 +37,7 @@ target_include_directories(esajpip BEFORE PRIVATE
     .
     ${ESAJPIP_TOP}
     ${LIBCONFIG}/lib
+    ${CMAKE_BINARY_DIR}/log4cpp/include
     ${LOG4CPP}/include)
 target_link_libraries(esajpip PRIVATE
     PkgConfig::PKG
@@ -80,6 +81,7 @@ if(BUILD_TESTING)
     target_compile_definitions(protocol_test PRIVATE _NO_READPROC NO_COLORS LOG4CPP_HAVE_SSTREAM)
     target_include_directories(protocol_test PRIVATE
         ${ESAJPIP_TOP}
+        ${CMAKE_BINARY_DIR}/log4cpp/include
         ${LOG4CPP}/include)
     target_link_libraries(protocol_test PRIVATE log4cpp Threads::Threads)
     add_test(NAME protocol COMMAND protocol_test)

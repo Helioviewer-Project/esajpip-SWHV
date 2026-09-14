@@ -1,7 +1,7 @@
 
 log4cpp:   http://log4cpp.sourceforge.net
 
-libconfig: http://www.hyperrealm.com/libconfig/
+libconfig: https://github.com/hyperrealm/libconfig
 
 ## How to build ##
 

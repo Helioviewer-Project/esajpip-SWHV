@@ -1,0 +1,18 @@
+Bastiaan Bakker <bastiaan.bakker@lifeline.nl>       Initiator
+Cedric Le Goater <cedric(at)legoater.com>	        autoconf setup, various improvements
+Marc Welz <marc(at)jade.cs.uct.ac.za>	            IdsaAppender
+Lynn Owen <opl(at)agoby.com>	                    MSVC++ support
+Steve Ostlind <s.ostlind(at)pentasafe.com>	        MSVC++ support, various fixes
+Marcel Harkema <marcel(at)debian.org>	            Debian packaging
+Uwe Jäger <jaeger(at)varial.de>	                    Borland C++ Builder support
+Walter Stroebel <walter.stroebel(at)lifeline.nl>	RemoteSyslogAppender
+Glen Scott <glen_s(at)yahoo.com>	                PatternLayout, SimpleConfigurator
+Tony Cheung <dragonman(at)asiayeah.com>	            OpenVMS support
+Alex Tapaccos <ATapaccos(at)redfig.com>	            RollingFileAppender
+Brendan B. Boerner <bboerner(at)texas.net>	        Multiple Appender support for Categories
+Paulo Pizarro <paulo.pizarro(at)digitro.com.br>	    RollingFileAppender
+David Resnick <dresnick(at)mobilespear.com>	        NTEventAppender, integration work
+Aaron Ingram <ai8(at)yahoo.com>	                    MSThreads support
+Alan Anderson <alan(at)rushmore.com>	            Win32DebugAppender, PropertyConfigurator
+Emiliano Martin <emilianomc(at)terra.es>	        PThreads support
+Alexander Perepelkin <sanchouss_(at)users.sf.net>	DailyRollingFileAppender. Project maintenance, improvements, fixes
