@@ -1,6 +1,8 @@
 #ifndef _JPEG2000_FILE_MANAGER_H_
 #define _JPEG2000_FILE_MANAGER_H_
 
+#include <map>
+
 #include "image_index.h"
 
 namespace jpeg2000 {

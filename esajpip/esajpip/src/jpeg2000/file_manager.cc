@@ -1,5 +1,7 @@
 #include "file_manager.h"
 
+#include <utility>
+
 #include <glib.h>
 
 namespace jpeg2000 {
@@ -25,10 +27,10 @@ namespace jpeg2000 {
         // Repeat the process with the image hyperlinks
         if (!image_info.paths.empty()) {
             image->hyper_links.resize(image_info.paths.size());
-            for (multimap<string, int>::const_iterator i = image_info.paths.begin(); i != image_info.paths.end(); ++i) {
+            for (size_t i = 0; i < image_info.paths.size(); ++i) {
                 ImageIndex::Ptr linked = ImageIndex::Ptr(new ImageIndex());
-                linked->Init(i->first, image_info, i->second);
-                image->hyper_links[i->second] = linked;
+                linked->Init(image_info.paths[i], image_info, i);
+                image->hyper_links[i] = linked;
             }
         }
         ClearFiles();
@@ -386,9 +388,7 @@ namespace jpeg2000 {
         image_info->meta_data.meta_data.emplace_back(pini, file->GetOffset() - pini);
 
         assert(v_data_reference.size() == v_path_file.size());
-        for (size_t i = 0; i < v_data_reference.size(); ++i) {
-            image_info->paths.insert(pair<string, int>(v_path_file[i], i));
-        }
+        image_info->paths = std::move(v_path_file);
 
         if (!image_info->paths.empty()) {
             image_info->codestreams.resize(image_info->paths.size());
@@ -396,17 +396,17 @@ namespace jpeg2000 {
             image_info->meta_data_hyperlinks.resize(image_info->paths.size());
         }
         // Get image info of the hyperlinked images
-        for (multimap<string, int>::const_iterator i = image_info->paths.begin(); i != image_info->paths.end() && res; ++i) {
+        for (size_t i = 0; i < image_info->paths.size() && res; ++i) {
             ImageInfo image_info_hyperlink;
-            res = ReadImage(i->first, &image_info_hyperlink);
-            file_map.erase(i->first);
+            res = ReadImage(image_info->paths[i], &image_info_hyperlink);
+            file_map.erase(image_info->paths[i]);
             if (!res)
                 break;
 
             image_info->coding_parameters = image_info_hyperlink.coding_parameters;
-            image_info->coding_parameters_hyperlinks[i->second] = image_info_hyperlink.coding_parameters;
-            image_info->codestreams[i->second] = image_info_hyperlink.codestreams.back();
-            image_info->meta_data_hyperlinks[i->second] = image_info_hyperlink.meta_data;
+            image_info->coding_parameters_hyperlinks[i] = image_info_hyperlink.coding_parameters;
+            image_info->codestreams[i] = image_info_hyperlink.codestreams.back();
+            image_info->meta_data_hyperlinks[i] = image_info_hyperlink.meta_data;
         }
         return res;
     }
