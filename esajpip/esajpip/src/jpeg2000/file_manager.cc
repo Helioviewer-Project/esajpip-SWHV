@@ -24,13 +24,6 @@ namespace jpeg2000 {
             return false;
         }
         image.reset(new ImageIndex(path_image_file, image_info));
-
-        // Repeat the process with the image hyperlinks
-        if (!image_info.paths.empty()) {
-            image->hyper_links.reserve(image_info.paths.size());
-            for (size_t i = 0; i < image_info.paths.size(); ++i)
-                image->hyper_links.emplace_back(image_info, i);
-        }
         ClearFiles();
         return true;
     }
@@ -89,7 +82,7 @@ namespace jpeg2000 {
             return false;
         }
 
-        if (res && image_info->paths.empty())
+        if (res && image_info->links.empty())
             image_info->coding_parameters.FillTotalPrecinctsVector();
 
         return res;
@@ -530,23 +523,23 @@ namespace jpeg2000 {
             if (v_data_reference[i] != i + 1)
                 sequential_references = false;
         }
+        vector<string> paths;
         if (sequential_references)
-            image_info->paths = std::move(v_path_file);
+            paths = std::move(v_path_file);
         else {
-            image_info->paths.reserve(v_data_reference.size());
+            paths.reserve(v_data_reference.size());
             for (uint16_t reference : v_data_reference)
-                image_info->paths.push_back(v_path_file[reference - 1]);
+                paths.push_back(v_path_file[reference - 1]);
         }
 
-        if (!image_info->paths.empty()) {
-            image_info->codestreams.resize(image_info->paths.size());
-            image_info->coding_parameters_hyperlinks.resize(image_info->paths.size());
-        }
         // Get image info of the hyperlinked images
-        for (size_t i = 0; i < image_info->paths.size() && res; ++i) {
+        if (!paths.empty())
+            vector<CodestreamIndex>().swap(image_info->codestreams);
+        image_info->links.reserve(paths.size());
+        for (size_t i = 0; i < paths.size() && res; ++i) {
             ImageInfo image_info_hyperlink;
-            res = ReadImage(image_info->paths[i], &image_info_hyperlink);
-            file_map.erase(image_info->paths[i]);
+            res = ReadImage(paths[i], &image_info_hyperlink);
+            file_map.erase(paths[i]);
             if (!res)
                 break;
 
@@ -563,8 +556,11 @@ namespace jpeg2000 {
                 break;
             }
 
-            image_info->coding_parameters_hyperlinks[i] = std::move(image_info_hyperlink.coding_parameters);
-            image_info->codestreams[i] = std::move(image_info_hyperlink.codestreams.back());
+            image_info->links.emplace_back();
+            ImageInfo::Link &link = image_info->links.back();
+            link.path_name = std::move(paths[i]);
+            link.coding_parameters = std::move(image_info_hyperlink.coding_parameters);
+            link.codestream = std::move(image_info_hyperlink.codestreams.back());
         }
         return res;
     }

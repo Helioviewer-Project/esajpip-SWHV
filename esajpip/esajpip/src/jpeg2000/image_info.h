@@ -20,28 +20,27 @@ namespace jpeg2000 {
      */
     class ImageInfo {
     public:
+        struct Link {
+            string path_name;
+            CodingParameters coding_parameters;
+            CodestreamIndex codestream;
+        };
+
         Metadata meta_data;                        ///< Meta-data information
-        vector<string> paths;                   ///< Paths of the hyperlinks (if any)
         CodingParameters coding_parameters;        ///< Coding parameters
         vector<CodestreamIndex> codestreams;    ///< Codestreams information
-        vector<CodingParameters> coding_parameters_hyperlinks; ///< Coding parameters of the hyperlinks
-
-        /**
-         * Empty constructor.
-         */
-        ImageInfo() {
-        }
+        vector<Link> links;                     ///< Hyperlinked codestreams
 
         friend ostream &operator<<(ostream &out, const ImageInfo &info) {
             out << "Coding parameters: " << endl
                 << "---------------------- " << endl
                 << info.coding_parameters << endl << endl;
-            if (!info.paths.empty()) {
-                for (size_t i = 0; i < info.paths.size(); ++i) {
+            if (!info.links.empty()) {
+                for (size_t i = 0; i < info.links.size(); ++i) {
                     out << "Codestream index " << i + 1 << ":" << endl;
                     out << "------------------------" << endl;
-                    out << "Path: " << info.paths[i] << endl;
-                    out << info.codestreams[i] << endl << endl;
+                    out << "Path: " << info.links[i].path_name << endl;
+                    out << info.links[i].codestream << endl << endl;
                 }
             } else {
                 for (size_t i = 0; i < info.codestreams.size(); ++i) {

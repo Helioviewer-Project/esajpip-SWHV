@@ -10,10 +10,10 @@ namespace jpeg2000 {
               codestream(std::move(_codestream)) {
     }
 
-    ImageIndex::Link::Link(ImageInfo &image_info, int index)
-            : path_name(std::move(image_info.paths[index])),
-              coding_parameters(std::move(image_info.coding_parameters_hyperlinks[index])),
-              stream(std::move(image_info.codestreams[index])) {
+    ImageIndex::Link::Link(ImageInfo::Link &&link)
+            : path_name(std::move(link.path_name)),
+              coding_parameters(std::move(link.coding_parameters)),
+              stream(std::move(link.codestream)) {
     }
 
     ImageIndex::ImageIndex(const string &path_name, ImageInfo &image_info) {
@@ -22,11 +22,13 @@ namespace jpeg2000 {
         meta_data = std::move(image_info.meta_data);
         coding_parameters = std::move(image_info.coding_parameters);
 
-        if (image_info.paths.empty()) {
-            streams.reserve(image_info.codestreams.size());
-            for (CodestreamIndex &codestream : image_info.codestreams)
-                streams.emplace_back(std::move(codestream));
-        }
+        streams.reserve(image_info.codestreams.size());
+        for (CodestreamIndex &codestream : image_info.codestreams)
+            streams.emplace_back(std::move(codestream));
+
+        hyper_links.reserve(image_info.links.size());
+        for (ImageInfo::Link &link : image_info.links)
+            hyper_links.emplace_back(std::move(link));
     }
 
     bool ImageIndex::BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r) {

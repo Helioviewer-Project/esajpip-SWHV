@@ -34,7 +34,7 @@ namespace jpeg2000 {
             CodingParameters coding_parameters;
             Stream stream;
 
-            Link(ImageInfo &image_info, int index);
+            explicit Link(ImageInfo::Link &&link);
         };
 
         string path_name;           ///< Image file name
