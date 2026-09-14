@@ -183,6 +183,10 @@ namespace jpeg2000 {
             return file;
         }
 
+        void ClearFiles() {
+            file_map.clear();
+        }
+
         virtual ~FileManager() {
         }
     };

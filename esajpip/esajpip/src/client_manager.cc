@@ -317,6 +317,7 @@ void ClientManager::Run(ClientInfo *client_info) {
 
             if (pclose || SendString(socket, ZERO))
                 break;
+            file_manager.ClearFiles();
         }
     }
 
