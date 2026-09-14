@@ -58,7 +58,7 @@ namespace jpip {
         template<typename T>
         DataBinWriter &WriteValue(T value) {
             if (!eof) {
-                if ((ptr + sizeof(T)) >= end) eof = true;
+                if ((ptr + sizeof(T)) > end) eof = true;
                 else {
                     for (int i = sizeof(T) - 1; i >= 0; --i)
                         *ptr++ = (value >> (8 * i)) & 0xFF;

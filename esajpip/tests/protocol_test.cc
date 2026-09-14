@@ -202,6 +202,18 @@ static void CheckCoalescedJPIPMessages() {
     Check(class_writer.GetCount() == sizeof class_expected, "Wrong mixed-class JPIP message length");
     for (size_t i = 0; i < sizeof class_expected; ++i)
         Check(static_cast<unsigned char>(class_buf[i]) == class_expected[i], "Wrong mixed-class JPIP message");
+
+    char exact_buf[7];
+    jpip::DataBinWriter exact_writer;
+    exact_writer.SetBuffer(exact_buf, sizeof exact_buf)
+                .SetCodestream(0)
+                .SetDataBinClass(jpip::DataBinClass::MAIN_HEADER)
+                .Write(0, 0, file, data::FileSegment(0, 2), true);
+
+    const unsigned char exact_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2};
+    Check(exact_writer.GetCount() == sizeof exact_expected, "Did not fill the JPIP buffer exactly");
+    for (size_t i = 0; i < sizeof exact_expected; ++i)
+        Check(static_cast<unsigned char>(exact_buf[i]) == exact_expected[i], "Wrong exact-size JPIP message");
 }
 
 static void CheckMetadataPlaceHolder() {
@@ -234,6 +246,17 @@ static void CheckMetadataPlaceHolder() {
     Check(writer.GetCount() == sizeof expected, "Wrong metadata place-holder length");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "Wrong metadata place-holder");
+
+    char exact_buf[sizeof expected];
+    jpip::DataBinWriter exact_writer;
+    exact_writer.SetBuffer(exact_buf, sizeof exact_buf)
+                .SetCodestream(0)
+                .SetDataBinClass(jpip::DataBinClass::META_DATA)
+                .WritePlaceHolder(0, 0, file, place_holder, true);
+
+    Check(exact_writer.GetCount() == sizeof expected, "Did not fill the place-holder buffer exactly");
+    for (size_t i = 0; i < sizeof expected; ++i)
+        Check(static_cast<unsigned char>(exact_buf[i]) == expected[i], "Wrong exact-size metadata place-holder");
 }
 
 int main() {

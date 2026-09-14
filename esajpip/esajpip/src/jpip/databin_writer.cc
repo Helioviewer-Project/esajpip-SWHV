@@ -139,7 +139,7 @@ namespace jpip {
             char *aux_ptr = ptr;
             if (segment.length > 0) {
                 file.Seek(segment.offset);
-                if ((ptr + segment.length) >= end) eof = true;
+                if ((ptr + segment.length) > end) eof = true;
                 else if (!file.Read(ptr, segment.length)) eof = true;
                 else ptr += segment.length;
             }
@@ -158,7 +158,7 @@ namespace jpip {
                                                    File &file, const PlaceHolder &place_holder, bool last_byte) {
         if (BeginMessage(bin_id, bin_offset, place_holder.length(), last_byte)) {
             char *aux_ptr = ptr;
-            if ((ptr + place_holder.length()) >= end) eof = true;
+            if ((ptr + place_holder.length()) > end) eof = true;
             else {
                 /* LBox   */  WriteValue<uint32_t>(place_holder.length());
                 /* TBox   */  WriteValue<uint32_t>(0x70686c64);
@@ -168,7 +168,7 @@ namespace jpip {
                 /* OrigBH */
                 if (place_holder.header.length > 0) {
                     file.Seek(place_holder.header.offset);
-                    if (ptr + place_holder.header.length >= end) eof = true;
+                    if (ptr + place_holder.header.length > end) eof = true;
                     else if (!file.Read(ptr, place_holder.header.length)) eof = true;
                     else ptr += place_holder.header.length;
                 }
