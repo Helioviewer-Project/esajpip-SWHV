@@ -4,7 +4,6 @@
 //#define SHOW_TRACES
 #include "trace.h"
 
-#include <memory>
 #include <vector>
 #include "image_info.h"
 #include "packet_index.h"
@@ -31,7 +30,7 @@ namespace jpeg2000 {
         vector<PacketIndex> packet_indexes;  ///< Code-stream packet index
         vector<CodestreamIndex> codestreams; ///< Image code-streams
 
-        vector<unique_ptr<ImageIndex>> hyper_links; ///< Image hyperlinks
+        vector<ImageIndex> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -64,6 +63,8 @@ namespace jpeg2000 {
         ImageIndex(ImageInfo &image_info, int index);
 
     public:
+        ImageIndex(ImageIndex &&) = default;
+
         /**
          * Returns the number of codestreams.
          */
@@ -95,7 +96,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number.
          */
         const string &GetPathName(int num_codestream) const {
-            return codestreams.empty() ? hyper_links[num_codestream]->path_name : path_name;
+            return codestreams.empty() ? hyper_links[num_codestream].path_name : path_name;
         }
 
         /**
@@ -104,11 +105,11 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const FileSegment &GetMainHeader(int num_codestream) const {
-            return codestreams.empty() ? hyper_links[num_codestream]->codestreams.back().header : codestreams[num_codestream].header;
+            return codestreams.empty() ? hyper_links[num_codestream].codestreams.back().header : codestreams[num_codestream].header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
-            return codestreams.empty() ? &hyper_links[num_codestream]->coding_parameters : &coding_parameters;
+            return codestreams.empty() ? &hyper_links[num_codestream].coding_parameters : &coding_parameters;
         }
 
         /**
@@ -155,7 +156,7 @@ namespace jpeg2000 {
                     out << j << " - " << info_node.packet_indexes[i][j] << endl;
             out << endl << "Num. Hyperlinks: " << info_node.hyper_links.size() << endl;
             for (size_t i = 0; i < info_node.hyper_links.size(); ++i)
-                out << "Hyperlinks: " << endl << "----------- " << endl << *info_node.hyper_links[i] << endl << "----------- " << endl;
+                out << "Hyperlinks: " << endl << "----------- " << endl << info_node.hyper_links[i] << endl << "----------- " << endl;
 
             out << endl << "Meta-data: ";
             out << endl << info_node.meta_data << endl;

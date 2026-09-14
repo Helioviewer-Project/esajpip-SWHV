@@ -128,7 +128,7 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
         bool linked = !hyper_links.empty();
-        ImageIndex *index = linked ? hyper_links[num_codestream].get() : this;
+        ImageIndex *index = linked ? &hyper_links[num_codestream] : this;
         int i = linked ? 0 : num_codestream;
 
         if (packet.resolution > index->max_resolution[i]) {
