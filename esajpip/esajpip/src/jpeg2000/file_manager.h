@@ -16,7 +16,7 @@ namespace jpeg2000 {
         ImageIndex::Ptr image;
         CodingParameters coding_parameters; ///< Image coding parameters
 
-        map<const string, File::Ptr> file_map;
+        map<string, File::Ptr> file_map;
 
         /**
          * Reads the header information. of a JP2/JPX box.
@@ -172,15 +172,15 @@ namespace jpeg2000 {
         bool OpenImage(string &path_image_file);
 
         File::Ptr GetFile(const string &path_file) {
-            try {
-                return file_map.at(path_file);
-            } catch (...) {
-                File::Ptr file = File::Ptr(new File());
-                if (!file->Open(path_file))
-                    return File::Ptr();
-                file_map.insert(pair<const string, File::Ptr>(path_file, file));
-                return file;
-            }
+            map<string, File::Ptr>::const_iterator found = file_map.find(path_file);
+            if (found != file_map.end())
+                return found->second;
+
+            File::Ptr file = File::Ptr(new File());
+            if (!file->Open(path_file))
+                return File::Ptr();
+            file_map.insert(pair<string, File::Ptr>(path_file, file));
+            return file;
         }
 
         virtual ~FileManager() {
