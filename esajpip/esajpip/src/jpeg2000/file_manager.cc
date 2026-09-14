@@ -306,7 +306,9 @@ namespace jpeg2000 {
         uint64_t length_box;
         string path_file;
         uint16_t data_reference;
+        FileSegment fragment;
         vector<uint16_t> v_data_reference;
+        vector<FileSegment> fragments;
         vector<string> v_path_file;
         int pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         int num_flst = 0, pini_ftbl = 0, plen_ftbl = 0;
@@ -345,7 +347,7 @@ namespace jpeg2000 {
                     break;
                     // 'flst' box assumed to be contained within a 'ftbl' superbox
                 case FLST_BOX_ID: TRACE("FLST box...");
-                    if (!ReadFlstBox(file, length_box, &data_reference)) {
+                    if (!ReadFlstBox(file, length_box, &fragment, &data_reference)) {
                         res = false;
                         break;
                     }
@@ -354,6 +356,7 @@ namespace jpeg2000 {
                     num_flst++;
                     image_info->meta_data.place_holders.emplace_back(v_data_reference.size(), true, FileSegment(pini_ftbl, plen_ftbl), 0);
                     v_data_reference.push_back(data_reference);
+                    fragments.push_back(fragment);
                     pini = file->GetOffset();
                     break;
                 case DBTL_BOX_ID: TRACE("DBTL box...");
@@ -407,13 +410,26 @@ namespace jpeg2000 {
             if (!res)
                 break;
 
+            if (image_info_hyperlink.codestreams.empty() || image_info_hyperlink.codestreams.back().packets.empty()) {
+                res = false;
+                break;
+            }
+            const CodestreamIndex &codestream = image_info_hyperlink.codestreams.back();
+            const FileSegment &last_packet_data = codestream.packets.back();
+            uint64_t codestream_length =
+                    last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
+            if (fragments[i] != FileSegment(codestream.header.offset, codestream_length)) {
+                res = false;
+                break;
+            }
+
             image_info->coding_parameters_hyperlinks[i] = std::move(image_info_hyperlink.coding_parameters);
             image_info->codestreams[i] = std::move(image_info_hyperlink.codestreams.back());
         }
         return res;
     }
 
-    bool FileManager::ReadFlstBox(File *file, uint64_t length_box, uint16_t *data_reference) {
+    bool FileManager::ReadFlstBox(File *file, uint64_t length_box, FileSegment *fragment, uint16_t *data_reference) {
         if (length_box != 16)
             return false;
 
@@ -421,9 +437,12 @@ namespace jpeg2000 {
         if (!file->ReadReverse(&num_fragments) || num_fragments != 1)
             return false;
 
-        // Skip the fragment offset and length
-        file->Seek(12, SEEK_CUR);
-        return file->ReadReverse(data_reference);
+        uint32_t fragment_length = 0;
+        if (!file->ReadReverse(&fragment->offset) || !file->ReadReverse(&fragment_length) ||
+            !file->ReadReverse(data_reference))
+            return false;
+        fragment->length = fragment_length;
+        return true;
     }
 
     bool FileManager::ReadUrlBox(File *file, uint64_t length_box, string *path_file) {

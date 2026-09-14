@@ -82,10 +82,11 @@ namespace jpeg2000 {
          * Reads the information of a FLST box.
          * @param file Image file.
          * @param length_box Box length in bytes.
+         * @param fragment Receives the fragment location.
          * @param data_reference Receives the data reference.
          * @return <code>true</code> if successful.
          */
-        bool ReadFlstBox(File *file, uint64_t length_box, uint16_t *data_reference);
+        bool ReadFlstBox(File *file, uint64_t length_box, FileSegment *fragment, uint16_t *data_reference);
 
         /**
          * Reads the information of a URL box.
