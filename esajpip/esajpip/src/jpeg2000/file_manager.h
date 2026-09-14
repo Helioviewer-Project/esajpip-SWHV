@@ -27,7 +27,7 @@ namespace jpeg2000 {
          * @param length_box Receives the length of the box.
          * @return <code>true</code> if successful.
          */
-        bool ReadBoxHeader(File *file, uint32_t *type_box, uint64_t *length_box);
+        bool ReadBoxHeader(File *file, uint64_t limit, uint32_t *type_box, uint64_t *length_box);
 
         /**
          * Reads the information of a codestream.
@@ -36,7 +36,7 @@ namespace jpeg2000 {
          * @param index Receives the indexing information.
          * @return <code>true</code> if successful.
          */
-        bool ReadCodestream(File *file, CodingParameters *params, CodestreamIndex *index);
+        bool ReadCodestream(File *file, uint64_t length, CodingParameters *params, CodestreamIndex *index);
 
         /**
          * Reads the information of a SIZ marker.
@@ -44,7 +44,7 @@ namespace jpeg2000 {
          * @param params Pointer to the coding parameters to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSIZMarker(File *file, CodingParameters *params);
+        bool ReadSIZMarker(File *file, uint64_t limit, CodingParameters *params);
 
         /**
          * Reads the information of a COD marker.
@@ -52,7 +52,7 @@ namespace jpeg2000 {
          * @param params Pointer to the coding parameters to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadCODMarker(File *file, CodingParameters *params);
+        bool ReadCODMarker(File *file, uint64_t limit, CodingParameters *params);
 
         /**
          * Reads the information of a SOT marker.
@@ -60,7 +60,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSOTMarker(File *file, CodestreamIndex *index);
+        bool ReadSOTMarker(File *file, uint64_t limit, CodestreamIndex *index);
 
         /**
          * Reads the information of a PLT marker.
@@ -68,7 +68,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadPLTMarker(File *file, CodestreamIndex *index);
+        bool ReadPLTMarker(File *file, uint64_t limit, CodestreamIndex *index);
 
         /**
          * Reads the information of a SOD marker.
@@ -76,7 +76,7 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSODMarker(File *file, CodestreamIndex *index);
+        bool ReadSODMarker(File *file, uint64_t limit, CodestreamIndex *index);
 
         /**
          * Reads the information of a FLST box.
