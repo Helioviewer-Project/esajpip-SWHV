@@ -1,12 +1,13 @@
 #ifndef _JPIP_REQUEST_H_
 #define _JPIP_REQUEST_H_
 
-#include <vector>
+#include <iosfwd>
+#include <map>
 #include <string>
-#include <iostream>
+#include <vector>
+#include "http/protocol.h"
 #include "woi.h"
 #include "cache_model.h"
-#include "http/request.h"
 #include "jpeg2000/point.h"
 #include "jpeg2000/coding_parameters.h"
 
@@ -14,16 +15,21 @@ namespace jpip {
     using namespace std;
     using namespace jpeg2000;
 
-    /**
-     * Class derived from the HTTP <code>Request</code> class
-     * that contains the required code for properly analyzing
-     * a JPIP request, when this protocol is used over the HTTP.
-     *
-     * @see http::Request
-     * @see CacheModel
-     */
-    class Request : public http::Request {
+    class Request {
     public:
+        enum Type {
+            GET,
+            UNKNOWN
+        };
+
+        Type type;
+        string object;
+        http::Protocol protocol;
+        map<string, string> parameters;
+
+        bool Parse(const string &line);
+        void ParseURI(const string &uri);
+
         /**
          * Parses a cache model from an input stream.
          * @param stream Input stream.
@@ -43,7 +49,7 @@ namespace jpip {
          * Parses the parameters of a CGI HTTP request.
          * @param stream Input stream.
          */
-        virtual void ParseParameters(istream &stream);
+        void ParseParameters(istream &stream);
 
         /**
          * Parses one parameter of a CGI HTTP request.
@@ -51,7 +57,10 @@ namespace jpip {
          * @param param String to store the parameter name.
          * @param value String to store the parameter value.
          */
-        virtual void ParseParameter(istream &stream, const string &param, string &value);
+        void ParseParameter(istream &stream, const string &param, string &value);
+
+        friend istream &operator>>(istream &in, Request &request);
+        friend ostream &operator<<(ostream &out, const Request &request);
 
         /**
          * Union used to control the presence of the different
@@ -132,6 +141,8 @@ namespace jpip {
          * Empty constructor.
          */
         Request() {
+            type = GET;
+            object = "/";
             length_response = 0;
             round_direction = CLOSEST;
             codestreams.reserve(100);
@@ -159,9 +170,6 @@ namespace jpip {
                 woi->size.x = (int) ceil((double) (woi->size.x * res_image_size.x) / resolution_size.x);
                 woi->size.y = (int) ceil((double) (woi->size.y * res_image_size.y) / resolution_size.y);
             }
-        }
-
-        virtual ~Request() {
         }
     };
 }

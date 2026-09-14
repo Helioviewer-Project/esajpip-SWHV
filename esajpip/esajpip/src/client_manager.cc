@@ -1,5 +1,6 @@
 #include "trace.h"
 #include "client_manager.h"
+#include "http/header.h"
 #include "jpeg2000/file_manager.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"

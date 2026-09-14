@@ -1,15 +1,51 @@
 #include "trace.h"
 #include "request.h"
 
+#include <cstring>
+#include <sstream>
+
+#define MAX_URI 1023
 #define MAXC 100000
 #define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
 
 namespace jpip {
 
+    bool Request::Parse(const string &line) {
+        string method, uri;
+
+        type = UNKNOWN;
+        if (line.empty())
+            return false;
+
+        istringstream in(line);
+        if (!(in >> method >> uri >> protocol) || method != "GET")
+            return false;
+
+        type = GET;
+        ParseURI(uri.substr(0, MAX_URI));
+        return true;
+    }
+
+    void Request::ParseURI(const string &uri) {
+        istringstream uri_stream(uri);
+        getline(uri_stream, object, '?');
+        ParseParameters(uri_stream);
+    }
+
     void Request::ParseParameters(istream &stream) {
+        string param, value;
+
         mask.Clear();
         codestreams.clear();
-        http::Request::ParseParameters(stream);
+        parameters.clear();
+
+        while (stream.good()) {
+            value.clear();
+            getline(stream, param, '=');
+            ParseParameter(stream, param, value);
+            if (stream)
+                parameters[param] = value;
+        }
     }
 
     void Request::ParseParameter(istream &stream, const string &param, string &value) {
@@ -223,5 +259,40 @@ namespace jpip {
         }
 
         return in;
+    }
+
+    istream &operator>>(istream &in, Request &request) {
+        string line;
+
+        if (getline(in, line)) {
+            TRACE("HTTP Request: " << line);
+            if (!request.Parse(line))
+                in.setstate(istream::failbit);
+        }
+        return in;
+    }
+
+    ostream &operator<<(ostream &out, const Request &request) {
+        if (request.type == Request::UNKNOWN)
+            return out;
+
+        out << "GET " << request.object;
+        if (!request.parameters.empty()) {
+            out << "?";
+            map<string, string>::const_iterator i = request.parameters.begin();
+            if (!i->second.empty())
+                out << i->first << "=" << i->second;
+            else
+                out << i->first;
+
+            while (++i != request.parameters.end()) {
+                out << "&";
+                if (!i->second.empty())
+                    out << i->first << "=" << i->second;
+                else
+                    out << i->first;
+            }
+        }
+        return out << " " << request.protocol << http::Protocol::CRLF;
     }
 }

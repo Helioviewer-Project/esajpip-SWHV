@@ -9,7 +9,6 @@
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
-#include "http/request.h"
 #include "http/response.h"
 #include "jpeg2000/place_holder.h"
 #include "jpip/databin_writer.h"
