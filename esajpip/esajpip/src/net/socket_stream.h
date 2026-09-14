@@ -1,9 +1,8 @@
 #ifndef _NET_SOCKET_STREAM_H_
 #define _NET_SOCKET_STREAM_H_
 
-#include <cstdio>
-#include <cstring>
 #include <iostream>
+#include <vector>
 #include "socket.h"
 
 namespace net {
@@ -19,28 +18,20 @@ namespace net {
     class SocketBuffer : public std::streambuf {
     protected:
         Socket *socket;
-        size_t in_len;
-        char *in_buf;
+        std::vector<char> in_buf;
 
     public:
-        SocketBuffer(Socket *socket, size_t in_len) {
-            this->socket = socket;
-            this->in_len = in_len;
-            in_buf = new char[in_len];
+        SocketBuffer(Socket *s, size_t len) : socket(s), in_buf(len) {
         }
 
-        virtual int_type underflow() {
-            ssize_t len = socket->Receive(in_buf, in_len);
+        int_type underflow() override {
+            ssize_t len = socket->Receive(in_buf.data(), in_buf.size());
 
             if (len <= 0) return traits_type::eof();
             else {
-                setg(in_buf, in_buf, in_buf + len);
+                setg(in_buf.data(), in_buf.data(), in_buf.data() + len);
                 return traits_type::to_int_type(*gptr());
             }
-        }
-
-        virtual ~SocketBuffer() {
-            delete[] in_buf;
         }
     };
 

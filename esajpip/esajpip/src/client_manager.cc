@@ -10,6 +10,7 @@
 #include <glib.h>
 
 #include <cstdio>
+#include <vector>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -135,7 +136,7 @@ void ClientManager::Run(ClientInfo *client_info) {
     int chunk_len = 0;
     int log_requests = cfg.log_requests();
     size_t buf_len = cfg.max_chunk_size();
-    char *buf = new char[buf_len];
+    vector<char> buf(buf_len);
 
     while (!pclose) {
         bool accept_gzip = false;
@@ -276,7 +277,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(file_manager, buf.data(), &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -286,7 +287,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                         pclose = true;
                         break;
                     }
-                    if (SendChunk(socket, buf, chunk_len)) {
+                    if (SendChunk(socket, buf.data(), chunk_len)) {
                         pclose = true;
                         break;
                     }
@@ -297,7 +298,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                 for (bool last = false; !last;) {
                     chunk_len = buf_len;
 
-                    if (!data_server.GenerateChunk(file_manager, buf, &chunk_len, &last)) {
+                    if (!data_server.GenerateChunk(file_manager, buf.data(), &chunk_len, &last)) {
                         ERROR("A new data chunk could not be generated");
                         pclose = true;
                         break;
@@ -309,7 +310,7 @@ void ClientManager::Run(ClientInfo *client_info) {
                     }
 
                     if (chunk_len > 0)
-                        zfilter_write(obj, buf, chunk_len);
+                        zfilter_write(obj, buf.data(), chunk_len);
                 }
 
                 size_t nbytes;
@@ -335,8 +336,6 @@ void ClientManager::Run(ClientInfo *client_info) {
             file_manager.ClearFiles();
         }
     }
-
-    delete[] buf;
 
     socket.Close(); // closes fd
 }
