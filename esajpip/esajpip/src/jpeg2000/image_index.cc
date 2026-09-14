@@ -39,7 +39,7 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::BuildIndex(FileManager &file_manager, int ind_codestream, int r) {
-        File::Ptr file = file_manager.GetFile(path_name);
+        File *file = file_manager.GetFile(path_name);
         // Check if PacketIndex has been created
         if (packet_indexes[ind_codestream].Size() == 0)
             packet_indexes[ind_codestream] = PacketIndex(file->GetSize());
@@ -72,7 +72,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool ImageIndex::GetPLTLength(File::Ptr &file, int ind_codestream, uint64_t *length_packet) {
+    bool ImageIndex::GetPLTLength(File *file, int ind_codestream, uint64_t *length_packet) {
         bool res = true;
         vector<FileSegment> &plt = codestreams[ind_codestream].PLT_markers;
         if (last_plt[ind_codestream] >= (int) plt.size())
@@ -104,7 +104,7 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool ImageIndex::GetOffsetPacket(File::Ptr &file, int ind_codestream, uint64_t length_packet) {
+    bool ImageIndex::GetOffsetPacket(File *file, int ind_codestream, uint64_t length_packet) {
         uint64_t offset;
         vector<FileSegment> &packets = codestreams[ind_codestream].packets;
         if (last_packet[ind_codestream] >= (int) packets.size())

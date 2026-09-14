@@ -53,7 +53,7 @@ namespace jpip {
             eof = false;
 
             if (!cache_model.IsFullMetadata()) {
-                File::Ptr file = file_manager.GetFile(image_index->GetPathName());
+                File *file = file_manager.GetFile(image_index->GetPathName());
                 if (!meta_bin0_done && image_index->GetNumMetadatas() <= 0) {
                     if (WriteSegment<DataBinClass::META_DATA>(file, 0, 0, FileSegment::Null) > 0)
                         meta_bin0_done = true;
@@ -93,7 +93,7 @@ namespace jpip {
 
             if (!eof) {
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
+                    File *file = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
                     WriteSegment<DataBinClass::MAIN_HEADER>(file, codestreams[i], 0, image_index->GetMainHeader(codestreams[i]));
                     WriteSegment<DataBinClass::TILE_HEADER>(file, codestreams[i], 0, FileSegment::Null);
                 }
@@ -114,7 +114,7 @@ namespace jpip {
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        File::Ptr file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
+                        File *file = file_manager.GetFile(image_index->GetPathName(codestreams[current_idx]));
                         if (segment.offset + segment.length > file->GetSize()) {
                             ERROR("Invalid packet segment: codestream=" << codestreams[current_idx]
                                   << ", packet=" << packet << ", segment=" << segment << ", file_size=" << file->GetSize());

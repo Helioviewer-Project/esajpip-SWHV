@@ -11,8 +11,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <memory>
-
 #include "trace.h"
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
@@ -22,14 +20,12 @@ namespace data {
 
     class File {
     public:
-        /**
-         * Safe pointer to this class.
-         */
-        typedef shared_ptr<File> Ptr;
-
         File() {
             clear();
         }
+
+        File(const File &) = delete;
+        File &operator=(const File &) = delete;
 
         /**
          * @param file_name Path name of the file to open.
@@ -129,7 +125,7 @@ namespace data {
            return true;
         }
 
-        virtual ~File() {
+        ~File() {
             Close();
         }
 
