@@ -32,8 +32,9 @@ int main(int argc, char **argv) {
         return CERR("The server is already running");
 
     AppConfig cfg;
-    if (!cfg.Load(CONFIG_FILE))
-        return CERR("The configuration file '" << CONFIG_FILE << "' can not be read");
+    string config_error;
+    if (!cfg.Load(CONFIG_FILE, config_error))
+        return CERR("Configuration error in '" << CONFIG_FILE << "': " << config_error);
 
     app_info->parent_pid = getpid();
 

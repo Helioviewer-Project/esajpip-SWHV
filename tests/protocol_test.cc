@@ -35,7 +35,8 @@ static void Check(bool condition, const char *message) {
     }
 }
 
-static bool LoadConfig(const char *contents, AppConfig *config) {
+static bool LoadConfig(const char *contents, AppConfig *config,
+                       string *error_message = NULL) {
     char path[] = "/tmp/esajpip-config-XXXXXX";
     int fd = mkstemp(path);
     Check(fd >= 0, "Could not create configuration test file");
@@ -44,8 +45,11 @@ static bool LoadConfig(const char *contents, AppConfig *config) {
           "Could not write configuration test file");
     close(fd);
 
-    bool loaded = config->Load(path);
+    string error;
+    bool loaded = config->Load(path, error);
     remove(path);
+    if (error_message)
+        *error_message = error;
     return loaded;
 }
 
@@ -103,6 +107,50 @@ static void CheckAppConfig() {
 
     AppConfig invalid;
     Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
+
+    const char *template_value =
+        "[listen]\n"
+        "port = ${SWHV_PORT_JPIP}\n"
+        "[jpip]\n"
+        "image_directory = /srv/jpip\n"
+        "chunk_size = 128\n"
+        "[connections]\n"
+        "limit = 10\n"
+        "[logging]\n";
+    string error;
+    AppConfig unconfigured;
+    Check(!LoadConfig(template_value, &unconfigured, &error) &&
+              error.find("port") != string::npos,
+          "Did not report an unconfigured template value");
+
+    const char *invalid_value =
+        "[listen]\n"
+        "port = 8090\n"
+        "[jpip]\n"
+        "image_directory = /srv/jpip\n"
+        "chunk_size = 127\n"
+        "[connections]\n"
+        "limit = 10\n"
+        "[logging]\n";
+    AppConfig invalid_chunk;
+    Check(!LoadConfig(invalid_value, &invalid_chunk, &error) &&
+              error == "jpip.chunk_size must be at least 128",
+          "Did not report an invalid configuration value");
+
+    const char *missing_log_directory =
+        "[listen]\n"
+        "port = 8090\n"
+        "[jpip]\n"
+        "image_directory = /srv/jpip\n"
+        "chunk_size = 128\n"
+        "[connections]\n"
+        "limit = 10\n"
+        "[logging]\n"
+        "file_enabled = 1\n";
+    AppConfig invalid_logging;
+    Check(!LoadConfig(missing_log_directory, &invalid_logging, &error) &&
+              error == "logging.directory must not be empty when file logging is enabled",
+          "Accepted file logging without a directory");
 }
 
 static InitialRequest Inspect(const char *request) {

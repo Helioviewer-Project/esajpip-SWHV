@@ -46,9 +46,10 @@ public:
     /**
      * Loads the parameters from a configuration file.
      * @param file_name Configuration file.
+     * @param error_message Description of a load or validation failure.
      * @return <code>true</code> if successful.
      */
-    bool Load(const char *file_name);
+    bool Load(const char *file_name, string &error_message);
 
     friend ostream &operator<<(ostream &out, const AppConfig &cfg) {
         out << "Configuration:" << endl;

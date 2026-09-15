@@ -21,6 +21,7 @@ namespace net {
     bool Socket::SendDescriptor(int fd, uint64_t connection_id) {
         msghdr msg;
         alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
+        memset(ccmsg, 0, sizeof ccmsg);
 
         struct iovec iov;
         memset(&iov, 0, sizeof iov);
