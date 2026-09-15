@@ -61,8 +61,10 @@ bool Send(const string &message) {
 
     timeval now;
     gettimeofday(&now, NULL);
-    RecordHeader header = {now.tv_sec, static_cast<int32_t>(now.tv_usec),
-                           message.size() > MAX_MESSAGE};
+    RecordHeader header = {};
+    header.seconds = now.tv_sec;
+    header.microseconds = static_cast<int32_t>(now.tv_usec);
+    header.truncated = message.size() > MAX_MESSAGE;
     size_t length = min(message.size(), MAX_MESSAGE);
     iovec buffers[] = {
         {&header, sizeof header},
