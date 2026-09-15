@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>

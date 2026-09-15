@@ -30,16 +30,12 @@ set_target_properties(esajpip PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES)
-target_compile_definitions(esajpip PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
 target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_include_directories(esajpip BEFORE PRIVATE
     .
-    ${ESAJPIP_TOP}
-    ${CMAKE_BINARY_DIR}/log4cpp/include
-    ${LOG4CPP}/include)
+    ${ESAJPIP_TOP})
 target_link_libraries(esajpip PRIVATE
     PkgConfig::PKG
-    log4cpp
     ZLIB::ZLIB
     Threads::Threads)
 
@@ -57,6 +53,16 @@ install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
 
 if(BUILD_TESTING)
+    add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
+    esajpip_enable_warnings(logging_test)
+    set_target_properties(logging_test PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES)
+    target_compile_definitions(logging_test PRIVATE ESAJPIP_LOG_LIMIT=1024)
+    target_include_directories(logging_test PRIVATE ${ESAJPIP_TOP})
+    add_test(NAME logging COMMAND logging_test)
+
     add_executable(protocol_test
         tests/protocol_test.cc
         ${ESAJPIP_TOP}/app_config.cc
@@ -73,12 +79,9 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
-    target_compile_definitions(protocol_test PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
     target_include_directories(protocol_test PRIVATE
-        ${ESAJPIP_TOP}
-        ${CMAKE_BINARY_DIR}/log4cpp/include
-        ${LOG4CPP}/include)
-    target_link_libraries(protocol_test PRIVATE PkgConfig::PKG log4cpp Threads::Threads)
+        ${ESAJPIP_TOP})
+    target_link_libraries(protocol_test PRIVATE PkgConfig::PKG Threads::Threads)
     add_test(NAME protocol COMMAND protocol_test)
 
     add_executable(jpeg2000_test
@@ -96,11 +99,8 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
-    target_compile_definitions(jpeg2000_test PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
     target_include_directories(jpeg2000_test PRIVATE
-        ${ESAJPIP_TOP}
-        ${CMAKE_BINARY_DIR}/log4cpp/include
-        ${LOG4CPP}/include)
-    target_link_libraries(jpeg2000_test PRIVATE PkgConfig::PKG log4cpp Threads::Threads)
+        ${ESAJPIP_TOP})
+    target_link_libraries(jpeg2000_test PRIVATE PkgConfig::PKG Threads::Threads)
     add_test(NAME jpeg2000 COMMAND jpeg2000_test)
 endif()

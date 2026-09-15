@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0-rc1 - 2026-09-15
+## 2.0-rc1 - future
 
 ### Changed
 
@@ -19,7 +19,9 @@
   state across reconnections.
 - Replace the libconfig format with `server.ini` parsed by GLib. This is an
   intentional configuration incompatibility.
-- Update the bundled log4cpp to 1.1.6 and modernize CMake installation.
+- Remove the bundled log4cpp library. Logging is now nonblocking for serving
+  threads while retaining timestamped output, optional request logging, and the
+  1 GiB active log with one backup.
 - Support PCRL and CPRL packet ordering for the verified origin-zero,
   single-tile geometry with unit component sampling.
 

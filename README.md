@@ -4,8 +4,7 @@
 for the Helioviewer project and streams solar imagery stored in JP2 and JPX
 files to JHelioviewer.
 
-The repository includes the required log4cpp sources and links against the
-system GLib and zlib libraries.
+The server links against the system GLib and zlib libraries.
 
 See [Connections and JPIP channels](CHANNELS.md) for the server's connection
 ownership, channel routing, timeout, and cleanup model.
@@ -63,8 +62,14 @@ server adds a trailing slash internally when needed.
 | `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it; values below `-1` are invalid. |
 | `connections.limit` | `500` | Positive connection limit. It limits physical connections in the listening parent and active channels in the serving child independently. |
 | `logging.directory` | `SWHV_DIR_LOG` | Directory in which the timestamped server log is created when `logging.file_enabled` is `1`. |
-| `logging.file_enabled` | `1` | Set to `1` to write the server log under `logging.directory`, or `0` to keep logging on the console only. |
-| `logging.requests` | `0` | Set to `1` to include individual request lines in the log, or `0` to suppress them. Other server messages are unaffected. |
+| `logging.file_enabled` | `1` | Set to `1` to write the server log under `logging.directory`, or `0` to keep logging on the console. The active file rolls at 1 GiB and one `.1` backup is retained. |
+| `logging.requests` | `0` | Set to `1` to include individual request lines in the log, or `0` to suppress them. Other server messages are unaffected. Request logging is normally unnecessary. |
+
+Channel threads submit log records through a bounded nonblocking queue. The
+parent writes queued records only when no connection event or deadline needs
+attention. If logging cannot keep up, records are dropped and the next
+successfully queued record reports their number. Logging therefore cannot hold
+up an active JPIP response.
 
 The executable reads `server.ini` from its current directory. Run it from the
 installed server directory, either in a terminal or under the host's process

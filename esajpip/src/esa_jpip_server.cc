@@ -129,8 +129,9 @@ int main(int argc, char **argv) {
     cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << '-' << cfg << endl;
 
-    if (cfg.file_logging())
-        TraceSystem::AppendToFile(cfg.log_directory() + SERVER_APP_NAME);
+    string log_name = cfg.file_logging() ? cfg.log_directory() + SERVER_APP_NAME : "";
+    if (!TraceSystem::Initialize(log_name))
+        return CERR("The logging system can not be initialized");
 
     Socket listen_socket;
     InetAddress listen_addr = cfg.address().empty()
@@ -156,6 +157,7 @@ int main(int argc, char **argv) {
     }
 
     poll_table.Add(parent_socket, POLLIN);
+    poll_table.Add(TraceSystem::ReadDescriptor(), POLLIN);
 
     struct sigaction child_action;
     memset(&child_action, 0, sizeof child_action);
@@ -183,6 +185,8 @@ parent_begin:
         close(parent_pipe[1]);
         listen_socket.Close();
         parent_socket.Close();
+        // The child keeps only the nonblocking end used to submit records.
+        TraceSystem::CloseParentDescriptors();
         for (const Connection &connection : connections) {
             if (!connection.pending)
                 shutdown(connection.fd, SHUT_RDWR);
@@ -209,7 +213,14 @@ parent_begin:
         if (res < 0 && errno != EINTR)
             ERROR("Connection poll failed: " << strerror(errno));
 
+        bool network_ready = false;
+        bool log_ready = false;
         if (res > 0) {
+            network_ready = poll_table[0].revents || poll_table[1].revents;
+            log_ready = poll_table[2].revents & POLLIN;
+            for (int i = 3; i < poll_table.GetSize(); ++i)
+                network_ready = network_ready || poll_table[i].revents;
+
             if (poll_table[0].revents & POLLIN) {
                 InetAddress from_addr;
                 Socket new_conn = listen_socket.Accept(&from_addr);
@@ -238,7 +249,7 @@ parent_begin:
                     ERROR("Could not receive connection identifier");
             }
 
-            for (int i = 2; i < poll_table.GetSize();) {
+            for (int i = 3; i < poll_table.GetSize();) {
                 short events = poll_table[i].revents;
                 if (!events) {
                     i++;
@@ -280,6 +291,12 @@ parent_begin:
         }
 
         ExpirePendingConnections();
+
+        // Logging never takes precedence over connection work or deadlines.
+        // Producers use a bounded nonblocking socket, while this parent is the
+        // only process that performs log file I/O.
+        if (log_ready && !network_ready)
+            TraceSystem::DrainOne();
     }
 
     child_lost = 0;

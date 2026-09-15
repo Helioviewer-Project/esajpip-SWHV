@@ -308,7 +308,7 @@ private:
             bool send_gzip = false;
 
             if (cfg.log_requests())
-                LOGC(_BLUE, "Waiting for a request ...");
+                LOG("Waiting for a request ...");
 
             req_line_raw.clear();
             SocketReader::Result read_result = reader.ReadLine(req_line_raw);
@@ -336,7 +336,7 @@ private:
             }
 
             if (cfg.log_requests())
-                LOGC(_BLUE, "Request: " << req_line);
+                LOG("Request: " << req_line);
 
             http::Header header;
             string header_line;
