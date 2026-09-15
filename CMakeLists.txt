@@ -10,7 +10,11 @@ endif()
 include(CTest)
 find_package(Threads REQUIRED)
 
-function(esajpip_enable_warnings target)
+function(esajpip_configure_target target)
+    set_target_properties(${target} PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES)
     target_compile_options(${target} PRIVATE
         -Wall
         -Wextra
@@ -49,14 +53,9 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/trace.cc)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
-esajpip_enable_warnings(esajpip)
-set_target_properties(esajpip PROPERTIES
-    CXX_EXTENSIONS OFF
-    CXX_STANDARD 11
-    CXX_STANDARD_REQUIRED YES)
+esajpip_configure_target(esajpip)
 target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_include_directories(esajpip BEFORE PRIVATE
-    .
     ${ESAJPIP_TOP})
 target_link_libraries(esajpip PRIVATE
     PkgConfig::PKG
@@ -78,22 +77,14 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
 
 if(BUILD_TESTING)
     add_executable(app_info_test tests/app_info_test.cc ${ESAJPIP_TOP}/app_info.cc)
-    esajpip_enable_warnings(app_info_test)
-    set_target_properties(app_info_test PROPERTIES
-        CXX_EXTENSIONS OFF
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
+    esajpip_configure_target(app_info_test)
     target_compile_definitions(app_info_test PRIVATE
         ESAJPIP_LOCK_FILE="${CMAKE_CURRENT_BINARY_DIR}/app_info_test.lock")
     target_include_directories(app_info_test PRIVATE ${ESAJPIP_TOP})
     add_test(NAME app_info COMMAND app_info_test)
 
     add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
-    esajpip_enable_warnings(logging_test)
-    set_target_properties(logging_test PROPERTIES
-        CXX_EXTENSIONS OFF
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
+    esajpip_configure_target(logging_test)
     target_compile_definitions(logging_test PRIVATE ESAJPIP_LOG_LIMIT=1024)
     target_include_directories(logging_test PRIVATE ${ESAJPIP_TOP})
     add_test(NAME logging COMMAND logging_test)
@@ -110,11 +101,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/server/connection_queue.cc
         ${ESAJPIP_TOP}/server/initial_request.cc
         ${ESAJPIP_TOP}/trace.cc)
-    esajpip_enable_warnings(protocol_test)
-    set_target_properties(protocol_test PROPERTIES
-        CXX_EXTENSIONS OFF
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
+    esajpip_configure_target(protocol_test)
     target_include_directories(protocol_test PRIVATE
         ${ESAJPIP_TOP})
     target_link_libraries(protocol_test PRIVATE PkgConfig::PKG Threads::Threads)
@@ -130,11 +117,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
         ${ESAJPIP_TOP}/jpip/request.cc
         ${ESAJPIP_TOP}/trace.cc)
-    esajpip_enable_warnings(jpeg2000_test)
-    set_target_properties(jpeg2000_test PROPERTIES
-        CXX_EXTENSIONS OFF
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED YES)
+    esajpip_configure_target(jpeg2000_test)
     target_include_directories(jpeg2000_test PRIVATE
         ${ESAJPIP_TOP})
     target_link_libraries(jpeg2000_test PRIVATE PkgConfig::PKG Threads::Threads)
