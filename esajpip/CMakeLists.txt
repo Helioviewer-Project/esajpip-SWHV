@@ -11,8 +11,8 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/app_info.cc
     ${ESAJPIP_TOP}/args_parser.cc
     ${ESAJPIP_TOP}/channel.cc
-    ${ESAJPIP_TOP}/client_admission.cc
-    ${ESAJPIP_TOP}/client_manager.cc
+    ${ESAJPIP_TOP}/channel_inbox.cc
+    ${ESAJPIP_TOP}/connection_admission.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
@@ -61,8 +61,8 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
 if(BUILD_TESTING)
     add_executable(protocol_test
         tests/protocol_test.cc
-        ${ESAJPIP_TOP}/channel.cc
-        ${ESAJPIP_TOP}/client_admission.cc
+        ${ESAJPIP_TOP}/channel_inbox.cc
+        ${ESAJPIP_TOP}/connection_admission.cc
         ${ESAJPIP_TOP}/data/file_segment.cc
         ${ESAJPIP_TOP}/http/header.cc
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc

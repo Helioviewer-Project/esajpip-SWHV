@@ -10,8 +10,8 @@
 #include <vector>
 #include <unistd.h>
 
-#include "client_admission.h"
-#include "channel.h"
+#include "connection_admission.h"
+#include "channel_inbox.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"

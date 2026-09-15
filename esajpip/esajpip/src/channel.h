@@ -2,36 +2,15 @@
 #define _CHANNEL_H_
 
 #include <cstdint>
-#include <mutex>
+#include <memory>
+#include <string>
+#include "app_config.h"
+#include "channel_inbox.h"
 
-struct ChannelConnection {
-    uint64_t id;
-    int fd;
-};
+typedef void (*ConnectionClosed)(uint64_t connection_id);
 
-class ChannelInbox {
-private:
-    int wake_socket[2];
-    std::mutex mutex;
-    ChannelConnection connection;
-    bool pending;
-    bool closed;
-
-    void Drain();
-
-public:
-    ChannelInbox();
-    ~ChannelInbox();
-
-    bool IsValid() const;
-    bool IsClosed();
-    int GetDescriptor() const;
-    bool Push(const ChannelConnection &connection);
-    bool Pop(ChannelConnection *connection);
-    bool Close(ChannelConnection *connection);
-
-    ChannelInbox(const ChannelInbox &) = delete;
-    ChannelInbox &operator=(const ChannelInbox &) = delete;
-};
+void RunChannel(const AppConfig &cfg, const std::string &channel,
+                const std::shared_ptr<ChannelInbox> &inbox,
+                ConnectionClosed connection_closed);
 
 #endif /* _CHANNEL_H_ */

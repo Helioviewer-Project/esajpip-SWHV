@@ -18,8 +18,8 @@
 #include "app_info.h"
 #include "app_config.h"
 #include "args_parser.h"
-#include "client_admission.h"
-#include "client_manager.h"
+#include "connection_admission.h"
+#include "channel.h"
 #include "net/poll_table.h"
 #include "net/socket.h"
 
@@ -44,7 +44,7 @@ struct Connection {
     Clock::time_point deadline;
 };
 
-struct ClientInfo {
+struct ChannelInfo {
     uint64_t id;
     string channel;
     shared_ptr<ChannelInbox> inbox;
@@ -186,11 +186,11 @@ int main(int argc, char **argv) {
     pthread_attr_t pattr;
     int pthread_error = pthread_attr_init(&pattr);
     if (pthread_error != 0)
-        return CERR("The client thread attributes can not be initialized: " << strerror(pthread_error));
+        return CERR("The channel thread attributes can not be initialized: " << strerror(pthread_error));
     pthread_error = pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
     if (pthread_error != 0) {
         pthread_attr_destroy(&pattr);
-        return CERR("Detached client threads can not be configured: " << strerror(pthread_error));
+        return CERR("Detached channel threads can not be configured: " << strerror(pthread_error));
     }
 
 father_begin:
@@ -433,24 +433,24 @@ static void NotifyParent(uint64_t id) {
 
 static bool StartChannel(const pthread_attr_t *pattr, uint64_t id, const string &channel,
                          const shared_ptr<ChannelInbox> &inbox) {
-    ClientInfo *client_info = new ClientInfo{id, channel, inbox};
+    ChannelInfo *channel_info = new ChannelInfo{id, channel, inbox};
     pthread_t service_tid;
-    int pthread_error = pthread_create(&service_tid, pattr, ChannelThread, client_info);
+    int pthread_error = pthread_create(&service_tid, pattr, ChannelThread, channel_info);
     if (pthread_error == 0)
         return true;
 
     ERROR("A thread for channel " << channel << " can not be created: "
           << strerror(pthread_error));
-    delete client_info;
+    delete channel_info;
     return false;
 }
 
 static void *ChannelThread(void *arg) {
-    ClientInfo *client_info = static_cast<ClientInfo *>(arg);
-    uint64_t id = client_info->id;
-    string channel = client_info->channel;
-    shared_ptr<ChannelInbox> inbox = client_info->inbox;
-    delete client_info;
+    ChannelInfo *channel_info = static_cast<ChannelInfo *>(arg);
+    uint64_t id = channel_info->id;
+    string channel = channel_info->channel;
+    shared_ptr<ChannelInbox> inbox = channel_info->inbox;
+    delete channel_info;
 
     RunChannel(cfg, channel, inbox, NotifyParent);
 

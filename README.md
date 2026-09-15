@@ -5,6 +5,9 @@ esajpip serves JP2 and JPX files over JPIP for JHelioviewer. The repository
 includes the required log4cpp and libconfig sources. It uses the system GLib and
 zlib libraries.
 
+See [Connections and JPIP channels](CHANNELS.md) for the server's connection
+ownership, channel routing, timeout and cleanup model.
+
 ## Build and install
 
 On Debian 12, install the build dependencies with:

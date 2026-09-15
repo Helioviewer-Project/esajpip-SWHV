@@ -1,5 +1,5 @@
-#ifndef _CLIENT_ADMISSION_H_
-#define _CLIENT_ADMISSION_H_
+#ifndef _CONNECTION_ADMISSION_H_
+#define _CONNECTION_ADMISSION_H_
 
 #include <string>
 
@@ -17,4 +17,4 @@ struct Admission {
 
 Admission CheckAdmission(int fd);
 
-#endif /* _CLIENT_ADMISSION_H_ */
+#endif /* _CONNECTION_ADMISSION_H_ */
