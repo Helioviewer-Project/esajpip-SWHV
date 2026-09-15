@@ -108,8 +108,10 @@ int RunParent(const AppConfig &cfg, AppInfo &app_info, Socket &listen_socket) {
     poll_table.Add(listen_socket, POLLIN);
 
     int control_fds[2];
-    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, control_fds) != 0)
-        return CERR("The child control socket can not be created: " << strerror(errno));
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, control_fds) != 0) {
+        ERROR("The child control socket can not be created: " << strerror(errno));
+        return -1;
+    }
     Socket parent_socket(control_fds[0]);
     Socket child_socket(control_fds[1]);
 
@@ -121,14 +123,18 @@ int RunParent(const AppConfig &cfg, AppInfo &app_info, Socket &listen_socket) {
     child_action.sa_handler = SIGCHLD_handler;
     sigemptyset(&child_action.sa_mask);
     child_action.sa_flags = SA_NOCLDSTOP;
-    if (sigaction(SIGCHLD, &child_action, NULL) != 0)
-        return CERR("The child signal handler can not be installed: " << strerror(errno));
+    if (sigaction(SIGCHLD, &child_action, NULL) != 0) {
+        ERROR("The child signal handler can not be installed: " << strerror(errno));
+        return -1;
+    }
 
 parent_begin:
 
     int parent_pipe[2];
-    if (pipe(parent_pipe) != 0)
-        return CERR("The parent lifetime pipe can not be created: " << strerror(errno));
+    if (pipe(parent_pipe) != 0) {
+        ERROR("The parent lifetime pipe can not be created: " << strerror(errno));
+        return -1;
+    }
 
     pid_t child_pid = fork();
     if (child_pid < 0) {
@@ -136,7 +142,8 @@ parent_begin:
         close(parent_pipe[1]);
         parent_socket.Close();
         child_socket.Close();
-        return CERR("The child process can not be created: " << strerror(errno));
+        ERROR("The child process can not be created: " << strerror(errno));
+        return -1;
     }
     if (child_pid == 0) {
         // The child must not inherit the only writer. Closing it before any
@@ -264,8 +271,10 @@ parent_begin:
     waitpid(child_pid, NULL, 0);
 
     parent_socket.Close();
-    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, control_fds) != 0)
-        return CERR("The child control socket can not be recreated: " << strerror(errno));
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, control_fds) != 0) {
+        ERROR("The child control socket can not be recreated: " << strerror(errno));
+        return -1;
+    }
     parent_socket = control_fds[0];
     child_socket = control_fds[1];
     poll_table[1].fd = parent_socket;

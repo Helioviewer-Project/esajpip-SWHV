@@ -1,3 +1,4 @@
+#include <cerrno>
 #include <cstring>
 #include <string>
 #include <unistd.h>
@@ -47,11 +48,15 @@ int main(int argc, char **argv) {
     InetAddress listen_addr = cfg.address().empty()
                                   ? InetAddress(cfg.port())
                                   : InetAddress(cfg.address().c_str(), cfg.port());
-    if (!listen_socket.OpenInet())
-        return CERR("The server listen socket can not be created");
-    if (!listen_socket.ListenAt(listen_addr))
-        return CERR("The server listen socket can not be initialized");
-
-    LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
-    return RunParent(cfg, app_info, listen_socket);
+    int result = -1;
+    if (!listen_socket.OpenInet()) {
+        ERROR("The server listen socket can not be created: " << strerror(errno));
+    } else if (!listen_socket.ListenAt(listen_addr)) {
+        ERROR("The server listen socket can not be initialized: " << strerror(errno));
+    } else {
+        LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
+        result = RunParent(cfg, app_info, listen_socket);
+    }
+    TraceSystem::Drain();
+    return result;
 }

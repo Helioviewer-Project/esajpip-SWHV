@@ -32,8 +32,9 @@ int main() {
     string base = string(directory) + "/server";
     Check(TraceSystem::Initialize(base), "Could not initialize logging");
 
-    LOG("parent message");
-    Check(TraceSystem::DrainOne(), "Could not write parent log message");
+    LOG("first parent message");
+    LOG("second parent message");
+    TraceSystem::Drain();
 
     pid_t child = fork();
     Check(child >= 0, "Could not create logging test child");
@@ -67,8 +68,10 @@ int main() {
 
     string old_messages = ReadFile(backup);
     string new_messages = ReadFile(active);
-    Check(old_messages.find("parent message") != string::npos,
-          "Parent message missing from rolled log");
+    Check(old_messages.find("first parent message") != string::npos,
+          "First parent message missing from rolled log");
+    Check(old_messages.find("second parent message") != string::npos,
+          "Second parent message missing from rolled log");
     Check(old_messages.find("child message") != string::npos,
           "Child message missing from rolled log");
     Check(new_messages.find("message after rollover") != string::npos,

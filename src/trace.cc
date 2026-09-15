@@ -240,4 +240,9 @@ bool DrainOne() {
     return true;
 }
 
+void Drain() {
+    while (DrainOne()) {
+    }
+}
+
 }
