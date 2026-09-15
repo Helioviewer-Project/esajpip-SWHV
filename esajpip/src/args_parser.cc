@@ -1,5 +1,4 @@
 #include <string>
-#include <iomanip>
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
@@ -51,39 +50,6 @@ bool ParseArgs(AppInfo &app_info, int argc, char **argv) {
         } else if (argv1 == "status") {
             app_info.Update();
             cout << app_info;
-        } else if (argv1 == "record") {
-            static double cpu = 0;
-            unsigned long tm_after, tm_before;
-
-            cout << "Time\t\t\t Alive?\tFree\tFather\tChild\tConns\tIters\tThreads\t%CPU" << endl;
-
-            app_info.Update();
-
-            if (argv2 != "") TraceSystem::AppendToFile(argv2.c_str());
-
-            for (;;) {
-                app_info.Update();
-                tm_before = app_info.child_time();
-
-                if (!app_info.is_running())
-                    LOG("0" << "\t" << app_info.available_memory() << "\t0\t0\t0\t0\t0\t0");
-                else
-                    LOG("1" << setiosflags(ios::fixed) << "\t"
-                            << setprecision(2)
-                            << app_info.available_memory() << "\t"
-                            << app_info.father_memory() << "\t"
-                            << app_info.child_memory() << "\t"
-                            << app_info->num_connections << "\t"
-                            << app_info->child_iterations << "\t"
-                            << app_info.num_threads() << "\t"
-                            << setiosflags(ios::fixed) << cpu
-                    );
-
-                sleep(5);
-                app_info.Update();
-                tm_after = app_info.child_time();
-                cpu = (tm_after - tm_before) / 5.0;
-            }
         } else {
             CERR("Invalid command");
         }

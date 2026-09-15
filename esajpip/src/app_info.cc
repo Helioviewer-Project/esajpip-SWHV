@@ -87,7 +87,6 @@ AppInfo &AppInfo::Update() {
     if (!is_running_) {
         father_memory_ = 0;
         child_memory_ = 0;
-        child_time_ = 0;
         num_threads_ = 0;
 
     } else {
@@ -100,16 +99,6 @@ AppInfo &AppInfo::Update() {
         // field 23: rss. Resident Set Size
         double rss = GetProcStat<double>(data_ptr->child_pid, 23);
         child_memory_ = rss * 4096.0 / (1024 * 1024);
-
-        // field 13: utime. Amount of time that this process has been scheduled
-        // in user mode, measured in clock ticks (divide by sysconf(_SC_CLK_TCK))
-        unsigned long utime = GetProcStat<unsigned long>(data_ptr->child_pid, 13);
-
-        // field 14: stime. Amount of time that this process has been scheduled
-        // in kernel mode, measured in clock ticks (divide by sysconf(_SC_CLK_TCK))
-        unsigned long stime = GetProcStat<unsigned long>(data_ptr->child_pid, 14);
-
-        child_time_ = utime + stime;
 
         // field 19: stime. Number of threads in this process (since Linux 2.6).
         num_threads_ = GetProcStat<int>(data_ptr->child_pid, 19);

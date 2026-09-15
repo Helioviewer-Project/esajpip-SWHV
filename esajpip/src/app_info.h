@@ -46,7 +46,6 @@ private:
     double child_memory_;            ///< Memory used by the child process
     double father_memory_;        ///< Memory used by the father process
     double available_memory_;        ///< Available memory in the system
-    unsigned long child_time_;    ///< Time spend by the child
 
     /**
      * Returns a specific field of /proc/<pid>/stat as a string.
@@ -75,7 +74,6 @@ public:
         father_memory_ = 0;
         is_running_ = false;
         available_memory_ = 0;
-        child_time_ = 0;
         data_ptr = NULL;
         num_threads_ = 0;
     }
@@ -149,13 +147,6 @@ public:
      */
     int num_threads() const {
         return num_threads_;
-    }
-
-    /**
-     * Returns the time spent by the child process.
-     */
-    unsigned long child_time() const {
-        return child_time_;
     }
 
     Data *operator->() const {

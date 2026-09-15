@@ -11,6 +11,7 @@
 - Keep a JPIP channel available when its HTTP connection is replaced, while
   retaining JPEG 2000 and cache state in the channel's serving thread.
 - Update the bundled log4cpp to 1.1.6.
+- Remove the legacy `record` monitoring command.
 - Replace bundled libconfig with GLib-based `server.ini` parsing and clearer setting names.
 - Use standard CMake install directories and per-target compiler warnings.
 

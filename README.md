@@ -79,7 +79,6 @@ The management commands must be run from the same directory:
 
 ```sh
 ./esajpip status
-./esajpip record
 ./esajpip stop
 ```
 
@@ -90,9 +89,7 @@ After admission, `connections.timeout` limits channel inactivity. It closes an i
 whether an HTTP connection is attached or the channel is waiting for a
 replacement. Values of `0` and `-1` disable this timeout.
 
-`record` prints a status sample every five seconds until interrupted. Pass a
-file name to send the samples to the configured logger. `stop child` restarts
-the serving child without stopping the listening parent.
+`stop child` restarts the serving child without stopping the listening parent.
 
 ## License
 
