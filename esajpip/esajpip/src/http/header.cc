@@ -37,7 +37,7 @@ namespace http {
     }
 
     std::ostream &operator<<(std::ostream &out, const Header &header) {
-        return out << header.name << ": " << header.value << Protocol::CRLF;
+        return out << header.name << ": " << header.value << CRLF;
     }
 
     std::istream &operator>>(std::istream &in, Header &header) {

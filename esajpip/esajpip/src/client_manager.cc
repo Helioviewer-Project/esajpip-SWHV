@@ -1,6 +1,7 @@
 #include "trace.h"
 #include "client_manager.h"
 #include "http/header.h"
+#include "http/protocol.h"
 #include "jpeg2000/file_manager.h"
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
@@ -110,11 +111,10 @@ static int SendStream(Socket &socket, const ostringstream &stream) {
 
 static int SendOK(Socket &socket, const string &headers) {
     static const char status[] = "HTTP/1.1 200 OK\r\n";
-    static const char end_headers[] = "\r\n";
     iovec buffers[] = {
         {const_cast<char *>(status), sizeof status - 1},
         {const_cast<char *>(headers.data()), headers.size()},
-        {const_cast<char *>(end_headers), sizeof end_headers - 1}
+        {const_cast<char *>(CRLF), sizeof CRLF - 1}
     };
     return SendAll(socket, buffers, 3);
 }
@@ -123,11 +123,10 @@ static int SendChunk(Socket &socket, const void *buf, size_t len) {
     if (len > 0) {
         char header[2 * sizeof(size_t) + 3];
         int header_len = snprintf(header, sizeof header, "%zx\r\n", len);
-        char trailer[] = "\r\n";
         iovec buffers[] = {
             {header, static_cast<size_t>(header_len)},
             {const_cast<void *>(buf), len},
-            {trailer, 2}
+            {const_cast<char *>(CRLF), sizeof CRLF - 1}
         };
 
         if (SendAll(socket, buffers, 3))
@@ -237,13 +236,13 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
     }
 
     ostringstream header_stream;
-    header_stream << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
-                  << "Strict-Transport-Security: " << STS << Protocol::CRLF
-                  << "Cache-Control: " << NOCACHE << Protocol::CRLF
-                  << "Transfer-Encoding: chunked" << Protocol::CRLF
-                  << "Content-Type: image/jpp-stream" << Protocol::CRLF;
+    header_stream << "Access-Control-Allow-Origin: " << CORS << CRLF
+                  << "Strict-Transport-Security: " << STS << CRLF
+                  << "Cache-Control: " << NOCACHE << CRLF
+                  << "Transfer-Encoding: chunked" << CRLF
+                  << "Content-Type: image/jpp-stream" << CRLF;
     const string head_data = header_stream.str();
-    const string head_data_gzip = head_data + "Content-Encoding: gzip" + Protocol::CRLF;
+    const string head_data_gzip = head_data + "Content-Encoding: gzip" + CRLF;
 
     Socket socket(fd);
     SocketReader reader(socket);
@@ -338,11 +337,10 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
 
                 ostringstream msg;
                 msg << http::Response(200, "OK")
-                        << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
-                        << "Strict-Transport-Security: " << STS << Protocol::CRLF
-                        << "Cache-Control: " << NOCACHE << Protocol::CRLF
-                        << "Content-Length: 0" << Protocol::CRLF
-                        << http::Protocol::CRLF;
+                        << "Access-Control-Allow-Origin: " << CORS << CRLF
+                        << "Strict-Transport-Security: " << STS << CRLF
+                        << "Cache-Control: " << NOCACHE << CRLF
+                        << "Content-Length: 0" << CRLF << CRLF;
                 SendStream(socket, msg);
                 break; // break connection
             }
@@ -367,9 +365,9 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
                         msg << http::Response(200, "OK")
                                 << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
                                 << http::Header("JPIP-tid", file_name)
-                                << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << Protocol::CRLF
+                                << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
                                 << (send_gzip ? head_data_gzip : head_data)
-                                << http::Protocol::CRLF;
+                                << CRLF;
                         SendStream(socket, msg);
                         send_data = true;
                     }
@@ -404,11 +402,10 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
             size_t err_msg_len = strlen(err_msg);
             ostringstream msg;
             msg << http::Response(500, "Internal Server Error")
-                    << "Access-Control-Allow-Origin: " << CORS << Protocol::CRLF
-                    << "Strict-Transport-Security: " << STS << Protocol::CRLF
-                    << "Cache-Control: " << NOCACHE << Protocol::CRLF
-                    << "Content-Length: " << err_msg_len << Protocol::CRLF
-                    << http::Protocol::CRLF;
+                    << "Access-Control-Allow-Origin: " << CORS << CRLF
+                    << "Strict-Transport-Security: " << STS << CRLF
+                    << "Cache-Control: " << NOCACHE << CRLF
+                    << "Content-Length: " << err_msg_len << CRLF << CRLF;
             if (err_msg_len)
                 msg << err_msg;
             SendStream(socket, msg);

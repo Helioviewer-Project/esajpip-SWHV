@@ -12,16 +12,13 @@ namespace http {
     private:
         int code;
         const char *reason;
-        Protocol protocol;
 
     public:
-        Response(int _code, const char *_reason, const Protocol &_protocol = Protocol())
-                : code(_code), reason(_reason), protocol(_protocol) {
+        Response(int _code, const char *_reason) : code(_code), reason(_reason) {
         }
 
         friend ostream &operator<<(ostream &out, const Response &response) {
-            return out << response.protocol << " " << response.code << " "
-                       << response.reason << Protocol::CRLF;
+            return out << "HTTP/1.1 " << response.code << " " << response.reason << CRLF;
         }
     };
 }

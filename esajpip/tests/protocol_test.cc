@@ -10,6 +10,7 @@
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
+#include "http/protocol.h"
 #include "http/response.h"
 #include "jpeg2000/place_holder.h"
 #include "jpip/databin_writer.h"
@@ -108,7 +109,7 @@ static void CheckHTTPResponse() {
         << http::Header("JPIP-cnew", "cid=7,path=jpip,transport=http")
         << http::Header("Transfer-Encoding", "chunked")
         << http::Header("Content-Type", "image/jpp-stream")
-        << http::Protocol::CRLF;
+        << http::CRLF;
 
     Check(out.str() ==
           "HTTP/1.1 200 OK\r\n"
