@@ -3,9 +3,9 @@ find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36)
 
-configure_file(esajpip/server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
+configure_file(server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
 
-set(ESAJPIP_TOP esajpip/src)
+set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/app_config.cc
     ${ESAJPIP_TOP}/app_info.cc
