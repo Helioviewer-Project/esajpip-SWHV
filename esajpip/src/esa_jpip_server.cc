@@ -286,7 +286,6 @@ father_begin:
 }
 
 static int ChildProcess(const pthread_attr_t *pattr) {
-    app_info->child_iterations++;
     app_info->child_pid = getpid();
 
     signal(SIGPIPE, SIG_IGN);

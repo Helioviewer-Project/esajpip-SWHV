@@ -48,7 +48,6 @@ bool ParseArgs(AppInfo &app_info, int argc, char **argv) {
         } else if (argv1 == "start") {
             res = true;
         } else if (argv1 == "status") {
-            app_info.Update();
             cout << app_info;
         } else {
             CERR("Invalid command");

@@ -30,7 +30,7 @@ set_target_properties(esajpip PROPERTIES
     CXX_EXTENSIONS OFF
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES)
-target_compile_definitions(esajpip PRIVATE _NO_READPROC NO_COLORS LOG4CPP_HAVE_SSTREAM)
+target_compile_definitions(esajpip PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
 target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_include_directories(esajpip BEFORE PRIVATE
     .
@@ -73,7 +73,7 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
-    target_compile_definitions(protocol_test PRIVATE _NO_READPROC NO_COLORS LOG4CPP_HAVE_SSTREAM)
+    target_compile_definitions(protocol_test PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
     target_include_directories(protocol_test PRIVATE
         ${ESAJPIP_TOP}
         ${CMAKE_BINARY_DIR}/log4cpp/include
@@ -96,7 +96,7 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
-    target_compile_definitions(jpeg2000_test PRIVATE _NO_READPROC NO_COLORS LOG4CPP_HAVE_SSTREAM)
+    target_compile_definitions(jpeg2000_test PRIVATE NO_COLORS LOG4CPP_HAVE_SSTREAM)
     target_include_directories(jpeg2000_test PRIVATE
         ${ESAJPIP_TOP}
         ${CMAKE_BINARY_DIR}/log4cpp/include

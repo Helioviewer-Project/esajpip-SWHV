@@ -82,6 +82,9 @@ The management commands must be run from the same directory:
 ./esajpip stop
 ```
 
+`status` reports whether the server is running and, when active, its parent and
+child process IDs and open connection count.
+
 `connections.admission_timeout` limits how long a new connection has to send a valid
 initial JPIP request. Until the request is recognized, the parent retains only
 the socket. It does not create a serving thread or allocate JPEG 2000 state.
