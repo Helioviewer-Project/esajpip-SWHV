@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "client_admission.h"
+#include "channel.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
@@ -32,7 +33,7 @@ static void Check(bool condition, const char *message) {
     }
 }
 
-static AdmissionResult Admit(const char *request) {
+static Admission Admit(const char *request) {
     int sockets[2];
     Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
           "Could not create admission test sockets");
@@ -40,24 +41,55 @@ static AdmissionResult Admit(const char *request) {
         Check(write(sockets[0], request, strlen(request)) == static_cast<ssize_t>(strlen(request)),
               "Could not write admission test request");
 
-    AdmissionResult result = CheckAdmission(sockets[1]);
+    Admission result = CheckAdmission(sockets[1]);
     close(sockets[0]);
     close(sockets[1]);
     return result;
 }
 
 static void CheckClientAdmission() {
-    Check(Admit(NULL) == ADMISSION_PENDING, "Rejected an idle connection before its deadline");
-    Check(Admit("G") == ADMISSION_PENDING, "Rejected a partial GET method");
-    Check(Admit("POST") == ADMISSION_REJECTED, "Accepted a non-GET method");
-    Check(Admit("GET /movie.jpx?cnew=http HTTP/1.1\r\n") == ADMISSION_ACCEPTED,
+    Check(Admit(NULL).result == ADMISSION_PENDING, "Rejected an idle connection before its deadline");
+    Check(Admit("G").result == ADMISSION_PENDING, "Rejected a partial GET method");
+    Check(Admit("POST").result == ADMISSION_REJECTED, "Accepted a non-GET method");
+    Check(Admit("GET /movie.jpx?cnew=http HTTP/1.1\r\n").result == ADMISSION_ACCEPTED,
           "Rejected a JHV channel request");
-    Check(Admit("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n") == ADMISSION_ACCEPTED,
+    Check(Admit("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").result == ADMISSION_ACCEPTED,
           "Rejected a target-form JPIP channel request");
-    Check(Admit("GET /movie.jpx?xcnew=http HTTP/1.1\r\n") == ADMISSION_REJECTED,
+    Check(Admit("GET /movie.jpx?xcnew=http HTTP/1.1\r\n").result == ADMISSION_REJECTED,
           "Accepted a request without a cnew parameter");
-    Check(Admit("GET /movie.jpx?cnew=http HTTP/2\r\n") == ADMISSION_REJECTED,
+    Check(Admit("GET /movie.jpx?cnew=http HTTP/2\r\n").result == ADMISSION_REJECTED,
           "Accepted an unsupported HTTP version");
+
+    Admission request = Admit("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
+    Check(request.result == ADMISSION_ACCEPTED && !request.new_channel && request.channel == "47",
+          "Could not route an existing channel request");
+
+    Admission close = Admit("GET /jpip?cclose=47 HTTP/1.1\r\n");
+    Check(close.result == ADMISSION_ACCEPTED && !close.new_channel && close.channel == "47",
+          "Could not route a channel close request");
+
+    Admission close_all = Admit("GET /jpip?cid=47&cclose=* HTTP/1.1\r\n");
+    Check(close_all.result == ADMISSION_ACCEPTED && close_all.channel == "47",
+          "Could not route an all-channel close request");
+}
+
+static void CheckChannelInbox() {
+    ChannelInbox inbox;
+    Check(inbox.IsValid(), "Could not create a channel inbox");
+    Check(inbox.Push({3, 7}), "Could not queue a channel connection");
+    Check(!inbox.Push({4, 8}), "Queued concurrent channel connections");
+    ChannelConnection connection;
+    Check(inbox.Pop(&connection), "Could not retrieve a channel connection");
+    Check(connection.id == 3 && connection.fd == 7, "Retrieved the wrong channel connection");
+    Check(!inbox.Pop(&connection), "Retrieved a channel connection twice");
+
+    Check(inbox.Push({5, 9}), "Could not queue a channel connection before closing");
+    ChannelConnection pending;
+    Check(inbox.Close(&pending), "Channel inbox lost its pending connection on close");
+    Check(inbox.IsClosed(), "Channel inbox remained open");
+    Check(pending.id == 5 && pending.fd == 9,
+          "Channel inbox did not return its pending connection");
+    Check(!inbox.Push({6, 10}), "Channel inbox accepted a connection after closing");
 }
 
 static void CheckJHVRequests() {
@@ -462,6 +494,7 @@ static void CheckMetadataPlaceHolder() {
 
 int main() {
     CheckClientAdmission();
+    CheckChannelInbox();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

@@ -55,8 +55,10 @@ The management commands must be run from the same directory:
 `identification_time_out` limits how long a new connection may take to send a
 valid initial JPIP request. Until that request is recognized, the parent keeps
 only the socket and does not create a serving thread or allocate JPEG 2000
-state. The separate `time_out` setting applies after the connection has been
-admitted.
+state. The separate `time_out` setting limits channel inactivity after
+admission. It closes an idle channel whether its current HTTP connection is
+still attached or the channel is waiting for a replacement connection. Values
+of `0` and `-1` leave this timeout disabled, as before.
 
 `record` prints a sample every five seconds until interrupted. Passing a file
 name records the samples through the configured logger. `stop child` restarts

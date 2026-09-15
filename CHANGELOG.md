@@ -8,6 +8,8 @@
   targets.
 - Stream gzip responses with zlib instead of buffering each compressed response.
 - Screen new connections before allocating a serving thread or JPEG 2000 state.
+- Keep a JPIP channel available when its HTTP connection is replaced, while
+  retaining JPEG 2000 and cache state in the channel's serving thread.
 - Update the bundled log4cpp to 1.1.6 and libconfig to 1.8.2.
 - Use standard CMake install directories and per-target compiler warnings.
 
@@ -28,6 +30,8 @@
 - Accept valid HTTP header whitespace and reject incomplete header blocks.
 - Track client completion by stable connection identifiers instead of reusable
   file descriptor numbers.
+- Expire inactive JPIP channels whether or not an HTTP connection remains
+  attached.
 - Fix mapped-file cleanup, address resolution, client-thread failure handling,
   platform-specific alignment, and macOS system queries.
 

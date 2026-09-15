@@ -11,7 +11,10 @@
 #include <glib.h>
 #include <zlib.h>
 
+#include <chrono>
+#include <climits>
 #include <cstdio>
+#include <poll.h>
 #include <vector>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -67,6 +70,10 @@ public:
             pos = 0;
             len = received;
         }
+    }
+
+    bool HasBufferedData() const {
+        return pos < len;
     }
 };
 
@@ -202,217 +209,331 @@ static const int true_val = 1;
 // static const int false_val = 0;
 static const int sndbuf_val = 524288;
 
-void RunClient(const AppConfig &cfg, Socket &socket, uint64_t connection_id) {
-    int fd = socket;
-    int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
-                      // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
-                      setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
-    int time_out;
-    if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
-        timeval tv;
-        tv.tv_sec = time_out;
-        tv.tv_usec = 0;
-        sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
-                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
-    }
-    if (sockopt_ret != 0) {
-        LOG("setsockopt failed: " << strerror(errno));
-        return;
-    }
+enum ServeResult {
+    KEEP_CHANNEL,
+    CLOSE_CHANNEL,
+    FAIL_CHANNEL
+};
 
-    ///
+enum WaitResult {
+    REQUEST_READY,
+    REPLACEMENT_READY,
+    WAIT_TIMED_OUT,
+    WAIT_FAILED
+};
 
-    string req_line, req_line_raw;
-    jpip::Request req;
-    bool pclose = false;
-    bool is_opened = false;
-    bool send_data = false;
+static int TimeoutMilliseconds(int seconds) {
+    if (seconds <= 0)
+        return -1;
+    if (seconds > INT_MAX / 1000)
+        return INT_MAX;
+    return seconds * 1000;
+}
+
+class Channel {
+private:
+    const AppConfig &cfg;
+    const string id;
+    const shared_ptr<ChannelInbox> inbox;
+    const ConnectionClosed connection_closed;
     DataBinServer data_server;
-
     FileManager file_manager;
-    if (!file_manager.Init(cfg.images_folder())) {
-        ERROR("The file manager can not be initialized");
-        return;
+    string head_data;
+    string head_data_gzip;
+    vector<char> buf;
+    bool opened = false;
+
+    bool Configure(Socket &socket) {
+        int fd = socket;
+        int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
+                          // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
+                          setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
+        int time_out;
+        if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
+            timeval tv;
+            tv.tv_sec = time_out;
+            tv.tv_usec = 0;
+            sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+                    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+        }
+        if (sockopt_ret == 0)
+            return true;
+        LOG("setsockopt failed: " << strerror(errno));
+        return false;
     }
 
-    ostringstream header_stream;
-    header_stream << "Access-Control-Allow-Origin: " << CORS << CRLF
-                  << "Strict-Transport-Security: " << STS << CRLF
-                  << "Cache-Control: " << NOCACHE << CRLF
-                  << "Transfer-Encoding: chunked" << CRLF
-                  << "Content-Type: image/jpp-stream" << CRLF;
-    const string head_data = header_stream.str();
-    const string head_data_gzip = head_data + "Content-Encoding: gzip" + CRLF;
+    WaitResult WaitForRequest(Socket &socket, const SocketReader &reader) {
+        if (reader.HasBufferedData())
+            return REQUEST_READY;
 
-    SocketReader reader(socket);
-    string channel = to_string(connection_id);
+        pollfd fds[] = {
+            {socket, POLLIN | POLLERR | POLLHUP | POLLNVAL, 0},
+            {inbox->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0}
+        };
+        int result;
+        do {
+            result = poll(fds, 2, TimeoutMilliseconds(cfg.com_time_out()));
+        } while (result < 0 && errno == EINTR);
 
-    int log_requests = cfg.log_requests();
-    size_t buf_len = cfg.max_chunk_size();
-    vector<char> buf(buf_len);
-
-    while (!pclose) {
-        bool accept_gzip = false;
-        bool send_gzip = false;
-
-        if (log_requests)
-            LOGC(_BLUE, "Waiting for a request ...");
-
-        req_line_raw.clear();
-        SocketReader::Result read_result = reader.ReadLine(req_line_raw);
-        if (read_result != SocketReader::LINE) {
-            if (read_result == SocketReader::CLOSED)
-                break;
-
-            if (read_result == SocketReader::ERROR)
-                LOG("Request read error: " << strerror(errno));
-            else {
-                char *escaped = g_strescape(req_line_raw.c_str(), NULL);
-                LOG("Incomplete request line: " << escaped);
-                g_free(escaped);
-            }
-            break;
+        if (result < 0) {
+            LOG("Channel poll failed: " << strerror(errno));
+            return WAIT_FAILED;
         }
+        if (result == 0)
+            return WAIT_TIMED_OUT;
+        if (fds[0].revents)
+            return REQUEST_READY;
+        if (fds[1].revents & POLLIN)
+            return REPLACEMENT_READY;
+        return WAIT_FAILED;
+    }
 
-        char *escaped = g_strescape(req_line_raw.c_str(), NULL);
-        req_line.assign(escaped);
-        g_free(escaped);
+    ServeResult Serve(Socket &socket) {
+        string req_line, req_line_raw;
+        jpip::Request req;
+        SocketReader reader(socket);
 
-        if (!req.Parse(req_line)) {
-            LOG("Bad request: " << req_line);
-            break;
-        }
-
-        if (log_requests)
-            LOGC(_BLUE, "Request: " << req_line);
-
-        http::Header header;
-        string header_line;
-        bool headers_complete = false;
         for (;;) {
-            SocketReader::Result header_result = reader.ReadLine(header_line);
-            if (header_result != SocketReader::LINE) {
-                if (header_result == SocketReader::ERROR)
-                    LOG("Header read error: " << strerror(errno));
-                else if (header_result == SocketReader::INCOMPLETE)
-                    LOG("Incomplete HTTP header");
-                break;
+            WaitResult wait_result = WaitForRequest(socket, reader);
+            if (wait_result == REPLACEMENT_READY)
+                return KEEP_CHANNEL;
+            if (wait_result == WAIT_TIMED_OUT) {
+                LOG("The channel " << id << " timed out");
+                return FAIL_CHANNEL;
             }
-            if (!header_line.empty() && header_line.back() == '\r')
-                header_line.pop_back();
-            if (header_line.empty()) {
-                headers_complete = true;
-                break;
+            if (wait_result == WAIT_FAILED)
+                return FAIL_CHANNEL;
+
+            bool accept_gzip = false;
+            bool send_gzip = false;
+
+            if (cfg.log_requests())
+                LOGC(_BLUE, "Waiting for a request ...");
+
+            req_line_raw.clear();
+            SocketReader::Result read_result = reader.ReadLine(req_line_raw);
+            if (read_result != SocketReader::LINE) {
+                if (read_result == SocketReader::CLOSED)
+                    return opened ? KEEP_CHANNEL : FAIL_CHANNEL;
+
+                if (read_result == SocketReader::ERROR)
+                    LOG("Request read error: " << strerror(errno));
+                else {
+                    char *escaped = g_strescape(req_line_raw.c_str(), NULL);
+                    LOG("Incomplete request line: " << escaped);
+                    g_free(escaped);
+                }
+                return FAIL_CHANNEL;
             }
-            if (!header.Parse(header_line)) {
-                LOG("Invalid HTTP header");
-                break;
+
+            char *escaped = g_strescape(req_line_raw.c_str(), NULL);
+            req_line.assign(escaped);
+            g_free(escaped);
+
+            if (!req.Parse(req_line)) {
+                LOG("Bad request: " << req_line);
+                return FAIL_CHANNEL;
             }
-            if (header.Is("Accept-Encoding") &&
-                header.value.find("gzip") != string::npos)
-                accept_gzip = true;
-        }
-        if (!headers_complete)
-            break;
 
-        const char *err_msg = "";
-        pclose = true;
-        send_data = false;
+            if (cfg.log_requests())
+                LOGC(_BLUE, "Request: " << req_line);
 
-        if (req.mask.items.metareq && accept_gzip)
-            send_gzip = true;
+            http::Header header;
+            string header_line;
+            bool headers_complete = false;
+            for (;;) {
+                SocketReader::Result header_result = reader.ReadLine(header_line);
+                if (header_result != SocketReader::LINE) {
+                    if (header_result == SocketReader::ERROR)
+                        LOG("Header read error: " << strerror(errno));
+                    else if (header_result == SocketReader::INCOMPLETE)
+                        LOG("Incomplete HTTP header");
+                    break;
+                }
+                if (!header_line.empty() && header_line.back() == '\r')
+                    header_line.pop_back();
+                if (header_line.empty()) {
+                    headers_complete = true;
+                    break;
+                }
+                if (!header.Parse(header_line)) {
+                    LOG("Invalid HTTP header");
+                    break;
+                }
+                if (header.Is("Accept-Encoding") &&
+                    header.value.find("gzip") != string::npos)
+                    accept_gzip = true;
+            }
+            if (!headers_complete)
+                return FAIL_CHANNEL;
 
-        if (req.mask.items.cclose) {
-            if (!is_opened) {
-                err_msg = "Close request received but there is not any channel opened";
-                LOG(err_msg);
-                /* Only one channel per client supported */
-            } else if (req.channel != "*" && req.channel != channel) {
-                err_msg = "Close request received related to another channel";
-                LOG(err_msg);
+            const char *err_msg = "";
+            bool send_data = false;
+
+            if (req.mask.items.metareq && accept_gzip)
+                send_gzip = true;
+
+            if (req.mask.items.cclose) {
+                if (!opened) {
+                    err_msg = "Close request received but there is not any channel opened";
+                    LOG(err_msg);
+                    /* Only one channel per client supported */
+                } else if (req.channel != "*" && req.channel != id) {
+                    err_msg = "Close request received related to another channel";
+                    LOG(err_msg);
+                } else {
+                    req.cache_model.Clear();
+                    LOG("The channel " << id << " has been closed");
+
+                    ostringstream msg;
+                    msg << http::Response(200, "OK")
+                            << "Access-Control-Allow-Origin: " << CORS << CRLF
+                            << "Strict-Transport-Security: " << STS << CRLF
+                            << "Cache-Control: " << NOCACHE << CRLF
+                            << "Content-Length: 0" << CRLF << CRLF;
+                    SendStream(socket, msg);
+                    return CLOSE_CHANNEL;
+                }
+            } else if (req.mask.items.cnew) {
+                if (opened) {
+                    err_msg = "There already is a channel opened. Only one channel per client is supported";
+                    LOG(err_msg);
+                } else {
+                    string file_name = req.mask.items.target ? req.target : req.object;
+
+                    if (!file_manager.OpenImage(file_name)) {
+                        ERROR("The image file '" << file_name << "' can not be read");
+                    } else {
+                        if (!data_server.SetRequest(file_manager, req)) {
+                            err_msg = "Invalid JPIP request for the selected image";
+                            LOG(err_msg);
+                        } else {
+                            opened = true;
+                            LOG("The channel " << id << " has been opened for the image '" << file_name << "'");
+
+                            ostringstream msg;
+                            msg << http::Response(200, "OK")
+                                    << http::Header("JPIP-cnew", "cid=" + id + ",path=jpip,transport=http")
+                                    << http::Header("JPIP-tid", file_name)
+                                    << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
+                                    << (send_gzip ? head_data_gzip : head_data)
+                                    << CRLF;
+                            if (SendStream(socket, msg) == 0)
+                                send_data = true;
+                        }
+                    }
+                }
+            } else if (req.mask.items.cid) {
+                if (!opened) {
+                    err_msg = "Request received but no channel is opened";
+                    LOG(err_msg);
+                } else {
+                    if (req.channel != id) {
+                        err_msg = "Request related to another channel";
+                        LOG(err_msg);
+                    } else {
+                        if (!data_server.SetRequest(file_manager, req)) {
+                            err_msg = "Invalid JPIP request for the selected image";
+                            LOG(err_msg);
+                        } else {
+                            if (SendOK(socket, send_gzip ? head_data_gzip : head_data) == 0)
+                                send_data = true;
+                        }
+                    }
+                }
             } else {
-                req.cache_model.Clear();
-                LOG("The channel " << channel << " has been closed");
+                err_msg = "Invalid request (channel parameter not found)";
+                LOG(err_msg);
+            }
 
+            if (!send_data) {
+                size_t err_msg_len = strlen(err_msg);
                 ostringstream msg;
-                msg << http::Response(200, "OK")
+                msg << http::Response(500, "Internal Server Error")
                         << "Access-Control-Allow-Origin: " << CORS << CRLF
                         << "Strict-Transport-Security: " << STS << CRLF
                         << "Cache-Control: " << NOCACHE << CRLF
-                        << "Content-Length: 0" << CRLF << CRLF;
+                        << "Content-Length: " << err_msg_len << CRLF << CRLF;
+                if (err_msg_len)
+                    msg << err_msg;
                 SendStream(socket, msg);
-                break; // break connection
-            }
-        } else if (req.mask.items.cnew) {
-            if (is_opened) {
-                err_msg = "There already is a channel opened. Only one channel per client is supported";
-                LOG(err_msg);
+                return FAIL_CHANNEL;
             } else {
-                string file_name = req.mask.items.target ? req.target : req.object;
-
-                if (!file_manager.OpenImage(file_name)) {
-                    ERROR("The image file '" << file_name << "' can not be read");
-                } else {
-                    if (!data_server.SetRequest(file_manager, req)) {
-                        err_msg = "Invalid JPIP request for the selected image";
-                        LOG(err_msg);
-                    } else {
-                        is_opened = true;
-                        LOG("The channel " << channel << " has been opened for the image '" << file_name << "'");
-
-                        ostringstream msg;
-                        msg << http::Response(200, "OK")
-                                << http::Header("JPIP-cnew", "cid=" + channel + ",path=jpip,transport=http")
-                                << http::Header("JPIP-tid", file_name)
-                                << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
-                                << (send_gzip ? head_data_gzip : head_data)
-                                << CRLF;
-                        SendStream(socket, msg);
-                        send_data = true;
-                    }
-                }
+                if (!SendData(socket, data_server, file_manager, buf, send_gzip) ||
+                    SendAll(socket, ZERO, sizeof ZERO - 1))
+                    return FAIL_CHANNEL;
+                file_manager.ClearFiles();
             }
-        } else if (req.mask.items.cid) {
-            if (!is_opened) {
-                err_msg = "Request received but no channel is opened";
-                LOG(err_msg);
-            } else {
-                if (req.channel != channel) {
-                    err_msg = "Request related to another channel";
-                    LOG(err_msg);
-                } else {
-                    if (!data_server.SetRequest(file_manager, req)) {
-                        err_msg = "Invalid JPIP request for the selected image";
-                        LOG(err_msg);
-                    } else {
-                        SendOK(socket, send_gzip ? head_data_gzip : head_data);
-                        send_data = true;
-                    }
-                }
-            }
-        } else {
-            err_msg = "Invalid request (channel parameter not found)";
-            LOG(err_msg);
-        }
-
-        pclose = pclose && !send_data;
-
-        if (pclose) {
-            size_t err_msg_len = strlen(err_msg);
-            ostringstream msg;
-            msg << http::Response(500, "Internal Server Error")
-                    << "Access-Control-Allow-Origin: " << CORS << CRLF
-                    << "Strict-Transport-Security: " << STS << CRLF
-                    << "Cache-Control: " << NOCACHE << CRLF
-                    << "Content-Length: " << err_msg_len << CRLF << CRLF;
-            if (err_msg_len)
-                msg << err_msg;
-            SendStream(socket, msg);
-        } else if (send_data) {
-            if (!SendData(socket, data_server, file_manager, buf, send_gzip) ||
-                SendAll(socket, ZERO, sizeof ZERO - 1))
-                break;
-            file_manager.ClearFiles();
         }
     }
+
+    bool WaitForConnection(ChannelConnection *connection) {
+        pollfd fd = {inbox->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0};
+        int result;
+        do {
+            result = poll(&fd, 1, TimeoutMilliseconds(cfg.com_time_out()));
+        } while (result < 0 && errno == EINTR);
+        if (result < 0) {
+            LOG("Channel handoff poll failed: " << strerror(errno));
+            return false;
+        }
+        if (result == 0) {
+            LOG("The channel " << id << " timed out");
+            return false;
+        }
+        if (!(fd.revents & POLLIN)) {
+            LOG("The channel " << id << " handoff failed");
+            return false;
+        }
+        return inbox->Pop(connection);
+    }
+
+    void CloseConnection(Socket &socket, uint64_t connection_id) {
+        shutdown(socket, SHUT_RDWR);
+        socket.Close();
+        connection_closed(connection_id);
+    }
+
+public:
+    Channel(const AppConfig &_cfg, const string &_id,
+            const shared_ptr<ChannelInbox> &_inbox,
+            ConnectionClosed _connection_closed)
+        : cfg(_cfg), id(_id), inbox(_inbox), connection_closed(_connection_closed),
+          buf(_cfg.max_chunk_size()) {
+        ostringstream header_stream;
+        header_stream << "Access-Control-Allow-Origin: " << CORS << CRLF
+                      << "Strict-Transport-Security: " << STS << CRLF
+                      << "Cache-Control: " << NOCACHE << CRLF
+                      << "Transfer-Encoding: chunked" << CRLF
+                      << "Content-Type: image/jpp-stream" << CRLF;
+        head_data = header_stream.str();
+        head_data_gzip = head_data + "Content-Encoding: gzip" + CRLF;
+    }
+
+    void Run() {
+        if (!file_manager.Init(cfg.images_folder())) {
+            ERROR("The file manager can not be initialized");
+        } else {
+            ChannelConnection connection;
+            while (WaitForConnection(&connection)) {
+                Socket socket(connection.fd);
+                ServeResult result = Configure(socket) ? Serve(socket) : FAIL_CHANNEL;
+                CloseConnection(socket, connection.id);
+                if (result != KEEP_CHANNEL)
+                    break;
+            }
+        }
+
+        ChannelConnection pending;
+        if (inbox->Close(&pending)) {
+            Socket socket(pending.fd);
+            CloseConnection(socket, pending.id);
+        }
+    }
+};
+
+void RunChannel(const AppConfig &cfg, const string &channel,
+                const shared_ptr<ChannelInbox> &inbox,
+                ConnectionClosed connection_closed) {
+    Channel(cfg, channel, inbox, connection_closed).Run();
 }
