@@ -4,8 +4,8 @@
 for the Helioviewer project and streams solar imagery stored in JP2 and JPX
 files to JHelioviewer.
 
-The repository includes the required log4cpp and libconfig sources and links
-against the system GLib and zlib libraries.
+The repository includes the required log4cpp sources and links against the
+system GLib and zlib libraries.
 
 See [Connections and JPIP channels](CHANNELS.md) for the server's connection
 ownership, channel routing, timeout, and cleanup model.
@@ -43,6 +43,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 ## Operation
+
+`server.cfg` uses INI syntax. Blank lines and lines beginning with `#` are
+ignored. Older brace-delimited configuration files must be converted.
 
 The executable reads `server.cfg` from its current directory. Run it from the
 installed server directory, either in a terminal or under the host's process

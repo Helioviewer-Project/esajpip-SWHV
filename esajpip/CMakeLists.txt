@@ -35,12 +35,10 @@ target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_include_directories(esajpip BEFORE PRIVATE
     .
     ${ESAJPIP_TOP}
-    ${LIBCONFIG}/lib
     ${CMAKE_BINARY_DIR}/log4cpp/include
     ${LOG4CPP}/include)
 target_link_libraries(esajpip PRIVATE
     PkgConfig::PKG
-    config
     log4cpp
     ZLIB::ZLIB
     Threads::Threads)
@@ -61,6 +59,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
 if(BUILD_TESTING)
     add_executable(protocol_test
         tests/protocol_test.cc
+        ${ESAJPIP_TOP}/app_config.cc
         ${ESAJPIP_TOP}/data/file_segment.cc
         ${ESAJPIP_TOP}/http/header.cc
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
@@ -79,7 +78,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}
         ${CMAKE_BINARY_DIR}/log4cpp/include
         ${LOG4CPP}/include)
-    target_link_libraries(protocol_test PRIVATE log4cpp Threads::Threads)
+    target_link_libraries(protocol_test PRIVATE PkgConfig::PKG log4cpp Threads::Threads)
     add_test(NAME protocol COMMAND protocol_test)
 
     add_executable(jpeg2000_test

@@ -10,7 +10,8 @@
 - Screen new connections before allocating a serving thread or JPEG 2000 state.
 - Keep a JPIP channel available when its HTTP connection is replaced, while
   retaining JPEG 2000 and cache state in the channel's serving thread.
-- Update the bundled log4cpp to 1.1.6 and libconfig to 1.8.2.
+- Update the bundled log4cpp to 1.1.6.
+- Replace bundled libconfig with GLib-based INI configuration parsing.
 - Use standard CMake install directories and per-target compiler warnings.
 
 ### Fixed

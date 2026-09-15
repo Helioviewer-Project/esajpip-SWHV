@@ -44,7 +44,7 @@ TCP accept
 parent: pending Connection + absolute identification deadline
     |
     +-- no complete request before deadline ----------> close
-    +-- unsupported or unrelated traffic --------------> close
+    +-- unsupported or unrelated traffic -------------> close
     |
     v
 bounded cnew/cid/cclose recognition

@@ -35,9 +35,7 @@ endfunction()
 #-fsanitize=memory -fsanitize-memory-track-origins"
 #-fsanitize=thread
 
-set(LIBCONFIG ${CMAKE_CURRENT_SOURCE_DIR}/libconfig/libconfig-1.8.2)
 set(LOG4CPP   ${CMAKE_CURRENT_SOURCE_DIR}/log4cpp/log4cpp-1.1.6)
 
-add_subdirectory(libconfig)
 add_subdirectory(log4cpp)
 add_subdirectory(esajpip)

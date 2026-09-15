@@ -10,6 +10,7 @@
 #include <vector>
 #include <unistd.h>
 
+#include "app_config.h"
 #include "server/channel_inbox.h"
 #include "server/connection_admission.h"
 #include "data/file.h"
@@ -31,6 +32,76 @@ static void Check(bool condition, const char *message) {
         cerr << message << endl;
         exit(EXIT_FAILURE);
     }
+}
+
+static bool LoadConfig(const char *contents, AppConfig *config) {
+    char path[] = "/tmp/esajpip-config-XXXXXX";
+    int fd = mkstemp(path);
+    Check(fd >= 0, "Could not create configuration test file");
+    size_t size = strlen(contents);
+    Check(write(fd, contents, size) == static_cast<ssize_t>(size),
+          "Could not write configuration test file");
+    close(fd);
+
+    bool loaded = config->Load(path);
+    remove(path);
+    return loaded;
+}
+
+static void CheckAppConfig() {
+    const char *contents =
+        "# Settings may be ordered freely.\n"
+        "[general]\n"
+        "logging = 1\n"
+        "log_requests = 0\n"
+        "max_chunk_size = 4096\n"
+        "cache_max_time = -1\n"
+        "\n"
+        "[folders]\n"
+        "images = /srv/jpip images\n"
+        "logging = /var/log/esajpip/\n"
+        "\n"
+        "[listen_at]\n"
+        "address = 127.0.0.1\n"
+        "port = 8090\n"
+        "\n"
+        "[connections]\n"
+        "max_number = 250\n"
+        "time_out = 60\n"
+        "identification_time_out = 4\n";
+
+    AppConfig config;
+    Check(LoadConfig(contents, &config), "Could not parse INI configuration");
+    Check(config.port() == 8090, "Wrong configured port");
+    Check(config.address() == "127.0.0.1", "Wrong configured address");
+    Check(config.images_folder() == "/srv/jpip images/", "Wrong configured image directory");
+    Check(config.logging_folder() == "/var/log/esajpip/", "Wrong configured log directory");
+    Check(config.max_chunk_size() == 4096, "Wrong configured chunk size");
+    Check(config.max_connections() == 250, "Wrong configured connection limit");
+    Check(config.identification_time_out() == 4, "Wrong configured identification timeout");
+    Check(config.com_time_out() == 60, "Wrong configured communication timeout");
+    Check(config.logging() && !config.log_requests(), "Wrong configured logging flags");
+
+    const char *old_defaults =
+        "[listen_at]\n"
+        "port = 8090\n"
+        "[folders]\n"
+        "images = /srv/jpip\n"
+        "[connections]\n"
+        "max_number = 10\n"
+        "[general]\n"
+        "max_chunk_size = 128\n";
+    AppConfig defaults;
+    Check(LoadConfig(old_defaults, &defaults), "Could not apply configuration defaults");
+    Check(defaults.identification_time_out() == 3 && defaults.com_time_out() == -1,
+          "Wrong configuration defaults");
+
+    AppConfig missing_group;
+    Check(!LoadConfig("[listen_at]\nport = 8090\n", &missing_group),
+          "Accepted configuration with missing groups");
+
+    AppConfig invalid;
+    Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
 }
 
 static Admission Admit(const char *request) {
@@ -493,6 +564,7 @@ static void CheckMetadataPlaceHolder() {
 }
 
 int main() {
+    CheckAppConfig();
     CheckClientAdmission();
     CheckChannelInbox();
     CheckInetAddress();
