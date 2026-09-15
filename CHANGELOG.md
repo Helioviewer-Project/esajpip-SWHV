@@ -7,6 +7,8 @@
 - Reduce per-client linked-JPX indexing state and transient allocations.
 - Stream gzip responses with zlib instead of buffering the compressed response.
 - Simplify request, response, socket, data-bin, and image-index ownership.
+- Replace JPIP constant-holder classes with namespaces and remove an unused
+  data-bin name lookup.
 - Update the bundled log4cpp to 1.1.6 and libconfig to 1.8.2.
 - Add focused JPEG 2000 and JPX parser regression tests.
 

@@ -19,7 +19,6 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpeg2000/image_index.cc
     ${ESAJPIP_TOP}/jpip/databin_server.cc
     ${ESAJPIP_TOP}/jpip/databin_writer.cc
-    ${ESAJPIP_TOP}/jpip/jpip.cc
     ${ESAJPIP_TOP}/jpip/request.cc
     ${ESAJPIP_TOP}/net/socket.cc
     ${ESAJPIP_TOP}/trace.cc)
@@ -66,7 +65,6 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/http/protocol.cc
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
-        ${ESAJPIP_TOP}/jpip/jpip.cc
         ${ESAJPIP_TOP}/jpip/request.cc
         ${ESAJPIP_TOP}/trace.cc)
     esajpip_enable_warnings(protocol_test)
@@ -91,7 +89,6 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/jpeg2000/image_index.cc
         ${ESAJPIP_TOP}/jpip/databin_server.cc
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
-        ${ESAJPIP_TOP}/jpip/jpip.cc
         ${ESAJPIP_TOP}/jpip/request.cc
         ${ESAJPIP_TOP}/trace.cc)
     esajpip_enable_warnings(jpeg2000_test)

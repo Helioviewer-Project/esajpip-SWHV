@@ -2,21 +2,13 @@
 #define _JPIP_JPIP_H_
 
 /**
- * Set of classes related to the JPIP protocol, defined in
- * the Part 9 of the JPEG2000 standard.
+ * Definitions from the JPIP protocol in Part 9 of the JPEG 2000 standard.
  */
 namespace jpip {
     /**
-     * Class that contains the definitions of all the
-     * data-bin classes defined for the JPIP protocol.
-     * It is not possible to create an object of this
-     * class.
+     * Data-bin classes defined by the JPIP protocol.
      */
-    class DataBinClass {
-    private:
-        DataBinClass() {}
-
-    public:
+    namespace DataBinClass {
         enum {
             /**
              * Class identifier for precinct data-bins.
@@ -53,24 +45,13 @@ namespace jpip {
              */
                     META_DATA = 8
         };
-
-        /**
-         * Returns a string with the name of the databin class name given,
-         */
-        static const char *GetName(int class_name);
-    };
+    }
 
 
     /**
-     * Class that contains all the definitions of the EOF
-     * messages defined for the JPIP protocol. It is not
-     * possible to create an object of this class.
+     * End-of-response reasons defined by the JPIP protocol.
      */
-    class EOR {
-    private:
-        EOR() {}
-
-    public:
+    namespace EOR {
         enum {
             /**
              * EOR code sent when the server has transferred all available image
@@ -125,7 +106,7 @@ namespace jpip {
              */
                     NON_SPECIFIED = 0xFF
         };
-    };
+    }
 }
 
 #endif /* _JPIP_JPIP_H_ */
