@@ -26,10 +26,10 @@
 using namespace std;
 using namespace net;
 
-#define SERVER_VERSION    "1.9.0-rc2"
+#define SERVER_VERSION    "2.0-rc1"
 #define SERVER_NAME       "ESA JPIP Server"
 #define SERVER_APP_NAME   "esa_jpip_server"
-#define CONFIG_FILE       "server.cfg"
+#define CONFIG_FILE       "server.ini"
 
 #ifndef POLLRDHUP
 #define POLLRDHUP         (0)
@@ -147,8 +147,8 @@ int main(int argc, char **argv) {
     cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << '-' << cfg << endl;
 
-    if (cfg.logging())
-        TraceSystem::AppendToFile(cfg.logging_folder() + SERVER_APP_NAME);
+    if (cfg.file_logging())
+        TraceSystem::AppendToFile(cfg.log_directory() + SERVER_APP_NAME);
 
     Socket listen_socket;
     InetAddress listen_addr = cfg.address().empty()
@@ -222,7 +222,7 @@ father_begin:
                                                  << " [" << static_cast<int>(new_conn) << ":" << id << "]");
                     poll_table.Add(new_conn, POLLIN | POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
                     connections.push_back({id, new_conn, true,
-                                           Clock::now() + chrono::seconds(cfg.identification_time_out())});
+                                           Clock::now() + chrono::seconds(cfg.admission_timeout())});
                     app_info->num_connections = static_cast<int>(connections.size());
                 }
             }

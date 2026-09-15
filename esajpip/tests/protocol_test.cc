@@ -51,53 +51,53 @@ static bool LoadConfig(const char *contents, AppConfig *config) {
 static void CheckAppConfig() {
     const char *contents =
         "# Settings may be ordered freely.\n"
-        "[general]\n"
-        "logging = 1\n"
-        "log_requests = 0\n"
-        "max_chunk_size = 4096\n"
+        "[logging]\n"
+        "file_enabled = 1\n"
+        "requests = 0\n"
+        "directory = /var/log/esajpip/\n"
         "cache_max_time = -1\n"
         "\n"
-        "[folders]\n"
-        "images = /srv/jpip images\n"
-        "logging = /var/log/esajpip/\n"
+        "[jpip]\n"
+        "image_directory = /srv/jpip images\n"
+        "chunk_size = 4096\n"
         "\n"
-        "[listen_at]\n"
+        "[listen]\n"
         "address = 127.0.0.1\n"
         "port = 8090\n"
         "\n"
         "[connections]\n"
-        "max_number = 250\n"
-        "time_out = 60\n"
-        "identification_time_out = 4\n";
+        "limit = 250\n"
+        "timeout = 60\n"
+        "admission_timeout = 4\n";
 
     AppConfig config;
     Check(LoadConfig(contents, &config), "Could not parse INI configuration");
     Check(config.port() == 8090, "Wrong configured port");
     Check(config.address() == "127.0.0.1", "Wrong configured address");
-    Check(config.images_folder() == "/srv/jpip images/", "Wrong configured image directory");
-    Check(config.logging_folder() == "/var/log/esajpip/", "Wrong configured log directory");
+    Check(config.image_directory() == "/srv/jpip images/", "Wrong configured image directory");
+    Check(config.log_directory() == "/var/log/esajpip/", "Wrong configured log directory");
     Check(config.max_chunk_size() == 4096, "Wrong configured chunk size");
     Check(config.max_connections() == 250, "Wrong configured connection limit");
-    Check(config.identification_time_out() == 4, "Wrong configured identification timeout");
-    Check(config.com_time_out() == 60, "Wrong configured communication timeout");
-    Check(config.logging() && !config.log_requests(), "Wrong configured logging flags");
+    Check(config.admission_timeout() == 4, "Wrong configured admission timeout");
+    Check(config.connection_timeout() == 60, "Wrong configured connection timeout");
+    Check(config.file_logging() && !config.log_requests(), "Wrong configured logging flags");
 
-    const char *old_defaults =
-        "[listen_at]\n"
+    const char *minimal =
+        "[listen]\n"
         "port = 8090\n"
-        "[folders]\n"
-        "images = /srv/jpip\n"
+        "[jpip]\n"
+        "image_directory = /srv/jpip\n"
+        "chunk_size = 128\n"
         "[connections]\n"
-        "max_number = 10\n"
-        "[general]\n"
-        "max_chunk_size = 128\n";
+        "limit = 10\n"
+        "[logging]\n";
     AppConfig defaults;
-    Check(LoadConfig(old_defaults, &defaults), "Could not apply configuration defaults");
-    Check(defaults.identification_time_out() == 3 && defaults.com_time_out() == -1,
+    Check(LoadConfig(minimal, &defaults), "Could not apply configuration defaults");
+    Check(defaults.admission_timeout() == 3 && defaults.connection_timeout() == -1,
           "Wrong configuration defaults");
 
     AppConfig missing_group;
-    Check(!LoadConfig("[listen_at]\nport = 8090\n", &missing_group),
+    Check(!LoadConfig("[listen]\nport = 8090\n", &missing_group),
           "Accepted configuration with missing groups");
 
     AppConfig invalid;

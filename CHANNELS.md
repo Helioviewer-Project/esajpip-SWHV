@@ -55,7 +55,7 @@ SCM_RIGHTS descriptor transfer to serving child
 
 Admission peeks at no more than 2 KiB and does not consume the request. It
 requires HTTP/1.0 or HTTP/1.1 `GET` traffic containing `cnew`, `cid` or
-`cclose`. The fixed `identification_time_out` deadline is not extended by a
+`cclose`. The fixed `connections.admission_timeout` deadline is not extended by a
 client sending request bytes slowly. Rejected and expired connections never
 create a channel thread or allocate JPEG 2000 state.
 
@@ -93,11 +93,11 @@ requests and responses.
 
 ## Timeouts and termination
 
-`identification_time_out` applies only before admission. After admission,
-`time_out` is the inactivity limit for the channel:
+`connections.admission_timeout` applies only before admission. After admission,
+`connections.timeout` is the inactivity limit for the channel:
 
 - With a connection attached, the channel waits on both the TCP socket and its
-  inbox for at most `time_out` seconds.
+  inbox for at most `connections.timeout` seconds.
 - Without a connection, it waits on the inbox for the same interval.
 - Socket receive and send operations use the same configured timeout.
 - Values of `0` and `-1` disable the communication timeout.
@@ -124,7 +124,7 @@ to govern pending, unidentified connections.
 
 ## Deliberate limits
 
-- `max_number` limits physical connections in the parent and active channels in
+- `connections.limit` limits physical connections in the parent and active channels in
   the child. These are separate counts.
 - A channel has one active request/response and at most one queued replacement
   connection.

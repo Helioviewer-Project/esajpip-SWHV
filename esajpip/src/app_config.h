@@ -16,15 +16,15 @@ using namespace std;
 class AppConfig {
 private:
     int port_;                ///< Listening port
-    int logging_;                ///< <code>true</code> if logs messages are allowed
+    int file_logging_;                ///< <code>true</code> if file logging is enabled
     int log_requests_;  ///< <code>true</code> if the client requests are logged
     string address_;            ///< Listening address
-    string images_folder_;    ///< Directory for the images
-    string logging_folder_;    ///< Directory for the logging files
+    string image_directory_;    ///< Directory containing the images
+    string log_directory_;    ///< Directory for log files
     int max_chunk_size_;        ///< Maximum chunk size
     int max_connections_;        ///< Maximum number of connections
-    int identification_time_out_; ///< Initial client identification time-out
-    int com_time_out_;        ///< Connection time-out
+    int admission_timeout_; ///< Initial client admission timeout
+    int connection_timeout_;        ///< Connection timeout
 
 public:
     /**
@@ -32,15 +32,15 @@ public:
      */
     AppConfig() {
         port_ = 0;
-        logging_ = 0;
+        file_logging_ = 0;
         address_ = "";
         log_requests_ = 0;
-        images_folder_ = "";
-        logging_folder_ = "";
+        image_directory_ = "";
+        log_directory_ = "";
         max_chunk_size_ = 0;
         max_connections_ = 0;
-        identification_time_out_ = 3;
-        com_time_out_ = -1;
+        admission_timeout_ = 3;
+        connection_timeout_ = -1;
     }
 
     /**
@@ -53,17 +53,17 @@ public:
     friend ostream &operator<<(ostream &out, const AppConfig &cfg) {
         out << "Configuration:" << endl;
         out << "\tListen at: " << cfg.address_ << ":" << cfg.port_ << endl;
-        out << "\tFolders:" << endl;
-        out << "\t\tImages: " << cfg.images_folder_ << endl;
-        out << "\t\tLogging: " << cfg.logging_folder_ << endl;
+        out << "\tDirectories:" << endl;
+        out << "\t\tImages: " << cfg.image_directory_ << endl;
+        out << "\t\tLogging: " << cfg.log_directory_ << endl;
         out << "\tConnections: " << endl;
-        out << "\t\tMax. number: " << cfg.max_connections_ << endl;
-        out << "\t\tIdentification time-out: " << cfg.identification_time_out_ << endl;
-        out << "\t\tMax. time-out: " << cfg.com_time_out() << endl;
+        out << "\t\tLimit: " << cfg.max_connections_ << endl;
+        out << "\t\tAdmission timeout: " << cfg.admission_timeout_ << endl;
+        out << "\t\tTimeout: " << cfg.connection_timeout() << endl;
         out << "\tGeneral:" << endl;
-        out << "\t\tLogging: " << (cfg.logging_ == 1 ? "yes" : "no") << endl;
+        out << "\t\tFile: " << (cfg.file_logging_ == 1 ? "yes" : "no") << endl;
         out << "\t\tLog. requests: " << (cfg.log_requests_ == 1 ? "yes" : "no") << endl;
-        out << "\t\tChunk max. size: " << cfg.max_chunk_size_ << endl;
+        out << "\t\tChunk size: " << cfg.max_chunk_size_ << endl;
         return out;
     }
 
@@ -82,17 +82,17 @@ public:
     }
 
     /**
-     * Returns the folder of the images.
+     * Returns the image directory.
      */
-    const string &images_folder() const {
-        return images_folder_;
+    const string &image_directory() const {
+        return image_directory_;
     }
 
     /**
-     * Returns the folder used for the logging files.
+     * Returns the log directory.
      */
-    const string &logging_folder() const {
-        return logging_folder_;
+    const string &log_directory() const {
+        return log_directory_;
     }
 
     /**
@@ -109,15 +109,15 @@ public:
         return max_connections_;
     }
 
-    int identification_time_out() const {
-        return identification_time_out_;
+    int admission_timeout() const {
+        return admission_timeout_;
     }
 
     /**
-     * Returns <code>true</code> if the logging messages are allowed.
+     * Returns <code>true</code> if file logging is enabled.
      */
-    bool logging() const {
-        return logging_ == 1;
+    bool file_logging() const {
+        return file_logging_ == 1;
     }
 
     /**
@@ -128,10 +128,10 @@ public:
     }
 
     /**
-     * Returns the connection time-out.
+     * Returns the connection timeout.
      */
-    int com_time_out() const {
-        return com_time_out_;
+    int connection_timeout() const {
+        return connection_timeout_;
     }
 
 };

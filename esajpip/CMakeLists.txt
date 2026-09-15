@@ -3,7 +3,7 @@ find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36)
 
-configure_file(server.cfg ${CMAKE_CURRENT_BINARY_DIR}/server.cfg)
+configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
@@ -54,7 +54,7 @@ elseif(APPLE)
 endif()
 
 install(TARGETS esajpip DESTINATION server/esajpip)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.cfg DESTINATION server/esajpip)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
 
 if(BUILD_TESTING)
     add_executable(protocol_test

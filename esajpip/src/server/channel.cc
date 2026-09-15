@@ -248,10 +248,10 @@ private:
         int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
                           // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
                           setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
-        int time_out;
-        if (sockopt_ret == 0 && (time_out = cfg.com_time_out()) > 0) {
+        int timeout;
+        if (sockopt_ret == 0 && (timeout = cfg.connection_timeout()) > 0) {
             timeval tv;
-            tv.tv_sec = time_out;
+            tv.tv_sec = timeout;
             tv.tv_usec = 0;
             sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
                     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
@@ -272,7 +272,7 @@ private:
         };
         int result;
         do {
-            result = poll(fds, 2, TimeoutMilliseconds(cfg.com_time_out()));
+            result = poll(fds, 2, TimeoutMilliseconds(cfg.connection_timeout()));
         } while (result < 0 && errno == EINTR);
 
         if (result < 0) {
@@ -471,7 +471,7 @@ private:
         pollfd fd = {inbox->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0};
         int result;
         do {
-            result = poll(&fd, 1, TimeoutMilliseconds(cfg.com_time_out()));
+            result = poll(&fd, 1, TimeoutMilliseconds(cfg.connection_timeout()));
         } while (result < 0 && errno == EINTR);
         if (result < 0) {
             LOG("Channel handoff poll failed: " << strerror(errno));
@@ -511,7 +511,7 @@ public:
     }
 
     void Run() {
-        if (!file_manager.Init(cfg.images_folder())) {
+        if (!file_manager.Init(cfg.image_directory())) {
             ERROR("The file manager can not be initialized");
         } else {
             ChannelConnection connection;
