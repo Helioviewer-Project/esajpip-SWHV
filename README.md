@@ -72,7 +72,7 @@ supervisor:
 
 ```sh
 cd "$HOME/esajpip/server/esajpip"
-./esajpip start
+./esajpip
 ```
 
 The management commands must be run from the same directory:
@@ -91,8 +91,6 @@ the socket. It does not create a serving thread or allocate JPEG 2000 state.
 After admission, `connections.timeout` limits channel inactivity. It closes an idle channel
 whether an HTTP connection is attached or the channel is waiting for a
 replacement. Values of `0` and `-1` disable this timeout.
-
-`stop child` restarts the serving child without stopping the listening parent.
 
 ## License
 
