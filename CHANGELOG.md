@@ -7,6 +7,7 @@
 - Reduce retained and transient per-client state when indexing large linked-JPX
   targets.
 - Stream gzip responses with zlib instead of buffering each compressed response.
+- Screen new connections before allocating a serving thread or JPEG 2000 state.
 - Update the bundled log4cpp to 1.1.6 and libconfig to 1.8.2.
 - Use standard CMake install directories and per-target compiler warnings.
 
@@ -25,6 +26,8 @@
 - Allow JPIP messages and metadata placeholders to exactly fill the configured
   response buffer.
 - Accept valid HTTP header whitespace and reject incomplete header blocks.
+- Track client completion by stable connection identifiers instead of reusable
+  file descriptor numbers.
 - Fix mapped-file cleanup, address resolution, client-thread failure handling,
   platform-specific alignment, and macOS system queries.
 

@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <cerrno>
 #include <cstring>
 #include "socket.h"
 
@@ -10,18 +11,21 @@ namespace net {
     }
 
     ssize_t Socket::SendTo(const UnixAddress &address, const void *buf, size_t len) {
-        return sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
+        ssize_t sent;
+        do {
+            sent = sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
+        } while (sent < 0 && errno == EINTR);
+        return sent;
     }
 
-    bool Socket::SendDescriptor(const UnixAddress &address, int fd, int aux) {
+    bool Socket::SendDescriptor(const UnixAddress &address, int fd, uint64_t connection_id) {
         msghdr msg;
-        cmsghdr *cmsg;
         alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
 
         struct iovec iov;
         memset(&iov, 0, sizeof iov);
-        iov.iov_base = &aux;
-        iov.iov_len = sizeof(aux);
+        iov.iov_base = &connection_id;
+        iov.iov_len = sizeof connection_id;
 
         memset(&msg, 0, sizeof msg);
         msg.msg_name = address.GetSockAddr();
@@ -31,34 +35,32 @@ namespace net {
         msg.msg_control = ccmsg;
         msg.msg_controllen = CMSG_SPACE(sizeof(int));
 
-        cmsg = CMSG_FIRSTHDR(&msg);
+        cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
         cmsg->cmsg_type = SCM_RIGHTS;
         cmsg->cmsg_level = SOL_SOCKET;
         cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
 
         memcpy(CMSG_DATA(cmsg), &fd, sizeof fd);
 
-        msg.msg_controllen = cmsg->cmsg_len;
+        msg.msg_controllen = sizeof ccmsg;
         msg.msg_flags = 0;
 
-        return (sendmsg(sid, &msg, 0) != -1);
+        ssize_t sent;
+        do {
+            sent = sendmsg(sid, &msg, 0);
+        } while (sent < 0 && errno == EINTR);
+        return sent == static_cast<ssize_t>(sizeof connection_id);
     }
 
-    bool Socket::ReceiveDescriptor(int *fd, int *aux) {
+    bool Socket::ReceiveDescriptor(int *fd, uint64_t *connection_id) {
         msghdr msg;
-        cmsghdr *cmsg;
         alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
+        memset(ccmsg, 0, sizeof ccmsg);
 
-        int aux2;
         iovec iov;
         memset(&iov, 0, sizeof iov);
-        if (aux) {
-            iov.iov_base = aux;
-            iov.iov_len = sizeof(*aux);
-        } else {
-            iov.iov_base = &aux2;
-            iov.iov_len = sizeof(aux2);
-        }
+        iov.iov_base = connection_id;
+        iov.iov_len = sizeof *connection_id;
 
         memset(&msg, 0, sizeof msg);
         msg.msg_name = 0;
@@ -68,19 +70,29 @@ namespace net {
         msg.msg_control = ccmsg;
         msg.msg_controllen = CMSG_SPACE(sizeof(int));
 
-        if (recvmsg(sid, &msg, 0) <= 0)
-            return false;
+        *fd = -1;
+        ssize_t received;
+        do {
+            received = recvmsg(sid, &msg, 0);
+        } while (received < 0 && errno == EINTR);
 
-        cmsg = CMSG_FIRSTHDR(&msg);
-        if (!cmsg)
-            return false;
+        cmsghdr *cmsg = received > 0 ? CMSG_FIRSTHDR(&msg) : NULL;
+        if (cmsg && cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS &&
+            cmsg->cmsg_len >= CMSG_LEN(sizeof *fd))
+            memcpy(fd, CMSG_DATA(cmsg), sizeof *fd);
 
-        if (cmsg->cmsg_type != SCM_RIGHTS)
-            return false;
-
-        memcpy(fd, CMSG_DATA(cmsg), sizeof *fd);
-
-        return true;
+        bool valid = received == static_cast<ssize_t>(sizeof *connection_id) &&
+                     !(msg.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) && *fd >= 0 &&
+                     cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof *fd) &&
+                     CMSG_NXTHDR(&msg, cmsg) == NULL;
+        if (!valid && *fd >= 0) {
+            shutdown(*fd, SHUT_RDWR);
+            close(*fd);
+            *fd = -1;
+        }
+        if (!valid && received >= 0)
+            errno = EBADMSG;
+        return valid;
     }
 
 }

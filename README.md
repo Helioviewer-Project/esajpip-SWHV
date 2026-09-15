@@ -52,6 +52,12 @@ The management commands must be run from the same directory:
 ./esajpip stop
 ```
 
+`identification_time_out` limits how long a new connection may take to send a
+valid initial JPIP request. Until that request is recognized, the parent keeps
+only the socket and does not create a serving thread or allocate JPEG 2000
+state. The separate `time_out` setting applies after the connection has been
+admitted.
+
 `record` prints a sample every five seconds until interrupted. Passing a file
 name records the samples through the configured logger. `stop child` restarts
 only the serving child while leaving the listening parent running.

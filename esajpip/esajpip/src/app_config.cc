@@ -26,6 +26,7 @@ bool AppConfig::Load(const char *file_name) {
             if (logging_folder_[n - 1] != '/') logging_folder_ += '/';
         }
 
+        root["connections"].lookupValue("identification_time_out", identification_time_out_);
         root["connections"].lookupValue("time_out", com_time_out_);
         root["connections"].lookupValue("max_number", max_connections_);
 
@@ -34,7 +35,8 @@ bool AppConfig::Load(const char *file_name) {
         root["general"].lookupValue("max_chunk_size", max_chunk_size_);
 
         if (port_ <= 0 || port_ > UINT16_MAX || images_folder_.empty() ||
-            max_chunk_size_ < 128 || max_connections_ <= 0 || com_time_out_ < -1 ||
+            max_chunk_size_ < 128 || max_connections_ <= 0 || identification_time_out_ <= 0 ||
+            com_time_out_ < -1 ||
             (logging_ != 0 && logging_ != 1) ||
             (log_requests_ != 0 && log_requests_ != 1))
             return false;

@@ -23,6 +23,7 @@ private:
     string logging_folder_;    ///< Directory for the logging files
     int max_chunk_size_;        ///< Maximum chunk size
     int max_connections_;        ///< Maximum number of connections
+    int identification_time_out_; ///< Initial client identification time-out
     int com_time_out_;        ///< Connection time-out
 
 public:
@@ -38,6 +39,7 @@ public:
         logging_folder_ = "";
         max_chunk_size_ = 0;
         max_connections_ = 0;
+        identification_time_out_ = 3;
         com_time_out_ = -1;
     }
 
@@ -56,6 +58,7 @@ public:
         out << "\t\tLogging: " << cfg.logging_folder_ << endl;
         out << "\tConnections: " << endl;
         out << "\t\tMax. number: " << cfg.max_connections_ << endl;
+        out << "\t\tIdentification time-out: " << cfg.identification_time_out_ << endl;
         out << "\t\tMax. time-out: " << cfg.com_time_out() << endl;
         out << "\tGeneral:" << endl;
         out << "\t\tLogging: " << (cfg.logging_ == 1 ? "yes" : "no") << endl;
@@ -104,6 +107,10 @@ public:
      */
     int max_connections() const {
         return max_connections_;
+    }
+
+    int identification_time_out() const {
+        return identification_time_out_;
     }
 
     /**

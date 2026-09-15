@@ -10,6 +10,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <cstdint>
 #include <string>
 #include "address.h"
 
@@ -134,18 +135,18 @@ namespace net {
          * Sends a descriptor through the socket.
          * @param address Address of the socket to send the descriptor.
          * @param fd File descriptor.
-         * @param aux Auxiliary information to send attached.
+         * @param connection_id Connection identifier to send with the descriptor.
          * @return true if successful.
          */
-        bool SendDescriptor(const UnixAddress &address, int fd, int aux = 0);
+        bool SendDescriptor(const UnixAddress &address, int fd, uint64_t connection_id);
 
         /**
          * Receives a descriptor from a socket.
          * @param fd Variable to store the received descriptor.
-         * @param aux Auxiliary information received attached.
+         * @param connection_id Variable to store the attached connection identifier.
          * @return <code>true</code> if successful.
          */
-        bool ReceiveDescriptor(int *fd, int *aux = NULL);
+        bool ReceiveDescriptor(int *fd, uint64_t *connection_id);
 
         /**
           Closes the socket.

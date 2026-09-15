@@ -202,7 +202,8 @@ static const int true_val = 1;
 // static const int false_val = 0;
 static const int sndbuf_val = 524288;
 
-void RunClient(const AppConfig &cfg, int fd, int base_id) {
+void RunClient(const AppConfig &cfg, Socket &socket, uint64_t connection_id) {
+    int fd = socket;
     int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
                       // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
                       setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
@@ -216,7 +217,6 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
     }
     if (sockopt_ret != 0) {
         LOG("setsockopt failed: " << strerror(errno));
-        close(fd);
         return;
     }
 
@@ -244,9 +244,8 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
     const string head_data = header_stream.str();
     const string head_data_gzip = head_data + "Content-Encoding: gzip" + CRLF;
 
-    Socket socket(fd);
     SocketReader reader(socket);
-    string channel = to_string(base_id);
+    string channel = to_string(connection_id);
 
     int log_requests = cfg.log_requests();
     size_t buf_len = cfg.max_chunk_size();
@@ -416,6 +415,4 @@ void RunClient(const AppConfig &cfg, int fd, int base_id) {
             file_manager.ClearFiles();
         }
     }
-
-    socket.Close(); // closes fd
 }
