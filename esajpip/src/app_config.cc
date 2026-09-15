@@ -42,7 +42,7 @@ bool AppConfig::Load(const char *file_name) {
     ReadString(file, "jpip", "image_directory", &image_directory_);
     ReadInteger(file, "jpip", "chunk_size", &max_chunk_size_);
 
-    ReadInteger(file, "connections", "admission_timeout", &admission_timeout_);
+    ReadInteger(file, "connections", "initial_timeout", &initial_timeout_);
     ReadInteger(file, "connections", "timeout", &connection_timeout_);
     ReadInteger(file, "connections", "limit", &max_connections_);
 
@@ -57,7 +57,7 @@ bool AppConfig::Load(const char *file_name) {
         log_directory_ += '/';
 
     return port_ > 0 && port_ <= UINT16_MAX && !image_directory_.empty() &&
-           max_chunk_size_ >= 128 && max_connections_ > 0 && admission_timeout_ > 0 &&
+           max_chunk_size_ >= 128 && max_connections_ > 0 && initial_timeout_ > 0 &&
            connection_timeout_ >= -1 && (file_logging_ == 0 || file_logging_ == 1) &&
            (log_requests_ == 0 || log_requests_ == 1);
 }

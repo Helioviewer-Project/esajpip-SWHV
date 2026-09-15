@@ -1,7 +1,3 @@
-#ifdef _PLATFORM_LINUX
-#include <sys/prctl.h>
-#endif
-
 #include <sys/socket.h>
 #include <sys/wait.h>
 
@@ -11,8 +7,6 @@
 #include <csignal>
 #include <cstdint>
 #include <cstring>
-#include <memory>
-#include <string>
 #include <vector>
 #include "trace.h"
 #include "app_info.h"
@@ -20,8 +14,8 @@
 #include "args_parser.h"
 #include "net/poll_table.h"
 #include "net/socket.h"
-#include "server/channel.h"
-#include "server/connection_admission.h"
+#include "server/child.h"
+#include "server/initial_request.h"
 
 using namespace std;
 using namespace net;
@@ -44,32 +38,16 @@ struct Connection {
     Clock::time_point deadline;
 };
 
-struct ChannelInfo {
-    uint64_t id;
-    string channel;
-    shared_ptr<ChannelInbox> inbox;
-};
-
 static AppConfig cfg;
 static AppInfo app_info;
-static Socket child_socket;
 static PollTable poll_table;
 static vector<Connection> connections;
 static uint64_t next_connection_id = 0;
 static volatile sig_atomic_t child_lost = 0;
 static UnixAddress child_address("/tmp/child_unix_address");
 static UnixAddress father_address("/tmp/father_unix_address");
-static UnixAddress channel_address("/tmp/channel_unix_address");
 
-static int ChildProcess(const pthread_attr_t *pattr);
-static bool StartChannel(const pthread_attr_t *pattr, uint64_t id, const string &channel,
-                         const shared_ptr<ChannelInbox> &inbox);
-static void NotifyParent(uint64_t id);
-
-static void *ChannelThread(void *arg);
-
-static void SIGCHLD_handler(int signal) {
-    wait(NULL);
+static void SIGCHLD_handler(int) {
     child_lost = 1;
 }
 
@@ -161,8 +139,6 @@ int main(int argc, char **argv) {
 
     LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
 
-    signal(SIGCHLD, SIG_IGN);
-
     poll_table.Add(listen_socket, POLLIN);
 
     Socket father_socket;
@@ -177,31 +153,54 @@ int main(int argc, char **argv) {
 
     poll_table.Add(father_socket, POLLIN);
 
-    pthread_attr_t pattr;
-    int pthread_error = pthread_attr_init(&pattr);
-    if (pthread_error != 0)
-        return CERR("The channel thread attributes can not be initialized: " << strerror(pthread_error));
-    pthread_error = pthread_attr_setdetachstate(&pattr, PTHREAD_CREATE_DETACHED);
-    if (pthread_error != 0) {
-        pthread_attr_destroy(&pattr);
-        return CERR("Detached channel threads can not be configured: " << strerror(pthread_error));
-    }
+    struct sigaction child_action;
+    memset(&child_action, 0, sizeof child_action);
+    child_action.sa_handler = SIGCHLD_handler;
+    sigemptyset(&child_action.sa_mask);
+    child_action.sa_flags = SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &child_action, NULL) != 0)
+        return CERR("The child signal handler can not be installed: " << strerror(errno));
 
 father_begin:
 
-    if (!fork())
-        return ChildProcess(&pattr);
+    int parent_pipe[2];
+    if (pipe(parent_pipe) != 0)
+        return CERR("The parent lifetime pipe can not be created: " << strerror(errno));
 
-    // in father
-    signal(SIGCHLD, SIGCHLD_handler);
+    pid_t child_pid = fork();
+    if (child_pid < 0) {
+        close(parent_pipe[0]);
+        close(parent_pipe[1]);
+        return CERR("The child process can not be created: " << strerror(errno));
+    }
+    if (child_pid == 0) {
+        // The child must not inherit the only writer. Closing it before any
+        // channel threads start makes the read end track the parent's lifetime.
+        close(parent_pipe[1]);
+        listen_socket.Close();
+        father_socket.Close();
+        for (const Connection &connection : connections) {
+            if (!connection.pending)
+                shutdown(connection.fd, SHUT_RDWR);
+            close(connection.fd);
+        }
+        connections.clear();
+        return RunChild(cfg, parent_pipe[0], child_address, father_address);
+    }
+
+    // The parent keeps the sole write end. The kernel closes it on every form
+    // of parent exit, which wakes the child even when no signal can be caught.
+    close(parent_pipe[0]);
+    app_info->child_pid = child_pid;
 
     for (;;) {
+        if (child_lost)
+            break;
+
         int res = poll_table.Poll(GetPollTimeout());
 
-        if (child_lost) {
-            child_lost = 0;
-            goto father_begin;
-        }
+        if (child_lost)
+            break;
 
         if (res < 0 && errno != EINTR)
             ERROR("Connection poll failed: " << strerror(errno));
@@ -222,7 +221,7 @@ father_begin:
                                                  << " [" << static_cast<int>(new_conn) << ":" << id << "]");
                     poll_table.Add(new_conn, POLLIN | POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
                     connections.push_back({id, new_conn, true,
-                                           Clock::now() + chrono::seconds(cfg.admission_timeout())});
+                                           Clock::now() + chrono::seconds(cfg.initial_timeout())});
                     app_info->num_connections = static_cast<int>(connections.size());
                 }
             }
@@ -252,20 +251,20 @@ father_begin:
 
                 uint64_t id = connection->id;
                 if (connection->pending && (events & POLLIN)) {
-                    Admission admission = CheckAdmission(fd);
-                    if (admission.result == ADMISSION_REJECTED) {
+                    InitialRequest request = InspectInitialRequest(fd);
+                    if (request.state == REQUEST_REJECTED) {
                         CloseConnection(id, "not a JPIP client");
                         continue;
                     }
-                    if (admission.result == ADMISSION_ACCEPTED) {
+                    if (request.state == REQUEST_ACCEPTED) {
                         if (!father_socket.SendDescriptor(child_address, fd, id)) {
-                            ERROR("The admitted socket can not be sent to the child process: " << strerror(errno));
+                            ERROR("The JPIP socket can not be sent to the child process: " << strerror(errno));
                             CloseConnection(id, "dispatch failed");
                             continue;
                         }
                         connection->pending = false;
                         poll_table[i].events = POLLRDHUP | POLLERR | POLLHUP | POLLNVAL;
-                        LOG("JPIP connection admitted [" << fd << ":" << id << "]");
+                        LOG("JPIP connection identified [" << fd << ":" << id << "]");
                     }
                 }
                 if (events & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL)) {
@@ -279,171 +278,8 @@ father_begin:
         ExpirePendingConnections();
     }
 
-    pthread_attr_destroy(&pattr);
-
-    listen_socket.Close();
-    return 0;
-}
-
-static int ChildProcess(const pthread_attr_t *pattr) {
-    app_info->child_pid = getpid();
-
-    signal(SIGPIPE, SIG_IGN);
-
-#ifdef _PLATFORM_LINUX
-    prctl(PR_SET_PDEATHSIG, SIGHUP);
-#endif
-
-    LOG("Child process created (PID = " << getpid() << ")");
-
-    if (!child_socket.OpenUnix(SOCK_DGRAM)) {
-        ERROR("The child unix socket can not be created");
-        return -1;
-    }
-    if (!child_socket.BindTo(child_address.Reset())) {
-        ERROR("The child unix socket can not be bound");
-        return -1;
-    }
-
-    Socket channel_socket;
-    if (!channel_socket.OpenUnix(SOCK_DGRAM)) {
-        ERROR("The channel notification socket can not be created");
-        return -1;
-    }
-    if (!channel_socket.BindTo(channel_address.Reset())) {
-        ERROR("The channel notification socket can not be bound");
-        return -1;
-    }
-
-    for (const Connection &connection : connections) {
-        if (!connection.pending)
-            shutdown(connection.fd, SHUT_RDWR);
-        close(connection.fd);
-    }
-    connections.clear();
-
-    vector<ChannelInfo> channels;
-    for (;;) {
-        pollfd fds[] = {
-            {child_socket, POLLIN, 0},
-            {channel_socket, POLLIN, 0}
-        };
-        int result;
-        do {
-            result = poll(fds, 2, -1);
-        } while (result < 0 && errno == EINTR);
-        if (result < 0) {
-            ERROR("The child dispatcher poll failed: " << strerror(errno));
-            return -1;
-        }
-
-        if (fds[1].revents & POLLIN) {
-            uint64_t id;
-            if (channel_socket.Receive(&id, sizeof id) == sizeof id) {
-                vector<ChannelInfo>::iterator channel =
-                        find_if(channels.begin(), channels.end(), [id](const ChannelInfo &route) {
-                            return route.id == id;
-                        });
-                if (channel != channels.end()) {
-                    LOG("The channel " << channel->channel << " has ended");
-                    channels.erase(channel);
-                }
-            } else {
-                ERROR("Could not receive the completed channel identifier");
-            }
-        }
-
-        if (!(fds[0].revents & POLLIN))
-            continue;
-
-        int fd;
-        uint64_t connection_id;
-        if (!child_socket.ReceiveDescriptor(&fd, &connection_id)) {
-            ERROR("The admitted socket can not be received by the child process: " << strerror(errno));
-            continue;
-        }
-
-        Admission admission = CheckAdmission(fd);
-        if (admission.result != ADMISSION_ACCEPTED) {
-            LOG("The admitted connection [" << connection_id << "] has no routable request");
-        } else if (admission.new_channel) {
-            channels.erase(remove_if(channels.begin(), channels.end(), [](ChannelInfo &route) {
-                return route.inbox->IsClosed();
-            }), channels.end());
-            if (channels.size() >= static_cast<size_t>(cfg.max_connections())) {
-                LOG("A new channel was refused because the limit has been reached");
-            } else {
-                string channel = to_string(connection_id);
-                shared_ptr<ChannelInbox> inbox = make_shared<ChannelInbox>();
-                if (!inbox->IsValid()) {
-                    ERROR("The channel inbox can not be created");
-                } else if (!inbox->Push({connection_id, fd})) {
-                    ERROR("The initial channel connection can not be queued");
-                } else if (StartChannel(pattr, connection_id, channel, inbox)) {
-                    channels.push_back({connection_id, channel, inbox});
-                    LOG("Creating channel " << channel << " for connection [" << connection_id << "]");
-                    continue;
-                }
-            }
-        } else {
-            vector<ChannelInfo>::iterator channel =
-                    find_if(channels.begin(), channels.end(), [&admission](const ChannelInfo &route) {
-                        return route.channel == admission.channel;
-                    });
-            if (channel == channels.end()) {
-                LOG("The connection [" << connection_id << "] references unknown channel "
-                    << admission.channel);
-            } else if (channel->inbox->Push({connection_id, fd})) {
-                continue;
-            } else if (channel->inbox->IsClosed()) {
-                channels.erase(channel);
-            }
-        }
-
-        shutdown(fd, SHUT_RDWR);
-        close(fd);
-        NotifyParent(connection_id);
-    }
-
-    return 0;
-}
-
-static void NotifyParent(uint64_t id) {
-    if (child_socket.SendTo(father_address, &id, sizeof id) == sizeof id)
-        return;
-    ERROR("The completed connection [" << id << "] could not notify the parent");
-}
-
-static bool StartChannel(const pthread_attr_t *pattr, uint64_t id, const string &channel,
-                         const shared_ptr<ChannelInbox> &inbox) {
-    ChannelInfo *channel_info = new ChannelInfo{id, channel, inbox};
-    pthread_t service_tid;
-    int pthread_error = pthread_create(&service_tid, pattr, ChannelThread, channel_info);
-    if (pthread_error == 0)
-        return true;
-
-    ERROR("A thread for channel " << channel << " can not be created: "
-          << strerror(pthread_error));
-    delete channel_info;
-    return false;
-}
-
-static void *ChannelThread(void *arg) {
-    ChannelInfo *channel_info = static_cast<ChannelInfo *>(arg);
-    uint64_t id = channel_info->id;
-    string channel = channel_info->channel;
-    shared_ptr<ChannelInbox> inbox = channel_info->inbox;
-    delete channel_info;
-
-    RunChannel(cfg, channel, inbox, NotifyParent);
-
-    Socket socket;
-    if (socket.OpenUnix(SOCK_DGRAM)) {
-        if (socket.SendTo(channel_address, &id, sizeof id) != sizeof id)
-            ERROR("The completed channel " << channel << " could not notify the dispatcher");
-        socket.Close();
-    } else {
-        ERROR("A notification socket for channel " << channel << " can not be created");
-    }
-    return NULL;
+    child_lost = 0;
+    close(parent_pipe[1]);
+    waitpid(child_pid, NULL, 0);
+    goto father_begin;
 }

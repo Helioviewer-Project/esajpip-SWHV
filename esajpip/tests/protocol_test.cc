@@ -11,8 +11,8 @@
 #include <unistd.h>
 
 #include "app_config.h"
-#include "server/channel_inbox.h"
-#include "server/connection_admission.h"
+#include "server/connection_queue.h"
+#include "server/initial_request.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
@@ -68,7 +68,7 @@ static void CheckAppConfig() {
         "[connections]\n"
         "limit = 250\n"
         "timeout = 60\n"
-        "admission_timeout = 4\n";
+        "initial_timeout = 4\n";
 
     AppConfig config;
     Check(LoadConfig(contents, &config), "Could not parse INI configuration");
@@ -78,7 +78,7 @@ static void CheckAppConfig() {
     Check(config.log_directory() == "/var/log/esajpip/", "Wrong configured log directory");
     Check(config.max_chunk_size() == 4096, "Wrong configured chunk size");
     Check(config.max_connections() == 250, "Wrong configured connection limit");
-    Check(config.admission_timeout() == 4, "Wrong configured admission timeout");
+    Check(config.initial_timeout() == 4, "Wrong configured initial timeout");
     Check(config.connection_timeout() == 60, "Wrong configured connection timeout");
     Check(config.file_logging() && !config.log_requests(), "Wrong configured logging flags");
 
@@ -93,7 +93,7 @@ static void CheckAppConfig() {
         "[logging]\n";
     AppConfig defaults;
     Check(LoadConfig(minimal, &defaults), "Could not apply configuration defaults");
-    Check(defaults.admission_timeout() == 3 && defaults.connection_timeout() == -1,
+    Check(defaults.initial_timeout() == 3 && defaults.connection_timeout() == -1,
           "Wrong configuration defaults");
 
     AppConfig missing_group;
@@ -104,63 +104,63 @@ static void CheckAppConfig() {
     Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
 }
 
-static Admission Admit(const char *request) {
+static InitialRequest Inspect(const char *request) {
     int sockets[2];
     Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create admission test sockets");
+          "Could not create initial-request test sockets");
     if (request)
         Check(write(sockets[0], request, strlen(request)) == static_cast<ssize_t>(strlen(request)),
-              "Could not write admission test request");
+              "Could not write initial test request");
 
-    Admission result = CheckAdmission(sockets[1]);
+    InitialRequest result = InspectInitialRequest(sockets[1]);
     close(sockets[0]);
     close(sockets[1]);
     return result;
 }
 
-static void CheckClientAdmission() {
-    Check(Admit(NULL).result == ADMISSION_PENDING, "Rejected an idle connection before its deadline");
-    Check(Admit("G").result == ADMISSION_PENDING, "Rejected a partial GET method");
-    Check(Admit("POST").result == ADMISSION_REJECTED, "Accepted a non-GET method");
-    Check(Admit("GET /movie.jpx?cnew=http HTTP/1.1\r\n").result == ADMISSION_ACCEPTED,
+static void CheckInitialRequest() {
+    Check(Inspect(NULL).state == REQUEST_PENDING, "Rejected an idle connection before its deadline");
+    Check(Inspect("G").state == REQUEST_PENDING, "Rejected a partial GET method");
+    Check(Inspect("POST").state == REQUEST_REJECTED, "Accepted a non-GET method");
+    Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1\r\n").state == REQUEST_ACCEPTED,
           "Rejected a JHV channel request");
-    Check(Admit("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").result == ADMISSION_ACCEPTED,
+    Check(Inspect("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").state == REQUEST_ACCEPTED,
           "Rejected a target-form JPIP channel request");
-    Check(Admit("GET /movie.jpx?xcnew=http HTTP/1.1\r\n").result == ADMISSION_REJECTED,
+    Check(Inspect("GET /movie.jpx?xcnew=http HTTP/1.1\r\n").state == REQUEST_REJECTED,
           "Accepted a request without a cnew parameter");
-    Check(Admit("GET /movie.jpx?cnew=http HTTP/2\r\n").result == ADMISSION_REJECTED,
+    Check(Inspect("GET /movie.jpx?cnew=http HTTP/2\r\n").state == REQUEST_REJECTED,
           "Accepted an unsupported HTTP version");
 
-    Admission request = Admit("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
-    Check(request.result == ADMISSION_ACCEPTED && !request.new_channel && request.channel == "47",
+    InitialRequest request = Inspect("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
+    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == "47",
           "Could not route an existing channel request");
 
-    Admission close = Admit("GET /jpip?cclose=47 HTTP/1.1\r\n");
-    Check(close.result == ADMISSION_ACCEPTED && !close.new_channel && close.channel == "47",
+    InitialRequest close = Inspect("GET /jpip?cclose=47 HTTP/1.1\r\n");
+    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == "47",
           "Could not route a channel close request");
 
-    Admission close_all = Admit("GET /jpip?cid=47&cclose=* HTTP/1.1\r\n");
-    Check(close_all.result == ADMISSION_ACCEPTED && close_all.channel == "47",
+    InitialRequest close_all = Inspect("GET /jpip?cid=47&cclose=* HTTP/1.1\r\n");
+    Check(close_all.state == REQUEST_ACCEPTED && close_all.channel == "47",
           "Could not route an all-channel close request");
 }
 
-static void CheckChannelInbox() {
-    ChannelInbox inbox;
-    Check(inbox.IsValid(), "Could not create a channel inbox");
-    Check(inbox.Push({3, 7}), "Could not queue a channel connection");
-    Check(!inbox.Push({4, 8}), "Queued concurrent channel connections");
+static void CheckConnectionQueue() {
+    ConnectionQueue queue;
+    Check(queue.IsValid(), "Could not create a connection queue");
+    Check(queue.Push({3, 7}), "Could not queue a channel connection");
+    Check(!queue.Push({4, 8}), "Queued concurrent channel connections");
     ChannelConnection connection;
-    Check(inbox.Pop(&connection), "Could not retrieve a channel connection");
+    Check(queue.Pop(&connection), "Could not retrieve a channel connection");
     Check(connection.id == 3 && connection.fd == 7, "Retrieved the wrong channel connection");
-    Check(!inbox.Pop(&connection), "Retrieved a channel connection twice");
+    Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
 
-    Check(inbox.Push({5, 9}), "Could not queue a channel connection before closing");
+    Check(queue.Push({5, 9}), "Could not queue a channel connection before closing");
     ChannelConnection pending;
-    Check(inbox.Close(pending), "Channel inbox lost its pending connection on close");
-    Check(inbox.IsClosed(), "Channel inbox remained open");
+    Check(queue.Close(pending), "Connection queue lost its pending connection on close");
+    Check(queue.IsClosed(), "Connection queue remained open");
     Check(pending.id == 5 && pending.fd == 9,
-          "Channel inbox did not return its pending connection");
-    Check(!inbox.Push({6, 10}), "Channel inbox accepted a connection after closing");
+          "Connection queue did not return its pending connection");
+    Check(!queue.Push({6, 10}), "Connection queue accepted a connection after closing");
 }
 
 static void CheckJHVRequests() {
@@ -565,8 +565,8 @@ static void CheckMetadataPlaceHolder() {
 
 int main() {
     CheckAppConfig();
-    CheckClientAdmission();
-    CheckChannelInbox();
+    CheckInitialRequest();
+    CheckConnectionQueue();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

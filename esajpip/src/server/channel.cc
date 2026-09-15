@@ -234,7 +234,7 @@ class Channel {
 private:
     const AppConfig &cfg;
     const string id;
-    const shared_ptr<ChannelInbox> inbox;
+    const shared_ptr<ConnectionQueue> queue;
     const ConnectionClosed connection_closed;
     DataBinServer data_server;
     FileManager file_manager;
@@ -268,7 +268,7 @@ private:
 
         pollfd fds[] = {
             {socket, POLLIN | POLLERR | POLLHUP | POLLNVAL, 0},
-            {inbox->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0}
+            {queue->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0}
         };
         int result;
         do {
@@ -468,7 +468,7 @@ private:
     }
 
     bool WaitForConnection(ChannelConnection *connection) {
-        pollfd fd = {inbox->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0};
+        pollfd fd = {queue->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0};
         int result;
         do {
             result = poll(&fd, 1, TimeoutMilliseconds(cfg.connection_timeout()));
@@ -485,7 +485,7 @@ private:
             LOG("The channel " << id << " handoff failed");
             return false;
         }
-        return inbox->Pop(connection);
+        return queue->Pop(connection);
     }
 
     void CloseConnection(Socket &socket, uint64_t connection_id) {
@@ -496,9 +496,9 @@ private:
 
 public:
     Channel(const AppConfig &_cfg, const string &_id,
-            const shared_ptr<ChannelInbox> &_inbox,
+            const shared_ptr<ConnectionQueue> &_queue,
             ConnectionClosed _connection_closed)
-        : cfg(_cfg), id(_id), inbox(_inbox), connection_closed(_connection_closed),
+        : cfg(_cfg), id(_id), queue(_queue), connection_closed(_connection_closed),
           buf(_cfg.max_chunk_size()) {
         ostringstream header_stream;
         header_stream << "Access-Control-Allow-Origin: " << CORS << CRLF
@@ -525,7 +525,7 @@ public:
         }
 
         ChannelConnection pending;
-        if (inbox->Close(pending)) {
+        if (queue->Close(pending)) {
             Socket socket(pending.fd);
             CloseConnection(socket, pending.id);
         }
@@ -533,7 +533,7 @@ public:
 };
 
 void RunChannel(const AppConfig &cfg, const string &channel,
-                const shared_ptr<ChannelInbox> &inbox,
+                const shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed) {
-    Channel(cfg, channel, inbox, connection_closed).Run();
+    Channel(cfg, channel, queue, connection_closed).Run();
 }

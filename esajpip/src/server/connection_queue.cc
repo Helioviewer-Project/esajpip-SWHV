@@ -1,11 +1,11 @@
 #include <cerrno>
 #include <sys/socket.h>
 #include <unistd.h>
-#include "channel_inbox.h"
+#include "connection_queue.h"
 
 using namespace std;
 
-ChannelInbox::ChannelInbox() : wake_socket{-1, -1}, pending(false), closed(false) {
+ConnectionQueue::ConnectionQueue() : wake_socket{-1, -1}, pending(false), closed(false) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0) {
         wake_socket[0] = sockets[0];
@@ -13,27 +13,27 @@ ChannelInbox::ChannelInbox() : wake_socket{-1, -1}, pending(false), closed(false
     }
 }
 
-ChannelInbox::~ChannelInbox() {
+ConnectionQueue::~ConnectionQueue() {
     if (wake_socket[0] >= 0)
         close(wake_socket[0]);
     if (wake_socket[1] >= 0)
         close(wake_socket[1]);
 }
 
-bool ChannelInbox::IsValid() const {
+bool ConnectionQueue::IsValid() const {
     return wake_socket[0] >= 0;
 }
 
-bool ChannelInbox::IsClosed() {
+bool ConnectionQueue::IsClosed() {
     lock_guard<std::mutex> lock(mutex);
     return closed;
 }
 
-int ChannelInbox::GetDescriptor() const {
+int ConnectionQueue::GetDescriptor() const {
     return wake_socket[0];
 }
 
-bool ChannelInbox::Push(const ChannelConnection &connection) {
+bool ConnectionQueue::Push(const ChannelConnection &connection) {
     lock_guard<std::mutex> lock(mutex);
     if (closed || pending || wake_socket[1] < 0)
         return false;
@@ -51,7 +51,7 @@ bool ChannelInbox::Push(const ChannelConnection &connection) {
     return false;
 }
 
-bool ChannelInbox::Pop(ChannelConnection *connection) {
+bool ConnectionQueue::Pop(ChannelConnection *connection) {
     lock_guard<std::mutex> lock(mutex);
     // Drain under the lock so Push cannot leave a
     // pending connection without a corresponding wake-up.
@@ -63,7 +63,7 @@ bool ChannelInbox::Pop(ChannelConnection *connection) {
     return true;
 }
 
-void ChannelInbox::Drain() {
+void ConnectionQueue::Drain() {
     char byte;
     ssize_t received;
     do {
@@ -71,7 +71,7 @@ void ChannelInbox::Drain() {
     } while (received < 0 && errno == EINTR);
 }
 
-bool ChannelInbox::Close(ChannelConnection &connection) {
+bool ConnectionQueue::Close(ChannelConnection &connection) {
     lock_guard<std::mutex> lock(mutex);
     closed = true;
     if (!pending)

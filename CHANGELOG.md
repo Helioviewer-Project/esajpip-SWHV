@@ -36,6 +36,8 @@
   file descriptor numbers.
 - Expire inactive JPIP channels whether or not an HTTP connection remains
   attached.
+- Stop the serving child when the listening parent exits on any supported
+  platform.
 - Fix mapped-file cleanup, address resolution, client-thread failure handling,
   platform-specific alignment, and macOS system queries.
 

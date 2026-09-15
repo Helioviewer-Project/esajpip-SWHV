@@ -23,7 +23,7 @@ private:
     string log_directory_;    ///< Directory for log files
     int max_chunk_size_;        ///< Maximum chunk size
     int max_connections_;        ///< Maximum number of connections
-    int admission_timeout_; ///< Initial client admission timeout
+    int initial_timeout_; ///< Initial request timeout
     int connection_timeout_;        ///< Connection timeout
 
 public:
@@ -39,7 +39,7 @@ public:
         log_directory_ = "";
         max_chunk_size_ = 0;
         max_connections_ = 0;
-        admission_timeout_ = 3;
+        initial_timeout_ = 3;
         connection_timeout_ = -1;
     }
 
@@ -58,7 +58,7 @@ public:
         out << "\t\tLogging: " << cfg.log_directory_ << endl;
         out << "\tConnections: " << endl;
         out << "\t\tLimit: " << cfg.max_connections_ << endl;
-        out << "\t\tAdmission timeout: " << cfg.admission_timeout_ << endl;
+        out << "\t\tInitial timeout: " << cfg.initial_timeout_ << endl;
         out << "\t\tTimeout: " << cfg.connection_timeout() << endl;
         out << "\tGeneral:" << endl;
         out << "\t\tFile: " << (cfg.file_logging_ == 1 ? "yes" : "no") << endl;
@@ -109,8 +109,8 @@ public:
         return max_connections_;
     }
 
-    int admission_timeout() const {
-        return admission_timeout_;
+    int initial_timeout() const {
+        return initial_timeout_;
     }
 
     /**

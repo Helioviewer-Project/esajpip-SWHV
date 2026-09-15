@@ -1,5 +1,5 @@
-#ifndef _CHANNEL_INBOX_H_
-#define _CHANNEL_INBOX_H_
+#ifndef _CONNECTION_QUEUE_H_
+#define _CONNECTION_QUEUE_H_
 
 #include <cstdint>
 #include <mutex>
@@ -9,7 +9,7 @@ struct ChannelConnection {
     int fd;
 };
 
-class ChannelInbox {
+class ConnectionQueue {
 private:
     int wake_socket[2];
     std::mutex mutex;
@@ -20,8 +20,8 @@ private:
     void Drain();
 
 public:
-    ChannelInbox();
-    ~ChannelInbox();
+    ConnectionQueue();
+    ~ConnectionQueue();
 
     bool IsValid() const;
     bool IsClosed();
@@ -30,8 +30,8 @@ public:
     bool Pop(ChannelConnection *connection);
     bool Close(ChannelConnection &connection);
 
-    ChannelInbox(const ChannelInbox &) = delete;
-    ChannelInbox &operator=(const ChannelInbox &) = delete;
+    ConnectionQueue(const ConnectionQueue &) = delete;
+    ConnectionQueue &operator=(const ConnectionQueue &) = delete;
 };
 
-#endif /* _CHANNEL_INBOX_H_ */
+#endif /* _CONNECTION_QUEUE_H_ */

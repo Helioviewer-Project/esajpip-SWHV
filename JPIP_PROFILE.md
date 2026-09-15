@@ -14,17 +14,17 @@ compatibility. Acceptance alone does not indicate support.
 
 | Area | Support | Behavior and reason |
 | --- | --- | --- |
-| HTTP | Reduced | HTTP/1.0 and HTTP/1.1 `GET` requests are accepted. Responses use HTTP/1.1 chunked transfer encoding. Admission rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
+| HTTP | Reduced | HTTP/1.0 and HTTP/1.1 `GET` requests are accepted. Responses use HTTP/1.1 chunked transfer encoding. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
 | Return type | JPP-stream only | Successful image responses use `image/jpp-stream`. JPT-stream, complete-file return types, and return-type negotiation are not implemented because JHelioviewer consumes precinct-based JPP-streams. |
 | Transport | HTTP only | `JPIP-cnew` advertises `transport=http`. Auxiliary TCP, UDP, and upload transports are not implemented. |
 | Sessions and channels | Stateful, reduced | `cnew`, `cid`, and `cclose` are supported. One channel owns one target and processes one request and response at a time. This matches JHelioviewer's access pattern and keeps cache and JPEG 2000 ownership explicit. |
 | HTTP connection reuse | Supported | A channel normally remains on a persistent connection, but a later request for its `cid` may arrive on a new connection. At most one replacement connection may wait. JPIP sessions are therefore not incorrectly identified with individual HTTP connections. |
-| Stateless requests | Not supported | Admission requires `cnew`, `cid` or a routable `cclose`. Keeping all cache and image state in one channel thread is the deliberately supported model. |
+| Stateless requests | Not supported | Initial inspection requires `cnew`, `cid`, or a usable `cclose`. Keeping all cache and image state in one channel thread is the deliberately supported model. |
 | Concurrent requests | Not supported | Responses are not preempted by a newer request and requests are not served concurrently within a channel. `qid`, `wait`, and window-change cancellation are not implemented. Serial service avoids shared JPEG 2000 state and is compatible with JHelioviewer. |
 | Compression | Reduced | If a request contains `metareq` and `Accept-Encoding` contains `gzip`, the JPP response is gzip encoded. Other content codings and general HTTP content negotiation are not implemented. |
 | Errors | Reduced | Valid requests receive `200`. Request and serving failures generally receive `500` and terminate the channel. The server does not implement the complete JPIP status and correction-header model. Termination is safer than retaining a cache model after an incomplete response. |
 
-Admission examines at most a 2 KiB request line. The JPIP parser uses at most
+Initial inspection examines at most a 2 KiB request line. The JPIP parser uses at most
 the first 1,023 characters of the URI. Request paths and `target` values are not
 subject to general URI decoding, so clients should use the literal file names
 known to the server.
@@ -155,13 +155,14 @@ The profile above was checked in both directions against the current source:
 
 | Source area | Externally visible behavior covered here |
 | --- | --- |
-| `server/connection_admission.cc` | Accepted method and HTTP versions, plus bounded `cnew`, `cid`, and `cclose` admission |
+| `server/initial_request.cc` | Accepted method and HTTP versions, plus bounded `cnew`, `cid`, and `cclose` inspection |
+| `server/child.cc` and `server/connection_queue.cc` | Channel selection and serialized replacement connections |
 | `server/channel.cc` | Channel lifecycle, request serialization, response headers, chunking, gzip, errors, and timeouts |
 | `jpip/request.cc` | Recognized fields, reduced grammars, ignored fields, and cache-model descriptors |
 | `jpip/databin_server.cc` and `jpip/databin_writer.cc` | Cache updates, response length, emitted data-bin classes, message headers, and EOR reasons |
 | `jpeg2000/file_manager.cc` | Accepted extensions, boxes, links, markers, PLT requirement, and rejected source structures |
 | `jpeg2000/coding_parameters.h` | Progression-order indexing and precinct data-bin identifiers |
-| `tests/protocol_test.cc` | JHelioviewer request forms, admission, headers, cache descriptors, and message encoding |
+| `tests/protocol_test.cc` | JHelioviewer request forms, initial inspection, headers, cache descriptors, and message encoding |
 | `tests/jpeg2000_test.cc` | JP2, embedded JPX, linked JPX, progression orders, and malformed-input rejection |
 
 Conversely, the profile covers every request field parsed by `Request`, every

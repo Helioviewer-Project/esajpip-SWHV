@@ -4,7 +4,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstring>
-#include "connection_admission.h"
+#include "initial_request.h"
 
 using namespace std;
 
@@ -29,7 +29,7 @@ static bool GetParameter(const char *begin, const char *end, const char *name,
     return false;
 }
 
-Admission CheckAdmission(int fd) {
+InitialRequest InspectInitialRequest(int fd) {
     char line[MAX_REQUEST_LINE];
     ssize_t length;
     do {
@@ -37,37 +37,37 @@ Admission CheckAdmission(int fd) {
     } while (length < 0 && errno == EINTR);
 
     if (length < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return {ADMISSION_PENDING, false, ""};
+        return {REQUEST_PENDING, false, ""};
     if (length <= 0)
-        return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, ""};
 
     static const char method[] = "GET ";
     size_t prefix_length = min(static_cast<size_t>(length), sizeof method - 1);
     if (memcmp(line, method, prefix_length) != 0)
-        return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, ""};
     if (static_cast<size_t>(length) < sizeof method - 1)
-        return {ADMISSION_PENDING, false, ""};
+        return {REQUEST_PENDING, false, ""};
 
     const char *newline = static_cast<const char *>(memchr(line, '\n', length));
     if (newline == NULL)
-        return {static_cast<size_t>(length) == sizeof line ? ADMISSION_REJECTED : ADMISSION_PENDING,
+        return {static_cast<size_t>(length) == sizeof line ? REQUEST_REJECTED : REQUEST_PENDING,
                 false, ""};
 
     const char *uri = line + sizeof method - 1;
     const char *uri_end = static_cast<const char *>(memchr(uri, ' ', newline - uri));
     if (!uri_end)
-        return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, ""};
 
     const char *protocol = uri_end;
     while (protocol < newline && *protocol == ' ')
         ++protocol;
     if (newline - protocol < 8 ||
         (memcmp(protocol, "HTTP/1.0", 8) != 0 && memcmp(protocol, "HTTP/1.1", 8) != 0))
-        return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, ""};
 
     const char *query = static_cast<const char *>(memchr(uri, '?', uri_end - uri));
     if (!query)
-        return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, ""};
 
     string cid;
     string cclose;
@@ -80,12 +80,12 @@ Admission CheckAdmission(int fd) {
         if (cclose == "*" && has_cid)
             cclose = cid;
         return cclose.empty() || cclose == "*"
-                   ? Admission{ADMISSION_REJECTED, false, ""}
-                   : Admission{ADMISSION_ACCEPTED, false, cclose};
+                   ? InitialRequest{REQUEST_REJECTED, false, ""}
+                   : InitialRequest{REQUEST_ACCEPTED, false, cclose};
     }
     if (has_new)
-        return {ADMISSION_ACCEPTED, true, ""};
+        return {REQUEST_ACCEPTED, true, ""};
     if (has_cid && !cid.empty())
-        return {ADMISSION_ACCEPTED, false, cid};
-    return {ADMISSION_REJECTED, false, ""};
+        return {REQUEST_ACCEPTED, false, cid};
+    return {REQUEST_REJECTED, false, ""};
 }

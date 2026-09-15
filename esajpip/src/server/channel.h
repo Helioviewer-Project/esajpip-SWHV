@@ -5,12 +5,12 @@
 #include <memory>
 #include <string>
 #include "app_config.h"
-#include "channel_inbox.h"
+#include "connection_queue.h"
 
 typedef void (*ConnectionClosed)(uint64_t connection_id);
 
 void RunChannel(const AppConfig &cfg, const std::string &channel,
-                const std::shared_ptr<ChannelInbox> &inbox,
+                const std::shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed);
 
 #endif /* _CHANNEL_H_ */
