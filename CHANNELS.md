@@ -15,9 +15,9 @@ The responsibilities are separated as follows:
 | Source | Responsibility |
 | --- | --- |
 | `esa_jpip_server.cc` | Listening parent, serving child, descriptor transfer, channel routing and process recovery |
-| `connection_admission.cc` | Bounded recognition of a new socket as `cnew`, `cid` or `cclose` traffic |
-| `channel_inbox.cc` | Capacity-one connection handoff from the child dispatcher to one channel thread |
-| `channel.cc` | HTTP request handling and all state retained for one JPIP channel |
+| `server/connection_admission.cc` | Bounded recognition of a new socket as `cnew`, `cid` or `cclose` traffic |
+| `server/channel_inbox.cc` | Capacity-one connection handoff from the child dispatcher to one channel thread |
+| `server/channel.cc` | HTTP request handling and all state retained for one JPIP channel |
 
 ## Ownership
 
@@ -64,8 +64,8 @@ parsed request state between processes.
 
 ## Channel creation and reuse
 
-For `cnew`, the child creates a channel ID, a capacity-one inbox and one detached
-channel thread. The first connection is handed to that thread. The response
+For `cnew`, the child creates a channel ID and a capacity-one inbox, queues the
+first connection, and then starts one detached channel thread. The response
 advertises `transport=http`, returns the channel ID, and serves the first JPIP
 request on the same connection.
 

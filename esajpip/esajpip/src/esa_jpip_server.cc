@@ -18,10 +18,10 @@
 #include "app_info.h"
 #include "app_config.h"
 #include "args_parser.h"
-#include "connection_admission.h"
-#include "channel.h"
 #include "net/poll_table.h"
 #include "net/socket.h"
+#include "server/channel.h"
+#include "server/connection_admission.h"
 
 using namespace std;
 using namespace net;
@@ -45,12 +45,6 @@ struct Connection {
 };
 
 struct ChannelInfo {
-    uint64_t id;
-    string channel;
-    shared_ptr<ChannelInbox> inbox;
-};
-
-struct ChannelRoute {
     uint64_t id;
     string channel;
     shared_ptr<ChannelInbox> inbox;
@@ -329,7 +323,7 @@ static int ChildProcess(const pthread_attr_t *pattr) {
     }
     connections.clear();
 
-    vector<ChannelRoute> channels;
+    vector<ChannelInfo> channels;
     for (;;) {
         pollfd fds[] = {
             {child_socket, POLLIN, 0},
@@ -347,8 +341,8 @@ static int ChildProcess(const pthread_attr_t *pattr) {
         if (fds[1].revents & POLLIN) {
             uint64_t id;
             if (channel_socket.Receive(&id, sizeof id) == sizeof id) {
-                vector<ChannelRoute>::iterator channel =
-                        find_if(channels.begin(), channels.end(), [id](const ChannelRoute &route) {
+                vector<ChannelInfo>::iterator channel =
+                        find_if(channels.begin(), channels.end(), [id](const ChannelInfo &route) {
                             return route.id == id;
                         });
                 if (channel != channels.end()) {
@@ -371,50 +365,40 @@ static int ChildProcess(const pthread_attr_t *pattr) {
         }
 
         Admission admission = CheckAdmission(fd);
-        shared_ptr<ChannelInbox> inbox;
-        bool channel_started = false;
         if (admission.result != ADMISSION_ACCEPTED) {
             LOG("The admitted connection [" << connection_id << "] has no routable request");
         } else if (admission.new_channel) {
-            channels.erase(remove_if(channels.begin(), channels.end(), [](ChannelRoute &route) {
+            channels.erase(remove_if(channels.begin(), channels.end(), [](ChannelInfo &route) {
                 return route.inbox->IsClosed();
             }), channels.end());
             if (channels.size() >= static_cast<size_t>(cfg.max_connections())) {
                 LOG("A new channel was refused because the limit has been reached");
             } else {
                 string channel = to_string(connection_id);
-                inbox = make_shared<ChannelInbox>();
+                shared_ptr<ChannelInbox> inbox = make_shared<ChannelInbox>();
                 if (!inbox->IsValid()) {
                     ERROR("The channel inbox can not be created");
-                } else if (!StartChannel(pattr, connection_id, channel, inbox)) {
-                    inbox.reset();
-                } else {
+                } else if (!inbox->Push({connection_id, fd})) {
+                    ERROR("The initial channel connection can not be queued");
+                } else if (StartChannel(pattr, connection_id, channel, inbox)) {
                     channels.push_back({connection_id, channel, inbox});
-                    channel_started = true;
                     LOG("Creating channel " << channel << " for connection [" << connection_id << "]");
+                    continue;
                 }
             }
         } else {
-            vector<ChannelRoute>::iterator channel =
-                    find_if(channels.begin(), channels.end(), [&admission](const ChannelRoute &route) {
+            vector<ChannelInfo>::iterator channel =
+                    find_if(channels.begin(), channels.end(), [&admission](const ChannelInfo &route) {
                         return route.channel == admission.channel;
                     });
-            if (channel != channels.end())
-                inbox = channel->inbox;
-            else
+            if (channel == channels.end()) {
                 LOG("The connection [" << connection_id << "] references unknown channel "
                     << admission.channel);
-        }
-
-        if (inbox && inbox->Push({connection_id, fd}))
-            continue;
-
-        if (channel_started) {
-            inbox->Close(NULL);
-        } else if (inbox && inbox->IsClosed()) {
-            channels.erase(remove_if(channels.begin(), channels.end(), [&inbox](const ChannelRoute &route) {
-                return route.inbox == inbox;
-            }), channels.end());
+            } else if (channel->inbox->Push({connection_id, fd})) {
+                continue;
+            } else if (channel->inbox->IsClosed()) {
+                channels.erase(channel);
+            }
         }
 
         shutdown(fd, SHUT_RDWR);

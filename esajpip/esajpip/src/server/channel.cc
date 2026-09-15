@@ -525,7 +525,7 @@ public:
         }
 
         ChannelConnection pending;
-        if (inbox->Close(&pending)) {
+        if (inbox->Close(pending)) {
             Socket socket(pending.fd);
             CloseConnection(socket, pending.id);
         }

@@ -71,21 +71,13 @@ void ChannelInbox::Drain() {
     } while (received < 0 && errno == EINTR);
 }
 
-bool ChannelInbox::Close(ChannelConnection *connection) {
+bool ChannelInbox::Close(ChannelConnection &connection) {
     lock_guard<std::mutex> lock(mutex);
-    bool was_closed = closed;
     closed = true;
-    bool had_pending = pending;
-    if (pending && connection)
-        *connection = this->connection;
-    pending = false;
+    if (!pending)
+        return false;
 
-    if (!was_closed && wake_socket[1] >= 0) {
-        char byte = 0;
-        ssize_t sent;
-        do {
-            sent = send(wake_socket[1], &byte, 1, MSG_DONTWAIT);
-        } while (sent < 0 && errno == EINTR);
-    }
-    return had_pending;
+    connection = this->connection;
+    pending = false;
+    return true;
 }

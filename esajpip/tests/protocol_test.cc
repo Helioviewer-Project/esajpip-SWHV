@@ -10,8 +10,8 @@
 #include <vector>
 #include <unistd.h>
 
-#include "connection_admission.h"
-#include "channel_inbox.h"
+#include "server/channel_inbox.h"
+#include "server/connection_admission.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
@@ -85,7 +85,7 @@ static void CheckChannelInbox() {
 
     Check(inbox.Push({5, 9}), "Could not queue a channel connection before closing");
     ChannelConnection pending;
-    Check(inbox.Close(&pending), "Channel inbox lost its pending connection on close");
+    Check(inbox.Close(pending), "Channel inbox lost its pending connection on close");
     Check(inbox.IsClosed(), "Channel inbox remained open");
     Check(pending.id == 5 && pending.fd == 9,
           "Channel inbox did not return its pending connection");

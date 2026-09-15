@@ -28,7 +28,7 @@ public:
     int GetDescriptor() const;
     bool Push(const ChannelConnection &connection);
     bool Pop(ChannelConnection *connection);
-    bool Close(ChannelConnection *connection);
+    bool Close(ChannelConnection &connection);
 
     ChannelInbox(const ChannelInbox &) = delete;
     ChannelInbox &operator=(const ChannelInbox &) = delete;
