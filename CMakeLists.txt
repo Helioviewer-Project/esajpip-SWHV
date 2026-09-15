@@ -77,6 +77,17 @@ install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
 
 if(BUILD_TESTING)
+    add_executable(app_info_test tests/app_info_test.cc ${ESAJPIP_TOP}/app_info.cc)
+    esajpip_enable_warnings(app_info_test)
+    set_target_properties(app_info_test PROPERTIES
+        CXX_EXTENSIONS OFF
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES)
+    target_compile_definitions(app_info_test PRIVATE
+        ESAJPIP_LOCK_FILE="${CMAKE_CURRENT_BINARY_DIR}/app_info_test.lock")
+    target_include_directories(app_info_test PRIVATE ${ESAJPIP_TOP})
+    add_test(NAME app_info COMMAND app_info_test)
+
     add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
     esajpip_enable_warnings(logging_test)
     set_target_properties(logging_test PROPERTIES
