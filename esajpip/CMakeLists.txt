@@ -9,7 +9,6 @@ set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/app_config.cc
     ${ESAJPIP_TOP}/app_info.cc
-    ${ESAJPIP_TOP}/args_parser.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc

@@ -75,22 +75,23 @@ cd "$HOME/esajpip/server/esajpip"
 ./esajpip
 ```
 
-The management commands must be run from the same directory:
+The executable also reports the running server's status:
 
 ```sh
 ./esajpip status
-./esajpip stop
 ```
 
 `status` reports whether the server is running and, when active, its parent and
-child process IDs and open connection count.
+child process IDs and open connection count. Stop the server through the host's
+process supervisor or by signaling the reported parent process.
 
-`connections.initial_timeout` limits how long a new connection has to send a valid
-initial JPIP request. Until the request is recognized, the parent retains only
-the socket. It does not create a serving thread or allocate JPEG 2000 state.
-After the initial request, `connections.timeout` limits channel inactivity. It closes an idle channel
-whether an HTTP connection is attached or the channel is waiting for a
-replacement. Values of `0` and `-1` disable this timeout.
+`connections.initial_timeout` limits how long a new connection has to send a
+valid initial JPIP request. Until the request is recognized, the parent retains
+only the socket. It does not create a serving thread or allocate JPEG 2000
+state. After the initial request, `connections.timeout` limits channel
+inactivity. It closes an idle channel whether an HTTP connection is attached or
+the channel is waiting for a replacement. Values of `0` and `-1` disable this
+timeout.
 
 ## License
 

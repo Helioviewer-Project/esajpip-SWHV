@@ -9,6 +9,6 @@ namespace net {
 
 int RunChild(const AppConfig &cfg, int parent_fd,
              net::UnixAddress &child_address,
-             const net::UnixAddress &father_address);
+             const net::UnixAddress &parent_address);
 
 #endif /* _CHILD_H_ */

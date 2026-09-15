@@ -11,7 +11,6 @@
 #include "trace.h"
 #include "app_info.h"
 #include "app_config.h"
-#include "args_parser.h"
 #include "net/poll_table.h"
 #include "net/socket.h"
 #include "server/child.h"
@@ -45,7 +44,7 @@ static vector<Connection> connections;
 static uint64_t next_connection_id = 0;
 static volatile sig_atomic_t child_lost = 0;
 static UnixAddress child_address("/tmp/child_unix_address");
-static UnixAddress father_address("/tmp/father_unix_address");
+static UnixAddress parent_address("/tmp/parent_unix_address");
 
 static void SIGCHLD_handler(int) {
     child_lost = 1;
@@ -112,15 +111,20 @@ static void ExpirePendingConnections() {
 
 int main(int argc, char **argv) {
     if (!app_info.Init())
-        return CERR("The shared information can not be set");
-    if (!cfg.Load(CONFIG_FILE))
-        return CERR("The configuration file '" << CONFIG_FILE << "' can not be read");
-    if (!ParseArgs(app_info, argc, argv))
-        return -1;
+        return CERR("The server status can not be initialized");
+    if (argc > 1) {
+        if (argc == 2 && strcmp(argv[1], "status") == 0) {
+            cout << app_info;
+            return 0;
+        }
+        return CERR("Invalid command");
+    }
     if (app_info.is_running())
         return CERR("The server is already running");
+    if (!cfg.Load(CONFIG_FILE))
+        return CERR("The configuration file '" << CONFIG_FILE << "' can not be read");
 
-    app_info->father_pid = getpid();
+    app_info->parent_pid = getpid();
 
     cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << '-' << cfg << endl;
@@ -141,17 +145,17 @@ int main(int argc, char **argv) {
 
     poll_table.Add(listen_socket, POLLIN);
 
-    Socket father_socket;
-    if (!father_socket.OpenUnix(SOCK_DGRAM)) {
-        ERROR("The father unix socket can not be created");
+    Socket parent_socket;
+    if (!parent_socket.OpenUnix(SOCK_DGRAM)) {
+        ERROR("The parent unix socket can not be created");
         return -1;
     }
-    if (!father_socket.BindTo(father_address.Reset())) {
-        ERROR("The father unix socket can not be bound");
+    if (!parent_socket.BindTo(parent_address.Reset())) {
+        ERROR("The parent unix socket can not be bound");
         return -1;
     }
 
-    poll_table.Add(father_socket, POLLIN);
+    poll_table.Add(parent_socket, POLLIN);
 
     struct sigaction child_action;
     memset(&child_action, 0, sizeof child_action);
@@ -161,7 +165,7 @@ int main(int argc, char **argv) {
     if (sigaction(SIGCHLD, &child_action, NULL) != 0)
         return CERR("The child signal handler can not be installed: " << strerror(errno));
 
-father_begin:
+parent_begin:
 
     int parent_pipe[2];
     if (pipe(parent_pipe) != 0)
@@ -178,14 +182,14 @@ father_begin:
         // channel threads start makes the read end track the parent's lifetime.
         close(parent_pipe[1]);
         listen_socket.Close();
-        father_socket.Close();
+        parent_socket.Close();
         for (const Connection &connection : connections) {
             if (!connection.pending)
                 shutdown(connection.fd, SHUT_RDWR);
             close(connection.fd);
         }
         connections.clear();
-        return RunChild(cfg, parent_pipe[0], child_address, father_address);
+        return RunChild(cfg, parent_pipe[0], child_address, parent_address);
     }
 
     // The parent keeps the sole write end. The kernel closes it on every form
@@ -228,7 +232,7 @@ father_begin:
 
             if (poll_table[1].revents & POLLIN) {
                 uint64_t id;
-                if (father_socket.Receive(&id, sizeof id) == sizeof id)
+                if (parent_socket.Receive(&id, sizeof id) == sizeof id)
                     CloseConnection(id, "client finished");
                 else
                     ERROR("Could not receive connection identifier");
@@ -257,7 +261,7 @@ father_begin:
                         continue;
                     }
                     if (request.state == REQUEST_ACCEPTED) {
-                        if (!father_socket.SendDescriptor(child_address, fd, id)) {
+                        if (!parent_socket.SendDescriptor(child_address, fd, id)) {
                             ERROR("The JPIP socket can not be sent to the child process: " << strerror(errno));
                             CloseConnection(id, "dispatch failed");
                             continue;
@@ -281,5 +285,5 @@ father_begin:
     child_lost = 0;
     close(parent_pipe[1]);
     waitpid(child_pid, NULL, 0);
-    goto father_begin;
+    goto parent_begin;
 }

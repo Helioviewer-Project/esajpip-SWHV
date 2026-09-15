@@ -17,7 +17,7 @@ private:
      * shared memory.
      */
     struct Data {
-        int father_pid;            ///< PID of the father process
+        int parent_pid;            ///< PID of the parent process
         int child_pid;            ///< PID of the child process
         int num_connections;    ///< Number of open connections
 
@@ -25,7 +25,7 @@ private:
          * Clears the values.
          */
         void Reset() {
-            father_pid = 0;
+            parent_pid = 0;
             child_pid = 0;
             num_connections = 0;
         }
@@ -63,7 +63,7 @@ public:
         out << "Status: " << (app.is_running() ? "running" : "stopped") << endl;
 
         if (app.is_running()) {
-            out << "Father PID: " << app->father_pid << endl;
+            out << "Parent PID: " << app->parent_pid << endl;
             out << "Child PID: " << app->child_pid << endl;
             out << "Num. connections: " << app->num_connections << endl;
         }

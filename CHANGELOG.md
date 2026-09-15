@@ -4,42 +4,40 @@
 
 ### Changed
 
-- Reduce retained and transient per-client state when indexing large linked-JPX
-  targets.
-- Stream gzip responses with zlib instead of buffering each compressed response.
-- Screen new connections before allocating a serving thread or JPEG 2000 state.
-- Keep a JPIP channel available when its HTTP connection is replaced, while
-  retaining JPEG 2000 and cache state in the channel's serving thread.
-- Update the bundled log4cpp to 1.1.6.
-- Remove the legacy `record` monitoring command and obsolete process statistics.
-- Remove the redundant `start` alias and legacy debugging and child-restart commands.
-- Replace bundled libconfig with GLib-based `server.ini` parsing and clearer setting names.
-- Use standard CMake install directories and per-target compiler warnings.
+- Reduce per-client indexing state. On a 4,014-link workload, resident memory
+  at the same held point fell from 13,040 KiB to 8,976 KiB (31%), while CPU and
+  elapsed time remained within measurement noise.
+- Stream gzip output with zlib, bounding compressed-response buffering to one
+  configured chunk instead of the complete response. This also removes libgsf
+  and its dependencies.
+- Identify JPIP traffic before creating a serving thread or JPEG 2000 state. In
+  a test with 100 silent connections, the server retained its baseline eight
+  descriptors and all connections expired at the configured three-second
+  deadline.
+- Preserve a JPIP channel across replacement HTTP connections, allowing clients
+  without direct socket control to retain the channel's cache and JPEG 2000
+  state across reconnections.
+- Replace the libconfig format with `server.ini` parsed by GLib. This is an
+  intentional configuration incompatibility.
+- Update the bundled log4cpp to 1.1.6 and modernize CMake installation.
+- Support PCRL and CPRL packet ordering for the verified origin-zero,
+  single-tile geometry with unit component sampling.
 
 ### Fixed
 
-- Implement PCRL and CPRL packet ordering for origin-zero, single-tile
-  codestreams with unit component sampling, and reject other PCRL/CPRL
-  geometries.
-- Reject multi-tile codestreams instead of flattening their tile-parts into the
-  single-tile packet model.
-- Validate JPEG 2000 marker, tile-part, packet, box, and codestream bounds before
-  indexing or copying data.
-- Validate linked-JPX fragment lists, data references, and external ranges.
-- Reject invalid cache-model lengths, response limits, and codestream selectors.
-- Avoid invalid scaling for empty frame sizes.
-- Use codestream zero for window requests without an explicit selector.
-- Allow JPIP messages and metadata placeholders to exactly fill the configured
-  response buffer.
-- Accept valid HTTP header whitespace and reject incomplete header blocks.
-- Track client completion by stable connection identifiers instead of reusable
-  file descriptor numbers.
-- Expire inactive JPIP channels whether or not an HTTP connection remains
-  attached.
-- Stop the serving child when the listening parent exits on any supported
-  platform.
-- Fix mapped-file cleanup, address resolution, client-thread failure handling,
-  platform-specific alignment, and macOS system queries.
+- Reject unsupported multi-tile and PCRL/CPRL geometries instead of indexing
+  them with incorrect single-tile assumptions.
+- Validate JPEG 2000 markers, tile parts, packets, boxes, codestream bounds, and
+  linked-JPX external references before indexing or copying them.
+- Reject invalid JPIP cache lengths, response limits, and codestream selectors.
+  Use codestream zero when a window request omits its selector.
+- Accept valid HTTP header whitespace and exact-fit JPIP messages while
+  rejecting incomplete headers and overfull messages.
+- Track completion with stable connection identifiers so descriptor reuse cannot
+  close an unrelated client. Expire inactive channels and terminate the child
+  whenever its parent exits.
+- Close mappings and connections on parser and thread failures, and correct
+  address-resolution and platform-specific alignment errors.
 
 ## 1.9.0-rc1 - 2026-09-14
 
@@ -47,15 +45,20 @@
 
 - Partition top-level JPX association contents into separate metadata bins using
   JPIP placeholders.
-- Coalesce contiguous contributions to the same data-bin within the existing
-  response buffer.
+- Deliver linked-JPX metadata as larger contiguous data-bin messages and resume
+  traversal where the previous response stopped. A representative 2 MiB
+  response fell from 261 messages to 32, reducing initial loading of the
+  4,014-frame JHelioviewer fixture from 77.27 seconds to 35.94 seconds. Avoiding
+  repeated traversal also reduced median local server-and-transfer time from
+  305.9 ms to 288.7 ms (5.7%). The 100-frame fixture remained effectively
+  unchanged at 0.58 versus 0.56 seconds.
 - Release linked-file mappings after indexing and after completing each
-  response.
+  response. For 4,014 links, warm-open peak RSS fell from about 275 MB to 81 MB.
+  After 1,000 randomized requests, final RSS fell from about 787 MB to 25 MB.
 - Modernize the CMake build.
 
 ### Fixed
 
 - Preserve linked-JPX codestream order when resolving frame URLs.
-- Continue linked-JPX metadata traversal across response chunks.
 - Handle partial socket writes when sending chunked responses.
 - Accept a JPIP cache-model descriptor at the end of a query string.

@@ -27,7 +27,7 @@ struct ChannelInfo {
 };
 
 static const AppConfig *cfg;
-static const UnixAddress *father_address;
+static const UnixAddress *parent_address;
 static Socket child_socket;
 static UnixAddress channel_address("/tmp/channel_unix_address");
 
@@ -41,7 +41,7 @@ int RunChild(const AppConfig &config, int parent_fd,
              UnixAddress &child_address,
              const UnixAddress &notification_address) {
     cfg = &config;
-    father_address = &notification_address;
+    parent_address = &notification_address;
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -175,7 +175,7 @@ int RunChild(const AppConfig &config, int parent_fd,
 }
 
 static void NotifyParent(uint64_t id) {
-    if (child_socket.SendTo(*father_address, &id, sizeof id) == sizeof id)
+    if (child_socket.SendTo(*parent_address, &id, sizeof id) == sizeof id)
         return;
     ERROR("The completed connection [" << id << "] could not notify the parent");
 }
