@@ -6,8 +6,6 @@
 #include "jpeg2000/coding_parameters.h"
 
 namespace jpip {
-    using namespace std;
-    using namespace jpeg2000;
 
     /**
      * By means of this class it is possible to find out the
@@ -21,13 +19,13 @@ namespace jpip {
      */
     class WOIComposer {
     private:
-        Point pxy1;            ///< Upper-left corner of the WOI
-        Point pxy2;            ///< Bottom-right corner of the WOI
+        jpeg2000::Point pxy1;            ///< Upper-left corner of the WOI
+        jpeg2000::Point pxy2;            ///< Bottom-right corner of the WOI
         bool more_packets;     ///< Flag to control the last packet
         int max_resolution;    ///< Maximum resolution
-        Size min_precinct_xy;  ///< Minimum precinct
-        Size max_precinct_xy;  ///< Maximum precinct
-        Packet current_packet; ///< Current packet
+        jpeg2000::Size min_precinct_xy;  ///< Minimum precinct
+        jpeg2000::Size max_precinct_xy;  ///< Maximum precinct
+        jpeg2000::Packet current_packet; ///< Current packet
 
     public:
         /**
@@ -45,9 +43,9 @@ namespace jpip {
          * @param coding_parameters Coding parameters to use.
          * @param woi New WOI to use.
          */
-        void Reset(const CodingParameters *coding_parameters, const WOI &woi) {
+        void Reset(const jpeg2000::CodingParameters *coding_parameters, const WOI &woi) {
             more_packets = true;
-            current_packet = Packet();
+            current_packet = jpeg2000::Packet();
             max_resolution = woi.resolution;
 
             pxy1 = woi.position * (1L << (coding_parameters->num_levels - woi.resolution));
@@ -67,7 +65,7 @@ namespace jpip {
         /**
          * Returns the current packet.
          */
-        const Packet &GetCurrentPacket() const {
+        const jpeg2000::Packet &GetCurrentPacket() const {
             return current_packet;
         }
 
@@ -75,7 +73,7 @@ namespace jpip {
          * Moves to the next packet of the WOI.
          * @return <code>true</code> if another packet is available.
          */
-        bool GetNextPacket(const CodingParameters *coding_parameters) {
+        bool GetNextPacket(const jpeg2000::CodingParameters *coding_parameters) {
             if (!more_packets) return false;
             else {
                 if (current_packet.precinct_xy.x < max_precinct_xy.x) current_packet.precinct_xy.x++;

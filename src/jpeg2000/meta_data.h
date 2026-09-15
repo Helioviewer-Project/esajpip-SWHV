@@ -5,7 +5,6 @@
 #include "place_holder.h"
 
 namespace jpeg2000 {
-    using namespace data;
 
     /**
      * Contains the indexing information associated to the
@@ -14,21 +13,21 @@ namespace jpeg2000 {
     class Metadata {
     public:
         struct Part {
-            FileSegment data;
+            data::FileSegment data;
             PlaceHolder placeholder;
 
-            Part(const FileSegment &_data, const PlaceHolder &_placeholder)
+            Part(const data::FileSegment &_data, const PlaceHolder &_placeholder)
                     : data(_data), placeholder(_placeholder) {
             }
         };
 
-        vector<Part> bin0;
-        FileSegment tail;
+        std::vector<Part> bin0;
+        data::FileSegment tail;
 
         /**
          * Contents of boxes referenced by place-holders in meta-data bin 0.
          */
-        vector<FileSegment> bins;
+        std::vector<data::FileSegment> bins;
 
     };
 }

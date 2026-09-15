@@ -16,9 +16,6 @@
 #include "jpeg2000/image_index.h"
 
 namespace jpip {
-    using namespace std;
-    using namespace data;
-    using namespace jpeg2000;
 
     /**
      * Contains the core functionality of a (JPIP) data-bin server,
@@ -29,8 +26,8 @@ namespace jpip {
     private:
         WOI woi;             ///< Current WOI
         int pending;         ///< Number of pending bytes
-        vector<int> codestreams;
-        vector<File *> files;
+        std::vector<int> codestreams;
+        std::vector<data::File *> files;
         bool has_woi;        ///< <code>true</code> if the last request contained a WOI
         size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
@@ -64,7 +61,9 @@ namespace jpip {
          * or -1 if an error was generated.
          */
         template<int BIN_CLASS>
-        int WriteSegment(File *file, int num_codestream, int id, const FileSegment &segment, int offset = 0, bool last = true) {
+        int WriteSegment(data::File *file, int num_codestream, int id,
+                         const data::FileSegment &segment, int offset = 0,
+                         bool last = true) {
             int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -78,7 +77,8 @@ namespace jpip {
                     eof = true;
                     res = 0;
                 } else {
-                    FileSegment part = FileSegment(segment.offset + seg_cached, segment.length - seg_cached);
+                    data::FileSegment part = data::FileSegment(
+                            segment.offset + seg_cached, segment.length - seg_cached);
                     if ((int) part.length > free) {
                         part.length = free;
                         last = false;
@@ -105,7 +105,9 @@ namespace jpip {
          * 0 if it was incompletely written (or not at all, if EOF flag is set),
          * or -1 if an error was generated.
          */
-        int WritePlaceHolder(File *file, int num_codestream, int id, const PlaceHolder &place_holder, int offset = 0, bool last = false) {
+        int WritePlaceHolder(data::File *file, int num_codestream, int id,
+                             const jpeg2000::PlaceHolder &place_holder,
+                             int offset = 0, bool last = false) {
             int cached = cache_model.GetDataBin(DataBinClass::META_DATA, num_codestream, id);
             int res = 1, seg_cached = cached - offset;
 
@@ -148,7 +150,7 @@ namespace jpip {
          * generating the chunks of data.
          * @param req Request.
          */
-        bool SetRequest(FileManager &file_manager, const Request &req);
+        bool SetRequest(jpeg2000::FileManager &file_manager, const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and
@@ -161,7 +163,8 @@ namespace jpip {
          * the last chunk of data associated to the last request.
          * @return <code>true</code> if successful.
          */
-        bool GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last);
+        bool GenerateChunk(jpeg2000::FileManager &file_manager, char *buf, int *len,
+                           bool *last);
 
     };
 }

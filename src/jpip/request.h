@@ -10,27 +10,25 @@
 #include "jpeg2000/coding_parameters.h"
 
 namespace jpip {
-    using namespace std;
-    using namespace jpeg2000;
 
     class Request {
     private:
         bool valid;
 
     public:
-        string object;
-        string target;
-        string channel;
+        std::string object;
+        std::string target;
+        std::string channel;
 
-        bool Parse(const string &line);
-        void ParseURI(const string &uri);
+        bool Parse(const std::string &line);
+        void ParseURI(const std::string &uri);
 
         /**
          * Parses a cache model from an input stream.
          * @param stream Input stream.
          * @return The same input stream after the parsing.
          */
-        istream &ParseModel(istream &stream);
+        std::istream &ParseModel(std::istream &stream);
 
         /**
          * Gets a coded char from an input stream.
@@ -38,13 +36,13 @@ namespace jpip {
          * @param c Reference to store the char.
          * @return The same input stream.
          */
-        istream &GetCodedChar(istream &in, char &c);
+        std::istream &GetCodedChar(std::istream &in, char &c);
 
         /**
          * Parses the parameters of a CGI HTTP request.
          * @param stream Input stream.
          */
-        void ParseParameters(istream &stream);
+        void ParseParameters(std::istream &stream);
 
         /**
          * Parses one parameter of a CGI HTTP request.
@@ -52,7 +50,8 @@ namespace jpip {
          * @param param String to store the parameter name.
          * @param value String to store the parameter value.
          */
-        void ParseParameter(istream &stream, const string &param, string &value);
+        void ParseParameter(std::istream &stream, const std::string &param,
+                            std::string &value);
 
         /**
          * Union used to control the presence of the different
@@ -116,12 +115,12 @@ namespace jpip {
             CLOSEST       ///< Closest
         };
 
-        Size woi_size;           ///< WOI size
-        Point woi_position;      ///< WOI position
-        vector<int> codestreams; ///< Requested codestreams
+        jpeg2000::Size woi_size;           ///< WOI size
+        jpeg2000::Point woi_position;      ///< WOI position
+        std::vector<int> codestreams; ///< Requested codestreams
         int length_response;     ///< Maximum response length
         ParametersMask mask;     ///< Parameters mask
-        Size resolution_size;    ///< Size of the resolution level
+        jpeg2000::Size resolution_size;    ///< Size of the resolution level
         CacheModel cache_model;  ///< Cache model
 
         /**
@@ -146,8 +145,9 @@ namespace jpip {
          * @param coding_parameters Associated coding parameters.
          * @param woi WOI to modify.
          */
-        void GetResolution(const CodingParameters *coding_parameters, WOI *woi) const {
-            Size res_image_size;
+        void GetResolution(const jpeg2000::CodingParameters *coding_parameters,
+                           WOI *woi) const {
+            jpeg2000::Size res_image_size;
 
             if (round_direction == Request::CLOSEST)
                 woi->resolution = coding_parameters->GetClosestResolution(resolution_size, &res_image_size);

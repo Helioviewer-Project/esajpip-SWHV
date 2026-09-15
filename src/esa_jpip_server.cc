@@ -10,7 +10,6 @@
 #include "server/parent.h"
 
 using namespace std;
-using namespace net;
 
 #define SERVER_VERSION  "2.0-rc1"
 #define SERVER_NAME     "ESA JPIP Server"
@@ -42,13 +41,13 @@ int main(int argc, char **argv) {
     cout << endl << '-' << cfg << endl;
 
     string log_name = cfg.file_logging() ? cfg.log_directory() + SERVER_APP_NAME : "";
-    if (!TraceSystem::Initialize(log_name))
+    if (!trace::Initialize(log_name))
         return CERR("The logging system can not be initialized");
 
-    Socket listen_socket;
-    InetAddress listen_addr = cfg.address().empty()
-                                  ? InetAddress(cfg.port())
-                                  : InetAddress(cfg.address().c_str(), cfg.port());
+    net::Socket listen_socket;
+    net::InetAddress listen_addr = cfg.address().empty()
+                                       ? net::InetAddress(cfg.port())
+                                       : net::InetAddress(cfg.address().c_str(), cfg.port());
     int result = -1;
     if (!listen_socket.OpenInet()) {
         ERROR("The server listen socket can not be created: " << strerror(errno));
@@ -58,6 +57,6 @@ int main(int argc, char **argv) {
         LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
         result = RunParent(cfg, app_info, listen_socket);
     }
-    TraceSystem::Drain();
+    trace::Drain();
     return result;
 }

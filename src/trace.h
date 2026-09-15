@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-namespace TraceSystem {
+namespace trace {
 
 bool Initialize(const std::string &file_name);
 int ReadDescriptor();
@@ -20,14 +20,14 @@ void Write(const std::string &message);
     do {                                                                        \
         std::ostringstream log_message;                                         \
         log_message << a;                                                       \
-        TraceSystem::Write(log_message.str());                                  \
+        trace::Write(log_message.str());                                        \
     } while (false)
 
 #define ERROR(a)                                                                \
     do {                                                                        \
         std::ostringstream log_message;                                         \
         log_message << __FILE__ << ":" << __LINE__ << ": ERROR: " << a;         \
-        TraceSystem::Write(log_message.str());                                  \
+        trace::Write(log_message.str());                                        \
     } while (false)
 
 #if defined(SHOW_TRACES) && !defined(NDEBUG)
@@ -35,7 +35,7 @@ void Write(const std::string &message);
     do {                                                                        \
         std::ostringstream log_message;                                         \
         log_message << __FILE__ << ":" << __LINE__ << ": TRACE: " << a;         \
-        TraceSystem::Write(log_message.str());                                  \
+        trace::Write(log_message.str());                                        \
     } while (false)
 #else
 #define TRACE(a) do { } while (false)

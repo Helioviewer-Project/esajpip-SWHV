@@ -30,26 +30,26 @@ int main() {
     char directory[] = "/tmp/esajpip-log-XXXXXX";
     Check(mkdtemp(directory) != NULL, "Could not create logging test directory");
     string base = string(directory) + "/server";
-    Check(TraceSystem::Initialize(base), "Could not initialize logging");
+    Check(trace::Initialize(base), "Could not initialize logging");
 
     LOG("first parent message");
     LOG("second parent message");
-    TraceSystem::Drain();
+    trace::Drain();
 
     pid_t child = fork();
     Check(child >= 0, "Could not create logging test child");
     if (child == 0) {
-        TraceSystem::CloseParentDescriptors();
+        trace::CloseParentDescriptors();
         LOG("child message");
         _exit(0);
     }
     Check(waitpid(child, NULL, 0) == child, "Could not wait for logging test child");
-    Check(TraceSystem::DrainOne(), "Could not write child log message");
+    Check(trace::DrainOne(), "Could not write child log message");
 
     LOG(string(1100, 'x'));
-    Check(TraceSystem::DrainOne(), "Could not rotate log");
+    Check(trace::DrainOne(), "Could not rotate log");
     LOG("message after rollover");
-    Check(TraceSystem::DrainOne(), "Could not write after log rollover");
+    Check(trace::DrainOne(), "Could not write after log rollover");
 
     DIR *files = opendir(directory);
     Check(files != NULL, "Could not list logging test files");
@@ -79,11 +79,11 @@ int main() {
 
     for (int i = 0; i < 10000; ++i)
         LOG(string(1800, 'x'));
-    while (TraceSystem::DrainOne()) {
+    while (trace::DrainOne()) {
     }
     LOG("message after queue saturation");
-    Check(TraceSystem::DrainOne(), "Dropped-message summary was not queued");
-    Check(TraceSystem::DrainOne(), "Message was not queued after saturation");
+    Check(trace::DrainOne(), "Dropped-message summary was not queued");
+    Check(trace::DrainOne(), "Message was not queued after saturation");
     new_messages = ReadFile(active);
     Check(new_messages.find("log messages dropped") != string::npos,
           "Dropped log messages were not reported");
@@ -93,12 +93,12 @@ int main() {
     unlink(backup.c_str());
     Check(mkdir(backup.c_str(), 0700) == 0, "Could not obstruct log rollover");
     LOG(string(1100, 'x'));
-    Check(!TraceSystem::DrainOne(), "Failed log rollover did not disable logging");
+    Check(!trace::DrainOne(), "Failed log rollover did not disable logging");
 
     int reused_fd = open("/dev/null", O_WRONLY);
     Check(reused_fd >= 0, "Could not reuse a descriptor after failed rollover");
     LOG("message after failed rollover");
-    Check(TraceSystem::DrainOne(), "Could not discard a log after rollover failure");
+    Check(trace::DrainOne(), "Could not discard a log after rollover failure");
     close(reused_fd);
     Check(rmdir(backup.c_str()) == 0, "Could not remove rollover obstruction");
 

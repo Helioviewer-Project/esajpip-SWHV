@@ -5,7 +5,6 @@
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
-    using namespace data;
 
     /**
      * Class used for indexing the information of a JPEG2000
@@ -18,9 +17,9 @@ namespace jpeg2000 {
      */
     class CodestreamIndex {
     public:
-        FileSegment header;                    ///< Main header segment
-        vector<FileSegment> packets;        ///< Tile-part packets segments
-        vector<FileSegment> PLT_markers;    ///< PLT markers segments
+        data::FileSegment header;                    ///< Main header segment
+        std::vector<data::FileSegment> packets;        ///< Tile-part packets segments
+        std::vector<data::FileSegment> PLT_markers;    ///< PLT markers segments
 
         /**
          * Empty constructor.

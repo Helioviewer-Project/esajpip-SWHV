@@ -1,6 +1,16 @@
 #include "databin_server.h"
 
+using namespace std;
+
 namespace jpip {
+
+    using data::File;
+    using data::FileSegment;
+    using jpeg2000::CodingParameters;
+    using jpeg2000::FileManager;
+    using jpeg2000::ImageIndex;
+    using jpeg2000::Metadata;
+    using jpeg2000::Packet;
 
     bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
         bool reset_woi = false;

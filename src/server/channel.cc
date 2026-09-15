@@ -20,17 +20,18 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 
+using namespace std;
+
+using http::CRLF;
+using jpeg2000::FileManager;
+using jpip::DataBinServer;
+using net::Socket;
+
 static const char ZERO[] = "0\r\n\r\n";
 
 static const char *CORS = "*";
 static const char *NOCACHE = "no-cache";
 static const char *STS = "max-age=31536000; includeSubDomains;";
-
-using namespace std;
-using namespace net;
-using namespace http;
-using namespace jpip;
-using namespace jpeg2000;
 
 class SocketReader {
 private:

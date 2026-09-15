@@ -21,13 +21,16 @@
 #include "server/parent.h"
 
 using namespace std;
-using namespace net;
+
+using net::InetAddress;
+using net::PollTable;
+using net::Socket;
 
 #ifndef POLLRDHUP
 #define POLLRDHUP (0)
 #endif
 
-using Clock = chrono::steady_clock;
+using Clock = std::chrono::steady_clock;
 
 struct Connection {
     uint64_t id;
@@ -86,7 +89,8 @@ static int GetPollTimeout() {
     if (remaining <= Clock::duration::zero())
         return 0;
 
-    chrono::milliseconds milliseconds = chrono::duration_cast<chrono::milliseconds>(remaining);
+    std::chrono::milliseconds milliseconds =
+            std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
     if (milliseconds.count() >= INT_MAX)
         return INT_MAX;
     return static_cast<int>(milliseconds.count()) + 1;
@@ -116,7 +120,7 @@ int RunParent(const AppConfig &cfg, AppInfo &app_info, Socket &listen_socket) {
     Socket child_socket(control_fds[1]);
 
     poll_table.Add(parent_socket, POLLIN);
-    poll_table.Add(TraceSystem::ReadDescriptor(), POLLIN);
+    poll_table.Add(trace::ReadDescriptor(), POLLIN);
 
     struct sigaction child_action;
     memset(&child_action, 0, sizeof child_action);
@@ -152,7 +156,7 @@ parent_begin:
         listen_socket.Close();
         parent_socket.Close();
         // The child keeps only the nonblocking end used to submit records.
-        TraceSystem::CloseParentDescriptors();
+        trace::CloseParentDescriptors();
         for (const Connection &connection : connections) {
             if (!connection.pending)
                 shutdown(connection.fd, SHUT_RDWR);
@@ -203,7 +207,8 @@ parent_begin:
                                                  << " [" << static_cast<int>(new_conn) << ":" << id << "]");
                     poll_table.Add(new_conn, POLLIN | POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
                     connections.push_back({id, new_conn, true,
-                                           Clock::now() + chrono::seconds(cfg.initial_timeout())});
+                                           Clock::now() +
+                                                   std::chrono::seconds(cfg.initial_timeout())});
                     app_info->num_connections = static_cast<int>(connections.size());
                 }
             }
@@ -263,7 +268,7 @@ parent_begin:
         // Producers use a bounded nonblocking socket, while this parent is the
         // only process that performs log file I/O.
         if (log_ready && !network_ready)
-            TraceSystem::DrainOne();
+            trace::DrainOne();
     }
 
     child_lost = 0;

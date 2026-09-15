@@ -8,7 +8,6 @@
 #include "jpip.h"
 
 namespace jpip {
-    using namespace std;
 
     /**
      * The cache model of a JPIP client is handled using this class.
@@ -29,7 +28,7 @@ namespace jpip {
         private:
             int header;                ///< Amount for the header
             int tile_header;            ///< Amount for the tile-header
-            vector<int> precincts;    ///< Amount for the precincts
+            std::vector<int> precincts;    ///< Amount for the precincts
 
             /**
              * Minimum identifier of the non-consecutive precinct
@@ -180,12 +179,12 @@ namespace jpip {
         /**
          * Amounts for the meta-datas.
          */
-        vector<int> meta_data;
+        std::vector<int> meta_data;
 
         /**
          * Amounts for the codestreams.
          */
-        vector<Codestream> codestreams;
+        std::vector<Codestream> codestreams;
 
         static int AddAmount(int current, int amount) {
             if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)

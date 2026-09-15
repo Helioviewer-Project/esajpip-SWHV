@@ -139,7 +139,7 @@ static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
 }
 
 static void WriteFile(const string &path, const vector<unsigned char> &data) {
-    ofstream out(path.c_str(), ios::binary);
+    ofstream out(path.c_str(), std::ios::binary);
     Check(static_cast<bool>(out), "Could not create JPEG 2000 test file");
     out.write(reinterpret_cast<const char *>(data.data()), data.size());
     Check(static_cast<bool>(out), "Could not write JPEG 2000 test file");

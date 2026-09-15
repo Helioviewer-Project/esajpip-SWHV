@@ -4,7 +4,6 @@
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
-    using namespace data;
 
     /**
      * Contains the information of a place-holder.
@@ -13,7 +12,7 @@ namespace jpeg2000 {
     public:
         int id;                    ///< Place-holder identifier.
         bool is_jp2c;            ///< <code>true</code> if refers to a codestream.
-        FileSegment header;        ///< File segment associated to the box header
+        data::FileSegment header;        ///< File segment associated to the box header
         uint64_t data_length;    ///< Length of the place-holder data
 
         /**
@@ -32,7 +31,8 @@ namespace jpeg2000 {
          * @param header File segment of the associated header.
          * @param data_length Length of the place-holder data.
          */
-        PlaceHolder(int id, bool is_jp2c, const FileSegment &header, uint64_t data_length) {
+        PlaceHolder(int id, bool is_jp2c, const data::FileSegment &header,
+                    uint64_t data_length) {
             this->id = id;
             this->is_jp2c = is_jp2c;
             this->header = header;

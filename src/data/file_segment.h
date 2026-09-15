@@ -6,7 +6,6 @@
 #include <cstdint>
 
 namespace data {
-    using namespace std;
 
     /**
      * Identifies a data segment of a file. This segment is defined by an offset
@@ -59,7 +58,7 @@ namespace data {
             return offset != segment.offset || length != segment.length;
         }
 
-        friend ostream &operator<<(ostream &out, const FileSegment &segment) {
+        friend std::ostream &operator<<(std::ostream &out, const FileSegment &segment) {
             out << "[" << segment.offset << ":" << segment.length << "]";
             return out;
         }

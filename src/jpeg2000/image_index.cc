@@ -3,7 +3,12 @@
 
 #include <utility>
 
+using namespace std;
+
 namespace jpeg2000 {
+
+    using data::File;
+    using data::FileSegment;
 
     ImageIndex::Stream::Stream(CodestreamIndex &&_codestream)
             : last_plt(0), last_packet(0), last_offset_PLT(0), last_offset_packet(0), max_resolution(-1),

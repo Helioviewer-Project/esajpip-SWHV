@@ -18,7 +18,8 @@
 #include "server/initial_request.h"
 
 using namespace std;
-using namespace net;
+
+using net::Socket;
 
 struct ChannelInfo {
     uint64_t id;

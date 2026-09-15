@@ -4,6 +4,10 @@
 
 namespace jpip {
 
+    using data::File;
+    using data::FileSegment;
+    using jpeg2000::PlaceHolder;
+
     static size_t VBASLength(uint64_t value) {
         size_t length = 1;
         while (value >>= 7)

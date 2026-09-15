@@ -6,7 +6,6 @@
 #include "protocol.h"
 
 namespace http {
-    using namespace std;
 
     class Response {
     private:
@@ -17,7 +16,7 @@ namespace http {
         Response(int _code, const char *_reason) : code(_code), reason(_reason) {
         }
 
-        friend ostream &operator<<(ostream &out, const Response &response) {
+        friend std::ostream &operator<<(std::ostream &out, const Response &response) {
             return out << "HTTP/1.1 " << response.code << " " << response.reason << CRLF;
         }
     };

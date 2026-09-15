@@ -9,8 +9,6 @@
 
 #include "app_info.h"
 
-using namespace std;
-
 #ifndef ESAJPIP_LOCK_FILE
 #define ESAJPIP_LOCK_FILE "/tmp/esa_jpip_server.lock"
 #endif

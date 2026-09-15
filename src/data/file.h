@@ -16,7 +16,6 @@
 #include "trace.h"
 
 namespace data {
-    using namespace std;
 
     class File {
     public:
@@ -53,7 +52,7 @@ namespace data {
             }
         }
 
-        bool Open(const string &file_name) {
+        bool Open(const std::string &file_name) {
             return Open(file_name.c_str());
         }
 

@@ -8,6 +8,8 @@
 #define MAXC 100000
 #define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
 
+using namespace std;
+
 namespace jpip {
 
     bool Request::Parse(const string &line) {

@@ -5,10 +5,12 @@
 
 #include <glib.h>
 
+using namespace std;
+
 namespace jpeg2000 {
 
-    using namespace std;
-    using namespace data;
+    using data::File;
+    using data::FileSegment;
 
     bool FileManager::OpenImage(string &path_image_file) {
         if (path_image_file.empty())

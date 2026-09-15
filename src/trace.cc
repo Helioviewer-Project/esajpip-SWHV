@@ -123,7 +123,7 @@ bool Rotate() {
 
 }
 
-namespace TraceSystem {
+namespace trace {
 
 bool Initialize(const string &file_name) {
     int sockets[2];

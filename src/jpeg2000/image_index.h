@@ -14,7 +14,6 @@
 #include "packet_index.h"
 
 namespace jpeg2000 {
-    using namespace std;
 
     class FileManager;
 
@@ -35,20 +34,20 @@ namespace jpeg2000 {
         };
 
         struct Link {
-            string path_name;
+            std::string path_name;
             CodingParameters coding_parameters;
             Stream stream;
 
-            Link(string &&_path, CodingParameters &&_params,
+            Link(std::string &&_path, CodingParameters &&_params,
                  CodestreamIndex &&_codestream);
         };
 
-        string path_name;           ///< Image file name
+        std::string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
         CodingParameters coding_parameters; ///< Coding parameters
-        vector<Stream> streams;
+        std::vector<Stream> streams;
 
-        vector<Link> hyper_links; ///< Image hyperlinks
+        std::vector<Link> hyper_links; ///< Image hyperlinks
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -57,7 +56,7 @@ namespace jpeg2000 {
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        static bool GetPLTLength(File *file, Stream &stream, uint64_t *length_packet);
+        static bool GetPLTLength(data::File *file, Stream &stream, uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
@@ -74,9 +73,10 @@ namespace jpeg2000 {
          * @param r Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        static bool BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r);
+        static bool BuildIndex(data::File *file, Stream &stream,
+                               const CodingParameters &coding_parameters, int r);
 
-        explicit ImageIndex(const string &_path);
+        explicit ImageIndex(const std::string &_path);
 
         ImageIndex(const ImageIndex &) = delete;
         ImageIndex &operator=(const ImageIndex &) = delete;
@@ -96,7 +96,7 @@ namespace jpeg2000 {
         /**
          * Returns the path name of the image.
          */
-        const string &GetPathName() const {
+        const std::string &GetPathName() const {
             return path_name;
         }
 
@@ -105,7 +105,7 @@ namespace jpeg2000 {
          * a hyperlinked codestream.
          * @param num_codestream Codestream number.
          */
-        const string &GetPathName(int num_codestream) const {
+        const std::string &GetPathName(int num_codestream) const {
             return streams.empty() ? hyper_links[num_codestream].path_name : path_name;
         }
 
@@ -114,7 +114,7 @@ namespace jpeg2000 {
          * codestream.
          * @param num_codestream Codestream number
          */
-        const FileSegment &GetMainHeader(int num_codestream) const {
+        const data::FileSegment &GetMainHeader(int num_codestream) const {
             return streams.empty() ? hyper_links[num_codestream].stream.codestream.header : streams[num_codestream].codestream.header;
         }
 
@@ -129,7 +129,8 @@ namespace jpeg2000 {
          * @param offset If it is not <code>NULL</code> receives the
          * offset of the packet.
          */
-        bool GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset = NULL);
+        bool GetPacket(data::File *file, int num_codestream, const Packet &packet,
+                       data::FileSegment *segment, int *offset = NULL);
 
         ~ImageIndex() {
             TRACE("Destroying the image index of '" << path_name << "'");

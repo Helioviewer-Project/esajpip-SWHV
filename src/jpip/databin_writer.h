@@ -9,9 +9,6 @@
 #include "jpeg2000/place_holder.h"
 
 namespace jpip {
-    using namespace std;
-    using namespace data;
-    using namespace jpeg2000;
 
     /**
      * Class used to generate data-bin segments and write them
@@ -134,7 +131,8 @@ namespace jpip {
          * contains the last byte of the data-bin.
          */
         void Write(int databin_class, int codestream_idx, uint64_t bin_id,
-                   uint64_t bin_offset, File &file, const FileSegment &segment,
+                   uint64_t bin_offset, data::File &file,
+                   const data::FileSegment &segment,
                    bool last_byte = false);
 
         /**
@@ -149,8 +147,9 @@ namespace jpip {
          * contains the last byte of the data-bin.
          */
         void WritePlaceHolder(int databin_class, int codestream_idx,
-                              uint64_t bin_id, uint64_t bin_offset, File &file,
-                              const PlaceHolder &place_holder, bool last_byte = false);
+                              uint64_t bin_id, uint64_t bin_offset, data::File &file,
+                              const jpeg2000::PlaceHolder &place_holder,
+                              bool last_byte = false);
 
         /**
          * Returns the number of bytes written.

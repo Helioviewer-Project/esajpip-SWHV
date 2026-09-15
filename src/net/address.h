@@ -10,7 +10,6 @@
 #include <cstring>
 
 namespace net {
-    using namespace std;
 
     /**
      * Class to identify and handle an Internet address. The
@@ -86,7 +85,7 @@ namespace net {
         /**
          * Returns the address path.
          */
-        string GetPath() const {
+        std::string GetPath() const {
             return inet_ntoa(sock_addr.sin_addr);
         }
 

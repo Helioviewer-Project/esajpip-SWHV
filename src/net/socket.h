@@ -15,7 +15,6 @@
 #include "address.h"
 
 namespace net {
-    using namespace std;
 
     /**
       This class has been designed to work with UNIX

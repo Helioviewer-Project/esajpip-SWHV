@@ -4,8 +4,6 @@
 #include "jpeg2000/point.h"
 
 namespace jpip {
-    using namespace std;
-    using namespace jpeg2000;
 
     /**
      * Class that identifies a WOI (Window Of Interest). This term
@@ -16,8 +14,8 @@ namespace jpip {
      */
     class WOI {
     public:
-        Size size;        ///< Size of the WOI (width and height)
-        Point position;    ///< Position of the upper-left corner of the WOI
+        jpeg2000::Size size;        ///< Size of the WOI (width and height)
+        jpeg2000::Point position;    ///< Position of the upper-left corner of the WOI
         int resolution;    ///< Resolution level where the WOI is located (0 == the highest)
 
         /**
@@ -33,7 +31,8 @@ namespace jpip {
          * @param size Size of the WOI.
          * @param resolution Resolution level of the WOI.
          */
-        WOI(const Point &position, const Size &size, int resolution) {
+        WOI(const jpeg2000::Point &position, const jpeg2000::Size &size,
+            int resolution) {
             this->size = size;
             this->position = position;
             this->resolution = resolution;

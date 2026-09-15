@@ -4,8 +4,6 @@
 #include <cassert>
 #include <iostream>
 
-using namespace std;
-
 /**
  * Contains the run-time information of the application.
  * This class can be printed.
@@ -59,13 +57,13 @@ public:
         return is_running_;
     }
 
-    friend ostream &operator<<(ostream &out, const AppInfo &app) {
-        out << "Status: " << (app.is_running() ? "running" : "stopped") << endl;
+    friend std::ostream &operator<<(std::ostream &out, const AppInfo &app) {
+        out << "Status: " << (app.is_running() ? "running" : "stopped") << std::endl;
 
         if (app.is_running()) {
-            out << "Parent PID: " << app->parent_pid << endl;
-            out << "Child PID: " << app->child_pid << endl;
-            out << "Num. connections: " << app->num_connections << endl;
+            out << "Parent PID: " << app->parent_pid << std::endl;
+            out << "Child PID: " << app->child_pid << std::endl;
+            out << "Num. connections: " << app->num_connections << std::endl;
         }
 
         return out;

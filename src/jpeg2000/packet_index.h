@@ -5,7 +5,6 @@
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
-    using namespace data;
 
     /**
      * Class used for indexing the packets of a codestream image.
@@ -15,13 +14,13 @@ namespace jpeg2000 {
         /**
          * Vector of packet offsets.
          */
-        vector<uint32_t> offsets;
+        std::vector<uint32_t> offsets;
 
         /**
          * Vector of file segments to handle the different
          * sets of packets that are not contiguous.
          */
-        vector<FileSegment> aux;
+        std::vector<data::FileSegment> aux;
 
     public:
         enum {
@@ -49,7 +48,7 @@ namespace jpeg2000 {
          * @param segment File segment associated to the packet.
          * @return The object itself.
          */
-        PacketIndex &Add(const FileSegment &segment) {
+        PacketIndex &Add(const data::FileSegment &segment) {
             assert(segment.offset >= MINIMUM_OFFSET);
 
             int last = aux.size() - 1;
@@ -85,7 +84,7 @@ namespace jpeg2000 {
          * @param i Item index.
          * @return File segment of the packet.
          */
-        bool Get(int i, FileSegment *segment) const {
+        bool Get(int i, data::FileSegment *segment) const {
             if (i < 0 || i >= (int) offsets.size())
                 return false;
 
@@ -114,13 +113,13 @@ namespace jpeg2000 {
                 if (off_i1 < off_i)
                     return false;
 
-                *segment = FileSegment(off_i, off_i1 - off_i);
+                *segment = data::FileSegment(off_i, off_i1 - off_i);
                 return true;
             }
         }
 
-        FileSegment operator[](int i) const {
-            FileSegment segment;
+        data::FileSegment operator[](int i) const {
+            data::FileSegment segment;
             Get(i, &segment);
             return segment;
         }
