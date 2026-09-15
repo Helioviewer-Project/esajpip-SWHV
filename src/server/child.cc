@@ -27,9 +27,8 @@ struct ChannelInfo {
 };
 
 static const AppConfig *cfg;
-static const UnixAddress *parent_address;
-static Socket child_socket;
-static UnixAddress channel_address("/tmp/channel_unix_address");
+static Socket control_socket;
+static Socket channel_notification_socket;
 
 static void NotifyParent(uint64_t id);
 static bool StartChannel(const pthread_attr_t *pattr, uint64_t id,
@@ -37,34 +36,21 @@ static bool StartChannel(const pthread_attr_t *pattr, uint64_t id,
                          const shared_ptr<ConnectionQueue> &queue);
 static void *ChannelThread(void *arg);
 
-int RunChild(const AppConfig &config, int parent_fd,
-             UnixAddress &child_address,
-             const UnixAddress &notification_address) {
+int RunChild(const AppConfig &config, int parent_fd, int control_fd) {
     cfg = &config;
-    parent_address = &notification_address;
+    control_socket = control_fd;
 
     signal(SIGPIPE, SIG_IGN);
 
     LOG("Child process created (PID = " << getpid() << ")");
 
-    if (!child_socket.OpenUnix(SOCK_DGRAM)) {
-        ERROR("The child unix socket can not be created");
-        return -1;
-    }
-    if (!child_socket.BindTo(child_address.Reset())) {
-        ERROR("The child unix socket can not be bound");
-        return -1;
-    }
-
-    Socket channel_socket;
-    if (!channel_socket.OpenUnix(SOCK_DGRAM)) {
+    int notification_fds[2];
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, notification_fds) != 0) {
         ERROR("The channel notification socket can not be created");
         return -1;
     }
-    if (!channel_socket.BindTo(channel_address.Reset())) {
-        ERROR("The channel notification socket can not be bound");
-        return -1;
-    }
+    Socket channel_socket(notification_fds[0]);
+    channel_notification_socket = notification_fds[1];
 
     pthread_attr_t pattr;
     int pthread_error = pthread_attr_init(&pattr);
@@ -82,7 +68,7 @@ int RunChild(const AppConfig &config, int parent_fd,
     for (;;) {
         pollfd fds[] = {
             {parent_fd, POLLIN, 0},
-            {child_socket, POLLIN, 0},
+            {control_socket, POLLIN, 0},
             {channel_socket, POLLIN, 0}
         };
         int result;
@@ -123,7 +109,7 @@ int RunChild(const AppConfig &config, int parent_fd,
 
         int fd;
         uint64_t connection_id;
-        if (!child_socket.ReceiveDescriptor(&fd, &connection_id)) {
+        if (!control_socket.ReceiveDescriptor(&fd, &connection_id)) {
             ERROR("The JPIP socket can not be received by the child process: "
                   << strerror(errno));
             continue;
@@ -175,7 +161,7 @@ int RunChild(const AppConfig &config, int parent_fd,
 }
 
 static void NotifyParent(uint64_t id) {
-    if (child_socket.SendTo(*parent_address, &id, sizeof id) == sizeof id)
+    if (control_socket.Send(&id, sizeof id) == sizeof id)
         return;
     ERROR("The completed connection [" << id << "] could not notify the parent");
 }
@@ -204,13 +190,7 @@ static void *ChannelThread(void *arg) {
 
     RunChannel(*cfg, channel, queue, NotifyParent);
 
-    Socket socket;
-    if (socket.OpenUnix(SOCK_DGRAM)) {
-        if (socket.SendTo(channel_address, &id, sizeof id) != sizeof id)
-            ERROR("The completed channel " << channel << " could not notify the child process");
-        socket.Close();
-    } else {
-        ERROR("A notification socket for channel " << channel << " can not be created");
-    }
+    if (channel_notification_socket.Send(&id, sizeof id) != sizeof id)
+        ERROR("The completed channel " << channel << " could not notify the child process");
     return NULL;
 }

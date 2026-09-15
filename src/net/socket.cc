@@ -10,15 +10,15 @@ namespace net {
         return recv(sid, buf, len, 0);
     }
 
-    ssize_t Socket::SendTo(const UnixAddress &address, const void *buf, size_t len) {
+    ssize_t Socket::Send(const void *buf, size_t len) {
         ssize_t sent;
         do {
-            sent = sendto(sid, buf, len, 0, address.GetSockAddr(), address.GetSize());
+            sent = send(sid, buf, len, 0);
         } while (sent < 0 && errno == EINTR);
         return sent;
     }
 
-    bool Socket::SendDescriptor(const UnixAddress &address, int fd, uint64_t connection_id) {
+    bool Socket::SendDescriptor(int fd, uint64_t connection_id) {
         msghdr msg;
         alignas(cmsghdr) char ccmsg[CMSG_SPACE(sizeof(int))];
 
@@ -28,8 +28,6 @@ namespace net {
         iov.iov_len = sizeof connection_id;
 
         memset(&msg, 0, sizeof msg);
-        msg.msg_name = address.GetSockAddr();
-        msg.msg_namelen = address.GetSize();
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
         msg.msg_control = ccmsg;

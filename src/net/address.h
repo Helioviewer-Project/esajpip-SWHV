@@ -8,8 +8,6 @@
 #include <netdb.h>
 #include <cstdlib>
 #include <cstring>
-#include <sys/un.h>
-#include <unistd.h>
 
 namespace net {
     using namespace std;
@@ -100,57 +98,6 @@ namespace net {
         }
     };
 
-    /**
-     * Class to identify and handle an UNIX address. The
-     * used internal address structure is <code>sockaddr_un</code>.
-     *
-     */
-    class UnixAddress {
-    private:
-        sockaddr_un sock_addr;    ///< Internal address structure
-
-    public:
-        /**
-         * Initializes the address to zero.
-         */
-        UnixAddress() {
-            memset(&sock_addr, 0, sizeof sock_addr);
-            sock_addr.sun_family = AF_UNIX;
-        }
-
-        /**
-         * Initializes the address with given path.
-         * @param path Address path.
-         */
-        UnixAddress(const char *path) {
-            memset(&sock_addr, 0, sizeof sock_addr);
-            sock_addr.sun_family = AF_UNIX;
-            strncpy(sock_addr.sun_path, path, sizeof sock_addr.sun_path - 1);
-        }
-
-        /**
-         * Removes the file associated to the UNIX address.
-         */
-        UnixAddress &Reset() {
-            unlink(sock_addr.sun_path);
-            return *this;
-        }
-
-        sockaddr *GetSockAddr() const {
-            return (sockaddr *) &sock_addr;
-        }
-
-        socklen_t GetSize() const {
-            return sizeof sock_addr;
-        }
-
-        /**
-         * Returns the address path.
-         */
-        string GetPath() const {
-            return sock_addr.sun_path;
-        }
-    };
 }
 
 #endif /* _NET_ADDRESS_H_ */

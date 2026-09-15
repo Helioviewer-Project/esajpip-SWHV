@@ -24,6 +24,7 @@
 #include "jpip/request.h"
 #include "jpip/woi_composer.h"
 #include "net/address.h"
+#include "net/socket.h"
 
 using namespace std;
 
@@ -161,6 +162,42 @@ static void CheckConnectionQueue() {
     Check(pending.id == 5 && pending.fd == 9,
           "Connection queue did not return its pending connection");
     Check(!queue.Push({6, 10}), "Connection queue accepted a connection after closing");
+}
+
+static void CheckControlSocket() {
+    int control_fds[2];
+    int data_fds[2];
+    Check(socketpair(AF_UNIX, SOCK_DGRAM, 0, control_fds) == 0,
+          "Could not create control test sockets");
+    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, data_fds) == 0,
+          "Could not create descriptor test sockets");
+
+    net::Socket parent(control_fds[0]);
+    net::Socket child(control_fds[1]);
+    Check(parent.SendDescriptor(data_fds[0], 17), "Could not pass a descriptor to the child");
+
+    int received_fd;
+    uint64_t connection_id;
+    Check(child.ReceiveDescriptor(&received_fd, &connection_id),
+          "Could not receive a passed descriptor");
+    Check(connection_id == 17, "Wrong passed connection identifier");
+
+    char sent = 'x';
+    char received;
+    Check(write(data_fds[1], &sent, 1) == 1 && read(received_fd, &received, 1) == 1 &&
+          received == sent, "Passed descriptor does not reference the connection");
+
+    Check(child.Send(&connection_id, sizeof connection_id) == sizeof connection_id,
+          "Could not notify the parent");
+    connection_id = 0;
+    Check(parent.Receive(&connection_id, sizeof connection_id) == sizeof connection_id &&
+          connection_id == 17, "Parent received the wrong completion identifier");
+
+    close(received_fd);
+    close(data_fds[0]);
+    close(data_fds[1]);
+    parent.Close();
+    child.Close();
 }
 
 static void CheckJHVRequests() {
@@ -567,6 +604,7 @@ int main() {
     CheckAppConfig();
     CheckInitialRequest();
     CheckConnectionQueue();
+    CheckControlSocket();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

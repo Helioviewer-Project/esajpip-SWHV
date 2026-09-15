@@ -45,6 +45,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/server/child.cc
     ${ESAJPIP_TOP}/server/connection_queue.cc
     ${ESAJPIP_TOP}/server/initial_request.cc
+    ${ESAJPIP_TOP}/server/parent.cc
     ${ESAJPIP_TOP}/trace.cc)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
@@ -94,6 +95,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
         ${ESAJPIP_TOP}/jpip/databin_writer.cc
         ${ESAJPIP_TOP}/jpip/request.cc
+        ${ESAJPIP_TOP}/net/socket.cc
         ${ESAJPIP_TOP}/server/connection_queue.cc
         ${ESAJPIP_TOP}/server/initial_request.cc
         ${ESAJPIP_TOP}/trace.cc)

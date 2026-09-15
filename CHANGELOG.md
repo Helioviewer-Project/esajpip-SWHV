@@ -40,6 +40,8 @@
   whenever its parent exits.
 - Close mappings and connections on parser and thread failures, and correct
   address-resolution and platform-specific alignment errors.
+- Replace predictable filesystem control sockets with inherited socket pairs,
+  preventing unrelated local processes from injecting completion messages.
 
 ## 1.9.0-rc1 - 2026-09-14
 

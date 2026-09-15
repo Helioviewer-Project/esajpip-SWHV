@@ -73,16 +73,6 @@ namespace net {
         }
 
         /**
-          This method creates a new UNIX socket, storing its identifier
-          in the object.
-          @param type Socket type, <code>SOCK_STREAM</code> by default.
-          @return <code>true</code> if successful.
-        */
-        bool OpenUnix(int type = SOCK_STREAM) {
-            return (sid = socket(PF_UNIX, type, 0)) != -1;
-        }
-
-        /**
           Configures the socket for listening incoming connections.
           @param address Address used to listen.
           @param nstack Maximum number of clients in listening stack.
@@ -93,15 +83,6 @@ namespace net {
             if (setsockopt(sid, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags)) != 0) return false;
             if (::bind(sid, address.GetSockAddr(), address.GetSize()) != 0) return false;
             return listen(sid, nstack) == 0;
-        }
-
-        /**
-         * Binds the socket to the specified address.
-         * @param address Address to bind.
-         * @return <code>true</code> if successful.
-         */
-        bool BindTo(const UnixAddress &address) {
-            return !::bind(sid, address.GetSockAddr(), address.GetSize());
         }
 
         /**
@@ -123,22 +104,20 @@ namespace net {
         ssize_t Receive(void *buf, size_t len);
 
         /**
-          Sends a number of bytes to a specific address.
-          @param address Address to send the bytes.
+          Sends a number of bytes.
           @param buf Buffer with the bytes to sent.
           @param len Number of bytes to sent.
           @return The number of sent bytes.
         */
-        ssize_t SendTo(const UnixAddress &address, const void *buf, size_t len);
+        ssize_t Send(const void *buf, size_t len);
 
         /**
          * Sends a descriptor through the socket.
-         * @param address Address of the socket to send the descriptor.
          * @param fd File descriptor.
          * @param connection_id Connection identifier to send with the descriptor.
          * @return true if successful.
          */
-        bool SendDescriptor(const UnixAddress &address, int fd, uint64_t connection_id);
+        bool SendDescriptor(int fd, uint64_t connection_id);
 
         /**
          * Receives a descriptor from a socket.

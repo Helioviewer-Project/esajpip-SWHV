@@ -3,12 +3,6 @@
 
 class AppConfig;
 
-namespace net {
-    class UnixAddress;
-}
-
-int RunChild(const AppConfig &cfg, int parent_fd,
-             net::UnixAddress &child_address,
-             const net::UnixAddress &parent_address);
+int RunChild(const AppConfig &cfg, int parent_fd, int control_fd);
 
 #endif /* _CHILD_H_ */

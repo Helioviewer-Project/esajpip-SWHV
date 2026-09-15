@@ -15,7 +15,8 @@ The responsibilities are separated as follows:
 
 | Source | Responsibility |
 | --- | --- |
-| `esa_jpip_server.cc` | Startup, listening parent, descriptor transfer and child recovery |
+| `esa_jpip_server.cc` | Configuration, status, logging, and listening-socket setup |
+| `server/parent.cc` | Connection admission, descriptor transfer, and child recovery |
 | `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |
 | `server/child.cc` | Child lifetime, channel lookup, and channel-thread creation |
 | `server/connection_queue.cc` | Capacity-one queue shared with one channel thread |
@@ -30,11 +31,19 @@ initial deadline. Passing the descriptor to the serving child with
 descriptor is then owned by the child process, a `ConnectionQueue`, or the
 channel thread. Every transfer leaves exactly one owner.
 
+The parent and child communicate through a fresh unnamed Unix datagram socket
+pair for each child generation. The parent passes client descriptors in one
+direction, and the child returns completed connection identifiers in the other.
+Only the inherited endpoints can use this control channel; it has no filesystem
+path that another local process can open or impersonate.
+
 One channel thread exclusively owns its `FileManager`, `ImageIndex`, linked JPX
 graph, `DataBinServer`, cache model, traversal state, and response buffer.
 None of this JPEG 2000 state is shared with another channel thread. The child
 process and channel thread share only the queue: one connection identifier, one
 descriptor, two wake-up sockets, and their small synchronization state.
+Channel threads report their completion to the child loop through a second
+unnamed datagram socket pair shared within the child process.
 
 ## Initial request
 
@@ -121,7 +130,8 @@ harmless no-op keyed by the stable connection identifier.
 If the serving child restarts, its per-channel state cannot be recovered. The
 new child closes inherited descriptor copies and shuts down identified connections
 so clients can establish new channels. The parent's initial deadline continues
-to govern pending, unidentified connections.
+to govern pending, unidentified connections. The replacement child receives a
+new control socket pair, so messages from the previous child cannot carry over.
 
 The child process also polls a parent-lifetime pipe. The parent owns its only
 write end, so parent termination closes the pipe and makes the child exit on
