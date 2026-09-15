@@ -37,11 +37,12 @@ struct RecordHeader {
 
 int read_fd = -1;
 int write_fd = -1;
+atomic<unsigned long> dropped(0);
+
 int output_fd = STDOUT_FILENO;
 bool file_output = false;
 size_t output_size = 0;
 string output_name;
-atomic<unsigned long> dropped(0);
 
 bool SetNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL);
@@ -95,20 +96,36 @@ bool WriteAll(int fd, const char *data, size_t length) {
     return true;
 }
 
+bool DisableOutput() {
+    if (output_fd >= 0)
+        close(output_fd);
+    output_fd = -1;
+    file_output = false;
+    return false;
+}
+
 bool Rotate() {
-    close(output_fd);
     string backup = output_name + ".1";
-    unlink(backup.c_str());
+    if (unlink(backup.c_str()) != 0 && errno != ENOENT)
+        return DisableOutput();
     if (rename(output_name.c_str(), backup.c_str()) != 0)
-        return false;
-    output_fd = open(output_name.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644);
+        return DisableOutput();
+
+    int replacement_fd = open(output_name.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644);
+    if (replacement_fd < 0)
+        return DisableOutput();
+
+    close(output_fd);
+    output_fd = replacement_fd;
     output_size = 0;
-    return output_fd >= 0;
+    return true;
 }
 
 }
 
-bool TraceSystem::Initialize(const string &file_name) {
+namespace TraceSystem {
+
+bool Initialize(const string &file_name) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) != 0)
         return false;
@@ -152,11 +169,11 @@ bool TraceSystem::Initialize(const string &file_name) {
     return true;
 }
 
-int TraceSystem::ReadDescriptor() {
+int ReadDescriptor() {
     return read_fd;
 }
 
-void TraceSystem::CloseParentDescriptors() {
+void CloseParentDescriptors() {
     if (read_fd >= 0) {
         close(read_fd);
         read_fd = -1;
@@ -167,7 +184,7 @@ void TraceSystem::CloseParentDescriptors() {
     }
 }
 
-void TraceSystem::Write(const string &message) {
+void Write(const string &message) {
     unsigned long count = dropped.exchange(0);
     if (count != 0) {
         ostringstream summary;
@@ -181,7 +198,7 @@ void TraceSystem::Write(const string &message) {
         dropped.fetch_add(1);
 }
 
-bool TraceSystem::DrainOne() {
+bool DrainOne() {
     char packet[sizeof(RecordHeader) + MAX_MESSAGE];
     ssize_t length;
     do {
@@ -189,6 +206,8 @@ bool TraceSystem::DrainOne() {
     } while (length < 0 && errno == EINTR);
     if (length < static_cast<ssize_t>(sizeof(RecordHeader)))
         return false;
+    if (output_fd < 0)
+        return true;
 
     RecordHeader header;
     memcpy(&header, packet, sizeof header);
@@ -211,7 +230,7 @@ bool TraceSystem::DrainOne() {
         line += "...";
     line += " \n";
     if (!WriteAll(output_fd, line.data(), line.size()))
-        return false;
+        return DisableOutput();
 
     if (file_output) {
         output_size += line.size();
@@ -219,4 +238,6 @@ bool TraceSystem::DrainOne() {
             return Rotate();
     }
     return true;
+}
+
 }

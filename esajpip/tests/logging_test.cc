@@ -1,8 +1,10 @@
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
 #include <cstdlib>
 #include <dirent.h>
+#include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -84,6 +86,18 @@ int main() {
           "Dropped log messages were not reported");
     Check(new_messages.find("message after queue saturation") != string::npos,
           "Logging did not recover after queue saturation");
+
+    unlink(backup.c_str());
+    Check(mkdir(backup.c_str(), 0700) == 0, "Could not obstruct log rollover");
+    LOG(string(1100, 'x'));
+    Check(!TraceSystem::DrainOne(), "Failed log rollover did not disable logging");
+
+    int reused_fd = open("/dev/null", O_WRONLY);
+    Check(reused_fd >= 0, "Could not reuse a descriptor after failed rollover");
+    LOG("message after failed rollover");
+    Check(TraceSystem::DrainOne(), "Could not discard a log after rollover failure");
+    close(reused_fd);
+    Check(rmdir(backup.c_str()) == 0, "Could not remove rollover obstruction");
 
     unlink(backup.c_str());
     unlink(active.c_str());

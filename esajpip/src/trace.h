@@ -5,14 +5,15 @@
 #include <sstream>
 #include <string>
 
-class TraceSystem {
-public:
-    static bool Initialize(const std::string &file_name);
-    static int ReadDescriptor();
-    static void CloseParentDescriptors();
-    static bool DrainOne();
-    static void Write(const std::string &message);
-};
+namespace TraceSystem {
+
+bool Initialize(const std::string &file_name);
+int ReadDescriptor();
+void CloseParentDescriptors();
+bool DrainOne();
+void Write(const std::string &message);
+
+}
 
 #define LOG(a)                                                                  \
     do {                                                                        \
