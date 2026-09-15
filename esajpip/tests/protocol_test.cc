@@ -201,7 +201,69 @@ static void CheckProgressionIndexes() {
     Check(params.GetProgressionIndex(packet) == 47, "Wrong RLCP packet index");
     params.progression = jpeg2000::CodingParameters::RPCL_PROGRESSION;
     Check(params.GetProgressionIndex(packet) == 47, "Wrong RPCL packet index");
+    params.progression = jpeg2000::CodingParameters::PCRL_PROGRESSION;
+    Check(params.GetProgressionIndex(packet) == 69, "Wrong PCRL packet index");
+    params.progression = jpeg2000::CodingParameters::CPRL_PROGRESSION;
+    Check(params.GetProgressionIndex(packet) == 69, "Wrong CPRL packet index");
     Check(params.GetPrecinctDataBinId(packet) == 23, "Wrong precinct data-bin ID");
+
+    jpeg2000::CodingParameters spatial;
+    spatial.size = jpeg2000::Size(11, 9);
+    spatial.num_levels = 2;
+    spatial.num_layers = 2;
+    spatial.num_components = 3;
+    spatial.resolutions.emplace_back(1, 2);
+    spatial.resolutions.emplace_back(2, 1);
+    spatial.resolutions.emplace_back(1, 4);
+    spatial.FillPrecinctCounts();
+
+    int expected = 0;
+    spatial.progression = jpeg2000::CodingParameters::PCRL_PROGRESSION;
+    for (int y = 0; y < spatial.size.y; ++y) {
+        for (int x = 0; x < spatial.size.x; ++x) {
+            for (int c = 0; c < spatial.num_components; ++c) {
+                for (int r = 0; r <= spatial.num_levels; ++r) {
+                    int step_x = spatial.resolutions[r].precinct_size.x <<
+                                 (spatial.num_levels - r);
+                    int step_y = spatial.resolutions[r].precinct_size.y <<
+                                 (spatial.num_levels - r);
+                    if (x % step_x != 0 || y % step_y != 0)
+                        continue;
+                    for (int l = 0; l < spatial.num_layers; ++l) {
+                        packet = jpeg2000::Packet(l, r, c,
+                                jpeg2000::Point(x / step_x, y / step_y));
+                        Check(spatial.GetProgressionIndex(packet) == expected++,
+                              "PCRL packet sequence does not follow the reference grid");
+                    }
+                }
+            }
+        }
+    }
+    Check(expected == spatial.GetNumPackets(), "PCRL packet sequence is incomplete");
+
+    expected = 0;
+    spatial.progression = jpeg2000::CodingParameters::CPRL_PROGRESSION;
+    for (int c = 0; c < spatial.num_components; ++c) {
+        for (int y = 0; y < spatial.size.y; ++y) {
+            for (int x = 0; x < spatial.size.x; ++x) {
+                for (int r = 0; r <= spatial.num_levels; ++r) {
+                    int step_x = spatial.resolutions[r].precinct_size.x <<
+                                 (spatial.num_levels - r);
+                    int step_y = spatial.resolutions[r].precinct_size.y <<
+                                 (spatial.num_levels - r);
+                    if (x % step_x != 0 || y % step_y != 0)
+                        continue;
+                    for (int l = 0; l < spatial.num_layers; ++l) {
+                        packet = jpeg2000::Packet(l, r, c,
+                                jpeg2000::Point(x / step_x, y / step_y));
+                        Check(spatial.GetProgressionIndex(packet) == expected++,
+                              "CPRL packet sequence does not follow the reference grid");
+                    }
+                }
+            }
+        }
+    }
+    Check(expected == spatial.GetNumPackets(), "CPRL packet sequence is incomplete");
 }
 
 static void CheckJPIPMessages() {

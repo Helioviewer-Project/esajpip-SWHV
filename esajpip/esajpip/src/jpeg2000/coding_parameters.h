@@ -61,6 +61,26 @@ namespace jpeg2000 {
                    (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
         }
 
+        int GetPositionIndex(int r, int px, int py, int *position_resolutions,
+                             int *resolution_at_position) const;
+
+        int GetProgressionIndexPCRL(int l, int r, int c, int px, int py) const {
+            int position_resolutions;
+            int resolution_at_position;
+            int position_index = GetPositionIndex(r, px, py, &position_resolutions,
+                                                  &resolution_at_position);
+            return ((position_index * num_components) +
+                    (c * position_resolutions) + resolution_at_position) * num_layers + l;
+        }
+
+        int GetProgressionIndexCPRL(int l, int r, int c, int px, int py) const {
+            int position_resolutions;
+            int resolution_at_position;
+            int position_index = GetPositionIndex(r, px, py, &position_resolutions,
+                                                  &resolution_at_position);
+            return ((c * total_precincts) + position_index + resolution_at_position) * num_layers + l;
+        }
+
     public:
         struct Resolution {
             Size precinct_size;
@@ -76,6 +96,7 @@ namespace jpeg2000 {
         int num_layers;            ///< Number of quality layers
         int progression;        ///< Progression order
         int num_components;        ///< Number of components
+        bool position_order_supported;
 
         /**
          * Precinct sizes of each resolution level.
@@ -102,16 +123,26 @@ namespace jpeg2000 {
             num_layers = 0;
             progression = 0;
             num_components = 0;
+            position_order_supported = false;
             total_precincts = 0;
         }
 
         void FillPrecinctCounts();
 
         /**
-         * Returns <code>true</code> if the progression is RLCP or RPCL.
+         * Returns <code>true</code> if the progression starts with resolution.
          */
         bool IsResolutionProgression() const {
             return progression == RLCP_PROGRESSION || progression == RPCL_PROGRESSION;
+        }
+
+        bool IsLayerLastProgression() const {
+            return progression == RPCL_PROGRESSION || progression == PCRL_PROGRESSION ||
+                   progression == CPRL_PROGRESSION;
+        }
+
+        int GetNumPackets() const {
+            return total_precincts * num_components * num_layers;
         }
 
         /**
@@ -139,6 +170,10 @@ namespace jpeg2000 {
                     return GetProgressionIndexRLCP(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
                 case RPCL_PROGRESSION:
                     return GetProgressionIndexRPCL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
+                case PCRL_PROGRESSION:
+                    return GetProgressionIndexPCRL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
+                case CPRL_PROGRESSION:
+                    return GetProgressionIndexCPRL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
                 default:
                     ERROR("Progression (" << progression << ") not supported");
             }

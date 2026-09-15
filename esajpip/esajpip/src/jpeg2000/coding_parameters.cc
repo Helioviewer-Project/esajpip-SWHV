@@ -1,6 +1,35 @@
 #include "coding_parameters.h"
 
+#include <cstdint>
+
 namespace jpeg2000 {
+
+    int CodingParameters::GetPositionIndex(int r, int px, int py, int *position_resolutions,
+                                           int *resolution_at_position) const {
+        int64_t x = (static_cast<int64_t>(px) * resolutions[r].precinct_size.x) << (num_levels - r);
+        int64_t y = (static_cast<int64_t>(py) * resolutions[r].precinct_size.y) << (num_levels - r);
+        int position_index = 0;
+        *position_resolutions = 0;
+        *resolution_at_position = 0;
+
+        for (int i = 0; i <= num_levels; ++i) {
+            int64_t step_x = static_cast<int64_t>(resolutions[i].precinct_size.x) << (num_levels - i);
+            int64_t step_y = static_cast<int64_t>(resolutions[i].precinct_size.y) << (num_levels - i);
+            Size precincts = GetPrecincts(i, size);
+
+            position_index += static_cast<int>((y + step_y - 1) / step_y) * precincts.x;
+            if (y % step_y != 0)
+                continue;
+
+            position_index += static_cast<int>((x + step_x - 1) / step_x);
+            if (x % step_x == 0) {
+                if (i < r)
+                    (*resolution_at_position)++;
+                (*position_resolutions)++;
+            }
+        }
+        return position_index;
+    }
 
     void CodingParameters::FillPrecinctCounts() {
         total_precincts = 0;

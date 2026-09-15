@@ -32,12 +32,7 @@ namespace jpeg2000 {
             Packet packet(0, r + 1, 0, Size(0, 0));
             max_index = coding_parameters.GetProgressionIndex(packet) - 1;
         } else {
-            // The max_index is the last packet of the image file
-            Size precinct_point =
-                    coding_parameters.GetPrecincts(coding_parameters.num_levels, coding_parameters.size) - 1;
-            Packet packet(coding_parameters.num_layers - 1, coding_parameters.num_levels,
-                          coding_parameters.num_components - 1, precinct_point);
-            max_index = coding_parameters.GetProgressionIndex(packet);
+            max_index = coding_parameters.GetNumPackets() - 1;
         }
 
         uint64_t length_packet = 0;
@@ -130,7 +125,7 @@ namespace jpeg2000 {
         if (offset != NULL) {
             *offset = 0;
 
-            if (coding_parameters.progression == CodingParameters::RPCL_PROGRESSION) {
+            if (coding_parameters.IsLayerLastProgression()) {
                 for (int l = packet.layer; l > 0; --l)
                     *offset += packet_index[--idx].length;
             } else {

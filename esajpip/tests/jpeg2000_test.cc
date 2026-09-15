@@ -43,7 +43,7 @@ static void AppendBox(vector<unsigned char> &file, uint32_t type,
     file.insert(file.end(), contents.begin(), contents.end());
 }
 
-static vector<unsigned char> MakeCodestream() {
+static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sampling = 1) {
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
@@ -60,13 +60,13 @@ static vector<unsigned char> MakeCodestream() {
     Append32(codestream, 0);      // YTOsiz
     Append16(codestream, 1);      // Csiz
     codestream.push_back(7);      // Ssiz
-    codestream.push_back(1);      // XRsiz
-    codestream.push_back(1);      // YRsiz
+    codestream.push_back(sampling); // XRsiz
+    codestream.push_back(sampling); // YRsiz
 
     Append16(codestream, 0xFF52); // COD
     Append16(codestream, 12);
     codestream.push_back(0);      // Scod
-    codestream.push_back(0);      // LRCP
+    codestream.push_back(progression);
     Append16(codestream, 1);      // layers
     codestream.push_back(0);      // MCT
     codestream.push_back(0);      // decomposition levels
@@ -159,6 +159,9 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    WriteFile(directory + "pcrl.jp2", MakeJP2(MakeCodestream(3)));
+    WriteFile(directory + "cprl.jp2", MakeJP2(MakeCodestream(4)));
+    WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
@@ -175,6 +178,22 @@ int main() {
                                         &packet),
           "Could not index valid JP2 packet");
     Check(packet.length == 1, "Wrong JP2 packet length");
+
+    for (const char *name : {"pcrl.jp2", "cprl.jp2"}) {
+        jpeg2000::FileManager progression_manager;
+        Check(OpenImage(directory, name, &progression_manager),
+              "Could not parse spatially progressive JP2");
+        data::File *progression_file = progression_manager.GetFile(directory + name);
+        Check(progression_file != NULL, "Could not reopen spatially progressive JP2");
+        Check(progression_manager.GetImage()->GetPacket(
+                      progression_file, 0,
+                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+              "Could not index spatially progressive JP2 packet");
+        Check(packet.length == 1, "Wrong spatially progressive packet length");
+    }
+    jpeg2000::FileManager unsupported_progression_manager;
+    Check(!OpenImage(directory, "unsupported-pcrl.jp2", &unsupported_progression_manager),
+          "Accepted spatial progression with unsupported component geometry");
 
     jpeg2000::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),
@@ -233,6 +252,9 @@ int main() {
     Check(!server.SetRequest(manager, request), "Accepted unavailable codestream");
 
     remove((directory + "image.jp2").c_str());
+    remove((directory + "pcrl.jp2").c_str());
+    remove((directory + "cprl.jp2").c_str());
+    remove((directory + "unsupported-pcrl.jp2").c_str());
     manager.ClearFiles();
     Check(request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");

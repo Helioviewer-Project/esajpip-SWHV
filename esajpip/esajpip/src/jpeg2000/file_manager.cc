@@ -194,6 +194,9 @@ namespace jpeg2000 {
 
         params->size = Size(image[0] - image[2], image[1] - image[3]);
         params->num_components = num_components;
+        params->position_order_supported =
+                image[2] == 0 && image[3] == 0 && tiling[2] == 0 && tiling[3] == 0 &&
+                tiling[0] >= image[0] && tiling[1] >= image[1];
         for (uint16_t i = 0; i < num_components; ++i) {
             uint8_t precision = 0;
             uint8_t xrsiz = 0;
@@ -201,6 +204,8 @@ namespace jpeg2000 {
             if (!file->ReadReverse(&precision) || !file->ReadReverse(&xrsiz) || !file->ReadReverse(&yrsiz) ||
                 (precision & 0x7F) > 37 || xrsiz == 0 || yrsiz == 0)
                 return false;
+            if (xrsiz != 1 || yrsiz != 1)
+                params->position_order_supported = false;
         }
         return true;
     }
@@ -227,7 +232,8 @@ namespace jpeg2000 {
         uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
         if (lcod != expected_length || (cs_buf & 0xF8) != 0 || progression > 4 || quality_layers == 0 ||
             mct > 1 || transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
-            cb_width + cb_height > 8 || transform > 1)
+            cb_width + cb_height > 8 || transform > 1 ||
+            (progression >= CodingParameters::PCRL_PROGRESSION && !params->position_order_supported))
             return false;
 
         params->progression = progression;

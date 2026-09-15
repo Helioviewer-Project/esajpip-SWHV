@@ -12,6 +12,8 @@
 
 ### Fixed
 
+- Implement PCRL and CPRL packet ordering for origin-zero, single-tile
+  codestreams with unit component sampling; reject other PCRL/CPRL geometries.
 - Validate JPEG 2000 marker, tile-part, packet, box, and codestream bounds.
 - Validate linked-JPX fragment lists, data references, and external ranges.
 - Reject invalid cache-model lengths, response limits, and codestream selectors.
