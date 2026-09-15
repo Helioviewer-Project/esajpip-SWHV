@@ -1,12 +1,16 @@
+#include <sys/socket.h>
+
 #include <cstdlib>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <unistd.h>
 
+#include "client_admission.h"
 #include "data/file.h"
 #include "data/file_segment.h"
 #include "http/header.h"
@@ -26,6 +30,34 @@ static void Check(bool condition, const char *message) {
         cerr << message << endl;
         exit(EXIT_FAILURE);
     }
+}
+
+static AdmissionResult Admit(const char *request) {
+    int sockets[2];
+    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
+          "Could not create admission test sockets");
+    if (request)
+        Check(write(sockets[0], request, strlen(request)) == static_cast<ssize_t>(strlen(request)),
+              "Could not write admission test request");
+
+    AdmissionResult result = CheckAdmission(sockets[1]);
+    close(sockets[0]);
+    close(sockets[1]);
+    return result;
+}
+
+static void CheckClientAdmission() {
+    Check(Admit(NULL) == ADMISSION_PENDING, "Rejected an idle connection before its deadline");
+    Check(Admit("G") == ADMISSION_PENDING, "Rejected a partial GET method");
+    Check(Admit("POST") == ADMISSION_REJECTED, "Accepted a non-GET method");
+    Check(Admit("GET /movie.jpx?cnew=http HTTP/1.1\r\n") == ADMISSION_ACCEPTED,
+          "Rejected a JHV channel request");
+    Check(Admit("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n") == ADMISSION_ACCEPTED,
+          "Rejected a target-form JPIP channel request");
+    Check(Admit("GET /movie.jpx?xcnew=http HTTP/1.1\r\n") == ADMISSION_REJECTED,
+          "Accepted a request without a cnew parameter");
+    Check(Admit("GET /movie.jpx?cnew=http HTTP/2\r\n") == ADMISSION_REJECTED,
+          "Accepted an unsupported HTTP version");
 }
 
 static void CheckJHVRequests() {
@@ -429,6 +461,7 @@ static void CheckMetadataPlaceHolder() {
 }
 
 int main() {
+    CheckClientAdmission();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();
