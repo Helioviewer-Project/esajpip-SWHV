@@ -58,7 +58,7 @@ namespace jpip {
         template<typename T>
         void WriteValue(T value) {
             if (!eof) {
-                if ((ptr + sizeof(T)) > end) eof = true;
+                if (static_cast<size_t>(end - ptr) < sizeof(T)) eof = true;
                 else {
                     for (int i = sizeof(T) - 1; i >= 0; --i)
                         *ptr++ = (value >> (8 * i)) & 0xFF;
@@ -173,7 +173,7 @@ namespace jpip {
          */
         void WriteEOR(int reason) {
             FinishMessage();
-            if ((ptr + 3) > end) eof = true;
+            if (end - ptr < 3) eof = true;
             else {
                 *ptr++ = 0;
                 *ptr++ = (char) reason;

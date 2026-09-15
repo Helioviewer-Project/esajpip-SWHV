@@ -43,7 +43,7 @@ namespace jpip {
         msg_databin_class = databin_class;
         msg_codestream_idx = codestream_idx;
         size_t header_len = HeaderLength(bin_id, bin_offset, bin_length);
-        if ((ptr + header_len) > end) {
+        if (static_cast<size_t>(end - ptr) < header_len) {
             eof = true;
             return false;
         }
@@ -66,7 +66,7 @@ namespace jpip {
         size_t payload_len = ptr - payload;
         size_t header_len = HeaderLength(msg_bin, msg_offset, msg_len);
         if (header_len > msg_header_len &&
-            ptr + header_len - msg_header_len > end) {
+            static_cast<size_t>(end - ptr) < header_len - msg_header_len) {
             eof = true;
             return;
         }
@@ -93,7 +93,7 @@ namespace jpip {
                     value >>= 7;
                 } while (value);
 
-                if ((ptr + num) > end) eof = true;
+                if (end - ptr < num) eof = true;
                 else {
                     while (num-- > 1) *ptr++ = bytes[num] | (uint8_t) 0x80;
                     *ptr++ = bytes[num];
@@ -145,10 +145,12 @@ namespace jpip {
                          segment.length, last_byte)) {
             char *aux_ptr = ptr;
             if (segment.length > 0) {
-                file.Seek(segment.offset);
-                if ((ptr + segment.length) > end) eof = true;
-                else if (!file.Read(ptr, segment.length)) eof = true;
-                else ptr += segment.length;
+                if (segment.length > static_cast<uint64_t>(end - ptr)) eof = true;
+                else {
+                    file.Seek(segment.offset);
+                    if (!file.Read(ptr, segment.length)) eof = true;
+                    else ptr += segment.length;
+                }
             }
 
             if (eof) ptr = aux_ptr;
@@ -167,7 +169,8 @@ namespace jpip {
         if (BeginMessage(databin_class, codestream_idx, bin_id, bin_offset,
                          place_holder.length(), last_byte)) {
             char *aux_ptr = ptr;
-            if ((ptr + place_holder.length()) > end) eof = true;
+            if (static_cast<uint64_t>(place_holder.length()) >
+                static_cast<uint64_t>(end - ptr)) eof = true;
             else {
                 /* LBox   */  WriteValue<uint32_t>(place_holder.length());
                 /* TBox   */  WriteValue<uint32_t>(0x70686c64);
@@ -177,7 +180,7 @@ namespace jpip {
                 /* OrigBH */
                 if (place_holder.header.length > 0) {
                     file.Seek(place_holder.header.offset);
-                    if (ptr + place_holder.header.length > end) eof = true;
+                    if (place_holder.header.length > static_cast<uint64_t>(end - ptr)) eof = true;
                     else if (!file.Read(ptr, place_holder.header.length)) eof = true;
                     else ptr += place_holder.header.length;
                 }

@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <cstdio>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -281,6 +282,22 @@ static void CheckJPIPMessages() {
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "The JPIP message format changed");
 }
 
+static void CheckDataBinCapacity() {
+    char tiny_buf[2];
+    jpip::DataBinWriter tiny_writer;
+    tiny_writer.SetBuffer(tiny_buf, sizeof tiny_buf);
+    tiny_writer.WriteEOR(jpip::EOR::WINDOW_DONE);
+    Check(!tiny_writer.IsValid(), "Accepted an EOR message larger than the buffer");
+
+    char buf[32];
+    data::File file;
+    jpip::DataBinWriter writer;
+    writer.SetBuffer(buf, sizeof buf);
+    writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                 data::FileSegment(0, UINT64_MAX), true);
+    Check(!writer.IsValid(), "Accepted a data-bin segment larger than the buffer");
+}
+
 static void CheckCoalescedJPIPMessages() {
     char path[] = "/tmp/esajpip-protocol-XXXXXX";
     int fd = mkstemp(path);
@@ -419,6 +436,7 @@ int main() {
     CheckWOIPackets();
     CheckProgressionIndexes();
     CheckJPIPMessages();
+    CheckDataBinCapacity();
     CheckCoalescedJPIPMessages();
     CheckMetadataPlaceHolder();
     return EXIT_SUCCESS;

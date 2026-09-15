@@ -16,6 +16,7 @@
   codestreams with unit component sampling; reject other PCRL/CPRL geometries.
 - Reject multi-tile codestreams instead of flattening their tile-parts into the
   single-tile packet model.
+- Avoid undefined pointer arithmetic in JPIP response-buffer capacity checks.
 - Validate JPEG 2000 marker, tile-part, packet, box, and codestream bounds.
 - Validate linked-JPX fragment lists, data references, and external ranges.
 - Reject invalid cache-model lengths, response limits, and codestream selectors.
