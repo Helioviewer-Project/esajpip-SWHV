@@ -43,18 +43,20 @@ static void AppendBox(vector<unsigned char> &file, uint32_t type,
     file.insert(file.end(), contents.begin(), contents.end());
 }
 
-static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sampling = 1) {
+static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sampling = 1,
+                                            uint32_t image_width = 1, uint32_t tile_width = 1,
+                                            uint16_t tile_index = 0) {
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
     Append16(codestream, 0xFF51); // SIZ
     Append16(codestream, 41);
     Append16(codestream, 0);      // Rsiz
-    Append32(codestream, 1);      // Xsiz
+    Append32(codestream, image_width); // Xsiz
     Append32(codestream, 1);      // Ysiz
     Append32(codestream, 0);      // XOsiz
     Append32(codestream, 0);      // YOsiz
-    Append32(codestream, 1);      // XTsiz
+    Append32(codestream, tile_width); // XTsiz
     Append32(codestream, 1);      // YTsiz
     Append32(codestream, 0);      // XTOsiz
     Append32(codestream, 0);      // YTOsiz
@@ -81,7 +83,7 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
 
     Append16(codestream, 0xFF90); // SOT
     Append16(codestream, 10);
-    Append16(codestream, 0);      // tile index
+    Append16(codestream, tile_index);
     Append32(codestream, 21);     // tile-part length
     codestream.push_back(0);      // tile-part index
     codestream.push_back(1);      // number of tile-parts
@@ -162,6 +164,8 @@ int main() {
     WriteFile(directory + "pcrl.jp2", MakeJP2(MakeCodestream(3)));
     WriteFile(directory + "cprl.jp2", MakeJP2(MakeCodestream(4)));
     WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
+    WriteFile(directory + "multi-tile.jp2", MakeJP2(MakeCodestream(0, 1, 2, 1)));
+    WriteFile(directory + "bad-tile-index.jp2", MakeJP2(MakeCodestream(0, 1, 1, 1, 1)));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
@@ -194,6 +198,13 @@ int main() {
     jpeg2000::FileManager unsupported_progression_manager;
     Check(!OpenImage(directory, "unsupported-pcrl.jp2", &unsupported_progression_manager),
           "Accepted spatial progression with unsupported component geometry");
+
+    jpeg2000::FileManager multi_tile_manager;
+    Check(!OpenImage(directory, "multi-tile.jp2", &multi_tile_manager),
+          "Accepted a multi-tile codestream");
+    jpeg2000::FileManager tile_index_manager;
+    Check(!OpenImage(directory, "bad-tile-index.jp2", &tile_index_manager),
+          "Accepted a nonzero tile index");
 
     jpeg2000::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),
@@ -255,6 +266,8 @@ int main() {
     remove((directory + "pcrl.jp2").c_str());
     remove((directory + "cprl.jp2").c_str());
     remove((directory + "unsupported-pcrl.jp2").c_str());
+    remove((directory + "multi-tile.jp2").c_str());
+    remove((directory + "bad-tile-index.jp2").c_str());
     manager.ClearFiles();
     Check(request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");

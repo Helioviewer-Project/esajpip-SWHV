@@ -191,6 +191,9 @@ namespace jpeg2000 {
             image[0] - image[2] > INT_MAX || image[1] - image[3] > INT_MAX ||
             tiling[0] == 0 || tiling[1] == 0)
             return false;
+        if (tiling[2] > image[2] || tiling[3] > image[3] ||
+            tiling[0] < image[0] - tiling[2] || tiling[1] < image[1] - tiling[3])
+            return false;
 
         params->size = Size(image[0] - image[2], image[1] - image[3]);
         params->num_components = num_components;
@@ -268,7 +271,7 @@ namespace jpeg2000 {
         uint8_t tpsot = 0;
         uint8_t tnsot = 0;
         if (!file->ReadReverse(&lsot) || !file->ReadReverse(&isot) || !file->ReadReverse(&psot) ||
-            !file->ReadReverse(&tpsot) || !file->ReadReverse(&tnsot) || lsot != 10 || isot == UINT16_MAX ||
+            !file->ReadReverse(&tpsot) || !file->ReadReverse(&tnsot) || lsot != 10 || isot != 0 ||
             tpsot == UINT8_MAX || (tnsot != 0 && tpsot >= tnsot) || (psot != 0 && psot < 14) ||
             (psot != 0 && psot > limit - marker_offset))
             return false;
