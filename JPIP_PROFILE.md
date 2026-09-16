@@ -96,7 +96,8 @@ JPX specifications allow.
 - All five Part 1 progression orders are indexed. PCRL and CPRL additionally
   require unit component sampling.
 - Explicit precinct dimensions and the Part 1 default of 32,768 by 32,768
-  samples are supported.
+  samples are supported. An explicit zero exponent is accepted only at the
+  lowest resolution.
 - The main `SIZ`, `COD`, and `QCD` information must describe the packet layout.
   Marker features that change that layout without being represented there,
   such as progression changes through `POC`, are outside the supported profile.

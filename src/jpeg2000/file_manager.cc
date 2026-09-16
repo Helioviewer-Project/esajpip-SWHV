@@ -272,6 +272,9 @@ namespace jpeg2000 {
             if (cs_buf & 1) {
                 if (!file->ReadReverse(&size_precinct))
                     return false;
+                if (i > 0 && ((size_precinct & 0x0F) == 0 ||
+                              (size_precinct & 0xF0) == 0))
+                    return false;
 
                 height = 1 << ((size_precinct & 0xF0) >> 4);
                 width = 1 << (size_precinct & 0x0F);

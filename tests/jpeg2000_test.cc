@@ -56,7 +56,10 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
                                             uint16_t quality_layers = 1,
                                             uint8_t tile_parts = 1,
                                             uint8_t packets_per_tile_part = 1,
-                                            uint8_t code_block_style = 0) {
+                                            uint8_t code_block_style = 0,
+                                            const vector<unsigned char> &precinct_sizes =
+                                                    vector<unsigned char>()) {
+    uint8_t transform_levels = precinct_sizes.empty() ? 0 : precinct_sizes.size() - 1;
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
@@ -77,16 +80,17 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     codestream.push_back(sampling); // YRsiz
 
     Append16(codestream, 0xFF52); // COD
-    Append16(codestream, 12);
-    codestream.push_back(0);      // Scod
+    Append16(codestream, 12 + precinct_sizes.size());
+    codestream.push_back(precinct_sizes.empty() ? 0 : 1); // Scod
     codestream.push_back(progression);
     Append16(codestream, quality_layers);
     codestream.push_back(0);      // MCT
-    codestream.push_back(0);      // decomposition levels
+    codestream.push_back(transform_levels);
     codestream.push_back(0);      // code-block width
     codestream.push_back(0);      // code-block height
     codestream.push_back(code_block_style); // code-block style
     codestream.push_back(1);      // reversible transform
+    codestream.insert(codestream.end(), precinct_sizes.begin(), precinct_sizes.end());
 
     Append16(codestream, 0xFF5C); // QCD
     Append16(codestream, 3);
@@ -111,6 +115,12 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     }
     Append16(codestream, 0xFFD9); // EOC
     return codestream;
+}
+
+static vector<unsigned char> MakePrecinctCodestream(uint8_t lowest,
+                                                     uint8_t higher) {
+    return MakeCodestream(0, 1, 1, 1, 0, 1, 1, 2, 0,
+                          vector<unsigned char>{lowest, higher});
 }
 
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
@@ -198,6 +208,12 @@ int main() {
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 64)));
     WriteFile(directory + "code-block-style-255.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 255)));
+    WriteFile(directory + "precinct-lowest-zero.jp2",
+              MakeJP2(MakePrecinctCodestream(0x00, 0x11)));
+    WriteFile(directory + "precinct-higher-ppx-zero.jp2",
+              MakeJP2(MakePrecinctCodestream(0x11, 0x10)));
+    WriteFile(directory + "precinct-higher-ppy-zero.jp2",
+              MakeJP2(MakePrecinctCodestream(0x11, 0x01)));
     vector<unsigned char> nonzero_origin = MakeCodestream(0, 1, 2, 2);
     Set32(nonzero_origin, 16, 1); // XOsiz
     WriteFile(directory + "nonzero-origin.jp2", MakeJP2(nonzero_origin));
@@ -292,6 +308,17 @@ int main() {
         jpeg2000::FileManager reserved_code_block_style_manager;
         Check(!OpenImage(directory, name, &reserved_code_block_style_manager),
               "Accepted a reserved code-block style bit");
+    }
+
+    jpeg2000::FileManager lowest_zero_precinct_manager;
+    Check(OpenImage(directory, "precinct-lowest-zero.jp2",
+                    &lowest_zero_precinct_manager),
+          "Rejected zero precinct exponents at the lowest resolution");
+    for (const char *name : {"precinct-higher-ppx-zero.jp2",
+                             "precinct-higher-ppy-zero.jp2"}) {
+        jpeg2000::FileManager zero_precinct_manager;
+        Check(!OpenImage(directory, name, &zero_precinct_manager),
+              "Accepted a zero precinct exponent above the lowest resolution");
     }
 
     jpeg2000::FileManager embedded_manager;
