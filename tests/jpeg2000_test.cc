@@ -12,6 +12,8 @@
 
 using namespace std;
 
+static const uint64_t JP2_CODESTREAM_OFFSET = 40;
+
 static void Check(bool condition, const char *message) {
     if (!condition) {
         cerr << message << endl;
@@ -48,6 +50,20 @@ static void AppendBox(vector<unsigned char> &file, uint32_t type,
     Append32(file, contents.size() + 8);
     Append32(file, type);
     file.insert(file.end(), contents.begin(), contents.end());
+}
+
+static vector<unsigned char> MakePreamble(uint32_t brand) {
+    vector<unsigned char> file;
+    vector<unsigned char> signature;
+    Append32(signature, 0x0D0A870A);
+    AppendBox(file, 0x6A502020, signature); // jP
+
+    vector<unsigned char> file_type;
+    Append32(file_type, brand);
+    Append32(file_type, 0);                 // minor version
+    Append32(file_type, brand);             // compatibility
+    AppendBox(file, 0x66747970, file_type); // ftyp
+    return file;
 }
 
 static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sampling = 1,
@@ -124,14 +140,14 @@ static vector<unsigned char> MakePrecinctCodestream(uint8_t lowest,
 }
 
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
-    vector<unsigned char> file;
+    vector<unsigned char> file = MakePreamble(0x6A703220); // jp2
     AppendBox(file, 0x6A703263, codestream); // jp2c
     return file;
 }
 
 static vector<unsigned char> MakeEmbeddedJPX(const vector<unsigned char> &codestream,
                                              const vector<unsigned char> &second = {}) {
-    vector<unsigned char> file;
+    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
     AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
     AppendBox(file, 0x6A703263, codestream);              // jp2c
     if (!second.empty()) {
@@ -144,12 +160,12 @@ static vector<unsigned char> MakeEmbeddedJPX(const vector<unsigned char> &codest
 static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
                                             uint32_t codestream_length,
                                             uint16_t reference_count = 1) {
-    vector<unsigned char> file;
+    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
     AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
 
     vector<unsigned char> fragment;
     Append16(fragment, 1);                 // one fragment
-    Append64(fragment, 8);                 // jp2c contents
+    Append64(fragment, JP2_CODESTREAM_OFFSET);
     Append32(fragment, codestream_length);
     Append16(fragment, 1);                 // data reference
     vector<unsigned char> fragment_box;
@@ -191,6 +207,14 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    WriteFile(directory + "missing-signature.jp2",
+              vector<unsigned char>(jp2.begin() + 12, jp2.end()));
+    vector<unsigned char> bad_signature = jp2;
+    Set32(bad_signature, 8, 0);
+    WriteFile(directory + "bad-signature.jp2", bad_signature);
+    vector<unsigned char> missing_file_type = jp2;
+    Set32(missing_file_type, 16, 0x66726565); // free
+    WriteFile(directory + "missing-file-type.jp2", missing_file_type);
     WriteFile(directory + "pcrl.jp2", MakeJP2(MakeCodestream(3)));
     WriteFile(directory + "cprl.jp2", MakeJP2(MakeCodestream(4)));
     WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
@@ -231,6 +255,13 @@ int main() {
     jpeg2000::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
     Check(manager.GetImage()->GetNumCodestreams() == 1, "Wrong JP2 codestream count");
+
+    for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
+                             "missing-file-type.jp2"}) {
+        jpeg2000::FileManager preamble_manager;
+        Check(!OpenImage(directory, name, &preamble_manager),
+              "Accepted an invalid JPEG 2000 file preamble");
+    }
 
     data::File *file = manager.GetFile(directory + "image.jp2");
     Check(file != NULL, "Could not reopen valid JP2");

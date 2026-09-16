@@ -90,6 +90,8 @@ JPX specifications allow.
 ### JP2
 
 - The file name must end in `.jp2`.
+- The first box must be the standard JPEG 2000 signature box, followed by the
+  file-type box.
 - Exactly one embedded codestream is supported.
 - The codestream must contain one tile, use zero image and tile origins, and
   contain at least one valid `PLT` marker.
@@ -115,6 +117,8 @@ transcoding step required for such inputs.
 ### JPX
 
 - The file name must end in `.jpx`.
+- The first box must be the standard JPEG 2000 signature box, followed by the
+  file-type box.
 - A JPX with no links must contain every declared codestream. Each embedded
   codestream keeps its own coding parameters.
 - If links are present, every declared codestream must have a link in the

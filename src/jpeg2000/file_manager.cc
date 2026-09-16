@@ -1,6 +1,7 @@
 #include "file_manager.h"
 
 #include <climits>
+#include <cstring>
 #include <utility>
 
 #include <glib.h>
@@ -60,6 +61,7 @@ namespace jpeg2000 {
 #define SOD_MARKER 0xFF93
 
 #define JP2C_BOX_ID 0x6A703263
+#define FILE_TYPE_BOX_ID 0x66747970
 #define ASOC_BOX_ID 0x61736F63
 #define NLST_BOX_ID 0x6E6C7374
 #define JPCH_BOX_ID 0x6A706368
@@ -67,6 +69,11 @@ namespace jpeg2000 {
 #define DBTL_BOX_ID 0x6474626C
 #define URL__BOX_ID 0x75726C20
 #define FLST_BOX_ID 0x666C7374
+
+    static const unsigned char JP2_SIGNATURE_BOX[] = {
+        0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20,
+        0x0D, 0x0A, 0x87, 0x0A
+    };
 
     static bool SkipMarker(File *file, uint64_t limit) {
         uint16_t length = 0;
@@ -94,7 +101,21 @@ namespace jpeg2000 {
             return false;
         }
 
-        bool res;
+        unsigned char signature_box[sizeof JP2_SIGNATURE_BOX];
+        uint32_t second_type = 0;
+        uint64_t second_length = 0;
+        bool res = file.Read(signature_box, sizeof signature_box) &&
+                   memcmp(signature_box, JP2_SIGNATURE_BOX,
+                          sizeof signature_box) == 0 &&
+                   ReadBoxHeader(&file, file.GetSize(), &second_type,
+                                 &second_length) &&
+                   second_type == FILE_TYPE_BOX_ID;
+        if (!res) {
+            ERROR("Invalid JPEG 2000 file preamble in '" << name_image_file << "'");
+            return false;
+        }
+        file.Seek(0);
+
         if (extension == ".jp2")
             res = ReadJP2(&file, image_index);
         else
