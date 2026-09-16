@@ -361,8 +361,6 @@ namespace jpeg2000 {
         uint32_t type_box;
         uint64_t length_box;
         uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
-        //int metadata_bin=1;
-
         CodingParameters coding_parameters;
         CodestreamIndex codestream_index;
         while (file->GetOffset() != file->GetSize() && res) {
@@ -522,7 +520,6 @@ namespace jpeg2000 {
                     // Add the paths of the hyperlinked images to the paths vector
                     res = containers.back().first == DBTL_BOX_ID &&
                           ReadUrlBox(file, length_box, &path_file);
-                    //path_file=root_dir_ + path_file; /// OJOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
                     if (res)
                         v_path_file.push_back(path_file);
                     break;

@@ -16,7 +16,7 @@ namespace jpip {
     public:
         jpeg2000::Size size;        ///< Size of the WOI (width and height)
         jpeg2000::Point position;    ///< Position of the upper-left corner of the WOI
-        int resolution;    ///< Resolution level where the WOI is located (0 == the highest)
+        int resolution;    ///< Resolution level where the WOI is located (0 == the lowest)
 
         /**
          * Initializes the resolution level to zero.

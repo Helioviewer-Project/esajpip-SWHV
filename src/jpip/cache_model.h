@@ -19,6 +19,13 @@ namespace jpip {
      * item is complete. This class is serializable.
      */
     class CacheModel {
+    private:
+        static int AddAmount(int current, int amount) {
+            if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)
+                return INT_MAX;
+            return current + amount;
+        }
+
     public:
         /**
          * Sub-class of the cache model class used to identify a
@@ -39,12 +46,6 @@ namespace jpip {
              * starting from this index.
              */
             int min_precinct;
-
-            static int AddAmount(int current, int amount) {
-                if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)
-                    return INT_MAX;
-                return current + amount;
-            }
 
         public:
             /**
@@ -80,7 +81,7 @@ namespace jpip {
             int AddToMainHeader(int amount, bool complete = false) {
                 if (header != INT_MAX) {
                     if (complete) header = INT_MAX;
-                    else header = AddAmount(header, amount);
+                    else header = CacheModel::AddAmount(header, amount);
                 }
                 return header;
             }
@@ -95,7 +96,7 @@ namespace jpip {
             int AddToTileHeader(int amount, bool complete = false) {
                 if (tile_header != INT_MAX) {
                     if (complete) tile_header = INT_MAX;
-                    else tile_header = AddAmount(tile_header, amount);
+                    else tile_header = CacheModel::AddAmount(tile_header, amount);
                 }
                 return tile_header;
             }
@@ -129,7 +130,7 @@ namespace jpip {
                     int &p = precincts[n];
                     if (p != INT_MAX) {
                         if (complete) p = INT_MAX;
-                        else p = AddAmount(p, amount);
+                        else p = CacheModel::AddAmount(p, amount);
                     }
                     return p;
                 }
@@ -173,12 +174,6 @@ namespace jpip {
          * Amounts for the codestreams.
          */
         std::vector<Codestream> codestreams;
-
-        static int AddAmount(int current, int amount) {
-            if (current == INT_MAX || amount == INT_MAX || amount > INT_MAX - current)
-                return INT_MAX;
-            return current + amount;
-        }
 
     public:
         /**

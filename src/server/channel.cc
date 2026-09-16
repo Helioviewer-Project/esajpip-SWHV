@@ -31,10 +31,10 @@ using jpeg2000::FileManager;
 using jpip::DataBinServer;
 
 static const char ZERO[] = "0\r\n\r\n";
-
-static const char *CORS = "*";
-static const char *NOCACHE = "no-cache";
-static const char *STS = "max-age=31536000; includeSubDomains;";
+static const char COMMON_HEADERS[] =
+        "Access-Control-Allow-Origin: *\r\n"
+        "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
+        "Cache-Control: no-cache\r\n";
 
 class SocketReader {
 private:
@@ -392,9 +392,7 @@ private:
 
                     ostringstream msg;
                     msg << http::Response(200, "OK")
-                            << "Access-Control-Allow-Origin: " << CORS << CRLF
-                            << "Strict-Transport-Security: " << STS << CRLF
-                            << "Cache-Control: " << NOCACHE << CRLF
+                            << COMMON_HEADERS
                             << "Content-Length: 0" << CRLF << CRLF;
                     SendStream(fd, msg);
                     return CLOSE_CHANNEL;
@@ -455,9 +453,7 @@ private:
                 size_t err_msg_len = strlen(err_msg);
                 ostringstream msg;
                 msg << http::Response(500, "Internal Server Error")
-                        << "Access-Control-Allow-Origin: " << CORS << CRLF
-                        << "Strict-Transport-Security: " << STS << CRLF
-                        << "Cache-Control: " << NOCACHE << CRLF
+                        << COMMON_HEADERS
                         << "Content-Length: " << err_msg_len << CRLF << CRLF;
                 if (err_msg_len)
                     msg << err_msg;
@@ -507,9 +503,7 @@ public:
         : cfg(_cfg), id(_id), queue(_queue), connection_closed(_connection_closed),
           buf(_cfg.max_chunk_size()) {
         ostringstream header_stream;
-        header_stream << "Access-Control-Allow-Origin: " << CORS << CRLF
-                      << "Strict-Transport-Security: " << STS << CRLF
-                      << "Cache-Control: " << NOCACHE << CRLF
+        header_stream << COMMON_HEADERS
                       << "Transfer-Encoding: chunked" << CRLF
                       << "Content-Type: image/jpp-stream" << CRLF;
         head_data = header_stream.str();
