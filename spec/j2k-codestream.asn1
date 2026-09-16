@@ -1,0 +1,236 @@
+-- j2k-codestream.asn1
+--
+-- Framing of a JPEG 2000 Part 1 codestream (ITU-T T.800 Annex A): SOC, the
+-- main header, tile-parts, EOC. Marker segment bodies come from
+-- j2k-headers.asn1. This module is what makes a generated vector a complete
+-- codestream rather than a loose marker body.
+--
+-- Design rules (encodings in j2k-codestream.acn):
+--   * No length is an ASN.1 field. Every Lxxx and Psot is an ACN-inserted
+--     determinant of an OCTET STRING (CONTAINING ...) with a mapping
+--     function for the standard's offset (Lxxx counts itself: +2; Psot
+--     counts from the SOT marker code: +12). On encode the value is
+--     computed by deferred patching; on decode it bounds the region.
+--     Invalid-length vectors are produced by byte mutation.
+--   * Each segment kind is its own SEQUENCE wrapper so that its inserted
+--     length has a home; the CHOICE over kinds is selected by the preceding
+--     marker code through an ACN parameter.
+--   * Lists terminated by a marker rather than counted use ACN
+--     `size null-terminated` with the marker as termination pattern. The
+--     pattern is inspected only at element boundaries, where the next bytes
+--     are always a marker code, so this is sound.
+--   * The type graph is not recursive (asn1scc requirement): main-header
+--     segments and tile-part-header segments are different CHOICEs, which
+--     also encodes T.800 Table A.1's placement rules.
+--   * The profile layer repeats the framing with *-Profile bodies, because a
+--     WITH COMPONENTS subtype cannot swap the type inside a CONTAINING.
+--
+-- Not modelled: Psot = 0 ("tile-part extends to EOC", A.4.2), because a
+-- region cannot be both determinant-sized and deduced; the server accepts
+-- it (README.md, "Gaps"). Bounds marked "corpus bound" are smaller than
+-- the standard's because asn1scc allocates every maximum inline; see the
+-- note in j2k-headers.asn1.
+
+J2K-Codestream DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+EXPORTS ALL;
+
+IMPORTS
+    Siz, Cod, Qcd, Plt, Com,
+    Siz-Profile, Cod-Profile, Qcd-Profile, Plt-Profile, Com-Profile
+        FROM J2K-Headers;
+
+-- ===========================================================================
+-- Layer 1: ITU-T T.800 Annex A
+-- ===========================================================================
+
+-- Marker codes, Table A.2. Delimiting: SOC FF4F, SOT FF90, SOD FF93,
+-- EOC FFD9. Fixed information: SIZ FF51. Functional: COD FF52, COC FF53,
+-- QCD FF5C, QCC FF5D, RGN FF5E, POC FF5F. Pointer: TLM FF55, PLM FF57,
+-- PLT FF58, PPM FF60, PPT FF61. Informational: CRG FF63, COM FF64.
+--
+-- Layer 1 admits only the codes T.800 defines for each position. Layer 2
+-- admits any marker the server would skip by length (any FFxx except SOC,
+-- SIZ, SOT, EOC and FFFF) through an `other` alternative selected by a
+-- negated present-when (ACN 4.9 boolean expressions).
+
+MainMarkerCode ::= INTEGER (65362 | 65363 | 65372 | 65373 | 65374 | 65375 |
+                            65365 | 65367 | 65376 | 65379 | 65380 | 65424)
+                            -- COD COC QCD QCC RGN POC TLM PLM PPM CRG COM SOT
+
+TileMarkerCode ::= INTEGER (65362 | 65363 | 65372 | 65373 | 65374 | 65375 |
+                            65368 | 65377 | 65380)
+                            -- COD COC QCD QCC RGN POC PLT PPT COM
+
+Codestream ::= SEQUENCE {
+    soc         INTEGER (65359..65359),       -- FF4F
+    sizCode     INTEGER (65361..65361),       -- FF51: SIZ is always first (A.3)
+    siz         SizSegment,
+    segments    SEQUENCE (SIZE (1..80)) OF MainSegment     -- terminated by EOC (corpus bound)
+}
+
+-- One wrapper per segment kind: the ACN-inserted Lxxx lives in the wrapper.
+SizSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Siz) }
+CodSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Cod) }
+QcdSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd) }
+PltSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Plt) }
+ComSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Com) }
+OpaqueSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Opaque) }
+
+-- Everything the server skips by length. Bounded for the corpus.
+Opaque ::= SEQUENCE {
+    data        OCTET STRING (SIZE (0..4096))            -- corpus bound
+}
+
+MainSegment ::= SEQUENCE {
+    code        MainMarkerCode,
+    body        MainBody                      -- alternative selected by code
+}
+
+MainBody ::= CHOICE {                         -- one alternative per code
+    cod         CodSegment,
+    coc         OpaqueSegment,
+    qcd         QcdSegment,
+    qcc         OpaqueSegment,
+    rgn         OpaqueSegment,
+    poc         OpaqueSegment,
+    tlm         OpaqueSegment,
+    plm         OpaqueSegment,
+    ppm         OpaqueSegment,
+    crg         OpaqueSegment,
+    com         ComSegment,
+    tilePart    TilePart
+}
+
+-- SOT marker segment (A.4.2) with the tile-part header and data that
+-- Psot covers. Psot is ACN-inserted between isot and tpsot.
+TilePart ::= SEQUENCE {
+    lsot        INTEGER (10..10),
+    isot        INTEGER (0..65534),           -- tile index
+    tpsot       INTEGER (0..254),             -- tile-part index (255 reserved)
+    tnsot       INTEGER (0..255),             -- number of tile-parts; 0 = not specified
+    rest        OCTET STRING (CONTAINING TilePartRest)   -- sized by Psot - 12
+}
+
+TilePartRest ::= SEQUENCE {
+    headers     SEQUENCE (SIZE (0..8)) OF TileSegment,    -- terminated by SOD (corpus bound)
+    data        OCTET STRING (SIZE (0..4096))             -- to the end of the tile-part (corpus bound)
+}
+
+TileSegment ::= SEQUENCE {
+    code        TileMarkerCode,
+    body        TileBody
+}
+
+TileBody ::= CHOICE {
+    cod         CodSegment,
+    coc         OpaqueSegment,
+    qcd         QcdSegment,
+    qcc         OpaqueSegment,
+    rgn         OpaqueSegment,
+    poc         OpaqueSegment,
+    plt         PltSegment,
+    ppt         OpaqueSegment,
+    com         ComSegment
+}
+
+-- ===========================================================================
+-- Layer 2: esajpip served profile (same framing, profile bodies)
+-- ===========================================================================
+
+-- Any marker code the server tolerates in that position; the listed
+-- alternatives are interpreted, everything else is `other` (skipped).
+MainMarkerCode-Profile ::= INTEGER (65281..65534)   -- FF01..FFFE; SOC/SIZ excluded by rule
+TileMarkerCode-Profile ::= INTEGER (65281..65534)   -- SOC/SIZ/SOT/EOC excluded by rule
+
+Codestream-Profile ::= SEQUENCE {
+    soc         INTEGER (65359..65359),
+    sizCode     INTEGER (65361..65361),
+    siz         SizSegment-Profile,
+    segments    SEQUENCE (SIZE (3..80)) OF MainSegment-Profile     -- >= COD, QCD, one tile-part
+}
+
+SizSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Siz-Profile) }
+CodSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Cod-Profile) }
+QcdSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Profile) }
+PltSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Profile) }
+ComSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Profile) }
+
+MainSegment-Profile ::= SEQUENCE {
+    code        MainMarkerCode-Profile,
+    body        MainBody-Profile
+}
+
+MainBody-Profile ::= CHOICE {
+    cod         CodSegment-Profile,
+    coc         OpaqueSegment,
+    qcd         QcdSegment-Profile,
+    qcc         OpaqueSegment,
+    rgn         OpaqueSegment,
+    poc         OpaqueSegment,
+    tlm         OpaqueSegment,
+    plm         OpaqueSegment,
+    ppm         OpaqueSegment,
+    crg         OpaqueSegment,
+    com         ComSegment-Profile,
+    tilePart    TilePart-Profile,
+    other       OpaqueSegment                 -- any other code: skipped by length
+}
+
+TilePart-Profile ::= SEQUENCE {
+    lsot        INTEGER (10..10),
+    isot        INTEGER (0..0),               -- single tile
+    tpsot       INTEGER (0..63),              -- at most 64 tile-parts (PacketIndex::MAX_SEGMENTS)
+    tnsot       INTEGER (0..64),
+    rest        OCTET STRING (CONTAINING TilePartRest-Profile)
+}
+
+TilePartRest-Profile ::= SEQUENCE {
+    headers     SEQUENCE (SIZE (0..8)) OF TileSegment-Profile,
+    data        OCTET STRING (SIZE (0..4096))
+}
+
+TileSegment-Profile ::= SEQUENCE {
+    code        TileMarkerCode-Profile,
+    body        TileBody-Profile
+}
+
+TileBody-Profile ::= CHOICE {
+    cod         CodSegment-Profile,
+    coc         OpaqueSegment,
+    qcd         QcdSegment-Profile,
+    qcc         OpaqueSegment,
+    rgn         OpaqueSegment,
+    poc         OpaqueSegment,
+    plt         PltSegment-Profile,
+    ppt         OpaqueSegment,
+    com         ComSegment-Profile,
+    other       OpaqueSegment                 -- any other code: skipped by length
+}
+
+END
+
+-- ===========================================================================
+-- Cross-field constraints for the framing (harness/crossfield.c)
+-- ===========================================================================
+--
+-- Standard (both layers), T.800 A.3 and Table A.1:
+--   Codestream.segments holds exactly one COD and exactly one QCD before the
+--     first tilePart (COC/QCC may repeat), and at least one tilePart.
+--   After the first tilePart, every element of Codestream.segments is a
+--     tilePart (A.3: only SOT and EOC follow tile-part data). The main list
+--     admits other kinds structurally; the rule rejects them.
+--   For each tile: tile-part indices tpsot are 0, 1, 2, ... in stream order;
+--     if any tnsot != 0 then tpsot < tnsot for every tile-part of that tile
+--     and the tile's tile-part count == that tnsot.
+--   The chosen CHOICE alternative matches `code` (automatic: present-when).
+--   Lengths and region fills: automatic (CONTAINING + size deduced).
+--
+-- Profile only:
+--   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51); tile-header
+--     `other` codes are never SOC, SIZ, SOT (FF90) or EOC (FFD9) — the server
+--     rejects those (ReadCodestream), everything else it skips.
+--   1..64 tile-parts in total (single tile, so per tile == total).
+--   At least one PLT segment across all tile-part headers
+--     ("The code-stream does not include any PLT marker").
+--   Whole codestream <= INT_MAX bytes.

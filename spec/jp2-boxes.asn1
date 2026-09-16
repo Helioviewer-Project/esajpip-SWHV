@@ -1,0 +1,275 @@
+-- jp2-boxes.asn1
+--
+-- JP2 / JPX file structure (ITU-T T.800 Annex I, T.801 Annex M): the box
+-- tree, with the boxes esajpip interprets modelled in full and everything
+-- else opaque. Together with j2k-codestream.asn1 this makes a generated
+-- vector a complete .jp2 or .jpx file.
+--
+-- Design (encodings in jp2-boxes.acn):
+--   * LBox is an ACN-inserted determinant with mapping function `lbox`
+--     (wire = payload bytes + 8). TBox selects the payload through an ACN
+--     parameter.
+--   * A superbox's children are a `SEQUENCE OF` with `size deduced` inside
+--     the CONTAINING region of the superbox — the nested-container case the
+--     deduced-size specification was written for.
+--   * asn1scc forbids recursive types, so nesting is two levels: TopBox
+--     (may be a superbox) contains InnerBox (never a superbox). This covers
+--     every structure the server interprets: jpch/ftbl/dtbl/asoc at the top
+--     with their leaf children. Deeper asoc trees are outside the model.
+--   * jp2c carries a full Codestream (CONTAINING), so a JP2 vector exercises
+--     the codestream framing and the marker bodies in one file.
+--
+-- Not modelled (documented gaps; the server accepts all three):
+--   * XLBox (LBox = 1, 64-bit length): the payload would need one of two
+--     determinants depending on LBox; never required under the INT_MAX
+--     file limit.
+--   * LBox = 0 (box extends to end of file): a region cannot be both
+--     determinant-sized and deduced.
+--   * Box types outside the listed sets are a decode error at layer 1;
+--     layer 2 skips them through an `other` alternative, as the server does.
+--
+-- Cross-field rules are at the end (harness/crossfield.c).
+
+JP2-Boxes DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+EXPORTS ALL;
+
+IMPORTS Codestream, Codestream-Profile FROM J2K-Codestream;
+
+-- ===========================================================================
+-- Layer 1: T.800 Annex I / T.801 Annex M
+-- ===========================================================================
+
+-- Box types as the big-endian value of the four-character code.
+-- Superboxes and interpreted boxes:
+--   jpch 0x6A706368  ftbl 0x6674626C  dtbl 0x6474626C  asoc 0x61736F63
+--   jp2c 0x6A703263  flst 0x666C7374  url  0x75726C20
+-- Opaque, permitted anywhere their level allows:
+--   jP   0x6A502020  ftyp 0x66747970  jp2h 0x6A703268  jplh 0x6A706C68
+--   rreq 0x72726571  uuid 0x75756964  xml  0x786D6C20  nlst 0x6E6C7374
+--   lbl  0x6C626C20  uinf 0x75696E66  ihdr 0x69686472  colr 0x636F6C72
+--   free 0x66726565  bpcc 0x62706363  res  0x72657320  pclr 0x70636C72
+--   cmap 0x636D6170  cdef 0x63646566
+
+TopBoxType ::= INTEGER (
+    1785750376 | 1718903404 | 1685348972 | 1634955107 | 1785737827 |    -- jpch ftbl dtbl asoc jp2c
+    1783636000 | 1718909296 | 1785737832 | 1785752680 | 1920099697 |    -- jP ftyp jp2h jplh rreq
+    1970628964 | 2020437024 | 1969843814 | 1718773093)                  -- uuid xml uinf free
+
+InnerBoxType ::= INTEGER (
+    1718383476 | 1970433056 |                                           -- flst url
+    1785737832 | 1785752680 | 1970628964 | 2020437024 | 1852601204 |    -- jp2h jplh uuid xml nlst
+    1818389536 | 1768449138 | 1668246642 | 1718773093 |                 -- lbl ihdr colr free
+    1651532643 | 1919251232 | 1885564018 | 1668112752 | 1667523942)     -- bpcc res pclr cmap cdef
+
+-- A JP2-family file is a sequence of top-level boxes filling the file
+-- (the file is the decode region).
+Jp2Family ::= SEQUENCE {
+    boxes       SEQUENCE (SIZE (1..32)) OF TopBox      -- corpus bound
+}
+
+TopBox ::= SEQUENCE {
+    tbox        TopBoxType,
+    payload     TopPayload                    -- selected by tbox; sized by LBox - 8
+}
+
+TopPayload ::= CHOICE {
+    jpch        Superbox,                     -- codestream header: one per codestream
+    ftbl        Superbox,                     -- fragment table: holds one flst
+    dtbl        DataReferences,               -- data references: holds url boxes
+    asoc        Superbox,                     -- association: nlst/lbl/xml/asoc...
+    jp2c        OCTET STRING (CONTAINING Codestream),
+    jP          OpaqueBox,
+    ftyp        OpaqueBox,
+    jp2h        Superbox,
+    jplh        Superbox,
+    rreq        OpaqueBox,
+    uuid        OpaqueBox,
+    xml         OpaqueBox,
+    uinf        Superbox,
+    free        OpaqueBox
+}
+
+Superbox ::= SEQUENCE {
+    children    SEQUENCE (SIZE (0..16)) OF InnerBox    -- fill the superbox (corpus bound)
+}
+
+-- T.801 Annex M, Data Reference box: NDR then NDR url boxes.
+DataReferences ::= SEQUENCE {
+    ndr         INTEGER (0..65535),
+    references  SEQUENCE (SIZE (0..64)) OF InnerBox     -- fill the box; count == ndr, each url (corpus bound)
+}
+
+OpaqueBox ::= SEQUENCE {
+    data        OCTET STRING (SIZE (0..4096))           -- fills the box (corpus bound)
+}
+
+InnerBox ::= SEQUENCE {
+    tbox        InnerBoxType,
+    payload     InnerPayload
+}
+
+InnerPayload ::= CHOICE {
+    flst        FragmentList,
+    url         DataEntryUrl,
+    jp2h        OpaqueBox,
+    jplh        OpaqueBox,
+    uuid        OpaqueBox,
+    xml         OpaqueBox,
+    nlst        OpaqueBox,
+    lbl         OpaqueBox,
+    ihdr        OpaqueBox,
+    colr        OpaqueBox,
+    free        OpaqueBox,
+    bpcc        OpaqueBox,
+    res         OpaqueBox,
+    pclr        OpaqueBox,
+    cmap        OpaqueBox,
+    cdef        OpaqueBox
+}
+
+-- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR u16).
+FragmentList ::= SEQUENCE {
+    nf          INTEGER (1..65535),
+    fragments   SEQUENCE (SIZE (1..16)) OF Fragment     -- count == nf (corpus bound)
+}
+
+Fragment ::= SEQUENCE {
+    off         INTEGER (0..18446744073709551615),   -- offset of the fragment in the referenced file
+    len         INTEGER (1..4294967295),             -- length of the fragment
+    dr          INTEGER (0..65535)                   -- 0: this file; else 1-based index into dtbl
+}
+
+-- T.801 Annex M, Data Entry URL box: VERS (1 byte), FLAG (3 bytes), LOC (NUL-terminated).
+DataEntryUrl ::= SEQUENCE {
+    vers        INTEGER (0..255),
+    flag        INTEGER (0..16777215),
+    loc         IA5String (SIZE (1..1024))           -- URL, NUL terminated on the wire (corpus bound)
+}
+
+-- ===========================================================================
+-- Layer 2: esajpip served profile (JPIP_PROFILE.md, "Supported JPEG 2000
+-- sources"). Structural rules (counts, pairing) are cross-field rules.
+-- ===========================================================================
+
+-- .jp2: exactly one jp2c, carrying a profile codestream.
+Jp2File-Profile ::= SEQUENCE {
+    boxes       SEQUENCE (SIZE (1..32)) OF TopBox-Profile
+}
+
+-- .jpx: N jpch boxes and either N jp2c boxes (embedded) or N ftbl/flst
+-- boxes plus one dtbl holding the url boxes (linked). When links are
+-- present they take precedence and any embedded codestreams are ignored
+-- (JPIP_PROFILE.md, "Supported JPEG 2000 sources").
+JpxFile-Profile ::= SEQUENCE {
+    boxes       SEQUENCE (SIZE (1..32)) OF TopBox-Profile
+}
+
+BoxType-Profile ::= INTEGER (0..4294967295)  -- any four-cc; unlisted ones are `other`
+
+TopBox-Profile ::= SEQUENCE {
+    tbox        BoxType-Profile,
+    payload     TopPayload-Profile
+}
+
+TopPayload-Profile ::= CHOICE {
+    jpch        Superbox,
+    ftbl        Superbox-Profile,
+    dtbl        DataReferences-Profile,
+    asoc        Superbox,
+    jp2c        OCTET STRING (CONTAINING Codestream-Profile),
+    jP          OpaqueBox,
+    ftyp        OpaqueBox,
+    jp2h        Superbox,
+    jplh        Superbox,
+    rreq        OpaqueBox,
+    uuid        OpaqueBox,
+    xml         OpaqueBox,
+    uinf        Superbox,
+    free        OpaqueBox,
+    other       OpaqueBox                     -- any other box: skipped
+}
+
+Superbox-Profile ::= SEQUENCE {
+    children    SEQUENCE (SIZE (0..16)) OF InnerBox-Profile
+}
+
+DataReferences-Profile ::= SEQUENCE {
+    ndr         INTEGER (0..65535),
+    references  SEQUENCE (SIZE (0..64)) OF InnerBox-Profile
+}
+
+InnerBox-Profile ::= SEQUENCE {
+    tbox        BoxType-Profile,
+    payload     InnerPayload-Profile
+}
+
+InnerPayload-Profile ::= CHOICE {
+    flst        FragmentList-Profile,
+    url         DataEntryUrl-Profile,
+    jp2h        OpaqueBox,
+    jplh        OpaqueBox,
+    uuid        OpaqueBox,
+    xml         OpaqueBox,
+    nlst        OpaqueBox,
+    lbl         OpaqueBox,
+    ihdr        OpaqueBox,
+    colr        OpaqueBox,
+    free        OpaqueBox,
+    bpcc        OpaqueBox,
+    res         OpaqueBox,
+    pclr        OpaqueBox,
+    cmap        OpaqueBox,
+    cdef        OpaqueBox,
+    other       OpaqueBox                     -- any other box: skipped
+}
+
+-- One fragment describing the complete codestream in the referenced file
+-- (ReadFlstBox: box length 16, NF == 1).
+FragmentList-Profile ::= FragmentList (WITH COMPONENTS {
+    nf (1..1),
+    fragments (SIZE (1..1))
+})
+
+-- Version-zero file:// URLs (ReadUrlBox).
+DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
+    vers (0..0),
+    flag (0..0),
+    loc (SIZE (8..1024))                             -- "file://" plus at least one character
+})
+
+END
+
+-- ===========================================================================
+-- Cross-field constraints for the box layer (harness/crossfield.c)
+-- ===========================================================================
+--
+-- Standard (both layers):
+--   T.800 I.4: the first box is jP with payload 0D0A870A, the second is ftyp.
+--   DataReferences.references has exactly ndr elements and every one is url.
+--   FragmentList.fragments has exactly nf elements.
+--   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
+--   Every Fragment.dr is 0 or <= the file's ndr.
+--   T.801 Annex M, Fragment Table box: it contains exactly one flst box.
+--   Every CONTAINING region is exactly filled: automatic (size deduced /
+--     null-terminated loc followed by nothing — the harness checks that the
+--     url box ends right after the terminator).
+--
+-- Profile only (ReadJP2 / ReadJPX):
+--   Jp2File-Profile: exactly one jp2c among the top-level boxes.
+--   JpxFile-Profile: let N = number of jpch boxes, N >= 1.
+--       (linked)   if any ftbl is present: exactly N ftbl boxes, exactly one
+--                  top-level dtbl, every flst's dr in 1..ndr. Embedded jp2c
+--                  boxes may also be present and are ignored (links take
+--                  precedence, JPIP_PROFILE.md).
+--       (embedded) otherwise: exactly N jp2c boxes.
+--     At every point in the file, the number of jp2c boxes seen so far is
+--     less than or equal to the number of jpch boxes seen so far
+--     (ReadJPX rejects a jp2c that has no jpch to pair with).
+--   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
+--     jp2c boxes.
+--   Every url loc begins with "file://"; the harness does not resolve it.
+--   Fragment (off, len) equal to the referenced file's codestream extent is
+--     checked by the server against the linked file and is outside the
+--     corpus (it needs the second file).
+--   The whole file is <= INT_MAX bytes.

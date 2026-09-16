@@ -1,0 +1,215 @@
+-- j2k-headers.asn1
+--
+-- Marker segment BODIES of the JPEG 2000 Part 1 codestream (ITU-T T.800
+-- Annex A). A body starts at the byte after Lxxx; the marker code and Lxxx
+-- belong to the framing in j2k-codestream.asn1, where each body is carried
+-- in an OCTET STRING (CONTAINING ...) sized by Lxxx. The framing is what
+-- makes lengths consistent on encode and checked on decode; nothing here
+-- needs to know its own length. SOT is framing (its Psot sizes what follows
+-- it) and is modelled as TilePart in j2k-codestream.asn1.
+--
+-- Two layers:
+--   Layer 1 (standard):  field ranges of T.800 (2002) Annex A, table cited
+--                        on each field.
+--   Layer 2 (profile):   *-Profile subtypes narrowing layer 1 to what
+--                        esajpip serves (JPIP_PROFILE.md). Subtypes can only
+--                        narrow. Anything the server accepts that the
+--                        standard forbids is listed in README.md.
+--
+-- Lists whose count is implied by the segment length use ACN `size deduced`
+-- (see the .acn), so a body that does not exactly fill its segment is a
+-- decode error rather than a hand-written rule.
+--
+-- Cross-field rules that ASN.1 cannot state are listed at the end and are
+-- implemented once in harness/crossfield.c (and, for the server, in C++).
+--
+-- CORPUS BOUNDS: some SIZE upper bounds are smaller than the standard's
+-- (marked "corpus bound"). asn1scc allocates every SEQUENCE OF / OCTET
+-- STRING at its maximum inline, so standard-sized bounds would make the
+-- generated file structs gigabytes large. A vector exceeding a corpus bound
+-- is not a standard-invalid file; the harness never generates one.
+
+J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+EXPORTS ALL;
+
+-- ===========================================================================
+-- Layer 1: ITU-T T.800 Annex A
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- SIZ body, Table A.9: image and tile size (Lsiz = 38 + 3 * Csiz)
+-- ---------------------------------------------------------------------------
+
+Siz ::= SEQUENCE {
+    rsiz        INTEGER (0..65535),           -- capabilities. DELIBERATE WIDENING: Table A.10
+                                              -- defines only 0, 1, 2; later amendments and
+                                              -- Part 2 assign the high bits and deployed files
+                                              -- carry them. The server ignores Rsiz.
+    xsiz        INTEGER (1..4294967295),      -- reference grid width
+    ysiz        INTEGER (1..4294967295),      -- reference grid height
+    xosiz       INTEGER (0..4294967294),      -- image horizontal offset
+    yosiz       INTEGER (0..4294967294),      -- image vertical offset
+    xtsiz       INTEGER (1..4294967295),      -- reference tile width
+    ytsiz       INTEGER (1..4294967295),      -- reference tile height
+    xtosiz      INTEGER (0..4294967294),      -- tile grid horizontal offset
+    ytosiz      INTEGER (0..4294967294),      -- tile grid vertical offset
+    csiz        INTEGER (1..16384),           -- number of components
+    components  SEQUENCE (SIZE (1..16384)) OF Component  -- fills the segment; count == csiz
+}
+
+Component ::= SEQUENCE {                      -- Ssiz, XRsiz, YRsiz (Table A.11)
+    isSigned    BOOLEAN,                      -- Ssiz bit 7 (`signed` is a C keyword)
+    depthMinus1 INTEGER (0..37),              -- Ssiz bits 6..0: bit depth - 1
+    xrsiz       INTEGER (1..255),             -- horizontal sub-sampling
+    yrsiz       INTEGER (1..255)              -- vertical sub-sampling
+}
+
+-- ---------------------------------------------------------------------------
+-- COD body, Table A.12: coding style default (Lcod = 12 + (custom ? NL + 1 : 0))
+-- ---------------------------------------------------------------------------
+
+Cod ::= SEQUENCE {
+    scod        Scod,
+    sgcod       Sgcod,
+    spcod       Spcod
+}
+
+Scod ::= SEQUENCE {                           -- Table A.13, one byte, MSB first
+    reserved        INTEGER (0..0),           -- bits 7..3
+    ephMarkers      BOOLEAN,                  -- bit 2
+    sopMarkers      BOOLEAN,                  -- bit 1
+    customPrecincts BOOLEAN                   -- bit 0: precinct sizes in Spcod
+}
+
+Sgcod ::= SEQUENCE {                          -- Table A.14
+    progression     INTEGER (0..4),           -- Table A.16: LRCP RLCP RPCL PCRL CPRL
+    layers          INTEGER (1..65535),
+    mct             INTEGER (0..1)
+}
+
+Spcod ::= SEQUENCE {                          -- Table A.15
+    levels          INTEGER (0..32),          -- decomposition levels NL
+    cbWidthExp      INTEGER (0..8),           -- xcb - 2 (Table A.18)
+    cbHeightExp     INTEGER (0..8),           -- ycb - 2
+    cbStyle         INTEGER (0..63),          -- Table A.19: bits 0..5 defined, 6..7 reserved
+    transform       INTEGER (0..1),           -- Table A.20
+    precincts       PrecinctSizes OPTIONAL    -- present iff scod.customPrecincts
+}
+
+-- Table A.21: one byte per resolution level r = 0 .. NL, lowest first.
+-- "lowest" is r = 0; "higher" fills the rest of the segment and must hold
+-- exactly `levels` entries (cross-field rule).
+PrecinctSizes ::= SEQUENCE {
+    lowest      PrecinctSize,                 -- r = 0 (NL LL): PPx = PPy = 0 permitted
+    higher      SEQUENCE (SIZE (0..32)) OF PrecinctSizeHigher
+}
+
+PrecinctSize ::= SEQUENCE {
+    ppy         INTEGER (0..15),              -- bits 7..4
+    ppx         INTEGER (0..15)               -- bits 3..0
+}
+
+-- T.800 Table A.21 states, separately for PPx and for PPy, that the value
+-- "may only equal zero at the resolution level corresponding to the NL LL
+-- band", i.e. each exponent independently must be >= 1 for r > 0.
+PrecinctSizeHigher ::= PrecinctSize (WITH COMPONENTS { ppy (1..15), ppx (1..15) })
+
+-- ---------------------------------------------------------------------------
+-- QCD body, A.6.4: quantization default. The server only skips it, so
+-- the model keeps the guard byte and treats the rest as opaque.
+-- ---------------------------------------------------------------------------
+
+Qcd ::= SEQUENCE {
+    sqcd        INTEGER (0..255),             -- Sqcd: guard bits and quantization style
+    spqcd       OCTET STRING (SIZE (0..1024))  -- fills the segment (corpus bound; standard 65530)
+}
+
+-- ---------------------------------------------------------------------------
+-- PLT body, A.7.3: packet lengths, tile-part header (Lplt = 3 + entries)
+-- ---------------------------------------------------------------------------
+
+Plt ::= SEQUENCE {
+    zplt        INTEGER (0..255),             -- index of this PLT segment
+    entries     SEQUENCE (SIZE (1..128)) OF Iplt   -- fills the segment (corpus bound; standard 65532)
+}
+
+-- One packet length: big-endian groups of 7 bits, bit 7 set when another
+-- byte follows. T.800 does not bound the byte count; ten bytes cover 64 bits.
+Iplt ::= SEQUENCE {
+    b0  IpltByte,
+    b1  IpltByte OPTIONAL,                    -- present iff b0.more
+    b2  IpltByte OPTIONAL,
+    b3  IpltByte OPTIONAL,
+    b4  IpltByte OPTIONAL,
+    b5  IpltByte OPTIONAL,
+    b6  IpltByte OPTIONAL,
+    b7  IpltByte OPTIONAL,
+    b8  IpltByte OPTIONAL,
+    b9  IpltByteLast OPTIONAL                 -- present iff b8.more; must terminate
+}
+
+IpltByte ::= SEQUENCE {
+    more    BOOLEAN,                          -- bit 7: continuation
+    bits    INTEGER (0..127)                  -- bits 6..0
+}
+
+IpltByteLast ::= IpltByte (WITH COMPONENTS { ..., more (FALSE) })
+
+-- ---------------------------------------------------------------------------
+-- COM body, A.9.2: comment. Opaque; kept so generated codestreams can
+-- carry a segment the server merely skips.
+-- ---------------------------------------------------------------------------
+
+Com ::= SEQUENCE {
+    rcom        INTEGER (0..1),               -- 0 binary, 1 Latin-1
+    ccom        OCTET STRING (SIZE (0..4096))  -- fills the segment (corpus bound; standard 65531)
+}
+
+-- ===========================================================================
+-- Layer 2: esajpip served profile (JPIP_PROFILE.md)
+-- ===========================================================================
+
+Siz-Profile ::= Siz (WITH COMPONENTS {
+    ...,
+    xsiz    (1..2147483647),
+    ysiz    (1..2147483647),
+    xosiz   (0..0),
+    yosiz   (0..0),
+    xtosiz  (0..0),
+    ytosiz  (0..0)
+})
+
+Cod-Profile ::= Cod                           -- see README.md, "Expected initial failures"
+Qcd-Profile ::= Qcd
+Com-Profile ::= Com
+
+-- The server bounds a packet length by its *value* (it must lie within the
+-- tile-part data, ImageIndex::GetOffsetPacket), not by its byte count, so
+-- the profile does not restrict the Iplt chain length: a value written in
+-- more groups than needed is accepted. The value rule is cross-field.
+Plt-Profile ::= Plt
+
+END
+
+-- ===========================================================================
+-- Cross-field constraints for the bodies (harness/crossfield.c; C++ in
+-- FileManager). Segment-length consistency is NOT listed: it is enforced by
+-- the CONTAINING framing plus `size deduced` in the .acn.
+-- ===========================================================================
+--
+-- Standard (both layers):
+--   Siz:  csiz == number of components decoded
+--         xosiz < xsiz  and  yosiz < ysiz              (non-empty image)
+--         xtosiz <= xosiz  and  ytosiz <= yosiz
+--         xtosiz + xtsiz > xosiz  and  ytosiz + ytsiz > yosiz
+--   Cod:  spcod.precincts present  <=>  scod.customPrecincts
+--         spcod.precincts.higher has exactly spcod.levels entries
+--         spcod.cbWidthExp + spcod.cbHeightExp <= 8
+--   Plt:  the sum of the Iplt values in a tile-part's PLT segments does not
+--         exceed that tile-part's data length (A.7.3; ImageIndex::GetOffsetPacket)
+--
+-- Profile only:
+--   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)
+--         sgcod.progression >= 3 (PCRL, CPRL)  =>  every Component has
+--         xrsiz == yrsiz == 1                            (position_order_supported)

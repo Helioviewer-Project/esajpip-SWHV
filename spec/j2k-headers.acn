@@ -1,0 +1,120 @@
+-- j2k-headers.acn
+--
+-- Bit-level encoding for j2k-headers.asn1: marker segment bodies, starting
+-- at the byte after Lxxx. One encoding serves both layers; *-Profile
+-- subtypes inherit it.
+--
+-- Conventions (T.800 A.1.3): unsigned big-endian integers; BOOLEAN is one
+-- bit, '1'B = TRUE; where the standard packs sub-fields into one byte the
+-- SEQUENCE lists them MSB first.
+--
+-- Every body is decoded inside a CONTAINING region sized by its Lxxx (see
+-- j2k-codestream.acn). Lists with no count on the wire therefore use
+-- `size deduced` (Docs/deduced-size-spec.md): they fill the region, and an
+-- element overrunning it or a leftover byte is a decode error. Rules
+-- satisfied: elements are byte-granular and >= 8 bits, the deduced list is
+-- the last component of its region, one deduced list per region.
+--
+-- Cross-type determinants (Scod.customPrecincts -> Spcod) are ACN
+-- parameters, the standard mechanism (Docs/ACN-Deferred-Patching.md).
+--
+-- Boolean presence uses the bare-field form of present-when
+-- (`[present-when customPrecincts]`, `[present-when b0.more]`), which the
+-- 4.9.0.0 grammar lists as the first presentWhenCond alternative; dotted
+-- paths are `longFld` and grammatical.
+
+J2K-Headers DEFINITIONS ::= BEGIN
+
+Siz [] {
+    rsiz        [encoding pos-int, size 16, endianness big],
+    xsiz        [encoding pos-int, size 32, endianness big],
+    ysiz        [encoding pos-int, size 32, endianness big],
+    xosiz       [encoding pos-int, size 32, endianness big],
+    yosiz       [encoding pos-int, size 32, endianness big],
+    xtsiz       [encoding pos-int, size 32, endianness big],
+    ytsiz       [encoding pos-int, size 32, endianness big],
+    xtosiz      [encoding pos-int, size 32, endianness big],
+    ytosiz      [encoding pos-int, size 32, endianness big],
+    csiz        [encoding pos-int, size 16, endianness big],
+    components  [size deduced]
+}
+
+Component [] {
+    isSigned    [true-value '1'B],                -- Ssiz bit 7
+    depthMinus1 [encoding pos-int, size 7],       -- Ssiz bits 6..0
+    xrsiz       [encoding pos-int, size 8],
+    yrsiz       [encoding pos-int, size 8]
+}
+
+Cod [] {
+    scod        [],
+    sgcod       [],
+    spcod       <scod.customPrecincts> []
+}
+
+Scod [] {
+    reserved        [encoding pos-int, size 5],   -- bits 7..3
+    ephMarkers      [true-value '1'B],            -- bit 2
+    sopMarkers      [true-value '1'B],            -- bit 1
+    customPrecincts [true-value '1'B]             -- bit 0
+}
+
+Sgcod [] {
+    progression     [encoding pos-int, size 8],
+    layers          [encoding pos-int, size 16, endianness big],
+    mct             [encoding pos-int, size 8]
+}
+
+Spcod <BOOLEAN:customPrecincts> [] {
+    levels          [encoding pos-int, size 8],
+    cbWidthExp      [encoding pos-int, size 8],
+    cbHeightExp     [encoding pos-int, size 8],
+    cbStyle         [encoding pos-int, size 8],
+    transform       [encoding pos-int, size 8],
+    precincts       [present-when customPrecincts]
+}
+
+PrecinctSizes [] {
+    lowest      [],
+    higher      [size deduced]                    -- fills the COD segment
+}
+
+PrecinctSize [] {
+    ppy         [encoding pos-int, size 4],       -- bits 7..4
+    ppx         [encoding pos-int, size 4]        -- bits 3..0
+}
+
+Qcd [] {
+    sqcd        [encoding pos-int, size 8],
+    spqcd       [size deduced]
+}
+
+Plt [] {
+    zplt        [encoding pos-int, size 8],
+    entries     [size deduced]
+}
+
+Iplt [] {
+    b0  [],
+    b1  [present-when b0.more],
+    b2  [present-when b1.more],
+    b3  [present-when b2.more],
+    b4  [present-when b3.more],
+    b5  [present-when b4.more],
+    b6  [present-when b5.more],
+    b7  [present-when b6.more],
+    b8  [present-when b7.more],
+    b9  [present-when b8.more]
+}
+
+IpltByte [] {
+    more    [true-value '1'B],                    -- bit 7
+    bits    [encoding pos-int, size 7]            -- bits 6..0
+}
+
+Com [] {
+    rcom        [encoding pos-int, size 16, endianness big],
+    ccom        [size deduced]
+}
+
+END

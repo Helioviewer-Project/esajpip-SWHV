@@ -1,0 +1,212 @@
+-- j2k-codestream.acn
+--
+-- Bit-level encoding for j2k-codestream.asn1. Unsigned big-endian
+-- throughout (T.800 A.1.3).
+--
+-- Inserted length determinants and their mapping functions (harness/mapping.c;
+-- asn1scc calls them on the wire value, see README.md "Mapping functions"):
+--   lxxx : wire = payload bytes + 2   (Lxxx counts its own two bytes)
+--   psot : wire = rest bytes + 12     (Psot counts from the SOT marker code:
+--                                      code 2 + Lsot 2 + Isot 2 + Psot 4 +
+--                                      TPsot 1 + TNsot 1)
+-- With --acn-v2 these are patched after the payload is encoded, so a
+-- generated codestream always has consistent lengths; the harness corrupts
+-- them by byte mutation to make invalid-length vectors.
+--
+-- Termination patterns are marker codes and are inspected only at element
+-- boundaries.
+--
+-- ACN 4.9.0.0 grammar (Antlr/acn.g): present-when accepts full boolean
+-- expressions (`not`, `and`, `or`, `!=`, `<`, `>=`), which is what the
+-- profile-layer `other` catch-alls use; parameters and size determinants
+-- accept dotted field paths. Still to confirm by compiling: the C prototype
+-- `mapping-function` expects, and `termination-pattern` on a SEQUENCE OF.
+
+J2K-Codestream DEFINITIONS ::= BEGIN
+
+-- ---------------------------------------------------------------------------
+-- Layer 1
+-- ---------------------------------------------------------------------------
+
+Codestream [] {
+    soc         [encoding pos-int, size 16, endianness big],
+    sizCode     [encoding pos-int, size 16, endianness big],
+    siz         [],
+    segments    [size null-terminated, termination-pattern 'FFD9'H]   -- EOC
+}
+
+SizSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+CodSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+QcdSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+PltSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+ComSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+OpaqueSegment [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+Opaque [] {
+    data        [size deduced]                    -- fills the segment
+}
+
+MainSegment [] {
+    code        [encoding pos-int, size 16, endianness big],
+    body        <code> []
+}
+
+MainBody <INTEGER:code> [] {
+    cod         [present-when code == 65362],     -- FF52
+    coc         [present-when code == 65363],     -- FF53
+    qcd         [present-when code == 65372],     -- FF5C
+    qcc         [present-when code == 65373],     -- FF5D
+    rgn         [present-when code == 65374],     -- FF5E
+    poc         [present-when code == 65375],     -- FF5F
+    tlm         [present-when code == 65365],     -- FF55
+    plm         [present-when code == 65367],     -- FF57
+    ppm         [present-when code == 65376],     -- FF60
+    crg         [present-when code == 65379],     -- FF63
+    com         [present-when code == 65380],     -- FF64
+    tilePart    [present-when code == 65424]      -- FF90
+}
+
+TilePart [] {
+    lsot        [encoding pos-int, size 16, endianness big],
+    isot        [encoding pos-int, size 16, endianness big],
+    psot        [encoding pos-int, size 32, endianness big, mapping-function psot],
+    tpsot       [encoding pos-int, size 8],
+    tnsot       [encoding pos-int, size 8],
+    rest        [size psot]
+}
+
+TilePartRest [] {
+    headers     [size null-terminated, termination-pattern 'FF93'H],  -- SOD
+    data        [size deduced]                                         -- to Psot boundary
+}
+
+TileSegment [] {
+    code        [encoding pos-int, size 16, endianness big],
+    body        <code> []
+}
+
+TileBody <INTEGER:code> [] {
+    cod         [present-when code == 65362],
+    coc         [present-when code == 65363],
+    qcd         [present-when code == 65372],
+    qcc         [present-when code == 65373],
+    rgn         [present-when code == 65374],
+    poc         [present-when code == 65375],
+    plt         [present-when code == 65368],     -- FF58
+    ppt         [present-when code == 65377],     -- FF61
+    com         [present-when code == 65380]
+}
+
+-- ---------------------------------------------------------------------------
+-- Layer 2: identical layout, profile bodies
+-- ---------------------------------------------------------------------------
+
+Codestream-Profile [] {
+    soc         [encoding pos-int, size 16, endianness big],
+    sizCode     [encoding pos-int, size 16, endianness big],
+    siz         [],
+    segments    [size null-terminated, termination-pattern 'FFD9'H]
+}
+
+SizSegment-Profile [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+CodSegment-Profile [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+QcdSegment-Profile [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+PltSegment-Profile [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+ComSegment-Profile [] {
+    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    body        [size length]
+}
+
+MainSegment-Profile [] {
+    code        [encoding pos-int, size 16, endianness big],
+    body        <code> []
+}
+
+MainBody-Profile <INTEGER:code> [] {
+    cod         [present-when code == 65362],
+    coc         [present-when code == 65363],
+    qcd         [present-when code == 65372],
+    qcc         [present-when code == 65373],
+    rgn         [present-when code == 65374],
+    poc         [present-when code == 65375],
+    tlm         [present-when code == 65365],
+    plm         [present-when code == 65367],
+    ppm         [present-when code == 65376],
+    crg         [present-when code == 65379],
+    com         [present-when code == 65380],
+    tilePart    [present-when code == 65424],
+    other       [present-when not (code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424)]
+}
+
+TilePart-Profile [] {
+    lsot        [encoding pos-int, size 16, endianness big],
+    isot        [encoding pos-int, size 16, endianness big],
+    psot        [encoding pos-int, size 32, endianness big, mapping-function psot],
+    tpsot       [encoding pos-int, size 8],
+    tnsot       [encoding pos-int, size 8],
+    rest        [size psot]
+}
+
+TilePartRest-Profile [] {
+    headers     [size null-terminated, termination-pattern 'FF93'H],
+    data        [size deduced]
+}
+
+TileSegment-Profile [] {
+    code        [encoding pos-int, size 16, endianness big],
+    body        <code> []
+}
+
+TileBody-Profile <INTEGER:code> [] {
+    cod         [present-when code == 65362],
+    coc         [present-when code == 65363],
+    qcd         [present-when code == 65372],
+    qcc         [present-when code == 65373],
+    rgn         [present-when code == 65374],
+    poc         [present-when code == 65375],
+    plt         [present-when code == 65368],
+    ppt         [present-when code == 65377],
+    com         [present-when code == 65380],
+    other       [present-when not (code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65368 or code == 65377 or code == 65380)]
+}
+
+END
