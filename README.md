@@ -1,12 +1,10 @@
 # ESA JPIP server
 
-`esajpip` is an open-source JPIP server for Unix-like systems. It was developed
-for the Helioviewer project and streams solar imagery stored in JP2 and JPX
-files to JHelioviewer.
+`esajpip` is an open-source JPIP server for Unix-like systems. It streams solar
+imagery from JP2 and JPX files and is designed primarily for JHelioviewer.
 
-The server uses HTTP and emits JPP streams. It does not provide TLS or
-authentication. Deploy it behind an appropriate network boundary or reverse
-proxy when those facilities are required.
+It serves JPP streams over HTTP. It does not provide TLS or authentication, so
+put it behind a suitable network boundary or reverse proxy if either is needed.
 
 ## Build and install
 
@@ -17,8 +15,9 @@ threads. On Debian 12, install the required packages with:
 sudo apt-get install build-essential cmake pkg-config libglib2.0-dev zlib1g-dev
 ```
 
-Use a separate build directory. The image and log directories are written into
-the generated `server.ini`:
+Build outside the source tree. This example installs the server under
+`$HOME/esajpip` and writes the chosen image and log directories to the generated
+`server.ini`:
 
 ```sh
 mkdir -p "$HOME/esajpip/images" "$HOME/esajpip/log"
@@ -31,23 +30,23 @@ ctest --test-dir build --output-on-failure
 cmake --install build
 ```
 
-This installs the executable and `server.ini` in `$HOME/esajpip/bin` for the
-example above. Choose another installation prefix if it better suits the host.
+The executable and `server.ini` are installed in `$HOME/esajpip/bin`. Use any
+other installation prefix that suits the host.
 
 ## Configure the server
 
-The executable reads `server.ini` from its current working directory. The file
-uses INI syntax; blank lines and lines beginning with `#` are ignored. All four
-sections must be present. Changes take effect only after restarting the server.
+The executable reads `server.ini` from its current working directory. It uses
+ordinary INI syntax. Blank lines and lines beginning with `#` are ignored, and
+all four sections must be present. Restart the server after changing it.
 
 | Setting | Generated value | Meaning |
 | --- | --- | --- |
 | `listen.port` | `8900` | TCP port on which the server listens. The value must be from 1 through 65535. |
 | `listen.address` | empty | Local IPv4 address or hostname on which to listen. An empty value listens on all IPv4 interfaces. |
 | `jpip.image_directory` | `SWHV_DIR_IMAGE` | Non-empty base directory from which requested JP2 and JPX paths are opened. |
-| `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128; the final chunk may be smaller. |
+| `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128. The final chunk may be smaller. |
 | `connections.initial_timeout` | `3` | Positive number of seconds allowed for a new socket to provide a recognizable JPIP request. Partial input does not extend the deadline. |
-| `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it; values below `-1` are invalid. |
+| `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it. Values below `-1` are invalid. |
 | `connections.limit` | `500` | Positive limit applied independently to physical connections and active channels. |
 | `logging.directory` | `SWHV_DIR_LOG` | Directory for log files when file logging is enabled. It must exist and be writable. |
 | `logging.file_enabled` | `1` | Set to `1` to log to a file or `0` to log to standard output. |
@@ -58,18 +57,17 @@ needed. `logging.directory` may be empty only when file logging is disabled.
 
 ## Prepare image data
 
-Requested file names must end in lowercase `.jp2` or `.jpx`. Every JPEG 2000
-codestream must contain `PLT` packet-length markers. Linked JPX movies produced by
-`hv_jpx_merge` and the compatible `kdu_merge` form are supported. The server
-preserves codestream order and does not sort movie frames, so construct the JPX
-with its sources in the intended timestamp order.
+File names must end in lowercase `.jp2` or `.jpx`, and every codestream must
+contain `PLT` packet-length markers. The server accepts linked JPX movies made
+by `hv_jpx_merge` and the compatible `kdu_merge` form. It preserves the order
+stored in the JPX, so give the merge tool source frames in timestamp order.
 
-Treat every JP2, JPX, and linked source file as immutable while it may be used
-by an active channel. The server indexes a target once and maps its source files
-again for later responses. Truncating a mapped file can terminate the serving
-process, while replacing a path can make an existing index refer to different
-content. Publish completed sources under new names and expose the referring JPX
-only after all of its sources are ready.
+Do not modify a JP2, JPX, or linked source while an active channel may use it.
+The server indexes a target once and maps source files again for later
+responses. Truncating a mapped file can terminate the serving process. Reusing
+a path for different content can leave an existing index pointing at the wrong
+bytes. Publish completed sources under new names, then expose the referring JPX
+after every source is ready.
 
 Client-supplied URI paths and `target` values are rejected if any path segment
 is `..`. They are not percent-decoded. Linked `file://` references are trusted
@@ -77,8 +75,8 @@ server-side data and may point outside the image directory. The server also
 follows filesystem symbolic links. Run it under an account whose read
 permissions are limited to the intended image data.
 
-See [JPIP support profile](JPIP_PROFILE.md) for the complete accepted JP2 and
-JPX structure, request fields, response behavior, and deliberate limitations.
+See [JPIP support profile](JPIP_PROFILE.md) for the accepted JP2 and JPX
+structures, request fields, response behavior, and known limits.
 
 ## Start and stop the server
 
@@ -89,10 +87,10 @@ cd "$HOME/esajpip/bin"
 ./esajpip
 ```
 
-The process started by the operator is the supervisor. It owns the listening
-socket and starts the serving process. The program does not detach, so a host
-process supervisor may manage it directly. The executable accepts no
-command-line options.
+The process you start is the supervisor. It keeps the listening socket open and
+starts the process that serves clients. `esajpip` stays in the foreground, so
+it can be managed directly by your preferred process supervisor. The executable
+has no command-line options.
 
 Stop the server by sending `SIGINT` or `SIGTERM` to the supervisor process, or
 through the host process supervisor. Do not signal only the serving child: an
@@ -109,10 +107,10 @@ The path is resolved relative to `jpip.image_directory`.
 
 ## Timeouts and capacity
 
-Until a new connection supplies a recognizable JPIP request, the serving
-process retains only its socket. `connections.initial_timeout` closes silent or
-unrelated connections without creating a channel thread or allocating JPEG
-2000 state.
+A new connection remains cheap until it sends a recognizable JPIP request.
+Before then, the server keeps only the socket. `connections.initial_timeout`
+closes silent or unrelated connections without starting a channel thread or
+allocating JPEG 2000 state.
 
 After channel creation, `connections.timeout` applies both to an attached HTTP
 connection and while the channel waits for a replacement connection. Each
@@ -129,14 +127,13 @@ routing, timeout, and cleanup model.
 With file logging enabled, the server creates
 `esajpip.<address>.<port>.<timestamp>.log` under `logging.directory`. The active
 file rolls at 1 GiB, and one `.1` backup is retained. Different listening
-addresses or ports therefore use distinct names.
+addresses or ports use distinct names.
 
-Channel threads submit log records through a bounded nonblocking queue. When
-logging cannot keep up, records are dropped instead of delaying an active
-response; the next successfully queued record reports how many were lost. If
-the active log can no longer be written or rotated, file logging is disabled
-without switching to standard output. Startup fails if the configured log file
-cannot be opened.
+Serving threads send log records through a bounded, nonblocking queue and never
+wait for log-file I/O. If logging falls behind, records are dropped and the next
+record reports how many were lost. If the active log can no longer be written
+or rotated, file logging stops rather than silently switching to standard
+output. The server does not start if it cannot open the configured log file.
 
 ## Troubleshooting
 
