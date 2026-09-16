@@ -1,7 +1,6 @@
 #ifndef _NET_POLL_TABLE_H_
 #define _NET_POLL_TABLE_H_
 
-#include <algorithm>
 #include <poll.h>
 #include <vector>
 
@@ -22,15 +21,6 @@ namespace net {
 
         int GetSize() const {
             return fds.size();
-        }
-
-        void Remove(int fd) {
-            std::vector<pollfd>::iterator i =
-                    std::find_if(fds.begin(), fds.end(), [fd](const pollfd &item) {
-                        return item.fd == fd;
-                    });
-            if (i != fds.end())
-                fds.erase(i);
         }
 
         void RemoveAt(int position) {

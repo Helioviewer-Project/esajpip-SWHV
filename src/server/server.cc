@@ -45,6 +45,14 @@ struct ChannelInfo {
     shared_ptr<ConnectionQueue> queue;
 };
 
+enum PollSlot {
+    LISTEN,
+    SUPERVISOR,
+    COMPLETION,
+    LOG,
+    FIRST_PENDING
+};
+
 enum CompletionType {
     CONNECTION_COMPLETED,
     CHANNEL_COMPLETED
@@ -98,40 +106,26 @@ bool StartChannel(const pthread_attr_t *attributes, const ChannelInfo &channel) 
     return false;
 }
 
-vector<PendingConnection>::iterator FindConnectionByDescriptor(
-        vector<PendingConnection> &pending_connections, int fd) {
-    return find_if(pending_connections.begin(), pending_connections.end(),
-                   [fd](const PendingConnection &connection) {
-                       return connection.fd == fd;
-                   });
-}
-
 void ClosePendingConnection(PollTable &poll_table,
                             vector<PendingConnection> &pending_connections,
-                            vector<PendingConnection>::iterator connection,
+                            size_t index,
                             int &num_connections,
                             const char *reason) {
-    LOG("Closing connection [" << connection->fd << "] (" << reason << ")");
-    shutdown(connection->fd, SHUT_RDWR);
-    close(connection->fd);
-    poll_table.Remove(connection->fd);
-    pending_connections.erase(connection);
+    int fd = pending_connections[index].fd;
+    LOG("Closing connection [" << fd << "] (" << reason << ")");
+    shutdown(fd, SHUT_RDWR);
+    close(fd);
+    poll_table.RemoveAt(FIRST_PENDING + static_cast<int>(index));
+    pending_connections.erase(pending_connections.begin() + index);
     num_connections--;
 }
 
 int GetPollTimeout(const vector<PendingConnection> &pending_connections) {
-    Clock::time_point deadline;
-    bool found = false;
-    for (const PendingConnection &connection : pending_connections) {
-        if (!found || connection.deadline < deadline) {
-            deadline = connection.deadline;
-            found = true;
-        }
-    }
-    if (!found)
+    if (pending_connections.empty())
         return -1;
 
-    Clock::duration remaining = deadline - Clock::now();
+    Clock::duration remaining =
+            pending_connections.front().deadline - Clock::now();
     if (remaining <= Clock::duration::zero())
         return 0;
 
@@ -146,16 +140,10 @@ void ExpirePendingConnections(PollTable &poll_table,
                               vector<PendingConnection> &pending_connections,
                               int &num_connections) {
     Clock::time_point now = Clock::now();
-    for (size_t i = 0; i < pending_connections.size();) {
-        if (pending_connections[i].deadline <= now) {
-            ClosePendingConnection(poll_table, pending_connections,
-                                   pending_connections.begin() + i,
-                                   num_connections,
-                                   "identification time-out");
-        } else {
-            ++i;
-        }
-    }
+    while (!pending_connections.empty() &&
+           pending_connections.front().deadline <= now)
+        ClosePendingConnection(poll_table, pending_connections, 0,
+                               num_connections, "identification time-out");
 }
 
 bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
@@ -246,14 +234,15 @@ int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
         return SERVER_STARTUP_FAILURE;
     }
 
-    enum { LISTEN, SUPERVISOR, COMPLETION, LOG, FIRST_PENDING };
-
     PollTable poll_table;
     poll_table.Add(listen_socket, POLLIN);
     poll_table.Add(supervisor_fd, POLLIN);
     poll_table.Add(completion_reader, POLLIN);
     poll_table.Add(trace::ReadDescriptor(), POLLIN);
 
+    // Pending records remain aligned with poll slots starting at FIRST_PENDING.
+    // Both sequences preserve acceptance and deadline order when entries move
+    // to a channel or close.
     vector<PendingConnection> pending_connections;
     vector<ChannelInfo> channels;
     uint64_t next_connection_id = 0;
@@ -338,42 +327,39 @@ int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
                     continue;
                 }
 
-                int fd = poll_table[i].fd;
-                vector<PendingConnection>::iterator connection =
-                        FindConnectionByDescriptor(pending_connections, fd);
-                if (connection == pending_connections.end()) {
-                    close(fd);
-                    poll_table.RemoveAt(i);
-                    continue;
-                }
-
-                uint64_t id = connection->id;
+                size_t pending_index = static_cast<size_t>(i - FIRST_PENDING);
+                PendingConnection &connection =
+                        pending_connections[pending_index];
+                int fd = connection.fd;
+                uint64_t id = connection.id;
                 if (events & POLLIN) {
                     InitialRequest request = InspectInitialRequest(fd);
                     if (request.state == REQUEST_REJECTED) {
                         ClosePendingConnection(poll_table, pending_connections,
-                                               connection, num_connections,
+                                               pending_index, num_connections,
                                                "not a JPIP client");
                         continue;
                     }
                     if (request.state == REQUEST_ACCEPTED) {
                         if (!DispatchConnection(cfg, &attributes, channels,
-                                                *connection, request)) {
+                                                connection, request)) {
                             ClosePendingConnection(poll_table,
                                                    pending_connections,
-                                                   connection, num_connections,
+                                                   pending_index,
+                                                   num_connections,
                                                    "dispatch failed");
                             continue;
                         }
-                        poll_table.Remove(fd);
-                        pending_connections.erase(connection);
+                        poll_table.RemoveAt(i);
+                        pending_connections.erase(
+                                pending_connections.begin() + pending_index);
                         LOG("JPIP connection identified [" << fd << ":" << id << "]");
                         continue;
                     }
                 }
                 if (events & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL)) {
                     ClosePendingConnection(poll_table, pending_connections,
-                                           connection, num_connections,
+                                           pending_index, num_connections,
                                            "socket closed");
                     continue;
                 }
