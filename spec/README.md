@@ -33,10 +33,7 @@ consumes only the committed corpus, through plain CMake/CTest.
 **Status.** The model and the harness are written and reviewed but have not
 yet been through the compiler: no corpus exists in `tests/vectors/j2k/`
 yet, and `jpeg2000_test.cc` does not yet have the loop that reads it. The
-first person to run "Quick start" will also do "Compiler checks". Writing
-the model against the code has already produced six parser fixes (see
-"Model findings so far"), so the description has earned its keep before
-generating a single vector.
+first person to run "Quick start" will also do "Compiler checks".
 
 If you are here to **run the tests**, you need nothing from this directory:
 once generated, the corpus lives in `tests/vectors/j2k/` and `ctest` uses
@@ -252,8 +249,7 @@ Two conventions worth knowing before you edit:
   with profile bodies inside `CONTAINING`, a copy with profile types
   substituted. It cannot *widen*. So if esajpip accepts something T.800
   forbids, that cannot be written into layer 2; it shows up as a failing
-  test instead ("Model findings so far" lists the ones found by writing the
-  model).
+  test instead.
 
 ## The test contract
 
@@ -302,10 +298,9 @@ the name up in `manifest.tsv`:
   lenient than `JPIP_PROFILE.md` promises. Either tighten the parser or
   change the profile (both the doc and the `*-Profile` type).
 - **`standard=invalid`, server accepted.** The parser accepts something the
-  standard forbids. Decide: tighten the parser (every case so far went
-  this way, see "Model findings so far"), or
-  document the leniency in `JPIP_PROFILE.md` and relax the rule in the
-  model (a layer-1 rule can only be relaxed by widening the base type).
+  standard forbids. Decide: tighten the parser, or document the leniency
+  in `JPIP_PROFILE.md` and relax the rule in the model (a layer-1 rule can
+  only be relaxed by widening the base type).
 - **`standard=invalid profile=valid`.** Only possible for unknown marker
   codes or box types: layer 2 skips them as the server does, layer 1
   rejects them because they are not in its list. If a real file carries
@@ -316,32 +311,6 @@ produced the vector (see "What the harness generates"), which narrows down
 the parser code involved: a length mutant points at `ReadBoxHeader` /
 `ReadCodestream`'s limit checks, a field mutant at the corresponding
 `Read*Marker`, a rule mutant at the structural checks.
-
-## Model findings so far
-
-Writing the model against `file_manager.cc` — before any vector was
-generated — surfaced six places where the parser was more lenient than
-T.800. Each needed a decision: tighten the parser, or relax the model and
-document the leniency in `JPIP_PROFILE.md`. All six were tightened, each
-with a hand-written fixture in `jpeg2000_test.cc`. The corpus will contain
-the same cases as generated vectors, so the first run should agree with
-those fixtures; the table pairs them so a disagreement can be traced to a
-specific mutant.
-
-| Parser now rejects | Hand-written fixture | Corpus vector (`field`) |
-| --- | --- | --- |
-| Reserved code-block style bits (Table A.19) | `code-block-style-64.jp2`, `-255.jp2` (`-63.jp2` accepted) | `cod.spcod.cbStyle` at 64 and 255 (63 valid) |
-| Zero precinct exponent above r = 0 (Table A.21) | `precinct-higher-ppx-zero.jp2`, `-ppy-zero.jp2` (`precinct-lowest-zero.jp2` accepted) | `cod.spcod.precincts.higher[0].ppx` / `.ppy` at 0 (`lowest.ppx` at 0 valid) |
-| Missing or wrong `jP` / `ftyp` preamble (I.4) | `missing-signature.jp2`, `bad-signature.jp2`, `missing-file-type.jp2` | `file.signature`, `jp2-sig-bad`, `jp2-code-…` on `ftyp` |
-| Second COD or QCD in the main header (A.6.1, A.6.4) | `duplicate-cod.jp2`, `duplicate-qcd.jp2` | `codestream.one-cod-before-sot`, `codestream.one-qcd-before-sot` |
-| Any marker other than SOT/EOC after tile-part data (A.3) | `marker-after-tile-part.jp2` | `codestream.segment-after-sot` |
-| TPsot not 0, 1, 2, … or TNsot contradicted (A.4.2) | `wrong-first-tile-part.jp2`, `wrong-tile-part-count.jp2`, `inconsistent-tile-part-count.jp2` | `sot.tpsot` at 1, `sot.tnsot` at 2, `sot.tnsot-inconsistent` |
-
-Nothing is known to be open. The first corpus run is still expected to
-produce findings — that is what it is for — most likely in places the model
-covers and no hand-written fixture ever did: length and region mutants on
-every box and segment, and the linked-JPX box rules. Treat each per "When a
-vector fails".
 
 Two things that look like failures are not. A JPX carrying both `jp2c` and
 `ftbl` boxes is valid: links take precedence and embedded codestreams are
@@ -489,8 +458,7 @@ already capture log output.
 
 The hand-built fixtures in `jpeg2000_test.cc` stay. Those that cover a
 gap in the model ("Gaps") are the only test of that behaviour; the rest
-overlap the corpus, but they run without the corpus, document each fix
-next to its check, and are the fallback if a regeneration is ever in doubt.
+overlap the corpus but run without it.
 
 ## Gaps (server accepts, model does not cover)
 
