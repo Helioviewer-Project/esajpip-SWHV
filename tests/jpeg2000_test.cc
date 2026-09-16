@@ -424,15 +424,24 @@ int main() {
     Check(response_length > 0 && last,
           "Did not complete a response for a window with defaults");
 
-    jpip::Request short_request;
-    Check(short_request.Parse("GET /jpip?len=2&cid=0 HTTP/1.1"),
-          "Could not parse a response limit shorter than an EOR message");
-    Check(server.SetRequest(manager, short_request), "Rejected a short response limit");
-    response_length = sizeof response;
-    Check(server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a short limited response");
-    Check(response_length == 0 && last,
-          "Generated an incomplete JPIP message for a short response limit");
+    for (int response_limit = 0; response_limit < jpip::DataBinWriter::EOR_LENGTH;
+         response_limit++) {
+        jpip::DataBinServer short_server;
+        jpip::Request short_request;
+        Check(short_request.Parse("GET /jpip?len=" + to_string(response_limit) +
+                                  "&cid=0 HTTP/1.1"),
+              "Could not parse a response limit shorter than an EOR message");
+        Check(short_server.SetRequest(manager, short_request),
+              "Rejected a short response limit");
+        response_length = sizeof response;
+        Check(short_server.GenerateChunk(manager, response, &response_length, &last),
+              "Could not generate a short limited response");
+        Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
+                  response[0] == 0 &&
+                  response[1] == jpip::EOR::BYTE_LIMIT_REACHED &&
+                  response[2] == 0,
+              "Short limited response has no byte-limit EOR");
+    }
 
     jpip::DataBinServer limited_server;
     jpip::Request limited_request;
@@ -477,7 +486,10 @@ int main() {
     response_length = sizeof response;
     Check(server.GenerateChunk(manager, response, &response_length, &last),
           "Could not generate a headers-only response");
-    Check(response_length == 0 && last, "Generated data for a headers-only request");
+    Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
+              response[0] == 0 && response[1] == jpip::EOR::WINDOW_DONE &&
+              response[2] == 0,
+          "Headers-only response has no window-done EOR");
 
     jpip::Request unlimited_request;
     Check(unlimited_request.Parse(

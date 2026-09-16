@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- Always terminate byte-limited JPP responses with an end-of-response message,
+  including when `len` is smaller than the three-byte message.
 - Return `JPIP-tid: 0` instead of exposing the resolved server path, correctly
   indicating that targets do not have stable identities across sessions.
 - Reject parent-directory segments in client-selected URI paths and `target`

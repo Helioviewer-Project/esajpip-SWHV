@@ -145,8 +145,8 @@ namespace jpip {
             ApplyModel(&cache_model, req.model);
 
         pending = req.has.len ? req.length_response : INT_MAX;
-        if (pending > 0 && pending < DataBinWriter::EOR_LENGTH)
-            pending = 0;
+        if (pending < DataBinWriter::EOR_LENGTH)
+            pending = DataBinWriter::EOR_LENGTH;
 
         return true;
     }
