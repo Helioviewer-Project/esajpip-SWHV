@@ -9,7 +9,6 @@
 #include <unistd.h>
 
 #include "app_config.h"
-#include "app_info.h"
 #include "server/server.h"
 #include "server/supervisor.h"
 
@@ -22,8 +21,8 @@ void ChildExited(int) {
 
 }
 
-int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
-                  int listen_socket, const string &log_name,
+int RunSupervisor(const AppConfig &cfg, int listen_socket,
+                  const string &log_name,
                   const string &description) {
     if (signal(SIGCHLD, ChildExited) == SIG_ERR) {
         cerr << "The child signal can not be configured: "
@@ -66,15 +65,13 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
                      << strerror(signal_error) << endl;
                 _exit(SERVER_STARTUP_FAILURE);
             }
-            int result = RunServer(cfg, app_info, listen_socket,
-                                   supervisor_sockets[1], log_name, description,
+            int result = RunServer(cfg, listen_socket, supervisor_sockets[1],
+                                   log_name, description,
                                    restart_message);
             _exit(result);
         }
 
         close(supervisor_sockets[1]);
-        app_info->child_pid = child_pid;
-
         bool stopping = false;
         int status;
         for (;;) {
@@ -109,9 +106,6 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
 
         if (!stopping)
             close(supervisor_sockets[0]);
-
-        app_info->child_pid = 0;
-        app_info->num_connections = 0;
 
         if (stopping)
             return 0;

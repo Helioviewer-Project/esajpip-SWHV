@@ -44,7 +44,6 @@ configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/app_config.cc
-    ${ESAJPIP_TOP}/app_info.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
@@ -83,13 +82,6 @@ install(TARGETS esajpip DESTINATION server/esajpip)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
 
 if(BUILD_TESTING)
-    add_executable(app_info_test tests/app_info_test.cc ${ESAJPIP_TOP}/app_info.cc)
-    esajpip_configure_target(app_info_test)
-    target_compile_definitions(app_info_test PRIVATE
-        ESAJPIP_LOCK_FILE="${CMAKE_CURRENT_BINARY_DIR}/app_info_test.lock")
-    target_include_directories(app_info_test PRIVATE ${ESAJPIP_TOP})
-    add_test(NAME app_info COMMAND app_info_test)
-
     add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
     esajpip_configure_target(logging_test)
     target_compile_definitions(logging_test PRIVATE ESAJPIP_LOG_LIMIT=1024)

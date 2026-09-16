@@ -61,7 +61,7 @@ server adds a trailing slash internally when needed.
 | `connections.initial_timeout` | `3` | Positive number of seconds allowed for a new socket to provide a recognizable JPIP request. This deadline is not extended by partial input. |
 | `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it; values below `-1` are invalid. |
 | `connections.limit` | `500` | Positive connection limit. It independently limits physical connections and active channels in the serving process. |
-| `logging.directory` | `SWHV_DIR_LOG` | Directory in which the timestamped server log is created when `logging.file_enabled` is `1`. |
+| `logging.directory` | `SWHV_DIR_LOG` | Directory in which the server creates `esajpip.<address>.<port>.<timestamp>.log` when `logging.file_enabled` is `1`. |
 | `logging.file_enabled` | `1` | Set to `1` to write the server log under `logging.directory`, or `0` to keep logging on the console. The active file rolls at 1 GiB and one `.1` backup is retained. |
 | `logging.requests` | `0` | Set to `1` to include individual request lines in the log, or `0` to suppress them. Other server messages are unaffected. Request logging is normally unnecessary. |
 
@@ -80,15 +80,8 @@ cd "$HOME/esajpip/server/esajpip"
 ./esajpip
 ```
 
-The executable also reports the running server's status:
-
-```sh
-./esajpip status
-```
-
-`status` reports whether the server is running and, when active, its parent and
-child process IDs and open connection count. Stop the server through the host's
-process supervisor or by signaling the reported parent process.
+Stop the server through the host's process supervisor or by signaling the
+`esajpip` supervisor process.
 
 `connections.initial_timeout` limits how long a new connection has to send a
 valid initial JPIP request. Until the request is recognized, the serving process

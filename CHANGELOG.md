@@ -30,6 +30,11 @@
   retaining bounded pre-identification and channel-owned JPEG 2000 state. A
   replacement process records whether its predecessor was killed or exited
   unexpectedly.
+- Remove the unused `status` command and its SysV shared-memory state. The
+  serving process now keeps its connection count locally, while the listening
+  socket provides the required endpoint exclusivity.
+- Include the listening address and port in log filenames so concurrent server
+  instances use distinct files.
 
 ### Fixed
 

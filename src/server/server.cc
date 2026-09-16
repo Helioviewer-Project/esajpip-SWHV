@@ -14,7 +14,6 @@
 
 #include "trace.h"
 #include "app_config.h"
-#include "app_info.h"
 #include "net/address.h"
 #include "net/poll_table.h"
 #include "server/channel.h"
@@ -110,14 +109,14 @@ vector<PendingConnection>::iterator FindConnectionByDescriptor(
 void ClosePendingConnection(PollTable &poll_table,
                             vector<PendingConnection> &pending_connections,
                             vector<PendingConnection>::iterator connection,
-                            AppInfo &app_info,
+                            int &num_connections,
                             const char *reason) {
     LOG("Closing connection [" << connection->fd << "] (" << reason << ")");
     shutdown(connection->fd, SHUT_RDWR);
     close(connection->fd);
     poll_table.Remove(connection->fd);
     pending_connections.erase(connection);
-    app_info->num_connections--;
+    num_connections--;
 }
 
 int GetPollTimeout(const vector<PendingConnection> &pending_connections) {
@@ -145,12 +144,13 @@ int GetPollTimeout(const vector<PendingConnection> &pending_connections) {
 
 void ExpirePendingConnections(PollTable &poll_table,
                               vector<PendingConnection> &pending_connections,
-                              AppInfo &app_info) {
+                              int &num_connections) {
     Clock::time_point now = Clock::now();
     for (size_t i = 0; i < pending_connections.size();) {
         if (pending_connections[i].deadline <= now) {
             ClosePendingConnection(poll_table, pending_connections,
-                                   pending_connections.begin() + i, app_info,
+                                   pending_connections.begin() + i,
+                                   num_connections,
                                    "identification time-out");
         } else {
             ++i;
@@ -206,8 +206,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
 
 }
 
-int RunServer(const AppConfig &cfg, AppInfo &app_info,
-              int listen_socket, int supervisor_fd,
+int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
               const string &log_name, const string &description,
               const string &restart_message) {
     if (!trace::Initialize(log_name)) {
@@ -216,7 +215,6 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
     }
 
     signal(SIGPIPE, SIG_IGN);
-    app_info->num_connections = 0;
     if (!restart_message.empty())
         LOG(restart_message);
     LOG(description << " started");
@@ -259,6 +257,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
     vector<PendingConnection> pending_connections;
     vector<ChannelInfo> channels;
     uint64_t next_connection_id = 0;
+    int num_connections = 0;
     int result = 0;
 
     for (;;) {
@@ -292,7 +291,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                                 &from_size);
                 if (fd < 0) {
                     ERROR("Error accepting a new connection: " << strerror(errno));
-                } else if (app_info->num_connections >= cfg.max_connections()) {
+                } else if (num_connections >= cfg.max_connections()) {
                     LOG("Connection refused because the limit has been reached");
                     close(fd);
                 } else {
@@ -305,7 +304,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                                                    Clock::now() +
                                                            std::chrono::seconds(
                                                                    cfg.initial_timeout())});
-                    app_info->num_connections++;
+                    num_connections++;
                 }
             }
 
@@ -314,8 +313,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 if (recv(completion_reader, &completion, sizeof completion, 0) ==
                     sizeof completion) {
                     if (completion.type == CONNECTION_COMPLETED) {
-                        if (app_info->num_connections > 0)
-                            app_info->num_connections--;
+                        if (num_connections > 0)
+                            num_connections--;
                     } else if (completion.type == CHANNEL_COMPLETED) {
                         vector<ChannelInfo>::iterator channel =
                                 find_if(channels.begin(), channels.end(),
@@ -353,7 +352,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                     InitialRequest request = InspectInitialRequest(fd);
                     if (request.state == REQUEST_REJECTED) {
                         ClosePendingConnection(poll_table, pending_connections,
-                                               connection, app_info,
+                                               connection, num_connections,
                                                "not a JPIP client");
                         continue;
                     }
@@ -362,7 +361,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                                                 *connection, request)) {
                             ClosePendingConnection(poll_table,
                                                    pending_connections,
-                                                   connection, app_info,
+                                                   connection, num_connections,
                                                    "dispatch failed");
                             continue;
                         }
@@ -374,7 +373,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 }
                 if (events & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL)) {
                     ClosePendingConnection(poll_table, pending_connections,
-                                           connection, app_info,
+                                           connection, num_connections,
                                            "socket closed");
                     continue;
                 }
@@ -382,7 +381,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
             }
         }
 
-        ExpirePendingConnections(poll_table, pending_connections, app_info);
+        ExpirePendingConnections(poll_table, pending_connections,
+                                 num_connections);
         if (log_ready && !connection_ready)
             trace::DrainOne();
     }
