@@ -217,26 +217,27 @@ static void CheckConnectionQueue() {
 }
 
 static void CheckCrashReport() {
-    int report_pipe[2];
-    Check(pipe(report_pipe) == 0, "Could not create crash-report test pipe");
+    int report_sockets[2];
+    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, report_sockets) == 0,
+          "Could not create crash-report test sockets");
 
     pid_t child = fork();
     Check(child >= 0, "Could not create crash-report test process");
     if (child == 0) {
-        close(report_pipe[0]);
+        close(report_sockets[0]);
         rlimit core_limit = {0, 0};
         setrlimit(RLIMIT_CORE, &core_limit);
-        if (!crash_report::Initialize(report_pipe[1]))
+        if (!crash_report::Initialize(report_sockets[1]))
             _exit(EXIT_FAILURE);
         crash_report::SetChannel(47);
         raise(SIGABRT);
         _exit(EXIT_FAILURE);
     }
 
-    close(report_pipe[1]);
+    close(report_sockets[1]);
     uint64_t channel;
-    ssize_t length = read(report_pipe[0], &channel, sizeof channel);
-    close(report_pipe[0]);
+    ssize_t length = read(report_sockets[0], &channel, sizeof channel);
+    close(report_sockets[0]);
 
     int status;
     Check(waitpid(child, &status, 0) == child,

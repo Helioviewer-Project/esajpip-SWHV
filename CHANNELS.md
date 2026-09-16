@@ -123,10 +123,10 @@ new channels after the restart. When a fatal signal originates in a channel
 thread, the replacement process records that channel number in its log. Failures
 outside a channel and uncatchable termination are recorded without one.
 
-The serving process polls a supervisor-lifetime pipe. The supervisor owns its
-only write end, so supervisor termination closes the pipe and makes the serving
-process exit on every supported platform. Each replacement process receives a
-fresh pipe.
+The serving process polls one end of a private Unix socket pair. Supervisor
+termination closes the other end and makes the serving process exit on every
+supported platform. The same socket carries the channel number after a crash;
+each replacement process receives a fresh pair.
 
 ## Deliberate limits
 

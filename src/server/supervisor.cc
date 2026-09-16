@@ -1,3 +1,4 @@
+#include <sys/socket.h>
 #include <sys/wait.h>
 
 #include <cerrno>
@@ -54,50 +55,37 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
 
     string restart_message;
     for (;;) {
-        int lifetime_pipe[2];
-        if (pipe(lifetime_pipe) != 0) {
-            cerr << "The supervisor lifetime pipe can not be created: "
-                 << strerror(errno) << endl;
-            return -1;
-        }
-        int crash_pipe[2];
-        if (pipe(crash_pipe) != 0) {
-            close(lifetime_pipe[0]);
-            close(lifetime_pipe[1]);
-            cerr << "The crash-report pipe can not be created: "
+        int supervisor_sockets[2];
+        if (socketpair(AF_UNIX, SOCK_STREAM, 0, supervisor_sockets) != 0) {
+            cerr << "The supervisor socket pair can not be created: "
                  << strerror(errno) << endl;
             return -1;
         }
 
         pid_t child_pid = fork();
         if (child_pid < 0) {
-            close(lifetime_pipe[0]);
-            close(lifetime_pipe[1]);
-            close(crash_pipe[0]);
-            close(crash_pipe[1]);
+            close(supervisor_sockets[0]);
+            close(supervisor_sockets[1]);
             cerr << "The serving process can not be created: " << strerror(errno) << endl;
             return -1;
         }
         if (child_pid == 0) {
-            close(lifetime_pipe[1]);
-            close(crash_pipe[0]);
+            close(supervisor_sockets[0]);
             ResetSignalHandler(SIGINT);
             ResetSignalHandler(SIGTERM);
-            return RunServer(cfg, app_info, listen_socket, lifetime_pipe[0],
-                             crash_pipe[1], log_name, description,
-                             restart_message);
+            return RunServer(cfg, app_info, listen_socket, supervisor_sockets[1],
+                             log_name, description, restart_message);
         }
 
-        close(lifetime_pipe[0]);
-        close(crash_pipe[1]);
+        close(supervisor_sockets[1]);
         app_info->child_pid = child_pid;
 
-        bool lifetime_closed = false;
+        bool supervisor_closed = false;
         int status;
         for (;;) {
-            if (stop_requested && !lifetime_closed) {
-                close(lifetime_pipe[1]);
-                lifetime_closed = true;
+            if (stop_requested && !supervisor_closed) {
+                close(supervisor_sockets[0]);
+                supervisor_closed = true;
             }
 
             pid_t waited = waitpid(child_pid, &status, 0);
@@ -106,22 +94,21 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
             if (waited < 0 && errno == EINTR)
                 continue;
 
-            if (!lifetime_closed)
-                close(lifetime_pipe[1]);
-            close(crash_pipe[0]);
+            if (!supervisor_closed)
+                close(supervisor_sockets[0]);
             cerr << "The serving process can not be observed: " << strerror(errno) << endl;
             return -1;
         }
 
-        if (!lifetime_closed)
-            close(lifetime_pipe[1]);
-
         uint64_t crash_channel = numeric_limits<uint64_t>::max();
-        ssize_t report_size;
-        do {
-            report_size = read(crash_pipe[0], &crash_channel, sizeof crash_channel);
-        } while (report_size < 0 && errno == EINTR);
-        close(crash_pipe[0]);
+        ssize_t report_size = 0;
+        if (!supervisor_closed) {
+            do {
+                report_size = read(supervisor_sockets[0], &crash_channel,
+                                   sizeof crash_channel);
+            } while (report_size < 0 && errno == EINTR);
+            close(supervisor_sockets[0]);
+        }
 
         app_info->child_pid = 0;
         app_info->num_connections = 0;

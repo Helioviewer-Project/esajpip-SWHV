@@ -214,10 +214,10 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
 }
 
 int RunServer(const AppConfig &cfg, AppInfo &app_info,
-              Socket &listen_socket, int supervisor_fd, int crash_report_fd,
+              Socket &listen_socket, int supervisor_fd,
               const string &log_name, const string &description,
               const string &restart_message) {
-    if (!crash_report::Initialize(crash_report_fd)) {
+    if (!crash_report::Initialize(supervisor_fd)) {
         cerr << "Crash reporting can not be initialized: " << strerror(errno) << endl;
         return SERVER_STARTUP_FAILURE;
     }
@@ -281,8 +281,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
         }
 
         if (poll_table[1].revents) {
-            // The supervisor never writes to this pipe. Any event means that
-            // its only write end was closed, so the serving process must exit.
+            // The supervisor never writes to this socket. Any event means its
+            // endpoint was closed, so the serving process must exit.
             break;
         }
 
