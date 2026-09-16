@@ -388,6 +388,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
     }
 
     pthread_attr_destroy(&attributes);
+    if (result == 0)
+        LOG("Serving process stopping");
     trace::Drain();
     return result;
 }
