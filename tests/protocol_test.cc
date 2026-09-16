@@ -19,6 +19,7 @@
 #include "http/protocol.h"
 #include "http/response.h"
 #include "jpeg2000/place_holder.h"
+#include "jpip/cache_model.h"
 #include "jpip/databin_writer.h"
 #include "jpip/jpip.h"
 #include "jpip/request.h"
@@ -259,12 +260,16 @@ static void CheckJHVRequests() {
     Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
           "Could not parse terminal cache model");
     Check(req.has.model, "Missing terminal cache model");
-    Check(req.cache_model.GetMetadata(0) == INT_MAX, "Wrong terminal metadata model");
+    Check(req.model.size() == 1 &&
+              req.model[0].bin_class == jpip::DataBinClass::META_DATA &&
+              req.model[0].id == 0 && req.model[0].amount == INT_MAX,
+          "Wrong terminal metadata model");
 
     Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
           "Could not parse terminal partial cache model");
     Check(req.has.model, "Missing terminal partial cache model");
-    Check(req.cache_model.GetMetadata(0) == 446, "Wrong terminal partial metadata model");
+    Check(req.model.size() == 1 && req.model[0].amount == 446,
+          "Wrong terminal partial metadata model");
 
     Check(req.Parse("GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
           "Could not parse request with an empty frame size");
@@ -307,13 +312,21 @@ static void CheckJHVRequests() {
           "Could not parse reduced codestream selectors");
     Check(req.codestreams == vector<int>({3, 2, 1, 4, 5, 6}),
           "Wrong codestream selector ranges");
+    Check(!req.Parse("GET /jpip?stream=0:100000&stream=0:100000&cid=7 HTTP/1.1"),
+          "Accepted an oversized expanded codestream selection");
 
     Check(req.Parse("GET /jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7 HTTP/1.1"),
           "Could not parse encoded cache-model descriptors");
-    Check(req.cache_model.GetCodestream(1).GetMainHeader() == 3 &&
-              req.cache_model.GetCodestream(2).GetTileHeader() == 5 &&
-              req.cache_model.GetCodestream(1).GetPrecinct(6) == 7 &&
-              req.cache_model.GetMetadata(8) == 9,
+    Check(req.model.size() == 4 &&
+              req.model[0].bin_class == jpip::DataBinClass::MAIN_HEADER &&
+              req.model[0].first_codestream == 1 &&
+              req.model[0].last_codestream == 2 && req.model[0].amount == 3 &&
+              req.model[1].bin_class == jpip::DataBinClass::TILE_HEADER &&
+              req.model[1].id == 4 && req.model[1].amount == 5 &&
+              req.model[2].bin_class == jpip::DataBinClass::PRECINCT &&
+              req.model[2].id == 6 && req.model[2].amount == 7 &&
+              req.model[3].bin_class == jpip::DataBinClass::META_DATA &&
+              req.model[3].id == 8 && req.model[3].amount == 9,
           "Wrong encoded cache model");
 
     Check(req.Parse("GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&

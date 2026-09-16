@@ -321,6 +321,25 @@ int main() {
               response[response_length - 1] == 0,
           "Unlimited response has no window-done EOR");
 
+    jpip::DataBinServer model_server;
+    jpip::Request model_request;
+    Check(model_request.Parse("GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
+              model_server.SetRequest(manager, model_request),
+          "Rejected a valid cache model");
+    Check(model_request.Parse("GET /jpip?model=M2147483647&cid=0 HTTP/1.1") &&
+              !model_server.SetRequest(manager, model_request),
+          "Accepted an unavailable metadata bin");
+    Check(model_request.Parse("GET /jpip?model=[0-100000]Hm&cid=0 HTTP/1.1") &&
+              model_request.model.size() == 1 &&
+              !model_server.SetRequest(manager, model_request),
+          "Accepted an unavailable cache-model codestream range");
+    Check(model_request.Parse("GET /jpip?model=P2147483647&cid=0 HTTP/1.1") &&
+              !model_server.SetRequest(manager, model_request),
+          "Accepted an unavailable precinct bin");
+    Check(model_request.Parse("GET /jpip?model=H1&cid=0 HTTP/1.1") &&
+              !model_server.SetRequest(manager, model_request),
+          "Accepted an unavailable tile-header bin");
+
     jpip::Request headers_only_request;
     Check(headers_only_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0 HTTP/1.1"),

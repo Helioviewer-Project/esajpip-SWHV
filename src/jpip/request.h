@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include "woi.h"
-#include "cache_model.h"
+#include "jpip.h"
 #include "jpeg2000/point.h"
 #include "jpeg2000/coding_parameters.h"
 
@@ -37,6 +37,14 @@ namespace jpip {
             bool context = false;
         };
 
+        struct ModelUpdate {
+            DataBinClass bin_class;
+            int first_codestream;
+            int last_codestream;
+            int id;
+            int amount;
+        };
+
         /**
          * Enumeration of the possible round directions
          * of a WOI for specifying the resolution levels.
@@ -53,7 +61,7 @@ namespace jpip {
         int length_response;     ///< Maximum response length
         Parameters has;          ///< Parameters present in the request
         jpeg2000::Size resolution_size;    ///< Size of the resolution level
-        CacheModel cache_model;  ///< Cache model
+        std::vector<ModelUpdate> model;
 
         /**
          * Round direction.

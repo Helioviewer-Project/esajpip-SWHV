@@ -388,7 +388,6 @@ private:
                     err_msg = "Close request received related to another channel";
                     LOG(err_msg);
                 } else {
-                    req.cache_model.Clear();
                     LOG("The channel " << id << " has been closed");
 
                     ostringstream msg;

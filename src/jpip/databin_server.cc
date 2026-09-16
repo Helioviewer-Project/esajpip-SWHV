@@ -36,6 +36,49 @@ namespace jpip {
             return true;
         }
 
+        bool ValidateModel(const ImageIndex &image_index,
+                           const vector<Request::ModelUpdate> &model) {
+            for (const Request::ModelUpdate &update : model) {
+                if (update.id < 0 || update.amount < 0)
+                    return false;
+                if (update.bin_class == DataBinClass::META_DATA) {
+                    if (static_cast<size_t>(update.id) > image_index.GetMetadata().bins.size())
+                        return false;
+                    continue;
+                }
+
+                if (update.bin_class != DataBinClass::MAIN_HEADER &&
+                    update.bin_class != DataBinClass::TILE_HEADER &&
+                    update.bin_class != DataBinClass::PRECINCT)
+                    return false;
+                if (update.first_codestream < 0 ||
+                    update.last_codestream < update.first_codestream ||
+                    update.last_codestream >= static_cast<int>(image_index.GetNumCodestreams()))
+                    return false;
+                if (update.bin_class == DataBinClass::TILE_HEADER && update.id != 0)
+                    return false;
+                if (update.bin_class == DataBinClass::PRECINCT) {
+                    for (int i = update.first_codestream; i <= update.last_codestream; ++i)
+                        if (update.id >= image_index.GetCodingParameters(i)->GetNumPrecinctDataBins())
+                            return false;
+                }
+            }
+            return true;
+        }
+
+        void ApplyModel(CacheModel *cache_model,
+                        const vector<Request::ModelUpdate> &model) {
+            for (const Request::ModelUpdate &update : model) {
+                if (update.bin_class == DataBinClass::META_DATA) {
+                    cache_model->AddToMetadata(update.id, update.amount);
+                    continue;
+                }
+                for (int i = update.first_codestream; i <= update.last_codestream; ++i)
+                    cache_model->AddToDataBin(update.bin_class, i, update.id,
+                                              update.amount);
+            }
+        }
+
     }
 
     bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
@@ -43,6 +86,9 @@ namespace jpip {
         ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.StartResponse();
+
+        if (req.has.model && !ValidateModel(*image_index, req.model))
+            return false;
 
         if (req.has.stream || req.has.context) {
             for (int codestream : req.codestreams)
@@ -79,7 +125,7 @@ namespace jpip {
         }
 
         if (req.has.model)
-            cache_model += req.cache_model;
+            ApplyModel(&cache_model, req.model);
 
         pending = req.has.len ? req.length_response : INT_MAX;
 

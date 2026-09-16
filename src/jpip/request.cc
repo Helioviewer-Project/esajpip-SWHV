@@ -91,7 +91,10 @@ namespace jpip {
             return true;
         }
 
-        void AppendRange(int first, int last, vector<int> *values) {
+        bool AppendRange(int first, int last, vector<int> *values) {
+            size_t count = static_cast<size_t>(first > last ? first - last : last - first) + 1;
+            if (values->size() > MAXC + 1 - count)
+                return false;
             if (first > last) {
                 for (int i = first; i >= last; --i)
                     values->push_back(i);
@@ -99,29 +102,28 @@ namespace jpip {
                 for (int i = first; i <= last; ++i)
                     values->push_back(i);
             }
+            return true;
         }
 
-        bool ParseContext(const string &value, vector<int> *codestreams) {
+        bool ParseContext(const string &value, int *first, int *last) {
             string decoded;
             if (!Decode(value, &decoded) || decoded.compare(0, 5, "jpxl<") != 0 ||
                 decoded.size() < 7 || decoded.back() != '>')
                 return false;
 
-            int first, last;
-            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', &first, &last))
+            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', first, last))
                 return false;
-            first = Clamp(first, 0, MAXC);
-            last = Clamp(last, 0, MAXC);
-            AppendRange(first, last, codestreams);
+            *first = Clamp(*first, 0, MAXC);
+            *last = Clamp(*last, 0, MAXC);
             return true;
         }
 
-        bool ParseModel(const string &value, CacheModel *model) {
+        bool ParseModel(const string &value, vector<Request::ModelUpdate> *model) {
             string text;
             if (!Decode(value, &text) || text.empty())
                 return false;
 
-            model->Clear();
+            model->clear();
             int minimum_codestream = 0;
             int maximum_codestream = 0;
             bool descriptor_found = false;
@@ -175,27 +177,28 @@ namespace jpip {
                         return false;
                 }
 
+                Request::ModelUpdate update;
+                update.first_codestream = minimum_codestream;
+                update.last_codestream = maximum_codestream;
+                update.id = id;
+                update.amount = amount;
                 if (type == 'M') {
-                    model->AddToMetadata(id, amount);
+                    update.bin_class = DataBinClass::META_DATA;
                     TRACE("Model updating: M" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                } else if (type == 'H' || type == 'h' || type == 'P') {
-                    for (int i = minimum_codestream; i <= maximum_codestream; ++i) {
-                        CacheModel::Codestream &codestream = model->GetCodestream(i);
-                        if (type == 'h') {
-                            codestream.AddToMainHeader(amount);
-                            TRACE("Model updating: Hm:" << (amount == INT_MAX ? -1 : amount));
-                        } else if (type == 'H') {
-                            codestream.AddToTileHeader(amount);
-                            TRACE("Model updating: H" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                        } else {
-                            codestream.AddToPrecinct(id, amount);
-                            TRACE("Model updating: P" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                        }
-                    }
+                } else if (type == 'h') {
+                    update.bin_class = DataBinClass::MAIN_HEADER;
+                    TRACE("Model updating: Hm:" << (amount == INT_MAX ? -1 : amount));
+                } else if (type == 'H') {
+                    update.bin_class = DataBinClass::TILE_HEADER;
+                    TRACE("Model updating: H" << id << ":" << (amount == INT_MAX ? -1 : amount));
+                } else if (type == 'P') {
+                    update.bin_class = DataBinClass::PRECINCT;
+                    TRACE("Model updating: P" << id << ":" << (amount == INT_MAX ? -1 : amount));
                 } else {
                     ERROR("The bin-descriptor '" << type << "' is not supported for model updating");
                     return false;
                 }
+                model->push_back(update);
                 descriptor_found = true;
             }
             return descriptor_found;
@@ -225,6 +228,7 @@ namespace jpip {
 
         has = Parameters();
         codestreams.clear();
+        model.clear();
         target.clear();
         channel.clear();
         if (question == string::npos)
@@ -285,19 +289,26 @@ namespace jpip {
                 if (ParseRange(value, ':', &x, &y)) {
                     x = Clamp(x, 0, MAXC);
                     y = Clamp(y, 0, MAXC);
-                    AppendRange(x, y, &codestreams);
-                    has.stream = true;
-                    TRACE("JPIP parameter: stream=" << x << ":" << y);
+                    if (AppendRange(x, y, &codestreams)) {
+                        has.stream = true;
+                        TRACE("JPIP parameter: stream=" << x << ":" << y);
+                    } else {
+                        valid = false;
+                    }
                 }
             } else if (name == "model") {
-                if (ParseModel(value, &cache_model))
+                if (ParseModel(value, &model))
                     has.model = true;
                 else
                     valid = false;
             } else if (name == "context") {
-                if (ParseContext(value, &codestreams)) {
-                    has.context = true;
-                    TRACE("JPIP parameter: context=" << value);
+                if (ParseContext(value, &x, &y)) {
+                    if (AppendRange(x, y, &codestreams)) {
+                        has.context = true;
+                        TRACE("JPIP parameter: context=" << value);
+                    } else {
+                        valid = false;
+                    }
                 }
             }
 

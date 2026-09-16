@@ -57,18 +57,6 @@ namespace jpip {
             }
 
             /**
-             * Add the content of the given codestream cache model.
-             */
-            Codestream &operator+=(const Codestream &model) {
-                AddToMainHeader(model.header);
-                AddToTileHeader(model.tile_header);
-
-                for (size_t i = 0; i < model.precincts.size(); ++i)
-                    AddToPrecinct(model.min_precinct + i, model.precincts[i]);
-                return *this;
-            }
-
-            /**
              * Returns the amount of the main header.
              */
             int GetMainHeader() const {
@@ -198,19 +186,6 @@ namespace jpip {
          */
         CacheModel() {
             full_meta = false;
-        }
-
-        /**
-         * Add the content of the given cache model.
-         */
-        CacheModel &operator+=(const CacheModel &model) {
-            if (!full_meta) {
-                for (size_t i = 0; i < model.meta_data.size(); ++i)
-                    AddToMetadata(i, model.meta_data[i]);
-            }
-            for (size_t i = 0; i < model.codestreams.size(); ++i)
-                GetCodestream(i) += model.codestreams[i];
-            return *this;
         }
 
         /**
