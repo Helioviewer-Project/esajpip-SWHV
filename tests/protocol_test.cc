@@ -28,7 +28,6 @@
 #include "jpip/request.h"
 #include "jpip/woi_composer.h"
 #include "net/address.h"
-#include "net/socket.h"
 
 using namespace std;
 

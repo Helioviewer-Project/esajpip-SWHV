@@ -13,7 +13,6 @@
 
 #include "app_config.h"
 #include "app_info.h"
-#include "net/socket.h"
 #include "server/server.h"
 #include "server/supervisor.h"
 
@@ -27,7 +26,7 @@ void ChildExited(int) {
 }
 
 int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
-                  net::Socket &listen_socket, const string &log_name,
+                  int listen_socket, const string &log_name,
                   const string &description) {
     if (signal(SIGCHLD, ChildExited) == SIG_ERR) {
         cerr << "The child signal can not be configured: "

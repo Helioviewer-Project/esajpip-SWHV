@@ -1,3 +1,5 @@
+#include <sys/socket.h>
+
 #include <cerrno>
 #include <cstring>
 #include <string>
@@ -6,7 +8,7 @@
 #include "trace.h"
 #include "app_config.h"
 #include "app_info.h"
-#include "net/socket.h"
+#include "net/address.h"
 #include "server/supervisor.h"
 
 using namespace std;
@@ -40,13 +42,17 @@ int main(int argc, char **argv) {
     cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << '-' << cfg << endl;
 
-    net::Socket listen_socket;
     net::InetAddress listen_addr = cfg.address().empty()
                                        ? net::InetAddress(cfg.port())
                                        : net::InetAddress(cfg.address().c_str(), cfg.port());
-    if (!listen_socket.OpenInet())
+    int listen_socket = socket(PF_INET, SOCK_STREAM, 0);
+    if (listen_socket < 0)
         return CERR("The server listen socket can not be created: " << strerror(errno));
-    if (!listen_socket.ListenAt(listen_addr))
+    int reuse_address = 1;
+    if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &reuse_address,
+                   sizeof reuse_address) != 0 ||
+        ::bind(listen_socket, listen_addr.GetSockAddr(), listen_addr.GetSize()) != 0 ||
+        listen(listen_socket, 10) != 0)
         return CERR("The server listen socket can not be initialized: " << strerror(errno));
 
     string log_name = cfg.file_logging() ? cfg.log_directory() + SERVER_APP_NAME : "";

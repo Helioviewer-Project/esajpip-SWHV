@@ -6,26 +6,29 @@
 #include "jpip/request.h"
 #include "jpip/databin_server.h"
 #include "http/response.h"
-#include "net/socket.h"
 
 #include <glib.h>
 #include <zlib.h>
 
+#include <cerrno>
 #include <chrono>
 #include <climits>
 #include <cstdio>
+#include <cstring>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <vector>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/uio.h>
+#include <unistd.h>
 
 using namespace std;
 
 using http::CRLF;
 using jpeg2000::FileManager;
 using jpip::DataBinServer;
-using net::Socket;
 
 static const char ZERO[] = "0\r\n\r\n";
 
@@ -35,7 +38,7 @@ static const char *STS = "max-age=31536000; includeSubDomains;";
 
 class SocketReader {
 private:
-    Socket &socket;
+    int fd;
     char buf[1024];
     size_t pos = 0;
     size_t len = 0;
@@ -48,7 +51,7 @@ public:
         ERROR
     };
 
-    explicit SocketReader(Socket &_socket) : socket(_socket) {
+    explicit SocketReader(int _fd) : fd(_fd) {
     }
 
     Result ReadLine(string &line) {
@@ -62,7 +65,7 @@ public:
             }
 
             line.append(buf + pos, len - pos);
-            ssize_t received = socket.Receive(buf, sizeof buf);
+            ssize_t received = recv(fd, buf, sizeof buf, 0);
             if (received <= 0) {
                 if (received < 0)
                     return ERROR;
@@ -78,9 +81,9 @@ public:
     }
 };
 
-static int SendAll(Socket &socket, iovec *buffers, int count) {
+static int SendAll(int fd, iovec *buffers, int count) {
     while (count > 0) {
-        ssize_t sent = writev(socket, buffers, count);
+        ssize_t sent = writev(fd, buffers, count);
         if (sent < 0) {
             if (errno == EINTR)
                 continue;
@@ -107,27 +110,27 @@ static int SendAll(Socket &socket, iovec *buffers, int count) {
     return 0;
 }
 
-static int SendAll(Socket &socket, const void *buf, size_t len) {
+static int SendAll(int fd, const void *buf, size_t len) {
     iovec buffer = {const_cast<void *>(buf), len};
-    return SendAll(socket, &buffer, 1);
+    return SendAll(fd, &buffer, 1);
 }
 
-static int SendStream(Socket &socket, const ostringstream &stream) {
+static int SendStream(int fd, const ostringstream &stream) {
     string str = stream.str();
-    return SendAll(socket, str.data(), str.size());
+    return SendAll(fd, str.data(), str.size());
 }
 
-static int SendOK(Socket &socket, const string &headers) {
+static int SendOK(int fd, const string &headers) {
     static const char status[] = "HTTP/1.1 200 OK\r\n";
     iovec buffers[] = {
         {const_cast<char *>(status), sizeof status - 1},
         {const_cast<char *>(headers.data()), headers.size()},
         {const_cast<char *>(CRLF), sizeof CRLF - 1}
     };
-    return SendAll(socket, buffers, 3);
+    return SendAll(fd, buffers, 3);
 }
 
-static int SendChunk(Socket &socket, const void *buf, size_t len) {
+static int SendChunk(int fd, const void *buf, size_t len) {
     if (len > 0) {
         char header[2 * sizeof(size_t) + 3];
         int header_len = snprintf(header, sizeof header, "%zx\r\n", len);
@@ -137,13 +140,13 @@ static int SendChunk(Socket &socket, const void *buf, size_t len) {
             {const_cast<char *>(CRLF), sizeof CRLF - 1}
         };
 
-        if (SendAll(socket, buffers, 3))
+        if (SendAll(fd, buffers, 3))
             return -1;
     }
     return 0;
 }
 
-static bool SendData(Socket &socket, DataBinServer &data_server,
+static bool SendData(int fd, DataBinServer &data_server,
                      FileManager &file_manager, vector<char> &buf, bool gzip) {
     z_stream zstream = {};
     vector<unsigned char> zbuf;
@@ -173,7 +176,7 @@ static bool SendData(Socket &socket, DataBinServer &data_server,
         }
 
         if (!gzip) {
-            success = SendChunk(socket, buf.data(), chunk_len) == 0;
+            success = SendChunk(fd, buf.data(), chunk_len) == 0;
             continue;
         }
 
@@ -191,7 +194,7 @@ static bool SendData(Socket &socket, DataBinServer &data_server,
 
             if (zstream.avail_out == 0 || result == Z_STREAM_END) {
                 size_t length = zbuf.size() - zstream.avail_out;
-                if (length > 0 && SendChunk(socket, zbuf.data(), length)) {
+                if (length > 0 && SendChunk(fd, zbuf.data(), length)) {
                     success = false;
                     break;
                 }
@@ -244,17 +247,19 @@ private:
     vector<char> buf;
     bool opened = false;
 
-    bool Configure(Socket &socket) {
-        int fd = socket;
-        int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val, sizeof sndbuf_val) |
+    bool Configure(int fd) {
+        int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val,
+                                     sizeof sndbuf_val) |
                           // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
-                          setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val, sizeof true_val);
+                          setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val,
+                                     sizeof true_val);
         int timeout;
         if (sockopt_ret == 0 && (timeout = cfg.connection_timeout()) > 0) {
             timeval tv;
             tv.tv_sec = timeout;
             tv.tv_usec = 0;
-            sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv) |
+            sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv,
+                                      sizeof tv) |
                     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
         }
         if (sockopt_ret == 0)
@@ -263,12 +268,12 @@ private:
         return false;
     }
 
-    WaitResult WaitForRequest(Socket &socket, const SocketReader &reader) {
+    WaitResult WaitForRequest(int fd, const SocketReader &reader) {
         if (reader.HasBufferedData())
             return REQUEST_READY;
 
         pollfd fds[] = {
-            {socket, POLLIN, 0},
+            {fd, POLLIN, 0},
             {queue->GetDescriptor(), POLLIN, 0}
         };
         int result;
@@ -289,13 +294,13 @@ private:
         return WAIT_FAILED;
     }
 
-    ServeResult Serve(Socket &socket) {
+    ServeResult Serve(int fd) {
         string req_line, req_line_raw;
         jpip::Request req;
-        SocketReader reader(socket);
+        SocketReader reader(fd);
 
         for (;;) {
-            WaitResult wait_result = WaitForRequest(socket, reader);
+            WaitResult wait_result = WaitForRequest(fd, reader);
             if (wait_result == REPLACEMENT_READY)
                 return KEEP_CHANNEL;
             if (wait_result == WAIT_TIMED_OUT) {
@@ -392,7 +397,7 @@ private:
                             << "Strict-Transport-Security: " << STS << CRLF
                             << "Cache-Control: " << NOCACHE << CRLF
                             << "Content-Length: 0" << CRLF << CRLF;
-                    SendStream(socket, msg);
+                    SendStream(fd, msg);
                     return CLOSE_CHANNEL;
                 }
             } else if (req.mask.items.cnew) {
@@ -419,7 +424,7 @@ private:
                                     << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
                                     << (send_gzip ? head_data_gzip : head_data)
                                     << CRLF;
-                            if (SendStream(socket, msg) == 0)
+                            if (SendStream(fd, msg) == 0)
                                 send_data = true;
                         }
                     }
@@ -437,7 +442,7 @@ private:
                             err_msg = "Invalid JPIP request for the selected image";
                             LOG(err_msg);
                         } else {
-                            if (SendOK(socket, send_gzip ? head_data_gzip : head_data) == 0)
+                            if (SendOK(fd, send_gzip ? head_data_gzip : head_data) == 0)
                                 send_data = true;
                         }
                     }
@@ -457,11 +462,11 @@ private:
                         << "Content-Length: " << err_msg_len << CRLF << CRLF;
                 if (err_msg_len)
                     msg << err_msg;
-                SendStream(socket, msg);
+                SendStream(fd, msg);
                 return FAIL_CHANNEL;
             } else {
-                if (!SendData(socket, data_server, file_manager, buf, send_gzip) ||
-                    SendAll(socket, ZERO, sizeof ZERO - 1))
+                if (!SendData(fd, data_server, file_manager, buf, send_gzip) ||
+                    SendAll(fd, ZERO, sizeof ZERO - 1))
                     return FAIL_CHANNEL;
                 file_manager.ClearFiles();
             }
@@ -489,11 +494,10 @@ private:
         return queue->Pop(connection);
     }
 
-    void CloseConnection(Socket &socket) {
-        LOG("Closing connection [" << static_cast<int>(socket)
-                                   << "] (client finished)");
-        shutdown(socket, SHUT_RDWR);
-        socket.Close();
+    void CloseConnection(int fd) {
+        LOG("Closing connection [" << fd << "] (client finished)");
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
         connection_closed();
     }
 
@@ -519,19 +523,17 @@ public:
         } else {
             ChannelConnection connection;
             while (WaitForConnection(&connection)) {
-                Socket socket(connection.fd);
-                ServeResult result = Configure(socket) ? Serve(socket) : FAIL_CHANNEL;
-                CloseConnection(socket);
+                ServeResult result = Configure(connection.fd) ? Serve(connection.fd)
+                                                               : FAIL_CHANNEL;
+                CloseConnection(connection.fd);
                 if (result != KEEP_CHANNEL)
                     break;
             }
         }
 
         ChannelConnection pending;
-        if (queue->Close(pending)) {
-            Socket socket(pending.fd);
-            CloseConnection(socket);
-        }
+        if (queue->Close(pending))
+            CloseConnection(pending.fd);
     }
 };
 

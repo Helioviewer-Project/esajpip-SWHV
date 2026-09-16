@@ -15,8 +15,8 @@
 #include "trace.h"
 #include "app_config.h"
 #include "app_info.h"
+#include "net/address.h"
 #include "net/poll_table.h"
-#include "net/socket.h"
 #include "server/channel.h"
 #include "server/crash_report.h"
 #include "server/initial_request.h"
@@ -26,7 +26,6 @@ using namespace std;
 
 using net::InetAddress;
 using net::PollTable;
-using net::Socket;
 
 #ifndef POLLRDHUP
 #define POLLRDHUP (0)
@@ -65,13 +64,17 @@ struct ChannelThreadInfo {
     shared_ptr<ConnectionQueue> queue;
 };
 
-Socket completion_socket;
+int completion_socket = -1;
 
 void Notify(CompletionType type, uint64_t id) {
     Completion completion{};
     completion.type = type;
     completion.id = id;
-    if (completion_socket.Send(&completion, sizeof completion) != sizeof completion)
+    ssize_t sent;
+    do {
+        sent = send(completion_socket, &completion, sizeof completion, 0);
+    } while (sent < 0 && errno == EINTR);
+    if (sent != sizeof completion)
         ERROR("Completion " << id << " could not notify the serving loop");
 }
 
@@ -216,7 +219,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
 }
 
 int RunServer(const AppConfig &cfg, AppInfo &app_info,
-              Socket &listen_socket, int supervisor_fd,
+              int listen_socket, int supervisor_fd,
               const string &log_name, const string &description,
               const string &restart_message) {
     if (!crash_report::Initialize(supervisor_fd)) {
@@ -241,7 +244,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
         trace::Drain();
         return SERVER_STARTUP_FAILURE;
     }
-    Socket completion_reader(completion_fds[0]);
+    int completion_reader = completion_fds[0];
     completion_socket = completion_fds[1];
 
     pthread_attr_t attributes;
@@ -297,15 +300,16 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
 
             if (poll_table[0].revents & POLLIN) {
                 InetAddress from_address;
-                Socket socket = listen_socket.Accept(&from_address);
-                if (socket == -1) {
+                socklen_t from_size = from_address.GetSize();
+                int fd = accept(listen_socket, from_address.GetSockAddr(),
+                                &from_size);
+                if (fd < 0) {
                     ERROR("Error accepting a new connection: " << strerror(errno));
                 } else if (app_info->num_connections >= cfg.max_connections()) {
                     LOG("Connection refused because the limit has been reached");
-                    socket.Close();
+                    close(fd);
                 } else {
                     uint64_t id = next_connection_id++;
-                    int fd = socket;
                     LOG("New connection from " << from_address.GetPath() << ":"
                                                 << from_address.GetPort() << " ["
                                                 << fd << ":" << id << "]");
@@ -320,7 +324,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
 
             if (poll_table[2].revents & POLLIN) {
                 Completion completion;
-                if (completion_reader.Receive(&completion, sizeof completion) ==
+                if (recv(completion_reader, &completion, sizeof completion, 0) ==
                     sizeof completion) {
                     if (completion.type == CONNECTION_COMPLETED) {
                         if (app_info->num_connections > 0)
