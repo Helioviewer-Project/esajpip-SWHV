@@ -107,9 +107,11 @@ JPX specifications allow.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
-  validated marker, packet, and tile-part bounds. After tile-part data, only
-  the next `SOT` or the final `EOC` marker may follow. A tile-part with
-  `Psot = 0` must be the last tile-part in the codestream.
+  validated marker, packet, and tile-part bounds. `TPsot` must start at zero
+  and increase by one. If `TNsot` is nonzero, it must equal the final
+  tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
+  marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
+  the codestream.
 - Packet locations and file-backed data-bin offsets must fit the signed 32-bit
   JPIP state. Source files of 2 GiB or more are outside the supported profile.
 

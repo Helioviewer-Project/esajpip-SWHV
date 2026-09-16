@@ -305,30 +305,18 @@ the parser code involved: a length mutant points at `ReadBoxHeader` /
 
 ## Expected initial failures
 
-Places where the server is *more lenient* than T.800. A subtype cannot widen
-its base, so each needs a decision: tighten the parser, or relax the model
-and document the leniency in `JPIP_PROFILE.md`. Five earlier ones were
-resolved in the parser (`e1b48dd` reserved code-block style bits, `63161e4`
-zero precinct exponents above r = 0, `c309867` the `jP`/`ftyp` preamble,
-`219d14b` a repeated COD or QCD in the main header, and the
-`ReadCodestream` phase machine that admits only SOT and EOC after tile-part
-data); the corpus expects rejection for those, matching the hand-written
-tests added with each fix (`codestream.one-cod-before-sot-0`,
-`one-qcd-before-sot-1` and `segment-after-sot-3` are the corpus twins of
-`duplicate-cod.jp2`, `duplicate-qcd.jp2` and `marker-after-tile-part.jp2`).
-
-One remains:
-
-1. **TNsot inconsistent with the tile-part count.** Vector
-   `jp2-sot.tnsot-2` (one tile-part, TNsot = 2). A.4.2: a non-zero TNsot is
-   the number of tile-parts of the tile. `ReadSOTMarker` checks only
-   `tpsot < tnsot` per segment. Fix: remember the first non-zero TNsot and,
-   at EOC, require `packets.size()` to equal it; also require TPsot to run
-   0, 1, 2, … (the model checks the sequence too; today a codestream whose
-   first tile-part has TPsot = 1 with TNsot = 0 would be accepted).
-
-It does not affect serving of well-formed files and is a few lines in
-`ReadSOTMarker` plus the EOC case of `ReadCodestream`.
+Places where the server is *more lenient* than T.800 need a decision: tighten
+the parser, or relax the model and document the leniency in
+`JPIP_PROFILE.md`. All known cases have been resolved in the parser: reserved
+code-block style bits, zero precinct exponents above r = 0, the `jP`/`ftyp`
+preamble, repeated COD or QCD markers in the main header, markers other than
+SOT and EOC after tile-part data, and inconsistent `TPsot` or `TNsot` values.
+The corpus expects rejection for these cases, matching the hand-written tests
+(`duplicate-cod.jp2` ↔ `codestream.one-cod-before-sot`, `duplicate-qcd.jp2` ↔
+`codestream.one-qcd-before-sot`, `marker-after-tile-part.jp2` ↔
+`codestream.segment-after-sot`, `wrong-first-tile-part.jp2` ↔ `sot.tpsot-1`,
+`wrong-tile-part-count.jp2` ↔ `sot.tnsot-2`, `inconsistent-tile-part-count.jp2`
+↔ `sot.tnsot-inconsistent`).
 
 A JPX carrying both `jp2c` and `ftbl` boxes is *not* a failure: links take
 precedence and embedded codestreams are ignored (`JPIP_PROFILE.md`), and the

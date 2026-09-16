@@ -157,6 +157,25 @@ static vector<unsigned char> DuplicateMarker(vector<unsigned char> codestream,
     return codestream;
 }
 
+static vector<unsigned char> SetTilePartNumbers(vector<unsigned char> codestream,
+                                                 size_t index, uint8_t part,
+                                                 uint8_t count) {
+    for (size_t i = 0; i + 12 <= codestream.size(); ++i) {
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x90 ||
+            codestream[i + 2] != 0 || codestream[i + 3] != 10)
+            continue;
+        if (index != 0) {
+            --index;
+            continue;
+        }
+        codestream[i + 10] = part;
+        codestream[i + 11] = count;
+        return codestream;
+    }
+    Check(false, "SOT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
     vector<unsigned char> file = MakePreamble(0x6A703220); // jp2
     AppendBox(file, 0x6A703263, codestream); // jp2c
@@ -234,6 +253,13 @@ int main() {
               MakeJP2(DuplicateMarker(codestream, 0xFF52)));
     WriteFile(directory + "duplicate-qcd.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF5C)));
+    WriteFile(directory + "wrong-tile-part-count.jp2",
+              MakeJP2(SetTilePartNumbers(codestream, 0, 0, 2)));
+    WriteFile(directory + "wrong-first-tile-part.jp2",
+              MakeJP2(SetTilePartNumbers(codestream, 0, 1, 0)));
+    WriteFile(directory + "inconsistent-tile-part-count.jp2",
+              MakeJP2(SetTilePartNumbers(
+                  MakeCodestream(0, 1, 1, 1, 0, 2, 2), 1, 1, 3)));
     WriteFile(directory + "missing-signature.jp2",
               vector<unsigned char>(jp2.begin() + 12, jp2.end()));
     vector<unsigned char> bad_signature = jp2;
@@ -292,6 +318,14 @@ int main() {
         jpeg2000::FileManager duplicate_marker_manager;
         Check(!OpenImage(directory, name, &duplicate_marker_manager),
               "Accepted a repeated main-header COD or QCD marker");
+    }
+
+    for (const char *name : {"wrong-tile-part-count.jp2",
+                             "wrong-first-tile-part.jp2",
+                             "inconsistent-tile-part-count.jp2"}) {
+        jpeg2000::FileManager tile_part_manager;
+        Check(!OpenImage(directory, name, &tile_part_manager),
+              "Accepted inconsistent JPEG 2000 tile-part numbering");
     }
 
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",

@@ -62,7 +62,8 @@ namespace jpeg2000 {
          * @param index Pointer to the indexing information to update.
          * @return <code>true</code> if successful.
          */
-        bool ReadSOTMarker(data::File *file, uint64_t limit, CodestreamIndex *index);
+        bool ReadSOTMarker(data::File *file, uint64_t limit, CodestreamIndex *index,
+                           uint8_t *declared_tile_parts);
 
         /**
          * Reads the information of a PLT marker.

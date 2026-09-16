@@ -221,8 +221,8 @@ END
 --     tilePart (A.3: only SOT and EOC follow tile-part data). The main list
 --     admits other kinds structurally; the rule rejects them.
 --   For each tile: tile-part indices tpsot are 0, 1, 2, ... in stream order;
---     if any tnsot != 0 then tpsot < tnsot for every tile-part of that tile
---     and the tile's tile-part count == that tnsot.
+--     every non-zero tnsot of that tile is the same value, tpsot < tnsot for
+--     every tile-part of that tile, and the tile's tile-part count == tnsot.
 --   The chosen CHOICE alternative matches `code` (automatic: present-when).
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
 --

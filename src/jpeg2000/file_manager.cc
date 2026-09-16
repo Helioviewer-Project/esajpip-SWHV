@@ -140,6 +140,7 @@ namespace jpeg2000 {
         bool qcd = false;
         bool first_marker = true;
         Phase phase = MAIN_HEADER;
+        uint8_t declared_tile_parts = 0;
         uint16_t value = 0;
 
         if (!file->ReadReverse(&value) || value != SOC_MARKER)
@@ -178,7 +179,7 @@ namespace jpeg2000 {
 
                 case SOT_MARKER: TRACE("SOT marker...");
                     if (phase == TILE_HEADER || !siz || !cod || !qcd ||
-                        !ReadSOTMarker(file, limit, index))
+                        !ReadSOTMarker(file, limit, index, &declared_tile_parts))
                         return false;
                     phase = TILE_HEADER;
                     break;
@@ -204,7 +205,9 @@ namespace jpeg2000 {
 
                 case EOC_MARKER:
                     if (phase == TILE_HEADER || index->packets.empty() ||
-                        file->GetOffset() != limit)
+                        file->GetOffset() != limit ||
+                        (declared_tile_parts != 0 &&
+                         index->packets.size() != declared_tile_parts))
                         return false;
                     if (!index->PLT_markers.empty())
                         return true;
@@ -321,7 +324,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadSOTMarker(File *file, uint64_t limit, CodestreamIndex *index) {
+    bool FileManager::ReadSOTMarker(File *file, uint64_t limit, CodestreamIndex *index,
+                                    uint8_t *declared_tile_parts) {
         uint64_t marker_offset = file->GetOffset() - 2;
         uint16_t lsot = 0;
         uint16_t isot = 0;
@@ -330,10 +334,16 @@ namespace jpeg2000 {
         uint8_t tnsot = 0;
         if (!file->ReadReverse(&lsot) || !file->ReadReverse(&isot) || !file->ReadReverse(&psot) ||
             !file->ReadReverse(&tpsot) || !file->ReadReverse(&tnsot) || lsot != 10 || isot != 0 ||
-            tpsot == UINT8_MAX || (tnsot != 0 && tpsot >= tnsot) || (psot != 0 && psot < 14) ||
+            tpsot != index->packets.size() || (tnsot != 0 && tpsot >= tnsot) ||
+            (tnsot != 0 && *declared_tile_parts != 0 &&
+             tnsot != *declared_tile_parts) ||
+            (psot != 0 && psot < 14) ||
             (psot != 0 && psot > limit - marker_offset) ||
             index->packets.size() >= PacketIndex::MAX_SEGMENTS)
             return false;
+
+        if (tnsot != 0 && *declared_tile_parts == 0)
+            *declared_tile_parts = tnsot;
 
         if (index->header.length == 0)
             index->header.length = marker_offset - index->header.offset;

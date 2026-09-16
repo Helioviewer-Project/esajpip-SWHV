@@ -696,6 +696,10 @@ static void rule_two_tile_parts(Jp2Family *f, int box) {
     cs->segments.arr[3].body.u.tilePart.tnsot = 2;
     cs->segments.nCount = 4;                              /* valid: two tile-parts */
 }
+static void rule_tnsot_inconsistent(Jp2Family *f, int box) {
+    rule_two_tile_parts(f, box);
+    cs_of(f, box)->segments.arr[3].body.u.tilePart.tnsot = 3;   /* first said 2 */
+}
 static void rule_tile_parts_65(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     int i;
@@ -766,6 +770,7 @@ static const RuleMutant rule_mutants[] = {
     { "cod.precincts-count",            rule_precinct_count,    "levels+2 precinct bytes", 0 },
     { "codestream.no-tile-part",        rule_no_tile_part,      "main header only", 0 },
     { "sot.two-tile-parts",             rule_two_tile_parts,    "two tile-parts: valid", 0 },
+    { "sot.tnsot-inconsistent",         rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0 },
     { "codestream.tile-part-limit",     rule_tile_parts_65,     "65 tile-parts: profile invalid", 0 },
     { "main.com",                       rule_com_segment,       "COM segment: valid", 0 },
     { "plt.iplt-five-bytes",            rule_iplt_five_bytes,   "5-byte Iplt encoding value 1: valid", 0 },

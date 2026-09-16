@@ -101,6 +101,8 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
             if (tp->tnsot != 0) {
                 if (tnsot == 0) tnsot = (int) tp->tnsot;
                 if (tp->tpsot >= tp->tnsot) return "sot.tpsot-below-tnsot";
+                /* A.4.2: TNsot, where given, is the one tile-part count. */
+                if ((int) tp->tnsot != tnsot) return "sot.tnsot-inconsistent";
             }
             {
                 /* T.800 A.7.3: PLT lengths describe packets of this tile-part;
