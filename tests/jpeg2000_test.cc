@@ -256,7 +256,7 @@ int main() {
 
     string large_file = directory + "large.jp2";
     WriteFile(large_file, jp2);
-    Check(truncate(large_file.c_str(), static_cast<off_t>(UINT32_MAX) + 1) == 0,
+    Check(truncate(large_file.c_str(), static_cast<off_t>(INT_MAX) + 1) == 0,
           "Could not create a sparse large-file fixture");
     jpeg2000::FileManager large_file_manager;
     Check(!OpenImage(directory, "large.jp2", &large_file_manager),

@@ -101,8 +101,8 @@ profile is therefore narrower than the JP2 and JPX file formats themselves.
   such as progression changes through `POC`, are outside the supported profile.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
   validated marker, packet, and tile-part bounds.
-- Packet locations must fit the current 32-bit packet-index representation.
-  Source files of 4 GiB or more are outside the supported profile.
+- Packet locations and file-backed data-bin offsets must fit the signed 32-bit
+  JPIP state. Source files of 2 GiB or more are outside the supported profile.
 
 Files without `PLT` packet-length information are rejected. esajpip does not
 decode packets to rediscover their boundaries and does not replace the separate

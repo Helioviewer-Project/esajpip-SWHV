@@ -13,7 +13,6 @@ namespace jpeg2000 {
         int id;                    ///< Place-holder identifier.
         bool is_jp2c;            ///< <code>true</code> if refers to a codestream.
         data::FileSegment header;        ///< File segment associated to the box header
-        uint64_t data_length;    ///< Length of the place-holder data
 
         /**
          * Initializes the object.
@@ -21,7 +20,6 @@ namespace jpeg2000 {
         PlaceHolder() {
             id = 0;
             is_jp2c = false;
-            data_length = 0;
         }
 
         /**
@@ -29,14 +27,11 @@ namespace jpeg2000 {
          * @param id Place-holder identifier.
          * @param is_jp2c Indicates if is a codestream place-holder.
          * @param header File segment of the associated header.
-         * @param data_length Length of the place-holder data.
          */
-        PlaceHolder(int id, bool is_jp2c, const data::FileSegment &header,
-                    uint64_t data_length) {
+        PlaceHolder(int id, bool is_jp2c, const data::FileSegment &header) {
             this->id = id;
             this->is_jp2c = is_jp2c;
             this->header = header;
-            this->data_length = data_length;
         }
 
         /**

@@ -758,7 +758,8 @@ static void CheckMetadataPlaceHolder() {
 
     char buf[64];
     jpip::DataBinWriter writer;
-    jpeg2000::PlaceHolder place_holder(7, false, data::FileSegment(0, sizeof header), 8);
+    jpeg2000::PlaceHolder place_holder(7, false,
+                                       data::FileSegment(0, sizeof header));
     writer.SetBuffer(buf, sizeof buf);
     writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
                             place_holder, true);

@@ -105,7 +105,7 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadCodestream(File *file, uint64_t length, CodingParameters *params, CodestreamIndex *index) {
-        if (file->GetSize() > UINT32_MAX || length < 4 ||
+        if (file->GetSize() > INT_MAX || length < 4 ||
             length > file->GetSize() - file->GetOffset())
             return false;
 
@@ -402,7 +402,7 @@ namespace jpeg2000 {
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
                             PlaceHolder(0, true,
-                                        FileSegment(pini_box, plen_box), length_box));
+                                        FileSegment(pini_box, plen_box)));
                     pini = file->GetOffset();
                     break;
 
@@ -489,7 +489,7 @@ namespace jpeg2000 {
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
                             PlaceHolder(num_codestreams - 1, true,
-                                        FileSegment(pini_box, plen_box), length_box));
+                                        FileSegment(pini_box, plen_box)));
                     pini = file->GetOffset();
                     break;
                 }
@@ -499,7 +499,7 @@ namespace jpeg2000 {
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
                             PlaceHolder(image_index->meta_data.bins.size(), false,
-                                        FileSegment(pini_box, plen_box), length_box));
+                                        FileSegment(pini_box, plen_box)));
                     pini = file->GetOffset();
                     break;
                     // 'ftbl' superbox contains a 'flst'
@@ -524,7 +524,7 @@ namespace jpeg2000 {
                     image_index->meta_data.bin0.emplace_back(
                             ftbl_metadata,
                             PlaceHolder(v_data_reference.size(), true,
-                                        FileSegment(pini_ftbl, plen_ftbl), 0));
+                                        FileSegment(pini_ftbl, plen_ftbl)));
                     v_data_reference.push_back(data_reference);
                     fragments.push_back(fragment);
                     pini = file->GetOffset();
