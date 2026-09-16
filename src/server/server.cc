@@ -254,6 +254,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
         return SERVER_STARTUP_FAILURE;
     }
 
+    enum { LISTEN, SUPERVISOR, COMPLETION, LOG, FIRST_PENDING };
+
     PollTable poll_table;
     poll_table.Add(listen_socket, POLLIN);
     poll_table.Add(supervisor_fd, POLLIN);
@@ -275,20 +277,21 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
             break;
         }
 
-        if (poll_table[1].revents) {
+        if (poll_table[SUPERVISOR].revents) {
             // The supervisor never writes to this socket. Any event means its
             // endpoint was closed, so the serving process must exit.
             break;
         }
 
         bool connection_ready = false;
-        bool log_ready = ready > 0 && (poll_table[3].revents & POLLIN);
+        bool log_ready = ready > 0 && (poll_table[LOG].revents & POLLIN);
         if (ready > 0) {
-            connection_ready = poll_table[0].revents || poll_table[2].revents;
-            for (int i = 4; i < poll_table.GetSize(); ++i)
+            connection_ready = poll_table[LISTEN].revents ||
+                    poll_table[COMPLETION].revents;
+            for (int i = FIRST_PENDING; i < poll_table.GetSize(); ++i)
                 connection_ready = connection_ready || poll_table[i].revents;
 
-            if (poll_table[0].revents & POLLIN) {
+            if (poll_table[LISTEN].revents & POLLIN) {
                 InetAddress from_address;
                 socklen_t from_size = from_address.GetSize();
                 int fd = accept(listen_socket, from_address.GetSockAddr(),
@@ -312,7 +315,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 }
             }
 
-            if (poll_table[2].revents & POLLIN) {
+            if (poll_table[COMPLETION].revents & POLLIN) {
                 Completion completion;
                 if (recv(completion_reader, &completion, sizeof completion, 0) ==
                     sizeof completion) {
@@ -335,7 +338,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 }
             }
 
-            for (int i = 4; i < poll_table.GetSize();) {
+            for (int i = FIRST_PENDING; i < poll_table.GetSize();) {
                 short events = poll_table[i].revents;
                 if (!events) {
                     ++i;
