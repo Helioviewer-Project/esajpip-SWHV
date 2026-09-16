@@ -35,18 +35,18 @@ namespace jpip {
         size_t meta_bin_idx;
         bool meta_bin0_done;
 
-        /**
-         * <code>true</code> if the end has been reached and the last write operation
-         * could not be completed.
-         */
-        bool eof;
-
         CacheModel cache_model;     ///< Cache model of the client
         WOIComposer woi_composer;   ///< WOI composer for determining the packets
         DataBinWriter data_writer;  ///< Data-bin writer for generating the chunks
 
         enum {
-            MINIMUM_SPACE = 60        ///< Minimum space in the chunk
+            CHUNK_RESERVE = 60 ///< Space for message headers and EOR
+        };
+
+        enum class SegmentResult {
+            FAILED,
+            FULL,
+            COMPLETE
         };
 
         /**
@@ -56,48 +56,44 @@ namespace jpip {
          * @param segment File segment associated.
          * @param offset Data-bin offset of the data (0 by default).
          * @param last <code>true</code> if this is the last data of the data-bin.
-         * @return 1 if the segment content was completely written and/or cached,
-         * 0 if it was incompletely written (or not at all, if EOF flag is set),
-         * or -1 if an error was generated.
+         * @return Result of writing the uncached part of the segment.
          */
         template<int BIN_CLASS>
-        int WriteSegment(data::File *file, int num_codestream, int id,
-                         const data::FileSegment &segment, int offset = 0,
-                         bool last = true) {
+        SegmentResult WriteSegment(data::File *file, int num_codestream, int id,
+                                   const data::FileSegment &segment, int offset = 0,
+                                   bool last = true) {
             int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
-            int res = 1, seg_cached = cached - offset;
+            int seg_cached = cached - offset;
 
             if (cached != INT_MAX && seg_cached <= (int) segment.length) {
                 if (seg_cached < 0)
                     seg_cached = 0;
 
-                int free = data_writer.GetFree() - MINIMUM_SPACE;
+                int free = data_writer.GetFree() - CHUNK_RESERVE;
 
-                if (free <= 0) {
-                    eof = true;
-                    res = 0;
-                } else {
-                    data::FileSegment part = data::FileSegment(
-                            segment.offset + seg_cached, segment.length - seg_cached);
-                    if ((int) part.length > free) {
-                        part.length = free;
-                        last = false;
-                        res = 0;
-                    }
+                if (free <= 0)
+                    return SegmentResult::FULL;
 
-                    if (!data_writer.Write(BIN_CLASS, num_codestream, id, cached,
-                                           *file, part, last)) {
-                        if (data_writer.IsValid()) {
-                            eof = true;
-                            res = 0;
-                        } else
-                            res = -1;
-                    } else
-                        cache_model.AddToDataBin(BIN_CLASS, num_codestream, id,
-                                                 part.length, last);
+                data::FileSegment part(segment.offset + seg_cached,
+                                       segment.length - seg_cached);
+                bool complete = part.length <= static_cast<uint64_t>(free);
+                if (!complete) {
+                    part.length = free;
+                    last = false;
                 }
+
+                DataBinWriter::Result result = data_writer.Write(
+                        BIN_CLASS, num_codestream, id, cached, *file, part, last);
+                if (result == DataBinWriter::Result::FULL)
+                    return SegmentResult::FULL;
+                if (result == DataBinWriter::Result::FAILED)
+                    return SegmentResult::FAILED;
+
+                cache_model.AddToDataBin(BIN_CLASS, num_codestream, id,
+                                         part.length, last);
+                return complete ? SegmentResult::COMPLETE : SegmentResult::FULL;
             }
-            return res;
+            return SegmentResult::COMPLETE;
         }
 
         /**
@@ -107,42 +103,37 @@ namespace jpip {
          * @param place_holder Place-holder information.
          * @param offset Data-bin offset of the data (0 by default).
          * @param last <code>true</code> if this is the last data of the data-bin.
-         * @return 1 if the segment content was completely written and/or cached,
-         * 0 if it was incompletely written (or not at all, if EOF flag is set),
-         * or -1 if an error was generated.
+         * @return Result of writing the uncached part of the place-holder.
          */
-        int WritePlaceHolder(data::File *file, int num_codestream, int id,
-                             const jpeg2000::PlaceHolder &place_holder,
-                             int offset = 0, bool last = false) {
+        SegmentResult WritePlaceHolder(data::File *file, int num_codestream, int id,
+                                       const jpeg2000::PlaceHolder &place_holder,
+                                       int offset = 0, bool last = false) {
             int cached = cache_model.GetDataBin(DataBinClass::META_DATA, num_codestream, id);
-            int res = 1, seg_cached = cached - offset;
+            int seg_cached = cached - offset;
 
             if (cached != INT_MAX && seg_cached < place_holder.length()) {
-                int free = data_writer.GetFree() - MINIMUM_SPACE - place_holder.length();
+                if (seg_cached < 0)
+                    seg_cached = 0;
+                if (data_writer.GetFree() - CHUNK_RESERVE < place_holder.length())
+                    return SegmentResult::FULL;
 
-                if (free <= 0) {
-                    eof = true;
-                    res = 0;
-                } else {
-                    if (!data_writer.WritePlaceHolder(DataBinClass::META_DATA,
-                                                      num_codestream, id, cached,
-                                                      *file, place_holder, last)) {
-                        if (data_writer.IsValid()) {
-                            eof = true;
-                            res = 0;
-                        } else
-                            res = -1;
-                    } else
-                        cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,
-                                                 place_holder.length(), last);
-                }
+                DataBinWriter::Result result = data_writer.WritePlaceHolder(
+                        DataBinClass::META_DATA, num_codestream, id, offset,
+                        *file, place_holder, last);
+                if (result == DataBinWriter::Result::FULL)
+                    return SegmentResult::FULL;
+                if (result == DataBinWriter::Result::FAILED)
+                    return SegmentResult::FAILED;
+
+                cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,
+                                         place_holder.length() - seg_cached, last);
             }
-            return res;
+            return SegmentResult::COMPLETE;
         }
 
     public:
         /**
-         * Initializes the obect.
+         * Initializes the object.
          */
         DataBinServer() {
             pending = 0;
@@ -152,7 +143,6 @@ namespace jpip {
             meta_offset = 0;
             meta_bin_idx = 0;
             meta_bin0_done = false;
-            eof = false;
         }
 
         /**

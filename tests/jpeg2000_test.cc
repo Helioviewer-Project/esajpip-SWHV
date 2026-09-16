@@ -343,6 +343,32 @@ int main() {
               response[response_length - 1] == 0,
           "Unlimited response has no window-done EOR");
 
+    jpip::Request short_request;
+    Check(short_request.Parse("GET /jpip?len=2&cid=0 HTTP/1.1"),
+          "Could not parse a response limit shorter than an EOR message");
+    Check(server.SetRequest(manager, short_request), "Rejected a short response limit");
+    response_length = sizeof response;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a short limited response");
+    Check(response_length == 0 && last,
+          "Generated an incomplete JPIP message for a short response limit");
+
+    jpip::DataBinServer limited_server;
+    jpip::Request limited_request;
+    Check(limited_request.Parse(
+              "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0 HTTP/1.1"),
+          "Could not parse a limited request");
+    Check(limited_server.SetRequest(manager, limited_request),
+          "Rejected a limited request");
+    response_length = sizeof response;
+    Check(limited_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a limited response");
+    Check(last && response_length <= 128 && response_length >= 3 &&
+              response[response_length - 3] == 0 &&
+              response[response_length - 2] == jpip::EOR::BYTE_LIMIT_REACHED &&
+              response[response_length - 1] == 0,
+          "Limited response has no byte-limit EOR");
+
     jpip::DataBinServer model_server;
     jpip::Request model_request;
     Check(model_request.Parse("GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&

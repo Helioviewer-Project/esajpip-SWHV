@@ -33,9 +33,9 @@ namespace jpip {
         return length + VBASLength(bin_offset) + VBASLength(bin_length);
     }
 
-    bool DataBinWriter::BeginMessage(int databin_class, int codestream_idx,
-                                     uint64_t bin_id, uint64_t bin_offset,
-                                     uint64_t bin_length, bool last_byte) {
+    DataBinWriter::Result DataBinWriter::BeginMessage(
+            int databin_class, int codestream_idx, uint64_t bin_id,
+            uint64_t bin_offset, uint64_t bin_length, bool last_byte) {
         if (codestream_idx < 0)
             codestream_idx = 0;
         if (msg_start != NULL && msg_databin_class == databin_class &&
@@ -44,8 +44,7 @@ namespace jpip {
             msg_offset + msg_len == bin_offset) {
             if (bin_length > UINT64_MAX - msg_len) {
                 FinishMessage();
-                eof = true;
-                return false;
+                return Result::FAILED;
             }
 
             size_t header_len = HeaderLength(msg_bin, msg_offset,
@@ -56,22 +55,19 @@ namespace jpip {
             uint64_t available = end - ptr;
             if (bin_length <= available &&
                 header_growth <= available - bin_length)
-                return true;
+                return Result::WRITTEN;
 
             FinishMessage();
-            return false;
+            return Result::FULL;
         }
 
         FinishMessage();
-        if (eof)
-            return false;
         msg_databin_class = databin_class;
         msg_codestream_idx = codestream_idx;
         size_t header_len = HeaderLength(bin_id, bin_offset, bin_length);
-        if (static_cast<size_t>(end - ptr) < header_len) {
-            eof = true;
-            return false;
-        }
+        uint64_t available = end - ptr;
+        if (bin_length > available || header_len > available - bin_length)
+            return Result::FULL;
 
         msg_start = ptr;
         WriteHeader(bin_id, bin_offset, bin_length, last_byte);
@@ -80,7 +76,7 @@ namespace jpip {
         msg_offset = bin_offset;
         msg_len = 0;
         msg_last = false;
-        return true;
+        return Result::WRITTEN;
     }
 
     void DataBinWriter::FinishMessage() {
@@ -90,11 +86,6 @@ namespace jpip {
         char *payload = msg_start + msg_header_len;
         size_t payload_len = ptr - payload;
         size_t header_len = HeaderLength(msg_bin, msg_offset, msg_len);
-        if (header_len > msg_header_len &&
-            static_cast<size_t>(end - ptr) < header_len - msg_header_len) {
-            eof = true;
-            return;
-        }
         if (header_len != msg_header_len)
             memmove(msg_start + header_len, payload, payload_len);
         ptr = msg_start;
@@ -107,129 +98,103 @@ namespace jpip {
     }
 
     void DataBinWriter::WriteVBAS(uint64_t value) {
-        if (!eof) {
-            if (ptr >= end) eof = true;
-            else {
-                int num = 0;
-                uint8_t bytes[10];
+        int num = 0;
+        uint8_t bytes[10];
 
-                do {
-                    bytes[num++] = (uint8_t) (value & 0x0000007F);
-                    value >>= 7;
-                } while (value);
+        do {
+            bytes[num++] = (uint8_t) (value & 0x0000007F);
+            value >>= 7;
+        } while (value);
 
-                if (end - ptr < num) eof = true;
-                else {
-                    while (num-- > 1) *ptr++ = bytes[num] | (uint8_t) 0x80;
-                    *ptr++ = bytes[num];
-                }
-            }
-        }
+        while (num-- > 1) *ptr++ = bytes[num] | (uint8_t) 0x80;
+        *ptr++ = bytes[num];
     }
 
     void DataBinWriter::WriteHeader(uint64_t bin_id, uint64_t bin_offset,
                                     uint64_t bin_length, bool last_byte) {
-        if (!eof) {
-            if (ptr >= end) eof = true;
-            else {
-                char *aux_ptr = ptr;
+        int pres = 1;
+        if (prev_databin_class != msg_databin_class) pres = 2;
+        if (prev_codestream_idx != msg_codestream_idx) pres = 3;
 
-                int pres = 1;
-                if (prev_databin_class != msg_databin_class) pres = 2;
-                if (prev_codestream_idx != msg_codestream_idx) pres = 3;
+        uint8_t first_b = (uint8_t) (pres << 5);
+        if (last_byte) first_b |= (uint8_t) (1 << 4);
 
-                uint8_t first_b = (uint8_t) (pres << 5);
-                if (last_byte) first_b |= (uint8_t) (1 << 4);
+        if (!(bin_id >> 4)) {
+            first_b |= (uint8_t) (bin_id & 0x0F);
+            *ptr++ = first_b;
 
-                if (!(bin_id >> 4)) {
-                    first_b |= (uint8_t) (bin_id & 0x0F);
-                    *ptr++ = first_b;
-
-                } else {
-                    *ptr++ = (first_b | (uint8_t) 0x80);
-                    WriteVBAS(bin_id);
-                }
-
-                if (pres >= 2) {
-                    WriteVBAS((uint64_t) msg_databin_class);
-                    if (pres == 3) WriteVBAS((uint64_t) msg_codestream_idx);
-                }
-
-                WriteVBAS(bin_offset);
-                WriteVBAS(bin_length);
-
-                if (eof) ptr = aux_ptr;
-            }
+        } else {
+            *ptr++ = (first_b | (uint8_t) 0x80);
+            WriteVBAS(bin_id);
         }
+
+        if (pres >= 2) {
+            WriteVBAS((uint64_t) msg_databin_class);
+            if (pres == 3) WriteVBAS((uint64_t) msg_codestream_idx);
+        }
+
+        WriteVBAS(bin_offset);
+        WriteVBAS(bin_length);
     }
 
-    bool DataBinWriter::Write(int databin_class, int codestream_idx,
-                              uint64_t bin_id, uint64_t bin_offset, File &file,
-                              const FileSegment &segment, bool last_byte) {
-        if (!BeginMessage(databin_class, codestream_idx, bin_id, bin_offset,
-                          segment.length, last_byte))
-            return false;
+    DataBinWriter::Result DataBinWriter::Write(
+            int databin_class, int codestream_idx, uint64_t bin_id,
+            uint64_t bin_offset, File &file, const FileSegment &segment,
+            bool last_byte) {
+        Result result = BeginMessage(databin_class, codestream_idx, bin_id,
+                                     bin_offset, segment.length, last_byte);
+        if (result != Result::WRITTEN)
+            return result;
 
         char *aux_ptr = ptr;
         if (segment.length > 0) {
-            if (segment.length > static_cast<uint64_t>(end - ptr)) eof = true;
-            else {
-                file.Seek(segment.offset);
-                if (!file.Read(ptr, segment.length)) eof = true;
-                else ptr += segment.length;
+            file.Seek(segment.offset);
+            if (!file.Read(ptr, segment.length)) {
+                ptr = aux_ptr;
+                return Result::FAILED;
             }
-        }
-
-        if (eof) {
-            ptr = aux_ptr;
-            return false;
+            ptr += segment.length;
         }
 
         msg_len += segment.length;
         msg_last = last_byte;
-        return true;
+        return Result::WRITTEN;
     }
 
-    bool DataBinWriter::WritePlaceHolder(int databin_class, int codestream_idx,
-                                         uint64_t bin_id, uint64_t bin_offset,
-                                         File &file, const PlaceHolder &place_holder,
-                                         bool last_byte) {
-        if (!BeginMessage(databin_class, codestream_idx, bin_id, bin_offset,
-                          place_holder.length(), last_byte))
-            return false;
+    DataBinWriter::Result DataBinWriter::WritePlaceHolder(
+            int databin_class, int codestream_idx, uint64_t bin_id,
+            uint64_t bin_offset, File &file, const PlaceHolder &place_holder,
+            bool last_byte) {
+        Result result = BeginMessage(databin_class, codestream_idx, bin_id,
+                                     bin_offset, place_holder.length(), last_byte);
+        if (result != Result::WRITTEN)
+            return result;
 
         char *aux_ptr = ptr;
-        if (static_cast<uint64_t>(place_holder.length()) >
-            static_cast<uint64_t>(end - ptr)) eof = true;
-        else {
-            /* LBox   */  WriteValue<uint32_t>(place_holder.length());
-            /* TBox   */  WriteValue<uint32_t>(0x70686c64);
-            /* Flags  */  WriteValue<uint32_t>(place_holder.is_jp2c ? 4 : 1);
-            /* OrigID */  WriteValue<uint64_t>(place_holder.is_jp2c ? 0 : place_holder.id);
+        /* LBox   */  WriteValue<uint32_t>(place_holder.length());
+        /* TBox   */  WriteValue<uint32_t>(0x70686c64);
+        /* Flags  */  WriteValue<uint32_t>(place_holder.is_jp2c ? 4 : 1);
+        /* OrigID */  WriteValue<uint64_t>(place_holder.is_jp2c ? 0 : place_holder.id);
 
-            /* OrigBH */
-            if (place_holder.header.length > 0) {
-                file.Seek(place_holder.header.offset);
-                if (place_holder.header.length > static_cast<uint64_t>(end - ptr)) eof = true;
-                else if (!file.Read(ptr, place_holder.header.length)) eof = true;
-                else ptr += place_holder.header.length;
+        /* OrigBH */
+        if (place_holder.header.length > 0) {
+            file.Seek(place_holder.header.offset);
+            if (!file.Read(ptr, place_holder.header.length)) {
+                ptr = aux_ptr;
+                return Result::FAILED;
             }
-
-            if (place_holder.is_jp2c) {
-                /* EquivID */ WriteValue<uint64_t>(0);
-                /* EquivBH */ WriteValue<uint64_t>(0);
-                /* CSID    */ WriteValue<uint64_t>(place_holder.id);
-            }
+            ptr += place_holder.header.length;
         }
 
-        if (eof) {
-            ptr = aux_ptr;
-            return false;
+        if (place_holder.is_jp2c) {
+            /* EquivID */ WriteValue<uint64_t>(0);
+            /* EquivBH */ WriteValue<uint64_t>(0);
+            /* CSID    */ WriteValue<uint64_t>(place_holder.id);
         }
 
         msg_len += place_holder.length();
         msg_last = last_byte;
-        return true;
+        return Result::WRITTEN;
     }
 
 }

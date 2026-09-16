@@ -19,12 +19,18 @@ namespace jpip {
      * @see EOR
      */
     class DataBinWriter {
+    public:
+        enum class Result {
+            WRITTEN, ///< The complete value was written
+            FULL,    ///< The complete value does not fit in this buffer
+            FAILED   ///< The message could not be encoded
+        };
+
+        enum {
+            EOR_LENGTH = 3
+        };
+
     private:
-        /**
-         * <code>true</code> if the end of the buffer has been reached and
-         * the last value could not be written.
-         */
-        bool eof;
         char *ini;            ///< Pointer to the beginning of the buffer
         char *ptr;            ///< Current position of the buffer
         char *end;            ///< Pointer to the end of the buffer
@@ -41,9 +47,9 @@ namespace jpip {
         uint64_t msg_len;
         bool msg_last;
 
-        bool BeginMessage(int databin_class, int codestream_idx,
-                          uint64_t bin_id, uint64_t bin_offset,
-                          uint64_t bin_length, bool last_byte);
+        Result BeginMessage(int databin_class, int codestream_idx,
+                            uint64_t bin_id, uint64_t bin_offset,
+                            uint64_t bin_length, bool last_byte);
         void FinishMessage();
         size_t HeaderLength(uint64_t bin_id, uint64_t bin_offset,
                             uint64_t bin_length) const;
@@ -54,13 +60,8 @@ namespace jpip {
          */
         template<typename T>
         void WriteValue(T value) {
-            if (!eof) {
-                if (static_cast<size_t>(end - ptr) < sizeof(T)) eof = true;
-                else {
-                    for (int i = sizeof(T) - 1; i >= 0; --i)
-                        *ptr++ = (value >> (8 * i)) & 0xFF;
-                }
-            }
+            for (int i = sizeof(T) - 1; i >= 0; --i)
+                *ptr++ = (value >> (8 * i)) & 0xFF;
         }
 
         /**
@@ -85,7 +86,6 @@ namespace jpip {
          * Initializes the object.
          */
         DataBinWriter() {
-            eof = true;
             prev_databin_class = -1;
             prev_codestream_idx = -1;
             msg_start = NULL;
@@ -105,7 +105,6 @@ namespace jpip {
          * @param buf_len Length of the memory buffer.
          */
         void SetBuffer(char *buf, int buf_len) {
-            eof = false;
             ini = ptr = buf;
             end = ini + buf_len;
             msg_start = NULL;
@@ -129,12 +128,12 @@ namespace jpip {
          * @param segment File segment of the data.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
-         * @return <code>true</code> if the segment was written.
+         * @return Result of the write operation.
          */
-        bool Write(int databin_class, int codestream_idx, uint64_t bin_id,
-                   uint64_t bin_offset, data::File &file,
-                   const data::FileSegment &segment,
-                   bool last_byte = false);
+        Result Write(int databin_class, int codestream_idx, uint64_t bin_id,
+                     uint64_t bin_offset, data::File &file,
+                     const data::FileSegment &segment,
+                     bool last_byte = false);
 
         /**
          * Writes a place-holder segment into the buffer.
@@ -146,12 +145,13 @@ namespace jpip {
          * @param place_holder Place-holder information.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
-         * @return <code>true</code> if the place-holder was written.
+         * @return Result of the write operation.
          */
-        bool WritePlaceHolder(int databin_class, int codestream_idx,
-                              uint64_t bin_id, uint64_t bin_offset, data::File &file,
-                              const jpeg2000::PlaceHolder &place_holder,
-                              bool last_byte = false);
+        Result WritePlaceHolder(int databin_class, int codestream_idx,
+                                uint64_t bin_id, uint64_t bin_offset,
+                                data::File &file,
+                                const jpeg2000::PlaceHolder &place_holder,
+                                bool last_byte = false);
 
         /**
          * Returns the number of bytes written.
@@ -169,24 +169,18 @@ namespace jpip {
         }
 
         /**
-         * Writes a EOR message into the buffer.
+         * Writes an EOR message into the buffer.
          * @param reason Reason of the message.
+         * @return <code>true</code> if the message was written.
          */
-        void WriteEOR(int reason) {
+        bool WriteEOR(int reason) {
             FinishMessage();
-            if (end - ptr < 3) eof = true;
-            else {
-                *ptr++ = 0;
-                *ptr++ = (char) reason;
-                *ptr++ = 0;
-            }
-        }
-
-        /**
-         * Returns whether the writer remains valid.
-         */
-        bool IsValid() const {
-            return !eof;
+            if (end - ptr < EOR_LENGTH)
+                return false;
+            *ptr++ = 0;
+            *ptr++ = (char) reason;
+            *ptr++ = 0;
+            return true;
         }
 
     };

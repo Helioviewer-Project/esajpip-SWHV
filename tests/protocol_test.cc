@@ -405,6 +405,17 @@ static void CheckCacheModel() {
         Check(model.AddToDataBin(bin_class, 2, 3, 0, true) == INT_MAX,
               "Incomplete terminal cache model");
     }
+
+    jpip::CacheModel augmented;
+    Check(augmented.AugmentDataBin(jpip::DataBinClass::META_DATA, 0, 0, 17) == 17,
+          "Did not augment an empty cache-model entry");
+    Check(augmented.AugmentDataBin(jpip::DataBinClass::META_DATA, 0, 0, 7) == 17,
+          "Reduced an augmented cache-model entry");
+    Check(augmented.AugmentDataBin(jpip::DataBinClass::META_DATA, 0, 0, 17) == 17,
+          "Accumulated a repeated cache-model descriptor");
+    Check(augmented.AugmentDataBin(jpip::DataBinClass::META_DATA, 0, 0, INT_MAX) ==
+              INT_MAX,
+          "Did not complete an augmented cache-model entry");
 }
 
 static void CheckWOIPackets() {
@@ -563,17 +574,36 @@ static void CheckDataBinCapacity() {
     char tiny_buf[2];
     jpip::DataBinWriter tiny_writer;
     tiny_writer.SetBuffer(tiny_buf, sizeof tiny_buf);
-    tiny_writer.WriteEOR(jpip::EOR::WINDOW_DONE);
-    Check(!tiny_writer.IsValid(), "Accepted an EOR message larger than the buffer");
+    Check(!tiny_writer.WriteEOR(jpip::EOR::WINDOW_DONE),
+          "Accepted an EOR message larger than the buffer");
+    char eor_buf[3];
+    tiny_writer.SetBuffer(eor_buf, sizeof eor_buf);
+    Check(tiny_writer.WriteEOR(jpip::EOR::WINDOW_DONE),
+          "Did not retry the EOR message in a new buffer");
 
     char buf[32];
     data::File file;
     jpip::DataBinWriter writer;
     writer.SetBuffer(buf, sizeof buf);
-    Check(!writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
-                        data::FileSegment(0, UINT64_MAX), true),
+    Check(writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                       data::FileSegment(0, UINT64_MAX), true) ==
+              jpip::DataBinWriter::Result::FULL,
           "Reported an oversized data-bin segment as written");
-    Check(!writer.IsValid(), "Accepted a data-bin segment larger than the buffer");
+    Check(writer.GetCount() == 0, "Left a partial data-bin message in the buffer");
+
+    char path[] = "/tmp/esajpip-short-read-XXXXXX";
+    int fd = mkstemp(path);
+    Check(fd >= 0, "Could not create short payload file");
+    Check(write(fd, "x", 1) == 1, "Could not write short payload file");
+    close(fd);
+
+    Check(file.Open(path), "Could not open short payload file");
+    remove(path);
+    writer.SetBuffer(buf, sizeof buf);
+    Check(writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                       data::FileSegment(0, 2), true) ==
+              jpip::DataBinWriter::Result::FAILED,
+          "Reported a short source-file read as written");
 }
 
 static void CheckCoalescedJPIPMessages() {
@@ -624,13 +654,14 @@ static void CheckCoalescedJPIPMessages() {
     jpip::DataBinWriter tight_writer;
     tight_writer.SetBuffer(tight_buf, sizeof tight_buf);
     Check(tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
-                             data::FileSegment(0, 100), false),
+                             data::FileSegment(0, 100), false) ==
+              jpip::DataBinWriter::Result::WRITTEN,
           "Rejected the complete JPIP message");
-    Check(!tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
-                              data::FileSegment(100, 50), true),
+    Check(tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
+                             data::FileSegment(100, 50), true) ==
+              jpip::DataBinWriter::Result::FULL,
           "Coalesced a message without space for its header");
 
-    Check(tight_writer.IsValid(), "Treated a full JPIP buffer as a write error");
     Check(tight_writer.GetCount() == 105, "Did not preserve the complete JPIP message");
     const unsigned char tight_header[] = {0x60, 0x06, 0x00, 0x00, 0x64};
     for (size_t i = 0; i < sizeof tight_header; ++i)
@@ -643,7 +674,8 @@ static void CheckCoalescedJPIPMessages() {
     char retry_buf[64];
     tight_writer.SetBuffer(retry_buf, sizeof retry_buf);
     Check(tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
-                             data::FileSegment(100, 50), true),
+                             data::FileSegment(100, 50), true) ==
+              jpip::DataBinWriter::Result::WRITTEN,
           "Did not retry the deferred JPIP message");
     Check(tight_writer.GetCount() == 53, "Wrong deferred JPIP message length");
     const unsigned char retry_header[] = {0x30, 0x64, 0x32};

@@ -70,12 +70,13 @@ namespace jpip {
                         const vector<Request::ModelUpdate> &model) {
             for (const Request::ModelUpdate &update : model) {
                 if (update.bin_class == DataBinClass::META_DATA) {
-                    cache_model->AddToMetadata(update.id, update.amount);
+                    cache_model->AugmentDataBin(update.bin_class, 0, update.id,
+                                                update.amount);
                     continue;
                 }
                 for (int i = update.first_codestream; i <= update.last_codestream; ++i)
-                    cache_model->AddToDataBin(update.bin_class, i, update.id,
-                                              update.amount);
+                    cache_model->AugmentDataBin(update.bin_class, i, update.id,
+                                                update.amount);
             }
         }
 
@@ -128,6 +129,8 @@ namespace jpip {
             ApplyModel(&cache_model, req.model);
 
         pending = req.has.len ? req.length_response : INT_MAX;
+        if (pending > 0 && pending < DataBinWriter::EOR_LENGTH)
+            pending = 0;
 
         if (reset_woi) {
             int codestream = codestreams[current_idx];
@@ -138,14 +141,13 @@ namespace jpip {
     }
 
     bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last) {
-        int res;
+        SegmentResult res;
+        bool chunk_full = false;
         ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.SetBuffer(buf, min(pending, *len));
 
         if (pending > 0) {
-            eof = false;
-
             if (!cache_model.IsFullMetadata()) {
                 File *file = file_manager.GetFile(image_index->GetPathName());
                 if (file == NULL)
@@ -156,28 +158,48 @@ namespace jpip {
                         const Metadata::Part &part = metadata.bin0[meta_idx];
                         res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0,
                                                                     part.data, meta_offset, false);
-                        if (res <= 0)
+                        if (res == SegmentResult::FAILED)
+                            return false;
+                        if (res == SegmentResult::FULL) {
+                            chunk_full = true;
                             break;
+                        }
 
                         int placeholder_offset = meta_offset + part.data.length;
-                        if (WritePlaceHolder(file, 0, 0, part.placeholder,
-                                             placeholder_offset) <= 0)
+                        res = WritePlaceHolder(file, 0, 0, part.placeholder,
+                                               placeholder_offset);
+                        if (res == SegmentResult::FAILED)
+                            return false;
+                        if (res == SegmentResult::FULL) {
+                            chunk_full = true;
                             break;
+                        }
                         meta_offset = placeholder_offset + part.placeholder.length();
                         meta_idx++;
                     }
 
-                    if (!eof && meta_idx == metadata.bin0.size() &&
-                        WriteSegment<DataBinClass::META_DATA>(file, 0, 0,
-                                                              metadata.tail, meta_offset) > 0)
-                        meta_bin0_done = true;
+                    if (!chunk_full && meta_idx == metadata.bin0.size()) {
+                        res = WriteSegment<DataBinClass::META_DATA>(
+                                file, 0, 0, metadata.tail, meta_offset);
+                        if (res == SegmentResult::FAILED)
+                            return false;
+                        if (res == SegmentResult::FULL)
+                            chunk_full = true;
+                        else
+                            meta_bin0_done = true;
+                    }
                 }
 
-                while (meta_bin0_done && !eof && meta_bin_idx < metadata.bins.size()) {
+                while (meta_bin0_done && !chunk_full &&
+                       meta_bin_idx < metadata.bins.size()) {
                     res = WriteSegment<DataBinClass::META_DATA>(file, 0, meta_bin_idx + 1,
                                                                 metadata.bins[meta_bin_idx]);
-                    if (res <= 0)
+                    if (res == SegmentResult::FAILED)
+                        return false;
+                    if (res == SegmentResult::FULL) {
+                        chunk_full = true;
                         break;
+                    }
                     meta_bin_idx++;
                 }
 
@@ -185,7 +207,7 @@ namespace jpip {
                     cache_model.SetFullMetadata();
             }
 
-            if (!eof) {
+            if (!chunk_full) {
                 if (files.empty()) {
                     files.resize(codestreams.size());
                     for (size_t i = 0; i < codestreams.size(); ++i) {
@@ -195,19 +217,33 @@ namespace jpip {
                     }
                 }
                 for (size_t i = 0; i < codestreams.size(); ++i) {
-                    WriteSegment<DataBinClass::MAIN_HEADER>(files[i], codestreams[i], 0,
-                                                            image_index->GetMainHeader(codestreams[i]));
-                    WriteSegment<DataBinClass::TILE_HEADER>(files[i], codestreams[i], 0,
-                                                            FileSegment::Null);
+                    res = WriteSegment<DataBinClass::MAIN_HEADER>(
+                            files[i], codestreams[i], 0,
+                            image_index->GetMainHeader(codestreams[i]));
+                    if (res == SegmentResult::FAILED)
+                        return false;
+                    if (res == SegmentResult::FULL) {
+                        chunk_full = true;
+                        break;
+                    }
+
+                    res = WriteSegment<DataBinClass::TILE_HEADER>(
+                            files[i], codestreams[i], 0, FileSegment::Null);
+                    if (res == SegmentResult::FAILED)
+                        return false;
+                    if (res == SegmentResult::FULL) {
+                        chunk_full = true;
+                        break;
+                    }
                 }
 
-                if (has_woi) {
+                if (!chunk_full && has_woi) {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
                     const CodingParameters *composer_parameters = image_index->GetCodingParameters(codestreams.front());
 
-                    while (data_writer.IsValid() && !eof) {
+                    while (!chunk_full) {
                         const Packet &packet = woi_composer.GetCurrentPacket();
                         const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
 
@@ -225,12 +261,14 @@ namespace jpip {
                         }
                         res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
 
-                        if (res < 0) {
+                        if (res == SegmentResult::FAILED) {
                             ERROR("Could not write packet segment: codestream=" << codestreams[current_idx]
                                   << ", bin=" << bin_id << ", packet=" << packet << ", segment=" << segment);
                             return false;
                         }
-                        else if (res > 0) {
+                        if (res == SegmentResult::FULL) {
+                            chunk_full = true;
+                        } else {
                             if (current_idx != codestreams.size() - 1) current_idx++;
                             else {
                                 if (!woi_composer.GetNextPacket(composer_parameters)) break;
@@ -241,14 +279,20 @@ namespace jpip {
                 }
             }
 
-            if (!eof) {
-                data_writer.WriteEOR(EOR::WINDOW_DONE);
-                pending = 0;
-            } else {
-                pending -= data_writer.GetCount();
-                if (pending <= MINIMUM_SPACE + 100) {
-                    data_writer.WriteEOR(EOR::BYTE_LIMIT_REACHED);
+            if (!chunk_full) {
+                if (data_writer.WriteEOR(EOR::WINDOW_DONE))
                     pending = 0;
+                else
+                    chunk_full = true;
+            }
+
+            if (chunk_full) {
+                pending -= data_writer.GetCount();
+                if (pending <= CHUNK_RESERVE + 100) {
+                    if (data_writer.WriteEOR(EOR::BYTE_LIMIT_REACHED))
+                        pending = 0;
+                    else
+                        return false;
                 }
             }
         }

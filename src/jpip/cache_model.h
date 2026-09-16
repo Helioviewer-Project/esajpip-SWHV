@@ -254,6 +254,15 @@ namespace jpip {
             return 0;
         }
 
+        int AugmentDataBin(int bin_class, int num_codestream, int id, int amount) {
+            int current = GetDataBin(bin_class, num_codestream, id);
+            if (current == INT_MAX || amount <= current)
+                return current;
+            return AddToDataBin(bin_class, num_codestream, id,
+                                amount == INT_MAX ? 0 : amount - current,
+                                amount == INT_MAX);
+        }
+
         /**
          * Returns the full flag of the meta-datas.
          */
