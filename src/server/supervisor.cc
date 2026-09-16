@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <pthread.h>
 #include <sstream>
 #include <unistd.h>
 
@@ -20,26 +21,7 @@ using namespace std;
 
 namespace {
 
-volatile sig_atomic_t stop_requested = 0;
-
-void RequestStop(int) {
-    stop_requested = 1;
-}
-
-bool InstallSignalHandler(int signal_number) {
-    struct sigaction action;
-    memset(&action, 0, sizeof action);
-    action.sa_handler = RequestStop;
-    sigemptyset(&action.sa_mask);
-    return sigaction(signal_number, &action, NULL) == 0;
-}
-
-void ResetSignalHandler(int signal_number) {
-    struct sigaction action;
-    memset(&action, 0, sizeof action);
-    action.sa_handler = SIG_DFL;
-    sigemptyset(&action.sa_mask);
-    sigaction(signal_number, &action, NULL);
+void ChildExited(int) {
 }
 
 }
@@ -47,9 +29,20 @@ void ResetSignalHandler(int signal_number) {
 int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
                   net::Socket &listen_socket, const string &log_name,
                   const string &description) {
-    if (!InstallSignalHandler(SIGINT) || !InstallSignalHandler(SIGTERM)) {
-        cerr << "The supervisor signal handlers can not be installed: "
+    if (signal(SIGCHLD, ChildExited) == SIG_ERR) {
+        cerr << "The child signal can not be configured: "
              << strerror(errno) << endl;
+        return -1;
+    }
+    sigset_t signals;
+    sigemptyset(&signals);
+    sigaddset(&signals, SIGCHLD);
+    sigaddset(&signals, SIGINT);
+    sigaddset(&signals, SIGTERM);
+    int signal_error = pthread_sigmask(SIG_BLOCK, &signals, NULL);
+    if (signal_error != 0) {
+        cerr << "The supervisor signals can not be blocked: "
+             << strerror(signal_error) << endl;
         return -1;
     }
 
@@ -71,8 +64,12 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
         }
         if (child_pid == 0) {
             close(supervisor_sockets[0]);
-            ResetSignalHandler(SIGINT);
-            ResetSignalHandler(SIGTERM);
+            signal_error = pthread_sigmask(SIG_UNBLOCK, &signals, NULL);
+            if (signal_error != 0) {
+                cerr << "The serving-process signals can not be unblocked: "
+                     << strerror(signal_error) << endl;
+                return SERVER_STARTUP_FAILURE;
+            }
             return RunServer(cfg, app_info, listen_socket, supervisor_sockets[1],
                              log_name, description, restart_message);
         }
@@ -80,29 +77,41 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
         close(supervisor_sockets[1]);
         app_info->child_pid = child_pid;
 
-        bool supervisor_closed = false;
+        bool stopping = false;
         int status;
         for (;;) {
-            if (stop_requested && !supervisor_closed) {
-                close(supervisor_sockets[0]);
-                supervisor_closed = true;
-            }
-
-            pid_t waited = waitpid(child_pid, &status, 0);
+            pid_t waited = waitpid(child_pid, &status, WNOHANG);
             if (waited == child_pid)
                 break;
-            if (waited < 0 && errno == EINTR)
-                continue;
+            if (waited < 0) {
+                if (!stopping)
+                    close(supervisor_sockets[0]);
+                cerr << "The serving process can not be observed: "
+                     << strerror(errno) << endl;
+                return -1;
+            }
 
-            if (!supervisor_closed)
-                close(supervisor_sockets[0]);
-            cerr << "The serving process can not be observed: " << strerror(errno) << endl;
-            return -1;
+            int signal_number;
+            signal_error = sigwait(&signals, &signal_number);
+
+            if (signal_error != 0) {
+                if (!stopping)
+                    close(supervisor_sockets[0]);
+                cerr << "The supervisor can not wait for signals: "
+                     << strerror(signal_error) << endl;
+                return -1;
+            }
+            if (signal_number == SIGINT || signal_number == SIGTERM) {
+                if (!stopping)
+                    close(supervisor_sockets[0]);
+                stopping = true;
+                continue;
+            }
         }
 
         uint64_t crash_channel = numeric_limits<uint64_t>::max();
         ssize_t report_size = 0;
-        if (!supervisor_closed) {
+        if (!stopping) {
             do {
                 report_size = read(supervisor_sockets[0], &crash_channel,
                                    sizeof crash_channel);
@@ -113,7 +122,7 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
         app_info->child_pid = 0;
         app_info->num_connections = 0;
 
-        if (stop_requested)
+        if (stopping)
             return 0;
         if (WIFEXITED(status) && WEXITSTATUS(status) == SERVER_STARTUP_FAILURE)
             return -1;
