@@ -65,6 +65,8 @@ int main() {
     string new_messages = ReadFile(active);
     Check(old_messages.find("first message") != string::npos,
           "First message missing from rolled log");
+    Check(old_messages.find("first message\n") != string::npos,
+          "Log line contains trailing characters");
     Check(old_messages.find("second message") != string::npos,
           "Second message missing from rolled log");
     Check(old_messages.find("worker message") != string::npos,

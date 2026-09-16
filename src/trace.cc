@@ -217,7 +217,7 @@ bool DrainOne() {
     line.append(packet + sizeof header, length - sizeof header);
     if (header.truncated)
         line += "...";
-    line += " \n";
+    line += '\n';
     if (!WriteAll(output_fd, line.data(), line.size()))
         return DisableOutput();
 

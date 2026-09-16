@@ -86,7 +86,10 @@ namespace net {
          * Returns the address path.
          */
         std::string GetPath() const {
-            return inet_ntoa(sock_addr.sin_addr);
+            char path[INET_ADDRSTRLEN];
+            if (inet_ntop(AF_INET, &sock_addr.sin_addr, path, sizeof path) == NULL)
+                return "";
+            return path;
         }
 
         /**

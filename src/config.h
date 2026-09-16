@@ -135,4 +135,4 @@ public:
 
 };
 
-#endif /* _APP_CONFIG_H_ */
+#endif /* _CONFIG_H_ */
