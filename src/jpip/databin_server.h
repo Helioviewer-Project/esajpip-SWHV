@@ -85,10 +85,16 @@ namespace jpip {
                         res = 0;
                     }
 
-                    data_writer.Write(BIN_CLASS, num_codestream, id, cached,
-                                      *file, part, last);
-                    if (!data_writer.IsValid()) res = -1;
-                    else cache_model.AddToDataBin(BIN_CLASS, num_codestream, id, part.length, last);
+                    if (!data_writer.Write(BIN_CLASS, num_codestream, id, cached,
+                                           *file, part, last)) {
+                        if (data_writer.IsValid()) {
+                            eof = true;
+                            res = 0;
+                        } else
+                            res = -1;
+                    } else
+                        cache_model.AddToDataBin(BIN_CLASS, num_codestream, id,
+                                                 part.length, last);
                 }
             }
             return res;
@@ -118,11 +124,15 @@ namespace jpip {
                     eof = true;
                     res = 0;
                 } else {
-                    data_writer.WritePlaceHolder(DataBinClass::META_DATA,
-                                                   num_codestream, id, cached,
-                                                   *file, place_holder, last);
-                    if (!data_writer.IsValid()) res = -1;
-                    else
+                    if (!data_writer.WritePlaceHolder(DataBinClass::META_DATA,
+                                                      num_codestream, id, cached,
+                                                      *file, place_holder, last)) {
+                        if (data_writer.IsValid()) {
+                            eof = true;
+                            res = 0;
+                        } else
+                            res = -1;
+                    } else
                         cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,
                                                  place_holder.length(), last);
                 }

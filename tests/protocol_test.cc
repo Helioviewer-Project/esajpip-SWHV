@@ -570,8 +570,9 @@ static void CheckDataBinCapacity() {
     data::File file;
     jpip::DataBinWriter writer;
     writer.SetBuffer(buf, sizeof buf);
-    writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
-                 data::FileSegment(0, UINT64_MAX), true);
+    Check(!writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                        data::FileSegment(0, UINT64_MAX), true),
+          "Reported an oversized data-bin segment as written");
     Check(!writer.IsValid(), "Accepted a data-bin segment larger than the buffer");
 }
 
@@ -618,6 +619,40 @@ static void CheckCoalescedJPIPMessages() {
         Check(static_cast<unsigned char>(growing_buf[i]) == growing_header[i], "Wrong growing JPIP header");
     for (size_t i = 0; i < 150; ++i)
         Check(growing_buf[sizeof growing_header + i] == payload[i], "Wrong shifted JPIP payload");
+
+    char tight_buf[155];
+    jpip::DataBinWriter tight_writer;
+    tight_writer.SetBuffer(tight_buf, sizeof tight_buf);
+    Check(tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 0, file,
+                             data::FileSegment(0, 100), false),
+          "Rejected the complete JPIP message");
+    Check(!tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
+                              data::FileSegment(100, 50), true),
+          "Coalesced a message without space for its header");
+
+    Check(tight_writer.IsValid(), "Treated a full JPIP buffer as a write error");
+    Check(tight_writer.GetCount() == 105, "Did not preserve the complete JPIP message");
+    const unsigned char tight_header[] = {0x60, 0x06, 0x00, 0x00, 0x64};
+    for (size_t i = 0; i < sizeof tight_header; ++i)
+        Check(static_cast<unsigned char>(tight_buf[i]) == tight_header[i],
+              "Corrupted the complete JPIP message");
+    for (size_t i = 0; i < 100; ++i)
+        Check(tight_buf[sizeof tight_header + i] == payload[i],
+              "Corrupted the complete JPIP payload");
+
+    char retry_buf[64];
+    tight_writer.SetBuffer(retry_buf, sizeof retry_buf);
+    Check(tight_writer.Write(jpip::DataBinClass::MAIN_HEADER, 0, 0, 100, file,
+                             data::FileSegment(100, 50), true),
+          "Did not retry the deferred JPIP message");
+    Check(tight_writer.GetCount() == 53, "Wrong deferred JPIP message length");
+    const unsigned char retry_header[] = {0x30, 0x64, 0x32};
+    for (size_t i = 0; i < sizeof retry_header; ++i)
+        Check(static_cast<unsigned char>(retry_buf[i]) == retry_header[i],
+              "Corrupted the deferred JPIP message");
+    for (size_t i = 0; i < 50; ++i)
+        Check(retry_buf[sizeof retry_header + i] == payload[i + 100],
+              "Corrupted the deferred JPIP payload");
 
     char class_buf[128];
     jpip::DataBinWriter class_writer;

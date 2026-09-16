@@ -129,8 +129,9 @@ namespace jpip {
          * @param segment File segment of the data.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
+         * @return <code>true</code> if the segment was written.
          */
-        void Write(int databin_class, int codestream_idx, uint64_t bin_id,
+        bool Write(int databin_class, int codestream_idx, uint64_t bin_id,
                    uint64_t bin_offset, data::File &file,
                    const data::FileSegment &segment,
                    bool last_byte = false);
@@ -145,8 +146,9 @@ namespace jpip {
          * @param place_holder Place-holder information.
          * @param last_byte <code>true</code> if the data
          * contains the last byte of the data-bin.
+         * @return <code>true</code> if the place-holder was written.
          */
-        void WritePlaceHolder(int databin_class, int codestream_idx,
+        bool WritePlaceHolder(int databin_class, int codestream_idx,
                               uint64_t bin_id, uint64_t bin_offset, data::File &file,
                               const jpeg2000::PlaceHolder &place_holder,
                               bool last_byte = false);
