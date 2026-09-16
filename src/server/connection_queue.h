@@ -3,15 +3,11 @@
 
 #include <mutex>
 
-struct ChannelConnection {
-    int fd;
-};
-
 class ConnectionQueue {
 private:
     int wake_socket[2];
     std::mutex mutex;
-    ChannelConnection connection;
+    int connection;
     bool pending;
     bool closed;
 
@@ -24,9 +20,9 @@ public:
     bool IsValid() const;
     bool IsClosed();
     int GetDescriptor() const;
-    bool Push(const ChannelConnection &connection);
-    bool Pop(ChannelConnection *connection);
-    bool Close(ChannelConnection &connection);
+    bool Push(int connection);
+    bool Pop(int *connection);
+    bool Close(int &connection);
 
     ConnectionQueue(const ConnectionQueue &) = delete;
     ConnectionQueue &operator=(const ConnectionQueue &) = delete;

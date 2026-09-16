@@ -184,35 +184,41 @@ static void CheckInitialRequest() {
           "Accepted an unsupported HTTP version");
 
     InitialRequest request = Inspect("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
-    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == "47",
+    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == 47,
           "Could not route an existing channel request");
 
     InitialRequest close = Inspect("GET /jpip?cclose=47 HTTP/1.1\r\n");
-    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == "47",
+    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == 47,
           "Could not route a channel close request");
 
     InitialRequest close_all = Inspect("GET /jpip?cid=47&cclose=* HTTP/1.1\r\n");
-    Check(close_all.state == REQUEST_ACCEPTED && close_all.channel == "47",
+    Check(close_all.state == REQUEST_ACCEPTED && close_all.channel == 47,
           "Could not route an all-channel close request");
+
+    Check(Inspect("GET /jpip?cid=047 HTTP/1.1\r\n").state == REQUEST_REJECTED,
+          "Accepted a non-canonical channel ID");
+    Check(Inspect("GET /jpip?cid=18446744073709551616 HTTP/1.1\r\n").state ==
+                  REQUEST_REJECTED,
+          "Accepted an overflowing channel ID");
 }
 
 static void CheckConnectionQueue() {
     ConnectionQueue queue;
     Check(queue.IsValid(), "Could not create a connection queue");
-    Check(queue.Push({7}), "Could not queue a channel connection");
-    Check(!queue.Push({8}), "Queued concurrent channel connections");
-    ChannelConnection connection;
+    Check(queue.Push(7), "Could not queue a channel connection");
+    Check(!queue.Push(8), "Queued concurrent channel connections");
+    int connection;
     Check(queue.Pop(&connection), "Could not retrieve a channel connection");
-    Check(connection.fd == 7, "Retrieved the wrong channel connection");
+    Check(connection == 7, "Retrieved the wrong channel connection");
     Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
 
-    Check(queue.Push({9}), "Could not queue a channel connection before closing");
-    ChannelConnection pending;
+    Check(queue.Push(9), "Could not queue a channel connection before closing");
+    int pending;
     Check(queue.Close(pending), "Connection queue lost its pending connection on close");
     Check(queue.IsClosed(), "Connection queue remained open");
-    Check(pending.fd == 9,
+    Check(pending == 9,
           "Connection queue did not return its pending connection");
-    Check(!queue.Push({10}), "Connection queue accepted a connection after closing");
+    Check(!queue.Push(10), "Connection queue accepted a connection after closing");
 }
 
 static void CheckCrashReport() {

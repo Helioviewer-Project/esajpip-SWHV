@@ -1,7 +1,7 @@
 #ifndef _INITIAL_REQUEST_H_
 #define _INITIAL_REQUEST_H_
 
-#include <string>
+#include <cstdint>
 
 enum RequestState {
     REQUEST_PENDING,
@@ -12,7 +12,7 @@ enum RequestState {
 struct InitialRequest {
     RequestState state;
     bool new_channel;
-    std::string channel;
+    uint64_t channel;
 };
 
 InitialRequest InspectInitialRequest(int fd);

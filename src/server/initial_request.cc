@@ -3,12 +3,32 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
+#include <string>
 #include "initial_request.h"
 
 using namespace std;
 
 static const size_t MAX_REQUEST_LINE = 2048;
+
+static bool ParseChannel(const string &text, uint64_t *channel) {
+    if (text.empty() || (text.size() > 1 && text[0] == '0'))
+        return false;
+
+    uint64_t value = 0;
+    for (char character : text) {
+        if (character < '0' || character > '9')
+            return false;
+        uint64_t digit = character - '0';
+        if (value > (numeric_limits<uint64_t>::max() - digit) / 10)
+            return false;
+        value = value * 10 + digit;
+    }
+    *channel = value;
+    return true;
+}
 
 static bool GetParameter(const char *begin, const char *end, const char *name,
                          size_t name_length, string *value) {
@@ -37,37 +57,37 @@ InitialRequest InspectInitialRequest(int fd) {
     } while (length < 0 && errno == EINTR);
 
     if (length < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return {REQUEST_PENDING, false, ""};
+        return {REQUEST_PENDING, false, 0};
     if (length <= 0)
-        return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, 0};
 
     static const char method[] = "GET ";
     size_t prefix_length = min(static_cast<size_t>(length), sizeof method - 1);
     if (memcmp(line, method, prefix_length) != 0)
-        return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, 0};
     if (static_cast<size_t>(length) < sizeof method - 1)
-        return {REQUEST_PENDING, false, ""};
+        return {REQUEST_PENDING, false, 0};
 
     const char *newline = static_cast<const char *>(memchr(line, '\n', length));
     if (newline == NULL)
         return {static_cast<size_t>(length) == sizeof line ? REQUEST_REJECTED : REQUEST_PENDING,
-                false, ""};
+                false, 0};
 
     const char *uri = line + sizeof method - 1;
     const char *uri_end = static_cast<const char *>(memchr(uri, ' ', newline - uri));
     if (!uri_end)
-        return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, 0};
 
     const char *protocol = uri_end;
     while (protocol < newline && *protocol == ' ')
         ++protocol;
     if (newline - protocol < 8 ||
         (memcmp(protocol, "HTTP/1.0", 8) != 0 && memcmp(protocol, "HTTP/1.1", 8) != 0))
-        return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, 0};
 
     const char *query = static_cast<const char *>(memchr(uri, '?', uri_end - uri));
     if (!query)
-        return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_REJECTED, false, 0};
 
     string cid;
     string cclose;
@@ -79,13 +99,15 @@ InitialRequest InspectInitialRequest(int fd) {
     if (has_close) {
         if (cclose == "*" && has_cid)
             cclose = cid;
-        return cclose.empty() || cclose == "*"
-                   ? InitialRequest{REQUEST_REJECTED, false, ""}
-                   : InitialRequest{REQUEST_ACCEPTED, false, cclose};
+        uint64_t channel;
+        return ParseChannel(cclose, &channel)
+                   ? InitialRequest{REQUEST_ACCEPTED, false, channel}
+                   : InitialRequest{REQUEST_REJECTED, false, 0};
     }
     if (has_new)
-        return {REQUEST_ACCEPTED, true, ""};
-    if (has_cid && !cid.empty())
-        return {REQUEST_ACCEPTED, false, cid};
-    return {REQUEST_REJECTED, false, ""};
+        return {REQUEST_ACCEPTED, true, 0};
+    uint64_t channel;
+    if (has_cid && ParseChannel(cid, &channel))
+        return {REQUEST_ACCEPTED, false, channel};
+    return {REQUEST_REJECTED, false, 0};
 }

@@ -5,7 +5,8 @@
 
 using namespace std;
 
-ConnectionQueue::ConnectionQueue() : wake_socket{-1, -1}, pending(false), closed(false) {
+ConnectionQueue::ConnectionQueue()
+    : wake_socket{-1, -1}, connection(-1), pending(false), closed(false) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0) {
         wake_socket[0] = sockets[0];
@@ -33,7 +34,7 @@ int ConnectionQueue::GetDescriptor() const {
     return wake_socket[0];
 }
 
-bool ConnectionQueue::Push(const ChannelConnection &connection) {
+bool ConnectionQueue::Push(int connection) {
     lock_guard<std::mutex> lock(mutex);
     if (closed || pending || wake_socket[1] < 0)
         return false;
@@ -51,7 +52,7 @@ bool ConnectionQueue::Push(const ChannelConnection &connection) {
     return false;
 }
 
-bool ConnectionQueue::Pop(ChannelConnection *connection) {
+bool ConnectionQueue::Pop(int *connection) {
     lock_guard<std::mutex> lock(mutex);
     // Drain under the lock so Push cannot leave a
     // pending connection without a corresponding wake-up.
@@ -71,7 +72,7 @@ void ConnectionQueue::Drain() {
     } while (received < 0 && errno == EINTR);
 }
 
-bool ConnectionQueue::Close(ChannelConnection &connection) {
+bool ConnectionQueue::Close(int &connection) {
     lock_guard<std::mutex> lock(mutex);
     closed = true;
     if (!pending)

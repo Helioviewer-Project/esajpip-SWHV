@@ -42,8 +42,8 @@ struct PendingConnection {
 };
 
 struct ChannelInfo {
+    const AppConfig *cfg;
     uint64_t id;
-    string channel;
     shared_ptr<ConnectionQueue> queue;
 };
 
@@ -55,13 +55,6 @@ enum CompletionType {
 struct Completion {
     CompletionType type;
     uint64_t id;
-};
-
-struct ChannelThreadInfo {
-    const AppConfig *cfg;
-    uint64_t id;
-    string channel;
-    shared_ptr<ConnectionQueue> queue;
 };
 
 int completion_socket = -1;
@@ -83,29 +76,26 @@ void NotifyConnection() {
 }
 
 void *ChannelThread(void *argument) {
-    ChannelThreadInfo *info = static_cast<ChannelThreadInfo *>(argument);
+    ChannelInfo *info = static_cast<ChannelInfo *>(argument);
     const AppConfig *cfg = info->cfg;
     uint64_t id = info->id;
-    string channel = info->channel;
     shared_ptr<ConnectionQueue> queue = info->queue;
     delete info;
 
     crash_report::SetChannel(id);
-    RunChannel(*cfg, channel, queue, NotifyConnection);
+    RunChannel(*cfg, to_string(id), queue, NotifyConnection);
     Notify(CHANNEL_COMPLETED, id);
     return NULL;
 }
 
-bool StartChannel(const pthread_attr_t *attributes, const AppConfig &cfg,
-                  uint64_t id, const string &channel,
-                  const shared_ptr<ConnectionQueue> &queue) {
-    ChannelThreadInfo *info = new ChannelThreadInfo{&cfg, id, channel, queue};
+bool StartChannel(const pthread_attr_t *attributes, const ChannelInfo &channel) {
+    ChannelInfo *info = new ChannelInfo(channel);
     pthread_t thread;
     int error = pthread_create(&thread, attributes, ChannelThread, info);
     if (error == 0)
         return true;
 
-    ERROR("A thread for channel " << channel << " can not be created: "
+    ERROR("A thread for channel " << channel.id << " can not be created: "
           << strerror(error));
     delete info;
     return false;
@@ -176,7 +166,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
                         const InitialRequest &request) {
     if (request.new_channel) {
         channels.erase(remove_if(channels.begin(), channels.end(),
-                                 [](ChannelInfo &entry) {
+                                 [](const ChannelInfo &entry) {
                                      return entry.queue->IsClosed();
                                  }), channels.end());
         if (channels.size() >= static_cast<size_t>(cfg.max_connections())) {
@@ -184,15 +174,15 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
             return false;
         }
 
-        string channel = to_string(connection.id);
         shared_ptr<ConnectionQueue> queue = make_shared<ConnectionQueue>();
+        ChannelInfo channel = {&cfg, connection.id, queue};
         if (!queue->IsValid()) {
             ERROR("The connection queue can not be created");
-        } else if (!queue->Push({connection.fd})) {
+        } else if (!queue->Push(connection.fd)) {
             ERROR("The initial channel connection can not be queued");
-        } else if (StartChannel(attributes, cfg, connection.id, channel, queue)) {
-            channels.push_back({connection.id, channel, queue});
-            LOG("Creating channel " << channel << " for connection ["
+        } else if (StartChannel(attributes, channel)) {
+            channels.push_back(channel);
+            LOG("Creating channel " << channel.id << " for connection ["
                                     << connection.id << "]");
             return true;
         }
@@ -202,14 +192,14 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
     vector<ChannelInfo>::iterator channel =
             find_if(channels.begin(), channels.end(),
                     [&request](const ChannelInfo &entry) {
-                        return entry.channel == request.channel;
+                        return entry.id == request.channel;
                     });
     if (channel == channels.end()) {
         LOG("The connection [" << connection.id << "] references unknown channel "
                                << request.channel);
         return false;
     }
-    if (channel->queue->Push({connection.fd}))
+    if (channel->queue->Push(connection.fd))
         return true;
     if (channel->queue->IsClosed())
         channels.erase(channel);
@@ -336,7 +326,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                                             return entry.id == completion.id;
                                         });
                         if (channel != channels.end()) {
-                            LOG("The channel " << channel->channel << " has ended");
+                            LOG("The channel " << channel->id << " has ended");
                             channels.erase(channel);
                         }
                     }

@@ -473,7 +473,7 @@ private:
         }
     }
 
-    bool WaitForConnection(ChannelConnection *connection) {
+    bool WaitForConnection(int *connection) {
         pollfd fd = {queue->GetDescriptor(), POLLIN, 0};
         int result;
         do {
@@ -521,19 +521,19 @@ public:
         if (!file_manager.Init(cfg.image_directory())) {
             ERROR("The file manager can not be initialized");
         } else {
-            ChannelConnection connection;
+            int connection;
             while (WaitForConnection(&connection)) {
-                ServeResult result = Configure(connection.fd) ? Serve(connection.fd)
-                                                               : FAIL_CHANNEL;
-                CloseConnection(connection.fd);
+                ServeResult result = Configure(connection) ? Serve(connection)
+                                                           : FAIL_CHANNEL;
+                CloseConnection(connection);
                 if (result != KEEP_CHANNEL)
                     break;
             }
         }
 
-        ChannelConnection pending;
+        int pending;
         if (queue->Close(pending))
-            CloseConnection(pending.fd);
+            CloseConnection(pending);
     }
 };
 
