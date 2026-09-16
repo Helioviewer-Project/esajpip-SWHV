@@ -68,7 +68,9 @@ struct ChannelThreadInfo {
 Socket completion_socket;
 
 void Notify(CompletionType type, uint64_t id) {
-    Completion completion = {type, id};
+    Completion completion{};
+    completion.type = type;
+    completion.id = id;
     if (completion_socket.Send(&completion, sizeof completion) != sizeof completion)
         ERROR("Completion " << id << " could not notify the serving loop");
 }
