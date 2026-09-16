@@ -1,4 +1,4 @@
-#include "app_config.h"
+#include "config.h"
 
 #include <glib.h>
 

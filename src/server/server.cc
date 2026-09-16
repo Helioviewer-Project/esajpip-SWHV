@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 #include "trace.h"
-#include "app_config.h"
+#include "config.h"
 #include "net/address.h"
 #include "net/poll_table.h"
 #include "server/channel.h"

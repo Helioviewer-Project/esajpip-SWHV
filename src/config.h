@@ -1,5 +1,5 @@
-#ifndef _APP_CONFIG_H_
-#define _APP_CONFIG_H_
+#ifndef _CONFIG_H_
+#define _CONFIG_H_
 
 #include <cstdint>
 #include <string>

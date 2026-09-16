@@ -40,6 +40,6 @@ void Write(const std::string &message);
 #define TRACE(a) do { } while (false)
 #endif
 
-#define CERR(a) (std::cerr << a << "!" << std::endl, -1)
+#define CERR(a) (std::cerr << a << std::endl, -1)
 
 #endif

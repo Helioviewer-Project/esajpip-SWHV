@@ -43,7 +43,7 @@ configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
-    ${ESAJPIP_TOP}/app_config.cc
+    ${ESAJPIP_TOP}/config.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
@@ -59,7 +59,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/server/supervisor.cc
     ${ESAJPIP_TOP}/trace.cc)
 
-add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
+add_executable(esajpip ${ESAJPIP_TOP}/main.cc ${ESAJPIP_SRCS})
 esajpip_configure_target(esajpip)
 target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_include_directories(esajpip BEFORE PRIVATE
@@ -78,8 +78,8 @@ elseif(APPLE)
     target_link_libraries(esajpip PRIVATE c++abi)
 endif()
 
-install(TARGETS esajpip DESTINATION server/esajpip)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION server/esajpip)
+install(TARGETS esajpip RUNTIME DESTINATION bin)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION bin)
 
 if(BUILD_TESTING)
     add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
@@ -91,7 +91,7 @@ if(BUILD_TESTING)
 
     add_executable(protocol_test
         tests/protocol_test.cc
-        ${ESAJPIP_TOP}/app_config.cc
+        ${ESAJPIP_TOP}/config.cc
         ${ESAJPIP_TOP}/data/file_segment.cc
         ${ESAJPIP_TOP}/http/header.cc
         ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc

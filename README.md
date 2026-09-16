@@ -27,7 +27,6 @@ paths to the installed `server.ini`:
 ```sh
 cmake -S . -B build \
     -DCMAKE_INSTALL_PREFIX="$HOME/esajpip" \
-    -DSWHV_PORT_JPIP=8090 \
     -DSWHV_DIR_IMAGE="$HOME/esajpip/images" \
     -DSWHV_DIR_LOG="$HOME/esajpip/log"
 cmake --build build
@@ -48,13 +47,13 @@ ignored.
 
 ### Configuration
 
-All four sections must be present. CMake substitutes the three `SWHV_*` values
-when it generates the installed file. Directory paths may contain spaces; the
-server adds a trailing slash internally when needed.
+All four sections must be present. CMake substitutes the image and log directory
+values when it generates the installed file. Directory paths may contain spaces;
+the server adds a trailing slash internally when needed.
 
 | Section and setting | Installed value | Meaning |
 | --- | --- | --- |
-| `listen.port` | `SWHV_PORT_JPIP` | TCP port on which the server listens. The value must be from 1 through 65535. |
+| `listen.port` | `8900` | TCP port on which the server listens. The value must be from 1 through 65535. |
 | `listen.address` | empty | Local IPv4 address or hostname on which to listen. An empty value listens on all IPv4 interfaces. |
 | `jpip.image_directory` | `SWHV_DIR_IMAGE` | Non-empty directory from which requested JP2 and JPX files are opened. |
 | `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128; the final chunk may be smaller. |
@@ -76,7 +75,7 @@ installed server directory, either in a terminal or under the host's process
 supervisor:
 
 ```sh
-cd "$HOME/esajpip/server/esajpip"
+cd "$HOME/esajpip/bin"
 ./esajpip
 ```
 

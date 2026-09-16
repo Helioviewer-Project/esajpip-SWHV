@@ -8,7 +8,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#include "app_config.h"
+#include "config.h"
 #include "server/server.h"
 #include "server/supervisor.h"
 

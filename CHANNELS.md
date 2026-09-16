@@ -15,7 +15,7 @@ The responsibilities are separated as follows:
 
 | Source | Responsibility |
 | --- | --- |
-| `esa_jpip_server.cc` | Configuration and listening-socket setup |
+| `main.cc` | Configuration and listening-socket setup |
 | `server/supervisor.cc` | Serving-process lifetime and restart |
 | `server/server.cc` | Connection admission, channel routing, and log output |
 | `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |

@@ -10,7 +10,7 @@
 #include <vector>
 #include <unistd.h>
 
-#include "app_config.h"
+#include "config.h"
 #include "server/connection_queue.h"
 #include "server/initial_request.h"
 #include "data/file.h"
@@ -107,9 +107,9 @@ static void CheckAppConfig() {
     AppConfig invalid;
     Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
 
-    const char *template_value =
+    const char *invalid_port =
         "[listen]\n"
-        "port = ${SWHV_PORT_JPIP}\n"
+        "port = invalid\n"
         "[jpip]\n"
         "image_directory = /srv/jpip\n"
         "chunk_size = 128\n"
@@ -117,10 +117,10 @@ static void CheckAppConfig() {
         "limit = 10\n"
         "[logging]\n";
     string error;
-    AppConfig unconfigured;
-    Check(!LoadConfig(template_value, &unconfigured, &error) &&
+    AppConfig invalid_port_config;
+    Check(!LoadConfig(invalid_port, &invalid_port_config, &error) &&
               error.find("port") != string::npos,
-          "Did not report an unconfigured template value");
+          "Did not report an invalid port value");
 
     const char *invalid_value =
         "[listen]\n"

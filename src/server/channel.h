@@ -3,7 +3,7 @@
 
 #include <memory>
 #include <string>
-#include "app_config.h"
+#include "config.h"
 #include "connection_queue.h"
 
 typedef void (*ConnectionClosed)();

@@ -4,7 +4,7 @@
 #include <string>
 
 #include "trace.h"
-#include "app_config.h"
+#include "config.h"
 #include "net/address.h"
 #include "server/supervisor.h"
 
