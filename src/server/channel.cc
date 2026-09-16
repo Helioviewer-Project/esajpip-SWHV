@@ -415,7 +415,7 @@ private:
                             ostringstream msg;
                             msg << http::Response(200, "OK")
                                     << http::Header("JPIP-cnew", "cid=" + id + ",path=jpip,transport=http")
-                                    << http::Header("JPIP-tid", file_name)
+                                    << http::Header("JPIP-tid", "0")
                                     << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
                                     << (send_gzip ? head_data_gzip : head_data)
                                     << CRLF;

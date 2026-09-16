@@ -359,6 +359,7 @@ static void CheckHTTPResponse() {
     ostringstream out;
     out << http::Response(200, "OK")
         << http::Header("JPIP-cnew", "cid=7,path=jpip,transport=http")
+        << http::Header("JPIP-tid", "0")
         << http::Header("Transfer-Encoding", "chunked")
         << http::Header("Content-Type", "image/jpp-stream")
         << http::CRLF;
@@ -366,6 +367,7 @@ static void CheckHTTPResponse() {
     Check(out.str() ==
           "HTTP/1.1 200 OK\r\n"
           "JPIP-cnew: cid=7,path=jpip,transport=http\r\n"
+          "JPIP-tid: 0\r\n"
           "Transfer-Encoding: chunked\r\n"
           "Content-Type: image/jpp-stream\r\n\r\n",
           "The JHV response headers changed");

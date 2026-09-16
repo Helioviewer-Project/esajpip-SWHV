@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- Return `JPIP-tid: 0` instead of exposing the resolved server path, correctly
+  indicating that targets do not have stable identities across sessions.
 - Reject parent-directory segments in client-selected URI paths and `target`
   values while retaining trusted linked-JPX references outside the image
   directory.

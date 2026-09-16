@@ -50,7 +50,7 @@ The detailed connection ownership, timeout and cleanup rules are documented in
 | `len` | Supported | Limits the number of JPP bytes generated for the response. When omitted, the server sends all data relevant to the request. A client can issue further requests using the same channel and cache model. Negative values are rejected. |
 | `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional codestream range. Descriptors are validated against the selected image before they update channel state. Since the source profile has one tile, only tile-header bin zero is valid. Subtractive descriptors, wildcard descriptors, and layer-count descriptors are rejected or unsupported. |
 | `metareq` | Compatibility subset | Its presence is recognized, including JHelioviewer's `[*]!!` form, but the expression is not parsed. Metadata is sent according to the server's fixed JPX metadata-bin representation. The field also enables gzip when the HTTP client accepts it. |
-| `type`, `tid` and unknown fields | Accepted but ignored | They do not affect serving. This tolerance preserves existing JHelioviewer requests, but it does not provide return-type negotiation or target-ID support. |
+| `type`, `tid` and unknown fields | Accepted but ignored | They do not affect serving. This tolerance preserves existing JHelioviewer requests, but it does not provide return-type negotiation or target-ID recovery. |
 | Other standard fields | Not supported | `subtarget`, `qid`, `comps`, `srate`, `roi`, `layers`, `quality`, `align`, `wait`, `drate`, `tpmodel`, `need`, `tpneed`, `mset`, upload, capability and preference fields have no implemented semantics. |
 
 The server does not reject every unsupported field. A standards-based client
@@ -75,10 +75,10 @@ The model is private to the channel. It is neither shared between clients nor
 recovered after the serving process or channel is lost.
 
 On channel creation, the response includes `JPIP-cnew` with the assigned `cid`,
-`path=jpip` and `transport=http`. It also includes `JPIP-tid`, but the value is
-the server-resolved file path rather than an independently managed opaque target
-ID. The remaining JPIP response preference and correction headers are not
-emitted.
+`path=jpip` and `transport=http`. It also includes `JPIP-tid: 0`, explicitly
+indicating that the server does not assign stable target identifiers or
+guarantee target identity across sessions. The remaining JPIP response
+preference and correction headers are not emitted.
 
 ## Supported JPEG 2000 sources
 
