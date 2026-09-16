@@ -24,24 +24,12 @@ namespace jpeg2000 {
 
     public:
         enum {
+            MAX_SEGMENTS = 64,
             /**
              * All the offsets must be greater than this value.
              */
-                    MINIMUM_OFFSET = 64
+            MINIMUM_OFFSET = MAX_SEGMENTS
         };
-
-        /**
-         * Empty constructor.
-         */
-        PacketIndex() = default;
-
-        /**
-         * Initializes the object.
-         * @param max_offset Maximum value for an offset.
-         */
-        explicit PacketIndex(uint64_t max_offset) {
-            assert(max_offset <= UINT32_MAX);
-        }
 
         /**
          * Adds a new packet segment to the index.
@@ -62,8 +50,6 @@ namespace jpeg2000 {
                     offsets.push_back(last);
                     aux[last] = segment;
                 } else {
-                    assert(last < (MINIMUM_OFFSET - 1));
-
                     offsets.push_back(last + 1);
                     aux.push_back(segment);
                 }

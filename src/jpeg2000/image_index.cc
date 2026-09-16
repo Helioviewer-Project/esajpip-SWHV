@@ -26,10 +26,6 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::BuildIndex(File *file, Stream &stream, const CodingParameters &coding_parameters, int r) {
-        // Check if PacketIndex has been created
-        if (stream.packet_index.Size() == 0)
-            stream.packet_index = PacketIndex(file->GetSize());
-
         // Check the upper top of the index (to build)
         int max_index;
         if (r < coding_parameters.num_levels && coding_parameters.IsResolutionProgression()) {

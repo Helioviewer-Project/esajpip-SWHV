@@ -45,7 +45,9 @@ static void AppendBox(vector<unsigned char> &file, uint32_t type,
 
 static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sampling = 1,
                                             uint32_t image_width = 1, uint32_t tile_width = 1,
-                                            uint16_t tile_index = 0) {
+                                            uint16_t tile_index = 0,
+                                            uint16_t quality_layers = 1,
+                                            uint8_t tile_parts = 1) {
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
@@ -69,7 +71,7 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     Append16(codestream, 12);
     codestream.push_back(0);      // Scod
     codestream.push_back(progression);
-    Append16(codestream, 1);      // layers
+    Append16(codestream, quality_layers);
     codestream.push_back(0);      // MCT
     codestream.push_back(0);      // decomposition levels
     codestream.push_back(0);      // code-block width
@@ -81,19 +83,21 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     Append16(codestream, 3);
     codestream.push_back(0);
 
-    Append16(codestream, 0xFF90); // SOT
-    Append16(codestream, 10);
-    Append16(codestream, tile_index);
-    Append32(codestream, 21);     // tile-part length
-    codestream.push_back(0);      // tile-part index
-    codestream.push_back(1);      // number of tile-parts
+    for (int tile_part = 0; tile_part < tile_parts; ++tile_part) {
+        Append16(codestream, 0xFF90); // SOT
+        Append16(codestream, 10);
+        Append16(codestream, tile_index);
+        Append32(codestream, 21);     // tile-part length
+        codestream.push_back(tile_part);
+        codestream.push_back(tile_parts);
 
-    Append16(codestream, 0xFF58); // PLT
-    Append16(codestream, 4);
-    codestream.push_back(0);      // Zplt
-    codestream.push_back(1);      // one-byte packet
-    Append16(codestream, 0xFF93); // SOD
-    codestream.push_back(0);      // packet data
+        Append16(codestream, 0xFF58); // PLT
+        Append16(codestream, 4);
+        codestream.push_back(0);      // Zplt
+        codestream.push_back(1);      // one-byte packet
+        Append16(codestream, 0xFF93); // SOD
+        codestream.push_back(0);      // packet data
+    }
     Append16(codestream, 0xFFD9); // EOC
     return codestream;
 }
@@ -166,6 +170,10 @@ int main() {
     WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
     WriteFile(directory + "multi-tile.jp2", MakeJP2(MakeCodestream(0, 1, 2, 1)));
     WriteFile(directory + "bad-tile-index.jp2", MakeJP2(MakeCodestream(0, 1, 1, 1, 1)));
+    WriteFile(directory + "64-tile-parts.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 64, 64)));
+    WriteFile(directory + "65-tile-parts.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 65, 65)));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
@@ -205,6 +213,27 @@ int main() {
     jpeg2000::FileManager tile_index_manager;
     Check(!OpenImage(directory, "bad-tile-index.jp2", &tile_index_manager),
           "Accepted a nonzero tile index");
+    jpeg2000::FileManager maximum_tile_parts_manager;
+    Check(OpenImage(directory, "64-tile-parts.jp2", &maximum_tile_parts_manager),
+          "Rejected the maximum supported tile-part count");
+    data::File *maximum_tile_parts_file =
+            maximum_tile_parts_manager.GetFile(directory + "64-tile-parts.jp2");
+    Check(maximum_tile_parts_file != NULL &&
+              maximum_tile_parts_manager.GetImage()->GetPacket(
+                      maximum_tile_parts_file, 0,
+                      jpeg2000::Packet(63, 0, 0, jpeg2000::Point()), &packet),
+          "Could not index the maximum supported tile-part count");
+    jpeg2000::FileManager excessive_tile_parts_manager;
+    Check(!OpenImage(directory, "65-tile-parts.jp2", &excessive_tile_parts_manager),
+          "Accepted too many tile-parts for the packet index");
+
+    string large_file = directory + "large.jp2";
+    WriteFile(large_file, jp2);
+    Check(truncate(large_file.c_str(), static_cast<off_t>(UINT32_MAX) + 1) == 0,
+          "Could not create a sparse large-file fixture");
+    jpeg2000::FileManager large_file_manager;
+    Check(!OpenImage(directory, "large.jp2", &large_file_manager),
+          "Accepted a file larger than the packet index can address");
 
     jpeg2000::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),
@@ -323,6 +352,9 @@ int main() {
     remove((directory + "unsupported-pcrl.jp2").c_str());
     remove((directory + "multi-tile.jp2").c_str());
     remove((directory + "bad-tile-index.jp2").c_str());
+    remove((directory + "64-tile-parts.jp2").c_str());
+    remove((directory + "65-tile-parts.jp2").c_str());
+    remove(large_file.c_str());
     manager.ClearFiles();
     Check(request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");

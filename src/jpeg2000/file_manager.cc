@@ -85,7 +85,8 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadCodestream(File *file, uint64_t length, CodingParameters *params, CodestreamIndex *index) {
-        if (length < 4 || length > file->GetSize() - file->GetOffset())
+        if (file->GetSize() > UINT32_MAX || length < 4 ||
+            length > file->GetSize() - file->GetOffset())
             return false;
 
         uint64_t limit = file->GetOffset() + length;
@@ -275,7 +276,8 @@ namespace jpeg2000 {
         if (!file->ReadReverse(&lsot) || !file->ReadReverse(&isot) || !file->ReadReverse(&psot) ||
             !file->ReadReverse(&tpsot) || !file->ReadReverse(&tnsot) || lsot != 10 || isot != 0 ||
             tpsot == UINT8_MAX || (tnsot != 0 && tpsot >= tnsot) || (psot != 0 && psot < 14) ||
-            (psot != 0 && psot > limit - marker_offset))
+            (psot != 0 && psot > limit - marker_offset) ||
+            index->packets.size() >= PacketIndex::MAX_SEGMENTS)
             return false;
 
         if (index->header.length == 0)

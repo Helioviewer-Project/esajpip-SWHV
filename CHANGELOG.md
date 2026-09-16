@@ -42,6 +42,8 @@
   them with incorrect single-tile assumptions.
 - Validate JPEG 2000 markers, tile parts, packets, boxes, codestream bounds, and
   linked-JPX external references before indexing or copying them.
+- Reject files beyond the packet index's 32-bit address range and codestreams
+  with more than 64 packet segments during parsing instead of aborting later.
 - Reject invalid JPIP cache lengths, response limits, and codestream selectors.
   Use codestream zero when a window request omits its selector.
 - Treat an omitted response-length limit as unlimited, so the server sends the

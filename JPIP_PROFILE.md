@@ -92,7 +92,7 @@ profile is therefore narrower than the JP2 and JPX file formats themselves.
 - The main `SIZ`, `COD`, and `QCD` information must describe the packet layout.
   Marker features that change that layout without being represented there,
   such as progression changes through `POC`, are outside the supported profile.
-- Multiple tile-parts and multiple `PLT` markers may be indexed, subject to the
+- Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
   validated marker, packet, and tile-part bounds.
 - Packet locations must fit the current 32-bit packet-index representation.
   Source files of 4 GiB or more are outside the supported profile.
