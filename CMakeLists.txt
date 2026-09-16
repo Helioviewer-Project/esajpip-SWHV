@@ -77,7 +77,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         _PLATFORM_LINUX
         _POSIX_C_SOURCE=200112L
         _XOPEN_SOURCE=600)
-    target_link_libraries(esajpip PRIVATE rt)
 elseif(APPLE)
     target_link_libraries(esajpip PRIVATE c++abi)
 endif()

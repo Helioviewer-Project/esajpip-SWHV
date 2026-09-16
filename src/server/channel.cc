@@ -268,8 +268,8 @@ private:
             return REQUEST_READY;
 
         pollfd fds[] = {
-            {socket, POLLIN | POLLERR | POLLHUP | POLLNVAL, 0},
-            {queue->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0}
+            {socket, POLLIN, 0},
+            {queue->GetDescriptor(), POLLIN, 0}
         };
         int result;
         do {
@@ -469,7 +469,7 @@ private:
     }
 
     bool WaitForConnection(ChannelConnection *connection) {
-        pollfd fd = {queue->GetDescriptor(), POLLIN | POLLERR | POLLHUP | POLLNVAL, 0};
+        pollfd fd = {queue->GetDescriptor(), POLLIN, 0};
         int result;
         do {
             result = poll(&fd, 1, TimeoutMilliseconds(cfg.connection_timeout()));

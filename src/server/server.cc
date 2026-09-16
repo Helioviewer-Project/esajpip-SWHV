@@ -263,7 +263,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
 
     PollTable poll_table;
     poll_table.Add(listen_socket, POLLIN);
-    poll_table.Add(supervisor_fd, POLLIN | POLLERR | POLLHUP | POLLNVAL);
+    poll_table.Add(supervisor_fd, POLLIN);
     poll_table.Add(completion_reader, POLLIN);
     poll_table.Add(trace::ReadDescriptor(), POLLIN);
 
@@ -309,7 +309,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                     LOG("New connection from " << from_address.GetPath() << ":"
                                                 << from_address.GetPort() << " ["
                                                 << fd << ":" << id << "]");
-                    poll_table.Add(fd, POLLIN | POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
+                    poll_table.Add(fd, POLLIN | POLLRDHUP);
                     pending_connections.push_back({id, fd,
                                                    Clock::now() +
                                                            std::chrono::seconds(

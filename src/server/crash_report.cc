@@ -16,8 +16,10 @@ volatile sig_atomic_t report_descriptor = -1;
 void Report(int signal_number) {
     uint64_t current_channel = channel.load(memory_order_relaxed);
     int fd = report_descriptor;
-    if (fd >= 0)
-        (void) write(fd, &current_channel, sizeof current_channel);
+    if (fd >= 0) {
+        ssize_t ignored = write(fd, &current_channel, sizeof current_channel);
+        (void) ignored;
+    }
 
     // SA_RESETHAND restored the default action. Queue the signal again so the
     // process still terminates normally for that fault, including a core dump
