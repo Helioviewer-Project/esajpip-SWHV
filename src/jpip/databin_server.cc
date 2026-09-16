@@ -81,8 +81,7 @@ namespace jpip {
         if (req.mask.items.model)
             cache_model += req.cache_model;
 
-        if (req.mask.items.len)
-            pending = req.length_response;
+        pending = req.mask.items.len ? req.length_response : INT_MAX;
 
         if (reset_woi) {
             int codestream = codestreams[current_idx];

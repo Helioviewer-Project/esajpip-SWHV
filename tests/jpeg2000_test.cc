@@ -247,16 +247,43 @@ int main() {
           "Accepted invalid JPX fragment range");
 
     jpip::Request request;
-    Check(request.Parse("GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
+    Check(request.Parse("GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse default-codestream request");
     jpip::DataBinServer server;
     Check(server.SetRequest(manager, request), "Rejected default codestream");
-    char response[512];
+    char response[4096];
     int response_length = sizeof response;
     bool last = false;
     Check(server.GenerateChunk(manager, response, &response_length, &last),
           "Could not generate default-codestream response");
     Check(response_length > 0, "Generated empty default-codestream response");
+    Check(last, "Did not complete an unlimited response");
+    Check(response_length >= 3 && response[response_length - 3] == 0 &&
+              response[response_length - 2] == jpip::EOR::WINDOW_DONE &&
+              response[response_length - 1] == 0,
+          "Unlimited response has no window-done EOR");
+
+    jpip::Request headers_only_request;
+    Check(headers_only_request.Parse(
+              "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0 HTTP/1.1"),
+          "Could not parse a headers-only request");
+    Check(server.SetRequest(manager, headers_only_request), "Rejected a headers-only request");
+    response_length = sizeof response;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a headers-only response");
+    Check(response_length == 0 && last, "Generated data for a headers-only request");
+
+    jpip::Request unlimited_request;
+    Check(unlimited_request.Parse(
+              "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
+          "Could not parse a second unlimited request");
+    Check(server.SetRequest(manager, unlimited_request), "Rejected a second unlimited request");
+    response_length = sizeof response;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a second unlimited response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A previous response limit affected an unlimited response");
 
     jpip::Request cropped_request;
     Check(cropped_request.Parse(
