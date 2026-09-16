@@ -46,6 +46,8 @@
   with more than 64 packet segments during parsing instead of aborting later.
 - Use the JPEG 2000 default 32,768-pixel precinct dimensions and reject nonzero
   image origins that the packet index cannot represent correctly.
+- Retain the coding parameters of each embedded JPX codestream instead of
+  applying one shared set to the complete container.
 - Reject invalid JPIP cache lengths, response limits, cache-model data-bin
   identifiers, and codestream selectors. Bound the total expanded codestream
   selection and use codestream zero when a window request omits its selector.

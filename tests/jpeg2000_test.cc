@@ -118,10 +118,15 @@ static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
     return file;
 }
 
-static vector<unsigned char> MakeEmbeddedJPX(const vector<unsigned char> &codestream) {
+static vector<unsigned char> MakeEmbeddedJPX(const vector<unsigned char> &codestream,
+                                             const vector<unsigned char> &second = {}) {
     vector<unsigned char> file;
     AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
     AppendBox(file, 0x6A703263, codestream);              // jp2c
+    if (!second.empty()) {
+        AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
+        AppendBox(file, 0x6A703263, second);                  // jp2c
+    }
     return file;
 }
 
@@ -190,6 +195,8 @@ int main() {
     Set32(nonzero_origin, 16, 1); // XOsiz
     WriteFile(directory + "nonzero-origin.jp2", MakeJP2(nonzero_origin));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
+    WriteFile(directory + "embedded-two.jpx",
+              MakeEmbeddedJPX(codestream, MakeCodestream(0, 1, 2, 2)));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
 
@@ -269,6 +276,21 @@ int main() {
           "Could not parse valid embedded JPX");
     Check(embedded_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong embedded JPX codestream count");
+
+    jpeg2000::FileManager embedded_two_manager;
+    Check(OpenImage(directory, "embedded-two.jpx", &embedded_two_manager),
+          "Could not parse embedded JPX with distinct codestreams");
+    Check(embedded_two_manager.GetImage()->GetNumCodestreams() == 2 &&
+              embedded_two_manager.GetImage()->GetCodingParameters(0)->size.x == 1 &&
+              embedded_two_manager.GetImage()->GetCodingParameters(1)->size.x == 2,
+          "Did not retain embedded codestream parameters");
+    data::File *embedded_file =
+            embedded_two_manager.GetFile(directory + "embedded-two.jpx");
+    Check(embedded_file != NULL &&
+              embedded_two_manager.GetImage()->GetPacket(
+                      embedded_file, 1,
+                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Could not index the second embedded codestream");
 
     jpeg2000::FileManager linked_manager;
     Check(OpenImage(directory, "linked.jpx", &linked_manager),
@@ -414,6 +436,7 @@ int main() {
           "Generated a response after its source file disappeared");
 
     remove((directory + "embedded.jpx").c_str());
+    remove((directory + "embedded-two.jpx").c_str());
     remove((directory + "linked.jpx").c_str());
     remove((directory + "bad-plt.jp2").c_str());
     remove((directory + "truncated.jp2").c_str());

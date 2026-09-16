@@ -15,10 +15,10 @@ namespace jpeg2000 {
               codestream(std::move(_codestream)) {
     }
 
-    ImageIndex::Link::Link(string &&_path, CodingParameters &&_params,
-                           CodestreamIndex &&_codestream)
-            : path_name(std::move(_path)),
-              coding_parameters(std::move(_params)),
+    ImageIndex::Codestream::Codestream(const string &_path, CodingParameters &&_params,
+                                      CodestreamIndex &&_codestream)
+            : path(_path),
+              parameters(std::move(_params)),
               stream(std::move(_codestream)) {
     }
 
@@ -103,10 +103,9 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
-        bool linked = !hyper_links.empty();
-        Stream &stream = linked ? hyper_links[num_codestream].stream : streams[num_codestream];
-        const CodingParameters &coding_parameters = linked ? hyper_links[num_codestream].coding_parameters
-                                                           : this->coding_parameters;
+        Codestream &codestream = codestreams[num_codestream];
+        Stream &stream = codestream.stream;
+        const CodingParameters &coding_parameters = codestream.parameters;
 
         if (packet.resolution > stream.max_resolution) {
             if (!BuildIndex(file, stream, coding_parameters, packet.resolution)) {

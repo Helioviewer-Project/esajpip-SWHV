@@ -33,21 +33,18 @@ namespace jpeg2000 {
             explicit Stream(CodestreamIndex &&_codestream);
         };
 
-        struct Link {
-            std::string path_name;
-            CodingParameters coding_parameters;
+        struct Codestream {
+            std::string path;
+            CodingParameters parameters;
             Stream stream;
 
-            Link(std::string &&_path, CodingParameters &&_params,
-                 CodestreamIndex &&_codestream);
+            Codestream(const std::string &_path, CodingParameters &&_params,
+                       CodestreamIndex &&_codestream);
         };
 
         std::string path_name;           ///< Image file name
         Metadata meta_data;         ///< Image Metadata
-        CodingParameters coding_parameters; ///< Coding parameters
-        std::vector<Stream> streams;
-
-        std::vector<Link> hyper_links; ///< Image hyperlinks
+        std::vector<Codestream> codestreams;
 
         /**
          * Gets the packet lengths from a PLT marker.
@@ -86,7 +83,7 @@ namespace jpeg2000 {
          * Returns the number of codestreams.
          */
         size_t GetNumCodestreams() const {
-            return streams.empty() ? hyper_links.size() : streams.size();
+            return codestreams.size();
         }
 
         const Metadata &GetMetadata() const {
@@ -106,7 +103,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number.
          */
         const std::string &GetPathName(int num_codestream) const {
-            return streams.empty() ? hyper_links[num_codestream].path_name : path_name;
+            return codestreams[num_codestream].path;
         }
 
         /**
@@ -115,11 +112,11 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const data::FileSegment &GetMainHeader(int num_codestream) const {
-            return streams.empty() ? hyper_links[num_codestream].stream.codestream.header : streams[num_codestream].codestream.header;
+            return codestreams[num_codestream].stream.codestream.header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
-            return streams.empty() ? &hyper_links[num_codestream].coding_parameters : &coding_parameters;
+            return &codestreams[num_codestream].parameters;
         }
 
         /**

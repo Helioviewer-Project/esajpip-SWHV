@@ -78,9 +78,6 @@ namespace jpeg2000 {
             res = ReadJP2(&file, image_index);
         else
             res = ReadJPX(&file, image_index);
-        if (res && image_index->hyper_links.empty())
-            image_index->coding_parameters.FillPrecinctCounts();
-
         return res;
     }
 
@@ -366,7 +363,8 @@ namespace jpeg2000 {
         uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
         //int metadata_bin=1;
 
-        image_index->streams.emplace_back(CodestreamIndex());
+        CodingParameters coding_parameters;
+        CodestreamIndex codestream_index;
         while (file->GetOffset() != file->GetSize() && res) {
             pini_box = file->GetOffset();
             plen = pini_box - pini;
@@ -378,11 +376,11 @@ namespace jpeg2000 {
                     if (codestream)
                         return false;
                     codestream = true;
-                    res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
-                                                &image_index->streams.back().codestream);
+                    res = ReadCodestream(file, length_box, &coding_parameters,
+                                         &codestream_index);
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
-                            PlaceHolder(image_index->streams.size() - 1, true,
+                            PlaceHolder(0, true,
                                         FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
@@ -392,6 +390,12 @@ namespace jpeg2000 {
             }
         }
         image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
+        if (res && codestream) {
+            coding_parameters.FillPrecinctCounts();
+            image_index->codestreams.emplace_back(image_index->path_name,
+                                                  std::move(coding_parameters),
+                                                  std::move(codestream_index));
+        }
         return res && codestream;
     }
 
@@ -412,7 +416,7 @@ namespace jpeg2000 {
         int num_flst = 0;
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
-        vector<CodestreamIndex> codestreams;
+        vector<ImageIndex::Codestream> codestreams;
         size_t num_codestreams = 0;
         vector<pair<uint32_t, uint64_t>> containers;
         containers.emplace_back(0, file->GetSize());
@@ -445,20 +449,29 @@ namespace jpeg2000 {
                     if (length_box != 0)
                         containers.emplace_back(type_box, box_end);
                     break;
-                case JP2C_BOX_ID: TRACE("JP2C box...");
+                case JP2C_BOX_ID: {
+                    TRACE("JP2C box...");
                     if (num_codestreams == 0 || codestreams.size() >= num_codestreams) {
                         res = false;
                         break;
                     }
-                    codestreams.emplace_back();
-                    res = res && ReadCodestream(file, length_box, &image_index->coding_parameters,
-                                                &codestreams.back());
+                    CodingParameters coding_parameters;
+                    CodestreamIndex codestream_index;
+                    res = ReadCodestream(file, length_box, &coding_parameters,
+                                         &codestream_index);
+                    if (res) {
+                        coding_parameters.FillPrecinctCounts();
+                        codestreams.emplace_back(image_index->path_name,
+                                                 std::move(coding_parameters),
+                                                 std::move(codestream_index));
+                    }
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(pini, plen),
                             PlaceHolder(num_codestreams - 1, true,
                                         FileSegment(pini_box, plen_box), length_box));
                     pini = file->GetOffset();
                     break;
+                }
                 case ASOC_BOX_ID: TRACE("ASOC box...");
                     res = res && file->Seek(length_box, SEEK_CUR);
                     image_index->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
@@ -543,27 +556,27 @@ namespace jpeg2000 {
         if (paths.empty()) {
             if (codestreams.size() != num_codestreams)
                 return false;
-            image_index->streams.reserve(num_codestreams);
-            for (CodestreamIndex &codestream : codestreams)
-                image_index->streams.emplace_back(std::move(codestream));
+            image_index->codestreams = std::move(codestreams);
             return true;
         }
 
         if (paths.size() != num_codestreams)
             return false;
-        vector<CodestreamIndex>().swap(codestreams);
-        image_index->hyper_links.reserve(paths.size());
+        vector<ImageIndex::Codestream>().swap(codestreams);
+        image_index->codestreams.reserve(paths.size());
         for (size_t i = 0; i < paths.size() && res; ++i) {
             ImageIndex linked_image(paths[i]);
             res = ReadImage(paths[i], &linked_image);
             if (!res)
                 break;
 
-            if (linked_image.streams.empty() || linked_image.streams.back().codestream.packets.empty()) {
+            if (linked_image.codestreams.empty() ||
+                linked_image.codestreams.back().stream.codestream.packets.empty()) {
                 res = false;
                 break;
             }
-            const CodestreamIndex &codestream = linked_image.streams.back().codestream;
+            const CodestreamIndex &codestream =
+                    linked_image.codestreams.back().stream.codestream;
             const FileSegment &last_packet_data = codestream.packets.back();
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
@@ -572,9 +585,9 @@ namespace jpeg2000 {
                 break;
             }
 
-            image_index->hyper_links.emplace_back(std::move(paths[i]),
-                                                  std::move(linked_image.coding_parameters),
-                                                  std::move(linked_image.streams.back().codestream));
+            linked_image.codestreams.back().path = std::move(paths[i]);
+            image_index->codestreams.push_back(
+                    std::move(linked_image.codestreams.back()));
         }
         return res;
     }
