@@ -60,14 +60,14 @@ server adds a trailing slash internally when needed.
 | `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128; the final chunk may be smaller. |
 | `connections.initial_timeout` | `3` | Positive number of seconds allowed for a new socket to provide a recognizable JPIP request. This deadline is not extended by partial input. |
 | `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it; values below `-1` are invalid. |
-| `connections.limit` | `500` | Positive connection limit. It limits physical connections in the listening parent and active channels in the serving child independently. |
+| `connections.limit` | `500` | Positive connection limit. It independently limits physical connections and active channels in the serving process. |
 | `logging.directory` | `SWHV_DIR_LOG` | Directory in which the timestamped server log is created when `logging.file_enabled` is `1`. |
 | `logging.file_enabled` | `1` | Set to `1` to write the server log under `logging.directory`, or `0` to keep logging on the console. The active file rolls at 1 GiB and one `.1` backup is retained. |
 | `logging.requests` | `0` | Set to `1` to include individual request lines in the log, or `0` to suppress them. Other server messages are unaffected. Request logging is normally unnecessary. |
 
 Channel threads submit log records through a bounded nonblocking queue. The
-parent writes queued records only when no connection event or deadline needs
-attention. If logging cannot keep up, records are dropped and the next
+serving event loop writes queued records only when no connection event or
+deadline needs attention. If logging cannot keep up, records are dropped and the next
 successfully queued record reports their number. Logging therefore cannot hold
 up an active JPIP response.
 
@@ -91,8 +91,8 @@ child process IDs and open connection count. Stop the server through the host's
 process supervisor or by signaling the reported parent process.
 
 `connections.initial_timeout` limits how long a new connection has to send a
-valid initial JPIP request. Until the request is recognized, the parent retains
-only the socket. It does not create a serving thread or allocate JPEG 2000
+valid initial JPIP request. Until the request is recognized, the serving process
+retains only the socket. It does not create a channel thread or allocate JPEG 2000
 state. After the initial request, `connections.timeout` limits channel
 inactivity. It closes an idle channel whether an HTTP connection is attached or
 the channel is waiting for a replacement. Values of `0` and `-1` disable this

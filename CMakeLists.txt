@@ -10,6 +10,12 @@ endif()
 include(CTest)
 find_package(Threads REQUIRED)
 
+option(ESAJPIP_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+if(ESAJPIP_SANITIZE AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    message(FATAL_ERROR "ESAJPIP_SANITIZE requires Clang or GCC")
+endif()
+
 function(esajpip_configure_target target)
     set_target_properties(${target} PROPERTIES
         CXX_EXTENSIONS OFF
@@ -20,11 +26,14 @@ function(esajpip_configure_target target)
         -Wextra
         -Wno-unused-parameter
         "$<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>")
+    if(ESAJPIP_SANITIZE)
+        target_compile_options(${target} PRIVATE
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer)
+        target_link_options(${target} PRIVATE
+            -fsanitize=address,undefined)
+    endif()
 endfunction()
-
-#-fsanitize=address,undefined
-#-fsanitize=memory -fsanitize-memory-track-origins"
-#-fsanitize=thread
 
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -46,10 +55,10 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpip/request.cc
     ${ESAJPIP_TOP}/net/socket.cc
     ${ESAJPIP_TOP}/server/channel.cc
-    ${ESAJPIP_TOP}/server/child.cc
     ${ESAJPIP_TOP}/server/connection_queue.cc
     ${ESAJPIP_TOP}/server/initial_request.cc
-    ${ESAJPIP_TOP}/server/parent.cc
+    ${ESAJPIP_TOP}/server/server.cc
+    ${ESAJPIP_TOP}/server/supervisor.cc
     ${ESAJPIP_TOP}/trace.cc)
 
 add_executable(esajpip ${ESAJPIP_TOP}/esa_jpip_server.cc ${ESAJPIP_SRCS})
@@ -87,6 +96,7 @@ if(BUILD_TESTING)
     esajpip_configure_target(logging_test)
     target_compile_definitions(logging_test PRIVATE ESAJPIP_LOG_LIMIT=1024)
     target_include_directories(logging_test PRIVATE ${ESAJPIP_TOP})
+    target_link_libraries(logging_test PRIVATE Threads::Threads)
     add_test(NAME logging COMMAND logging_test)
 
     add_executable(protocol_test

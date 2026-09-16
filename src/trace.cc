@@ -173,17 +173,6 @@ int ReadDescriptor() {
     return read_fd;
 }
 
-void CloseParentDescriptors() {
-    if (read_fd >= 0) {
-        close(read_fd);
-        read_fd = -1;
-    }
-    if (file_output && output_fd >= 0) {
-        close(output_fd);
-        output_fd = -1;
-    }
-}
-
 void Write(const string &message) {
     unsigned long count = dropped.exchange(0);
     if (count != 0) {

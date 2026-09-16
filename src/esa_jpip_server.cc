@@ -7,7 +7,7 @@
 #include "app_config.h"
 #include "app_info.h"
 #include "net/socket.h"
-#include "server/parent.h"
+#include "server/supervisor.h"
 
 using namespace std;
 
@@ -40,23 +40,16 @@ int main(int argc, char **argv) {
     cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
     cout << endl << '-' << cfg << endl;
 
-    string log_name = cfg.file_logging() ? cfg.log_directory() + SERVER_APP_NAME : "";
-    if (!trace::Initialize(log_name))
-        return CERR("The logging system can not be initialized");
-
     net::Socket listen_socket;
     net::InetAddress listen_addr = cfg.address().empty()
                                        ? net::InetAddress(cfg.port())
                                        : net::InetAddress(cfg.address().c_str(), cfg.port());
-    int result = -1;
-    if (!listen_socket.OpenInet()) {
-        ERROR("The server listen socket can not be created: " << strerror(errno));
-    } else if (!listen_socket.ListenAt(listen_addr)) {
-        ERROR("The server listen socket can not be initialized: " << strerror(errno));
-    } else {
-        LOG(SERVER_NAME << " " << SERVER_VERSION << " started");
-        result = RunParent(cfg, app_info, listen_socket);
-    }
-    trace::Drain();
-    return result;
+    if (!listen_socket.OpenInet())
+        return CERR("The server listen socket can not be created: " << strerror(errno));
+    if (!listen_socket.ListenAt(listen_addr))
+        return CERR("The server listen socket can not be initialized: " << strerror(errno));
+
+    string log_name = cfg.file_logging() ? cfg.log_directory() + SERVER_APP_NAME : "";
+    string description = string(SERVER_NAME) + " " + SERVER_VERSION;
+    return RunSupervisor(cfg, app_info, listen_socket, log_name, description);
 }

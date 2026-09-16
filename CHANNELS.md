@@ -15,35 +15,29 @@ The responsibilities are separated as follows:
 
 | Source | Responsibility |
 | --- | --- |
-| `esa_jpip_server.cc` | Configuration, status, logging, and listening-socket setup |
-| `server/parent.cc` | Connection admission, descriptor transfer, and child recovery |
+| `esa_jpip_server.cc` | Configuration, status, and listening-socket setup |
+| `server/supervisor.cc` | Serving-process lifetime and restart |
+| `server/server.cc` | Connection admission, channel routing, and log output |
 | `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |
-| `server/child.cc` | Child lifetime, channel lookup, and channel-thread creation |
 | `server/connection_queue.cc` | Capacity-one queue shared with one channel thread |
 | `server/channel.cc` | HTTP request handling and all state retained for one JPIP channel |
 
 ## Ownership
 
-The listening parent owns its copy of every accepted socket and a small
-`Connection` record containing its stable identifier, initial state, and
-initial deadline. Passing the descriptor to the serving child with
-`SCM_RIGHTS` creates another descriptor for the same socket. The child-side
-descriptor is then owned by the child process, a `ConnectionQueue`, or the
-channel thread. Every transfer leaves exactly one owner.
-
-The parent and child communicate through a fresh unnamed Unix datagram socket
-pair for each child generation. The parent passes client descriptors in one
-direction, and the child returns completed connection identifiers in the other.
-Only the inherited endpoints can use this control channel; it has no filesystem
-path that another local process can open or impersonate.
+The supervisor owns the listening socket but never accepts from it. The serving
+process accepts each connection and owns a small `Connection` record containing
+its stable identifier and, until identification, its descriptor and absolute
+deadline. Once identified, the descriptor passes directly to a
+`ConnectionQueue` in the same process. The serving loop retains only the stable
+identifier until the channel thread reports that the connection has closed.
 
 One channel thread exclusively owns its `FileManager`, `ImageIndex`, linked JPX
 graph, `DataBinServer`, cache model, traversal state, and response buffer.
-None of this JPEG 2000 state is shared with another channel thread. The child
-process and channel thread share only the queue: one connection identifier, one
-descriptor, two wake-up sockets, and their small synchronization state.
-Channel threads report their completion to the child loop through a second
-unnamed datagram socket pair shared within the child process.
+None of this JPEG 2000 state is shared with another channel thread. The serving
+loop and channel thread share only the queue: one connection identifier, one
+descriptor, two wake-up sockets, and their small synchronization state. Channel
+threads report connection and channel completion to the serving loop through
+an unnamed datagram socket pair within the serving process.
 
 ## Initial request
 
@@ -51,7 +45,7 @@ unnamed datagram socket pair shared within the child process.
 TCP accept
     |
     v
-parent: pending Connection + absolute identification deadline
+serving process: pending Connection + absolute identification deadline
     |
     +-- no complete request before deadline ----------> close
     +-- unsupported or unrelated traffic -------------> close
@@ -60,7 +54,7 @@ parent: pending Connection + absolute identification deadline
 bounded cnew/cid/cclose recognition
     |
     v
-SCM_RIGHTS descriptor transfer to serving child
+direct transfer to the selected channel queue
 ```
 
 Initial request inspection peeks at no more than 2 KiB and does not consume the
@@ -69,18 +63,14 @@ or `cclose`. The fixed `connections.initial_timeout` deadline is not extended
 by a client sending request bytes slowly. Rejected and expired connections
 never create a channel thread or allocate JPEG 2000 state.
 
-After receiving the descriptor, the child repeats the same bounded recognition.
-It derives the routing fields from its socket instead of receiving parsed
-request state from the parent.
-
 ## Channel creation and reuse
 
-For `cnew`, the child creates a channel ID and a capacity-one connection queue,
+For `cnew`, the serving loop creates a channel ID and a capacity-one connection queue,
 queues the first connection, and then starts one detached channel thread. The
 response selects `transport=http`, returns the channel ID, and serves the first
 JPIP request on the same connection.
 
-For `cid` or `cclose`, the child looks up the existing channel and places the
+For `cid` or `cclose`, the serving loop looks up the existing channel and places the
 new connection in its queue. An unknown channel is closed immediately. If
 a connection is already waiting, a second concurrent replacement is also
 closed. The supported profile therefore allows one active response and at most
@@ -88,8 +78,8 @@ one waiting connection per channel.
 
 The channel thread processes requests serially. Buffered requests on its
 current persistent connection take precedence. Otherwise, a queued replacement
-connection wakes the thread. The thread closes its current child-side
-descriptor and adopts the replacement. This supports both JHelioviewer's
+connection wakes the thread. The thread closes its current descriptor and
+adopts the replacement. This supports both JHelioviewer's
 persistent socket and clients whose HTTP implementation opens a new socket for
 a later request.
 
@@ -121,26 +111,24 @@ safely preserve the channel because its cache model may already record bytes
 that the client did not receive completely.
 
 On termination, the channel thread closes its current descriptor and any queued
-descriptor, notifies the parent for each physical connection, closes the queue,
-and notifies the child process to remove the channel entry. The parent then
-closes its corresponding descriptor copy and removes the `Connection` record.
-If the parent observed the socket close first, the later notification is a
-harmless no-op keyed by the stable connection identifier.
+descriptor, reports each physical connection as complete, closes the queue, and
+reports that the channel has ended. The serving loop removes the corresponding
+records by their stable identifiers.
 
-If the serving child restarts, its per-channel state cannot be recovered. The
-new child closes inherited descriptor copies and shuts down identified connections
-so clients can establish new channels. The parent's initial deadline continues
-to govern pending, unidentified connections. The replacement child receives a
-new control socket pair, so messages from the previous child cannot carry over.
+If the serving process restarts, accepted sockets and all per-channel state are
+lost. The supervisor retains the listening socket, so new connections remain in
+the listen backlog while it creates the replacement process. Clients establish
+new channels after the restart.
 
-The child process also polls a parent-lifetime pipe. The parent owns its only
-write end, so parent termination closes the pipe and makes the child exit on
-every supported platform. Each replacement child receives a fresh pipe.
+The serving process polls a supervisor-lifetime pipe. The supervisor owns its
+only write end, so supervisor termination closes the pipe and makes the serving
+process exit on every supported platform. Each replacement process receives a
+fresh pipe.
 
 ## Deliberate limits
 
-- `connections.limit` limits physical connections in the parent and active
-  channels in the child. These are separate counts.
+- `connections.limit` independently limits physical connections and active
+  channels in the serving process.
 - A channel has one active request/response and at most one queued replacement
   connection.
 - A connection cannot carry simultaneous work for multiple channels in this

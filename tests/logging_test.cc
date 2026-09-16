@@ -1,13 +1,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
-
 #include <cstdlib>
 #include <dirent.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 
 #include "trace.h"
@@ -32,19 +31,15 @@ int main() {
     string base = string(directory) + "/server";
     Check(trace::Initialize(base), "Could not initialize logging");
 
-    LOG("first parent message");
-    LOG("second parent message");
+    LOG("first message");
+    LOG("second message");
     trace::Drain();
 
-    pid_t child = fork();
-    Check(child >= 0, "Could not create logging test child");
-    if (child == 0) {
-        trace::CloseParentDescriptors();
-        LOG("child message");
-        _exit(0);
-    }
-    Check(waitpid(child, NULL, 0) == child, "Could not wait for logging test child");
-    Check(trace::DrainOne(), "Could not write child log message");
+    thread worker([] {
+        LOG("worker message");
+    });
+    worker.join();
+    Check(trace::DrainOne(), "Could not write worker log message");
 
     LOG(string(1100, 'x'));
     Check(trace::DrainOne(), "Could not rotate log");
@@ -68,12 +63,12 @@ int main() {
 
     string old_messages = ReadFile(backup);
     string new_messages = ReadFile(active);
-    Check(old_messages.find("first parent message") != string::npos,
-          "First parent message missing from rolled log");
-    Check(old_messages.find("second parent message") != string::npos,
-          "Second parent message missing from rolled log");
-    Check(old_messages.find("child message") != string::npos,
-          "Child message missing from rolled log");
+    Check(old_messages.find("first message") != string::npos,
+          "First message missing from rolled log");
+    Check(old_messages.find("second message") != string::npos,
+          "Second message missing from rolled log");
+    Check(old_messages.find("worker message") != string::npos,
+          "Worker message missing from rolled log");
     Check(new_messages.find("message after rollover") != string::npos,
           "Message missing after rollover");
 

@@ -9,7 +9,6 @@ namespace trace {
 
 bool Initialize(const std::string &file_name);
 int ReadDescriptor();
-void CloseParentDescriptors();
 bool DrainOne();
 void Drain();
 void Write(const std::string &message);

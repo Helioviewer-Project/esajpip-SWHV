@@ -24,6 +24,10 @@
   1 GiB active log with one backup.
 - Support PCRL and CPRL packet ordering for the verified origin-zero,
   single-tile geometry with unit component sampling.
+- Reduce the parent process to supervising and restarting the serving process.
+  Connection admission and channel routing now occur in one event loop, removing
+  cross-process descriptor passing and duplicate client descriptors while
+  retaining bounded pre-identification and channel-owned JPEG 2000 state.
 
 ### Fixed
 
@@ -40,8 +44,6 @@
   whenever its parent exits.
 - Close mappings and connections on parser and thread failures, and correct
   address-resolution and platform-specific alignment errors.
-- Replace predictable filesystem control sockets with inherited socket pairs,
-  preventing unrelated local processes from injecting completion messages.
 
 ## 1.9.0-rc1 - 2026-09-14
 

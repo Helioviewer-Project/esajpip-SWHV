@@ -111,22 +111,6 @@ namespace net {
         ssize_t Send(const void *buf, size_t len);
 
         /**
-         * Sends a descriptor through the socket.
-         * @param fd File descriptor.
-         * @param connection_id Connection identifier to send with the descriptor.
-         * @return true if successful.
-         */
-        bool SendDescriptor(int fd, uint64_t connection_id);
-
-        /**
-         * Receives a descriptor from a socket.
-         * @param fd Variable to store the received descriptor.
-         * @param connection_id Variable to store the attached connection identifier.
-         * @return <code>true</code> if successful.
-         */
-        bool ReceiveDescriptor(int *fd, uint64_t *connection_id);
-
-        /**
           Closes the socket.
         */
         void Close() {

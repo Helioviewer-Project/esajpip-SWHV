@@ -156,7 +156,7 @@ The profile above was checked in both directions against the current source:
 | Source area | Externally visible behavior covered here |
 | --- | --- |
 | `server/initial_request.cc` | Accepted method and HTTP versions, plus bounded `cnew`, `cid`, and `cclose` inspection |
-| `server/child.cc` and `server/connection_queue.cc` | Channel selection and serialized replacement connections |
+| `server/server.cc` and `server/connection_queue.cc` | Channel selection and serialized replacement connections |
 | `server/channel.cc` | Channel lifecycle, request serialization, response headers, chunking, gzip, errors, and timeouts |
 | `jpip/request.cc` | Recognized fields, reduced grammars, ignored fields, and cache-model descriptors |
 | `jpip/databin_server.cc` and `jpip/databin_writer.cc` | Cache updates, response length, emitted data-bin classes, message headers, and EOR reasons |
