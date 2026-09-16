@@ -489,10 +489,12 @@ private:
         return queue->Pop(connection);
     }
 
-    void CloseConnection(Socket &socket, uint64_t connection_id) {
+    void CloseConnection(Socket &socket) {
+        LOG("Closing connection [" << static_cast<int>(socket)
+                                   << "] (client finished)");
         shutdown(socket, SHUT_RDWR);
         socket.Close();
-        connection_closed(connection_id);
+        connection_closed();
     }
 
 public:
@@ -519,7 +521,7 @@ public:
             while (WaitForConnection(&connection)) {
                 Socket socket(connection.fd);
                 ServeResult result = Configure(socket) ? Serve(socket) : FAIL_CHANNEL;
-                CloseConnection(socket, connection.id);
+                CloseConnection(socket);
                 if (result != KEEP_CHANNEL)
                     break;
             }
@@ -528,7 +530,7 @@ public:
         ChannelConnection pending;
         if (queue->Close(pending)) {
             Socket socket(pending.fd);
-            CloseConnection(socket, pending.id);
+            CloseConnection(socket);
         }
     }
 };

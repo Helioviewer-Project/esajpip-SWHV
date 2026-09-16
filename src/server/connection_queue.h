@@ -1,11 +1,9 @@
 #ifndef _CONNECTION_QUEUE_H_
 #define _CONNECTION_QUEUE_H_
 
-#include <cstdint>
 #include <mutex>
 
 struct ChannelConnection {
-    uint64_t id;
     int fd;
 };
 

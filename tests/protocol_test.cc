@@ -196,20 +196,20 @@ static void CheckInitialRequest() {
 static void CheckConnectionQueue() {
     ConnectionQueue queue;
     Check(queue.IsValid(), "Could not create a connection queue");
-    Check(queue.Push({3, 7}), "Could not queue a channel connection");
-    Check(!queue.Push({4, 8}), "Queued concurrent channel connections");
+    Check(queue.Push({7}), "Could not queue a channel connection");
+    Check(!queue.Push({8}), "Queued concurrent channel connections");
     ChannelConnection connection;
     Check(queue.Pop(&connection), "Could not retrieve a channel connection");
-    Check(connection.id == 3 && connection.fd == 7, "Retrieved the wrong channel connection");
+    Check(connection.fd == 7, "Retrieved the wrong channel connection");
     Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
 
-    Check(queue.Push({5, 9}), "Could not queue a channel connection before closing");
+    Check(queue.Push({9}), "Could not queue a channel connection before closing");
     ChannelConnection pending;
     Check(queue.Close(pending), "Connection queue lost its pending connection on close");
     Check(queue.IsClosed(), "Connection queue remained open");
-    Check(pending.id == 5 && pending.fd == 9,
+    Check(pending.fd == 9,
           "Connection queue did not return its pending connection");
-    Check(!queue.Push({6, 10}), "Connection queue accepted a connection after closing");
+    Check(!queue.Push({10}), "Connection queue accepted a connection after closing");
 }
 
 static void CheckJHVRequests() {

@@ -35,10 +35,9 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-struct Connection {
+struct PendingConnection {
     uint64_t id;
     int fd;
-    bool pending;
     Clock::time_point deadline;
 };
 
@@ -73,8 +72,8 @@ void Notify(CompletionType type, uint64_t id) {
         ERROR("Completion " << id << " could not notify the serving loop");
 }
 
-void NotifyConnection(uint64_t id) {
-    Notify(CONNECTION_COMPLETED, id);
+void NotifyConnection() {
+    Notify(CONNECTION_COMPLETED, 0);
 }
 
 void *ChannelThread(void *argument) {
@@ -105,43 +104,32 @@ bool StartChannel(const pthread_attr_t *attributes, const AppConfig &cfg,
     return false;
 }
 
-vector<Connection>::iterator FindConnection(vector<Connection> &connections,
-                                            uint64_t id) {
-    return find_if(connections.begin(), connections.end(),
-                   [id](const Connection &connection) {
-                       return connection.id == id;
+vector<PendingConnection>::iterator FindConnectionByDescriptor(
+        vector<PendingConnection> &pending_connections, int fd) {
+    return find_if(pending_connections.begin(), pending_connections.end(),
+                   [fd](const PendingConnection &connection) {
+                       return connection.fd == fd;
                    });
 }
 
-vector<Connection>::iterator FindConnectionByDescriptor(
-        vector<Connection> &connections, int fd) {
-    return find_if(connections.begin(), connections.end(),
-                   [fd](const Connection &connection) {
-                       return connection.pending && connection.fd == fd;
-                   });
-}
-
-void RemoveConnection(PollTable &poll_table, vector<Connection> &connections,
-                      AppInfo &app_info, uint64_t id, const char *reason) {
-    vector<Connection>::iterator connection = FindConnection(connections, id);
-    if (connection == connections.end())
-        return;
-
+void ClosePendingConnection(PollTable &poll_table,
+                            vector<PendingConnection> &pending_connections,
+                            vector<PendingConnection>::iterator connection,
+                            AppInfo &app_info,
+                            const char *reason) {
     LOG("Closing connection [" << connection->fd << "] (" << reason << ")");
-    if (connection->pending) {
-        shutdown(connection->fd, SHUT_RDWR);
-        close(connection->fd);
-        poll_table.Remove(connection->fd);
-    }
-    connections.erase(connection);
-    app_info->num_connections = static_cast<int>(connections.size());
+    shutdown(connection->fd, SHUT_RDWR);
+    close(connection->fd);
+    poll_table.Remove(connection->fd);
+    pending_connections.erase(connection);
+    app_info->num_connections--;
 }
 
-int GetPollTimeout(const vector<Connection> &connections) {
+int GetPollTimeout(const vector<PendingConnection> &pending_connections) {
     Clock::time_point deadline;
     bool found = false;
-    for (const Connection &connection : connections) {
-        if (connection.pending && (!found || connection.deadline < deadline)) {
+    for (const PendingConnection &connection : pending_connections) {
+        if (!found || connection.deadline < deadline) {
             deadline = connection.deadline;
             found = true;
         }
@@ -161,14 +149,14 @@ int GetPollTimeout(const vector<Connection> &connections) {
 }
 
 void ExpirePendingConnections(PollTable &poll_table,
-                              vector<Connection> &connections,
+                              vector<PendingConnection> &pending_connections,
                               AppInfo &app_info) {
     Clock::time_point now = Clock::now();
-    for (size_t i = 0; i < connections.size();) {
-        if (connections[i].pending && connections[i].deadline <= now) {
-            uint64_t id = connections[i].id;
-            RemoveConnection(poll_table, connections, app_info, id,
-                             "identification time-out");
+    for (size_t i = 0; i < pending_connections.size();) {
+        if (pending_connections[i].deadline <= now) {
+            ClosePendingConnection(poll_table, pending_connections,
+                                   pending_connections.begin() + i, app_info,
+                                   "identification time-out");
         } else {
             ++i;
         }
@@ -176,7 +164,8 @@ void ExpirePendingConnections(PollTable &poll_table,
 }
 
 bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
-                        vector<ChannelInfo> &channels, const Connection &connection,
+                        vector<ChannelInfo> &channels,
+                        const PendingConnection &connection,
                         const InitialRequest &request) {
     if (request.new_channel) {
         channels.erase(remove_if(channels.begin(), channels.end(),
@@ -192,7 +181,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
         shared_ptr<ConnectionQueue> queue = make_shared<ConnectionQueue>();
         if (!queue->IsValid()) {
             ERROR("The connection queue can not be created");
-        } else if (!queue->Push({connection.id, connection.fd})) {
+        } else if (!queue->Push({connection.fd})) {
             ERROR("The initial channel connection can not be queued");
         } else if (StartChannel(attributes, cfg, connection.id, channel, queue)) {
             channels.push_back({connection.id, channel, queue});
@@ -213,7 +202,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
                                << request.channel);
         return false;
     }
-    if (channel->queue->Push({connection.id, connection.fd}))
+    if (channel->queue->Push({connection.fd}))
         return true;
     if (channel->queue->IsClosed())
         channels.erase(channel);
@@ -267,13 +256,13 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
     poll_table.Add(completion_reader, POLLIN);
     poll_table.Add(trace::ReadDescriptor(), POLLIN);
 
-    vector<Connection> connections;
+    vector<PendingConnection> pending_connections;
     vector<ChannelInfo> channels;
     uint64_t next_connection_id = 0;
     int result = 0;
 
     for (;;) {
-        int ready = poll_table.Poll(GetPollTimeout(connections));
+        int ready = poll_table.Poll(GetPollTimeout(pending_connections));
         if (ready < 0) {
             if (errno == EINTR)
                 continue;
@@ -300,8 +289,7 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 Socket socket = listen_socket.Accept(&from_address);
                 if (socket == -1) {
                     ERROR("Error accepting a new connection: " << strerror(errno));
-                } else if (connections.size() >=
-                           static_cast<size_t>(cfg.max_connections())) {
+                } else if (app_info->num_connections >= cfg.max_connections()) {
                     LOG("Connection refused because the limit has been reached");
                     socket.Close();
                 } else {
@@ -311,11 +299,11 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                                                 << from_address.GetPort() << " ["
                                                 << fd << ":" << id << "]");
                     poll_table.Add(fd, POLLIN | POLLRDHUP | POLLERR | POLLHUP | POLLNVAL);
-                    connections.push_back({id, fd, true,
-                                           Clock::now() +
-                                                   std::chrono::seconds(
-                                                           cfg.initial_timeout())});
-                    app_info->num_connections = static_cast<int>(connections.size());
+                    pending_connections.push_back({id, fd,
+                                                   Clock::now() +
+                                                           std::chrono::seconds(
+                                                                   cfg.initial_timeout())});
+                    app_info->num_connections++;
                 }
             }
 
@@ -324,8 +312,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 if (completion_reader.Receive(&completion, sizeof completion) ==
                     sizeof completion) {
                     if (completion.type == CONNECTION_COMPLETED) {
-                        RemoveConnection(poll_table, connections, app_info,
-                                         completion.id, "client finished");
+                        if (app_info->num_connections > 0)
+                            app_info->num_connections--;
                     } else if (completion.type == CHANNEL_COMPLETED) {
                         vector<ChannelInfo>::iterator channel =
                                 find_if(channels.begin(), channels.end(),
@@ -350,9 +338,9 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 }
 
                 int fd = poll_table[i].fd;
-                vector<Connection>::iterator connection =
-                        FindConnectionByDescriptor(connections, fd);
-                if (connection == connections.end()) {
+                vector<PendingConnection>::iterator connection =
+                        FindConnectionByDescriptor(pending_connections, fd);
+                if (connection == pending_connections.end()) {
                     close(fd);
                     poll_table.RemoveAt(i);
                     continue;
@@ -362,33 +350,37 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
                 if (events & POLLIN) {
                     InitialRequest request = InspectInitialRequest(fd);
                     if (request.state == REQUEST_REJECTED) {
-                        RemoveConnection(poll_table, connections, app_info, id,
-                                         "not a JPIP client");
+                        ClosePendingConnection(poll_table, pending_connections,
+                                               connection, app_info,
+                                               "not a JPIP client");
                         continue;
                     }
                     if (request.state == REQUEST_ACCEPTED) {
                         if (!DispatchConnection(cfg, &attributes, channels,
                                                 *connection, request)) {
-                            RemoveConnection(poll_table, connections, app_info,
-                                             id, "dispatch failed");
+                            ClosePendingConnection(poll_table,
+                                                   pending_connections,
+                                                   connection, app_info,
+                                                   "dispatch failed");
                             continue;
                         }
                         poll_table.Remove(fd);
-                        connection->pending = false;
+                        pending_connections.erase(connection);
                         LOG("JPIP connection identified [" << fd << ":" << id << "]");
                         continue;
                     }
                 }
                 if (events & (POLLRDHUP | POLLERR | POLLHUP | POLLNVAL)) {
-                    RemoveConnection(poll_table, connections, app_info, id,
-                                     "socket closed");
+                    ClosePendingConnection(poll_table, pending_connections,
+                                           connection, app_info,
+                                           "socket closed");
                     continue;
                 }
                 ++i;
             }
         }
 
-        ExpirePendingConnections(poll_table, connections, app_info);
+        ExpirePendingConnections(poll_table, pending_connections, app_info);
         if (log_ready && !connection_ready)
             trace::DrainOne();
     }
