@@ -86,9 +86,12 @@ profile is therefore narrower than the JP2 and JPX file formats themselves.
 
 - The file name must end in `.jp2`.
 - Exactly one embedded codestream is supported.
-- The codestream must contain one tile and at least one valid `PLT` marker.
+- The codestream must contain one tile, use zero image and tile origins, and
+  contain at least one valid `PLT` marker.
 - All five Part 1 progression orders are indexed. PCRL and CPRL additionally
-  require origin-zero, single-tile geometry and unit component sampling.
+  require unit component sampling.
+- Explicit precinct dimensions and the Part 1 default of 32,768 by 32,768
+  samples are supported.
 - The main `SIZ`, `COD`, and `QCD` information must describe the packet layout.
   Marker features that change that layout without being represented there,
   such as progression changes through `POC`, are outside the supported profile.

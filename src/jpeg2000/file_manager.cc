@@ -191,6 +191,7 @@ namespace jpeg2000 {
         uint16_t num_components = 0;
         if (!file->ReadReverse(&num_components) || num_components == 0 || num_components > 16384 ||
             lsiz != 38 + 3 * num_components || image[0] <= image[2] || image[1] <= image[3] ||
+            image[2] != 0 || image[3] != 0 ||
             image[0] - image[2] > INT_MAX || image[1] - image[3] > INT_MAX ||
             tiling[0] == 0 || tiling[1] == 0)
             return false;
@@ -200,9 +201,7 @@ namespace jpeg2000 {
 
         params->size = Size(image[0] - image[2], image[1] - image[3]);
         params->num_components = num_components;
-        params->position_order_supported =
-                image[2] == 0 && image[3] == 0 && tiling[2] == 0 && tiling[3] == 0 &&
-                tiling[0] >= image[0] && tiling[1] >= image[1];
+        params->position_order_supported = true;
         for (uint16_t i = 0; i < num_components; ++i) {
             uint8_t precision = 0;
             uint8_t xrsiz = 0;
@@ -257,8 +256,7 @@ namespace jpeg2000 {
                 width = 1 << (size_precinct & 0x0F);
                 params->resolutions.emplace_back(width, height);
             } else {
-                height = (int) ceil((double) params->size.y / (1L << i));
-                width = (int) ceil((double) params->size.x / (1L << i));
+                height = width = 1 << 15;
                 params->resolutions.insert(params->resolutions.begin(),
                                            CodingParameters::Resolution(width, height));
             }

@@ -44,6 +44,8 @@
   linked-JPX external references before indexing or copying them.
 - Reject files beyond the packet index's 32-bit address range and codestreams
   with more than 64 packet segments during parsing instead of aborting later.
+- Use the JPEG 2000 default 32,768-pixel precinct dimensions and reject nonzero
+  image origins that the packet index cannot represent correctly.
 - Reject invalid JPIP cache lengths, response limits, and codestream selectors.
   Use codestream zero when a window request omits its selector.
 - Treat an omitted response-length limit as unlimited, so the server sends the

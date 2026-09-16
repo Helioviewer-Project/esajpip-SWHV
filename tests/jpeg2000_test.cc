@@ -31,6 +31,13 @@ static void Append32(vector<unsigned char> &data, uint32_t value) {
     data.push_back(value);
 }
 
+static void Set32(vector<unsigned char> &data, size_t offset, uint32_t value) {
+    data[offset] = value >> 24;
+    data[offset + 1] = value >> 16;
+    data[offset + 2] = value >> 8;
+    data[offset + 3] = value;
+}
+
 static void Append64(vector<unsigned char> &data, uint64_t value) {
     Append32(data, value >> 32);
     Append32(data, value);
@@ -47,7 +54,8 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
                                             uint32_t image_width = 1, uint32_t tile_width = 1,
                                             uint16_t tile_index = 0,
                                             uint16_t quality_layers = 1,
-                                            uint8_t tile_parts = 1) {
+                                            uint8_t tile_parts = 1,
+                                            uint8_t packets_per_tile_part = 1) {
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
@@ -87,16 +95,18 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
         Append16(codestream, 0xFF90); // SOT
         Append16(codestream, 10);
         Append16(codestream, tile_index);
-        Append32(codestream, 21);     // tile-part length
+        Append32(codestream, 19 + 2 * packets_per_tile_part);
         codestream.push_back(tile_part);
         codestream.push_back(tile_parts);
 
         Append16(codestream, 0xFF58); // PLT
-        Append16(codestream, 4);
+        Append16(codestream, 3 + packets_per_tile_part);
         codestream.push_back(0);      // Zplt
-        codestream.push_back(1);      // one-byte packet
+        for (int packet = 0; packet < packets_per_tile_part; ++packet)
+            codestream.push_back(1);  // one-byte packet
         Append16(codestream, 0xFF93); // SOD
-        codestream.push_back(0);      // packet data
+        for (int packet = 0; packet < packets_per_tile_part; ++packet)
+            codestream.push_back(0);  // packet data
     }
     Append16(codestream, 0xFFD9); // EOC
     return codestream;
@@ -174,6 +184,11 @@ int main() {
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 64, 64)));
     WriteFile(directory + "65-tile-parts.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 65, 65)));
+    WriteFile(directory + "default-precincts.jp2",
+              MakeJP2(MakeCodestream(0, 1, 65537, 65537, 0, 1, 1, 3)));
+    vector<unsigned char> nonzero_origin = MakeCodestream(0, 1, 2, 2);
+    Set32(nonzero_origin, 16, 1); // XOsiz
+    WriteFile(directory + "nonzero-origin.jp2", MakeJP2(nonzero_origin));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
@@ -234,6 +249,20 @@ int main() {
     jpeg2000::FileManager large_file_manager;
     Check(!OpenImage(directory, "large.jp2", &large_file_manager),
           "Accepted a file larger than the packet index can address");
+
+    jpeg2000::FileManager default_precinct_manager;
+    Check(OpenImage(directory, "default-precincts.jp2", &default_precinct_manager),
+          "Rejected a valid default precinct partition");
+    data::File *default_precinct_file =
+            default_precinct_manager.GetFile(directory + "default-precincts.jp2");
+    Check(default_precinct_file != NULL &&
+              default_precinct_manager.GetImage()->GetPacket(
+                      default_precinct_file, 0,
+                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point(2, 0)), &packet),
+          "Did not apply the default precinct size");
+    jpeg2000::FileManager nonzero_origin_manager;
+    Check(!OpenImage(directory, "nonzero-origin.jp2", &nonzero_origin_manager),
+          "Accepted an unsupported nonzero image origin");
 
     jpeg2000::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),
@@ -355,6 +384,8 @@ int main() {
     remove((directory + "64-tile-parts.jp2").c_str());
     remove((directory + "65-tile-parts.jp2").c_str());
     remove(large_file.c_str());
+    remove((directory + "default-precincts.jp2").c_str());
+    remove((directory + "nonzero-origin.jp2").c_str());
     manager.ClearFiles();
     Check(request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");
