@@ -40,6 +40,9 @@
 
 ### Fixed
 
+- Reject parent-directory segments in client-selected URI paths and `target`
+  values while retaining trusted linked-JPX references outside the image
+  directory.
 - Report the actual JP2 filename when a linked source prevents a JPX from being
   parsed, making corrupted movie frames identifiable from the server log.
 - Reject unsupported multi-tile and PCRL/CPRL geometries instead of indexing

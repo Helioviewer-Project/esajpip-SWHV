@@ -12,9 +12,29 @@ namespace jpeg2000 {
     using data::File;
     using data::FileSegment;
 
+    static bool HasParentSegment(const string &path) {
+        size_t begin = 0;
+        while (begin <= path.size()) {
+            size_t end = path.find('/', begin);
+            if (end == string::npos)
+                end = path.size();
+            if (end - begin == 2 && path[begin] == '.' && path[begin + 1] == '.')
+                return true;
+            if (end == path.size())
+                break;
+            begin = end + 1;
+        }
+        return false;
+    }
+
     bool FileManager::OpenImage(string &path_image_file) {
         if (path_image_file.empty()) {
             ERROR("The image file name is empty");
+            return false;
+        }
+        if (path_image_file.find('\0') != string::npos ||
+            HasParentSegment(path_image_file)) {
+            ERROR("Invalid image file path: '" << path_image_file << "'");
             return false;
         }
         if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);

@@ -200,6 +200,10 @@ int main() {
                               MakeCodestream(0, 1, 2, 2, 0, 2, 1, 2)));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
+    string outside_file = string(directory_name) + ".jp2";
+    WriteFile(outside_file, jp2);
+    WriteFile(directory + "outside-linked.jpx",
+              MakeLinkedJPX(outside_file, codestream.size()));
 
     jpeg2000::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
@@ -334,6 +338,28 @@ int main() {
           "Could not parse valid linked JPX");
     Check(linked_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong linked JPX codestream count");
+
+    jpeg2000::FileManager outside_linked_manager;
+    Check(OpenImage(directory, "outside-linked.jpx", &outside_linked_manager),
+          "Rejected a trusted JPX link outside the image directory");
+
+    string outside_name = outside_file.substr(outside_file.find_last_of('/') + 1);
+    jpeg2000::FileManager traversal_manager;
+    Check(traversal_manager.Init(directory), "Could not initialize traversal test manager");
+    string target_traversal = "../" + outside_name;
+    Check(!traversal_manager.OpenImage(target_traversal),
+          "Accepted parent traversal in a target path");
+    string uri_traversal = "/../" + outside_name;
+    Check(!traversal_manager.OpenImage(uri_traversal),
+          "Accepted parent traversal in a URI path");
+    string embedded_traversal = "unused/../image.jp2";
+    Check(!traversal_manager.OpenImage(embedded_traversal),
+          "Accepted an embedded parent path segment");
+    string nul_path = "image.jp2";
+    nul_path.push_back('\0');
+    nul_path += ".jp2";
+    Check(!traversal_manager.OpenImage(nul_path),
+          "Accepted a file path containing NUL");
 
     vector<unsigned char> malformed_plt = jp2;
     size_t plt = 8 + codestream.size() - 11;
@@ -531,6 +557,8 @@ int main() {
     remove((directory + "embedded.jpx").c_str());
     remove((directory + "embedded-two.jpx").c_str());
     remove((directory + "linked.jpx").c_str());
+    remove((directory + "outside-linked.jpx").c_str());
+    remove(outside_file.c_str());
     remove((directory + "bad-plt.jp2").c_str());
     remove((directory + "truncated.jp2").c_str());
     remove((directory + "truncated-linked.jpx").c_str());

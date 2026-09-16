@@ -71,10 +71,11 @@ process, while replacing a path can make an existing index refer to different
 content. Publish completed sources under new names and expose the referring JPX
 only after all of its sources are ready.
 
-The image directory is a base path, not a security sandbox. Requested paths
-containing `..` and linked `file://` references can reach readable files outside
-it. Run the server under an account whose read permissions are limited to the
-intended image data.
+Client-supplied URI paths and `target` values are rejected if any path segment
+is `..`. They are not percent-decoded. Linked `file://` references are trusted
+server-side data and may point outside the image directory. The server also
+follows filesystem symbolic links. Run it under an account whose read
+permissions are limited to the intended image data.
 
 See [JPIP support profile](JPIP_PROFILE.md) for the complete accepted JP2 and
 JPX structure, request fields, response behavior, and deliberate limitations.

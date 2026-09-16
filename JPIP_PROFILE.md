@@ -30,7 +30,8 @@ subject to general URI decoding, so clients should use the literal file names
 known to the server. Percent escapes are decoded only within the supported
 `model` and `context` grammars. Initial routing and full request parsing use the
 same query-field splitter and URI limit. If a non-conforming request repeats a
-routing field, both stages use its last value.
+routing field, both stages use its last value. Client-supplied URI paths and
+`target` values containing a path segment equal to `..` are rejected.
 
 The detailed connection ownership, timeout and cleanup rules are documented in
 [Connections and JPIP channels](CHANNELS.md).
@@ -39,7 +40,7 @@ The detailed connection ownership, timeout and cleanup rules are documented in
 
 | Field | Support | Current interpretation |
 | --- | --- | --- |
-| `target` | Supported on `cnew` | Selects the file. If absent, the request URI path selects it. A channel cannot change target after creation. |
+| `target` | Supported on `cnew` | Selects the file. If absent, the request URI path selects it. A channel cannot change target after creation. Parent-directory path segments are rejected. |
 | `cnew` | Reduced | Creates one HTTP channel. The requested transport list and other negotiation details are not interpreted. The response always selects HTTP. |
 | `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. |
 | `cclose` | Supported | Closes the named channel. `cclose=*` is accepted when the request also supplies the channel to route. There is no multi-channel session to close. |
