@@ -31,7 +31,9 @@ known to the server. Percent escapes are decoded only within the supported
 `model` and `context` grammars. Initial routing and full request parsing use the
 same query-field splitter and URI limit. If a non-conforming request repeats a
 routing field, both stages use its last value. Client-supplied URI paths and
-`target` values containing a path segment equal to `..` are rejected.
+`target` values containing a path segment equal to `..` are rejected. An
+established channel accepts at most 4 KiB for the complete HTTP request head,
+including the request line and all headers.
 
 The detailed connection ownership, timeout and cleanup rules are documented in
 [Connections and JPIP channels](CHANNELS.md).

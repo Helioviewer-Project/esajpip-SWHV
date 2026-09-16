@@ -31,6 +31,7 @@ using jpeg2000::FileManager;
 using jpip::DataBinServer;
 
 static const char ZERO[] = "0\r\n\r\n";
+static const size_t MAX_REQUEST_HEAD = 4096;
 static const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
@@ -54,17 +55,25 @@ public:
     explicit SocketReader(int _fd) : fd(_fd) {
     }
 
-    Result ReadLine(string &line) {
+    Result ReadLine(string &line, size_t &remaining) {
         line.clear();
         for (;;) {
             const char *newline = static_cast<const char *>(memchr(buf + pos, '\n', len - pos));
+            size_t part_length = newline != NULL
+                    ? newline - (buf + pos)
+                    : len - pos;
+            size_t consumed = part_length + (newline != NULL);
+            if (consumed > remaining) {
+                errno = EMSGSIZE;
+                return ERROR;
+            }
+            line.append(buf + pos, part_length);
+            remaining -= consumed;
             if (newline != NULL) {
-                line.append(buf + pos, newline - (buf + pos));
                 pos = newline - buf + 1;
                 return LINE;
             }
 
-            line.append(buf + pos, len - pos);
             ssize_t received = recv(fd, buf, sizeof buf, 0);
             if (received <= 0) {
                 if (received < 0)
@@ -316,8 +325,9 @@ private:
             if (cfg.log_requests())
                 LOG("Waiting for a request ...");
 
+            size_t request_bytes = MAX_REQUEST_HEAD;
             req_line_raw.clear();
-            SocketReader::Result read_result = reader.ReadLine(req_line_raw);
+            SocketReader::Result read_result = reader.ReadLine(req_line_raw, request_bytes);
             if (read_result != SocketReader::LINE) {
                 if (read_result == SocketReader::CLOSED)
                     return opened ? KEEP_CHANNEL : FAIL_CHANNEL;
@@ -348,7 +358,7 @@ private:
             string header_line;
             bool headers_complete = false;
             for (;;) {
-                SocketReader::Result header_result = reader.ReadLine(header_line);
+                SocketReader::Result header_result = reader.ReadLine(header_line, request_bytes);
                 if (header_result != SocketReader::LINE) {
                     if (header_result == SocketReader::ERROR)
                         LOG("Header read error: " << strerror(errno));

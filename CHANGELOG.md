@@ -79,6 +79,8 @@
   an empty successful response instead of terminating the channel.
 - Accept valid HTTP header whitespace and exact-fit JPIP messages while
   rejecting incomplete headers and overfull messages.
+- Bound established-channel HTTP request heads, preventing a client from growing
+  a channel thread's memory or parsing work without limit.
 - Remove identified sockets from the admission table so a reused descriptor
   cannot close an unrelated client. Expire inactive channels and terminate the
   serving process whenever its supervisor exits.
