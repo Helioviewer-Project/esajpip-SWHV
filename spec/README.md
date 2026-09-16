@@ -30,11 +30,19 @@ Nothing here is part of the server build. The ASN.1 compiler runs offline,
 on a developer machine, only when the description changes. The repository
 consumes only the committed corpus, through plain CMake/CTest.
 
+**Status.** The model and the harness are written and reviewed but have not
+yet been through the compiler: no corpus exists in `tests/vectors/j2k/`
+yet, and `jpeg2000_test.cc` does not yet have the loop that reads it. The
+first person to run "Quick start" will also do "Compiler checks". Writing
+the model against the code has already produced six parser fixes (see
+"Model findings so far"), so the description has earned its keep before
+generating a single vector.
+
 If you are here to **run the tests**, you need nothing from this directory:
-the corpus is already in `tests/vectors/j2k/` and `ctest` uses it.
-If you are here to **change what the server accepts**, read "Background",
-then "Quick start", then edit the model and regenerate.
-If a test **just failed**, go to "When a vector fails".
+once generated, the corpus lives in `tests/vectors/j2k/` and `ctest` uses
+it. If you are here to **change what the server accepts**, read
+"Background", then "Quick start", then edit the model and regenerate. If a
+test **just failed**, go to "When a vector fails".
 
 ## Background you need
 
@@ -119,7 +127,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 
 | Term | Meaning here |
 | --- | --- |
-| **model** | The six `spec/*.asn1` + `*.acn` files together. |
+| **model** | The three `spec/*.asn1` files and their `*.acn` companions, together. |
 | **layer 1 / standard** | Types with the ranges and rules of T.800/T.801. |
 | **layer 2 / profile** | `*-Profile` types: layer 1 narrowed to what esajpip serves. |
 | **vector** | One generated `.jp2`/`.jpx` file in the corpus. |
@@ -195,8 +203,12 @@ Only needed when a model file changes. Everything runs offline.
        j2k-headers.asn1 j2k-headers.acn \
        j2k-codestream.asn1 j2k-codestream.acn \
        jp2-boxes.asn1 jp2-boxes.acn
-   cd /tmp/j2k-gen && cc -O1 -g -fsanitize=address,undefined *.c ../spec/harness/mapping.c -o atc && ./atc
+   cd /tmp/j2k-gen && cc -O1 -g -fsanitize=address,undefined *.c \
+       "$OLDPWD"/harness/mapping.c -o atc && ./atc
    ```
+
+   (`$OLDPWD` is `spec/` after the `cd`; the mapping functions are needed
+   because the generated code only declares them.)
 4. Build the harness against the generated code and run it:
 
    ```sh
@@ -208,7 +220,8 @@ Only needed when a model file changes. Everything runs offline.
    ```
 
    It prints `vectors: N vectors written … (M valid at both layers)`.
-   Expect N in the low thousands and M a few dozen.
+   Estimate from the mutant tables: N in the low thousands, M a few dozen.
+   Record the first real numbers here.
 5. Run the server tests and read "When a vector fails" for anything red:
 
    ```sh
@@ -239,7 +252,8 @@ Two conventions worth knowing before you edit:
   with profile bodies inside `CONTAINING`, a copy with profile types
   substituted. It cannot *widen*. So if esajpip accepts something T.800
   forbids, that cannot be written into layer 2; it shows up as a failing
-  test instead ("Expected initial failures").
+  test instead ("Model findings so far" lists the ones found by writing the
+  model).
 
 ## The test contract
 
@@ -288,8 +302,8 @@ the name up in `manifest.tsv`:
   lenient than `JPIP_PROFILE.md` promises. Either tighten the parser or
   change the profile (both the doc and the `*-Profile` type).
 - **`standard=invalid`, server accepted.** The parser accepts something the
-  standard forbids. See "Expected initial failures" — it may already be
-  listed with a suggested fix. Otherwise decide: tighten the parser, or
+  standard forbids. Decide: tighten the parser (every case so far went
+  this way, see "Model findings so far"), or
   document the leniency in `JPIP_PROFILE.md` and relax the rule in the
   model (a layer-1 rule can only be relaxed by widening the base type).
 - **`standard=invalid profile=valid`.** Only possible for unknown marker
@@ -303,29 +317,38 @@ the parser code involved: a length mutant points at `ReadBoxHeader` /
 `ReadCodestream`'s limit checks, a field mutant at the corresponding
 `Read*Marker`, a rule mutant at the structural checks.
 
-## Expected initial failures
+## Model findings so far
 
-Places where the server is *more lenient* than T.800 need a decision: tighten
-the parser, or relax the model and document the leniency in
-`JPIP_PROFILE.md`. All known cases have been resolved in the parser: reserved
-code-block style bits, zero precinct exponents above r = 0, the `jP`/`ftyp`
-preamble, repeated COD or QCD markers in the main header, markers other than
-SOT and EOC after tile-part data, and inconsistent `TPsot` or `TNsot` values.
-The corpus expects rejection for these cases, matching the hand-written tests
-(`duplicate-cod.jp2` ↔ `codestream.one-cod-before-sot`, `duplicate-qcd.jp2` ↔
-`codestream.one-qcd-before-sot`, `marker-after-tile-part.jp2` ↔
-`codestream.segment-after-sot`, `wrong-first-tile-part.jp2` ↔ `sot.tpsot-1`,
-`wrong-tile-part-count.jp2` ↔ `sot.tnsot-2`, `inconsistent-tile-part-count.jp2`
-↔ `sot.tnsot-inconsistent`).
+Writing the model against `file_manager.cc` — before any vector was
+generated — surfaced six places where the parser was more lenient than
+T.800. Each needed a decision: tighten the parser, or relax the model and
+document the leniency in `JPIP_PROFILE.md`. All six were tightened, each
+with a hand-written fixture in `jpeg2000_test.cc`. The corpus will contain
+the same cases as generated vectors, so the first run should agree with
+those fixtures; the table pairs them so a disagreement can be traced to a
+specific mutant.
 
-A JPX carrying both `jp2c` and `ftbl` boxes is *not* a failure: links take
-precedence and embedded codestreams are ignored (`JPIP_PROFILE.md`), and the
-model's `jpx.linked-precedence` vector is expected to be accepted. Likewise
-an `Iplt` written in more 7-bit groups than its value needs is valid at both
-layers: the server bounds packet lengths by value, not by byte count.
+| Parser now rejects | Hand-written fixture | Corpus vector (`field`) |
+| --- | --- | --- |
+| Reserved code-block style bits (Table A.19) | `code-block-style-64.jp2`, `-255.jp2` (`-63.jp2` accepted) | `cod.spcod.cbStyle` at 64 and 255 (63 valid) |
+| Zero precinct exponent above r = 0 (Table A.21) | `precinct-higher-ppx-zero.jp2`, `-ppy-zero.jp2` (`precinct-lowest-zero.jp2` accepted) | `cod.spcod.precincts.higher[0].ppx` / `.ppy` at 0 (`lowest.ppx` at 0 valid) |
+| Missing or wrong `jP` / `ftyp` preamble (I.4) | `missing-signature.jp2`, `bad-signature.jp2`, `missing-file-type.jp2` | `file.signature`, `jp2-sig-bad`, `jp2-code-…` on `ftyp` |
+| Second COD or QCD in the main header (A.6.1, A.6.4) | `duplicate-cod.jp2`, `duplicate-qcd.jp2` | `codestream.one-cod-before-sot`, `codestream.one-qcd-before-sot` |
+| Any marker other than SOT/EOC after tile-part data (A.3) | `marker-after-tile-part.jp2` | `codestream.segment-after-sot` |
+| TPsot not 0, 1, 2, … or TNsot contradicted (A.4.2) | `wrong-first-tile-part.jp2`, `wrong-tile-part-count.jp2`, `inconsistent-tile-part-count.jp2` | `sot.tpsot` at 1, `sot.tnsot` at 2, `sot.tnsot-inconsistent` |
 
-Any other failure is a finding about the parser or the model; read the
-clause cited on the model field before changing either.
+Nothing is known to be open. The first corpus run is still expected to
+produce findings — that is what it is for — most likely in places the model
+covers and no hand-written fixture ever did: length and region mutants on
+every box and segment, and the linked-JPX box rules. Treat each per "When a
+vector fails".
+
+Two things that look like failures are not. A JPX carrying both `jp2c` and
+`ftbl` boxes is valid: links take precedence and embedded codestreams are
+ignored (`JPIP_PROFILE.md`), and the `jpx.linked-precedence` vector is
+expected to be accepted. An `Iplt` written in more 7-bit groups than its
+value needs is valid at both layers: the server bounds packet lengths by
+value, not by byte count (`plt.iplt-five-bytes`, `plt.iplt-six-bytes`).
 
 ## Compiler checks (first run of asn1scc on this model)
 
@@ -384,10 +407,12 @@ From each base:
    bound, and semantically loaded values (`xtsiz = 3` below `xsiz`,
    `progression = 3`). Names look like `jp2-siz.xosiz-1`.
 3. **Rule mutants** (`rule_mutants[]`, `linked_rule_mutants[]`): one
-   structural change per cross-field rule — a second COD or QCD, no QCD, a QCD
-   after the tile-part, no PLT, 65 tile-parts, a packet length beyond the
-   data, no `jP` box, two `jp2c`, `DR = 0`, `NDR` mismatch, two `flst`, an
-   `http` URL. Names look like `jp2-rule-codestream.no-plt-4`.
+   structural change per cross-field rule — a second COD or QCD, no QCD, a
+   QCD after the tile-part, no PLT, contradictory TNsot, 65 tile-parts, a
+   packet length beyond the data, no `jP` box, two `jp2c`, `DR = 0`, `NDR`
+   mismatch, two `flst`, an `http` URL. Names look like
+   `jp2-rule-codestream.no-plt-4` (the number is the mutant's index in its
+   table, so it shifts when a mutant is inserted before it).
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
    `n + 1`, and below its minimum. Names: `jp2-len-<offset>-<value>`.
 5. **Code mutants**: each marker code patched to `FF70` (undefined), `FF51`
@@ -462,9 +487,10 @@ rejection's log line names the profile rule (origin, tile index, dimension
 limit, PLT missing, tile-part count, link structure). The trace test helpers
 already capture log output.
 
-Once the corpus is in, the hand-built `MakeCodestream`, `MakeJP2`,
-`MakeEmbeddedJPX` and `MakeLinkedJPX` in `jpeg2000_test.cc` are redundant
-except for the linked-file resolution case ("Gaps"); retire the rest.
+The hand-built fixtures in `jpeg2000_test.cc` stay. Those that cover a
+gap in the model ("Gaps") are the only test of that behaviour; the rest
+overlap the corpus, but they run without the corpus, document each fix
+next to its check, and are the fallback if a regeneration is ever in doubt.
 
 ## Gaps (server accepts, model does not cover)
 
