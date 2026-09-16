@@ -1,5 +1,6 @@
 #include <sys/socket.h>
 
+#include <climits>
 #include <cstdlib>
 #include <cstdio>
 #include <cstdint>
@@ -434,6 +435,9 @@ static void CheckProgressionIndexes() {
     params.resolutions.emplace_back(2, 2);
     params.resolutions.emplace_back(4, 4);
     params.FillPrecinctCounts();
+    for (const jpeg2000::CodingParameters::Resolution &resolution : params.resolutions)
+        Check(resolution.num_precincts == jpeg2000::Size(2, 2),
+              "Wrong precomputed precinct count");
 
     jpeg2000::Packet packet(1, 1, 2, jpeg2000::Size(1, 1));
     params.progression = jpeg2000::CodingParameters::LRCP_PROGRESSION;
@@ -505,6 +509,39 @@ static void CheckProgressionIndexes() {
         }
     }
     Check(expected == spatial.GetNumPackets(), "CPRL packet sequence is incomplete");
+}
+
+static void CheckResolutionSelection() {
+    jpeg2000::CodingParameters params;
+    params.size = jpeg2000::Size(4097, 4095);
+    params.num_levels = 5;
+    jpeg2000::Size selected;
+
+    Check(params.GetClosestResolution(jpeg2000::Size(2050, 2048), &selected) == 4 &&
+              selected == jpeg2000::Size(2049, 2048),
+          "Wrong closest resolution size");
+    Check(params.GetRoundUpResolution(jpeg2000::Size(2048, 2048), &selected) == 4 &&
+              selected == jpeg2000::Size(2049, 2048),
+          "Wrong round-up resolution size");
+    Check(params.GetRoundDownResolution(jpeg2000::Size(2048, 2048), &selected) == 3 &&
+              selected == jpeg2000::Size(1025, 1024),
+          "Wrong round-down resolution size");
+
+    params.size = jpeg2000::Size(INT_MAX, INT_MAX);
+    params.num_levels = 32;
+    Check(params.GetRoundDownResolution(jpeg2000::Size(1, 1), &selected) == 1 &&
+              selected == jpeg2000::Size(1, 1),
+          "Wrong resolution size at the decomposition limit");
+
+    jpip::Request request;
+    request.resolution_size = jpeg2000::Size(INT_MAX - 1, INT_MAX - 1);
+    jpip::WOI woi;
+    woi.position = jpeg2000::Point(INT_MAX - 2, INT_MAX - 2);
+    woi.size = jpeg2000::Size(1, 1);
+    request.GetResolution(&params, &woi);
+    Check(woi.position == jpeg2000::Point(INT_MAX - 1, INT_MAX - 1) &&
+              woi.size == jpeg2000::Size(2, 2),
+          "Window scaling overflowed");
 }
 
 static void CheckJPIPMessages() {
@@ -678,6 +715,7 @@ int main() {
     CheckHTTPResponse();
     CheckWOIPackets();
     CheckProgressionIndexes();
+    CheckResolutionSelection();
     CheckJPIPMessages();
     CheckDataBinCapacity();
     CheckCoalescedJPIPMessages();

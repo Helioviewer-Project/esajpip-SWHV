@@ -3,6 +3,7 @@
 #include "query.h"
 
 #include <cerrno>
+#include <cstdint>
 #include <climits>
 #include <cstdlib>
 #include <sstream>
@@ -17,6 +18,11 @@ namespace jpip {
 
         int Clamp(int value, int minimum, int maximum) {
             return value < minimum ? minimum : (value > maximum ? maximum : value);
+        }
+
+        int Scale(int value, int numerator, int denominator) {
+            uint64_t scaled = static_cast<uint64_t>(value) * numerator;
+            return static_cast<int>((scaled + denominator - 1) / denominator);
         }
 
         bool ParseInteger(const char **position, int *value) {
@@ -204,6 +210,32 @@ namespace jpip {
             return descriptor_found;
         }
 
+    }
+
+    jpeg2000::Size Request::GetResolution(
+            const jpeg2000::CodingParameters *coding_parameters, WOI *woi) const {
+        jpeg2000::Size res_image_size;
+
+        if (round_direction == CLOSEST)
+            woi->resolution = coding_parameters->GetClosestResolution(resolution_size,
+                                                                       &res_image_size);
+        else if (round_direction == ROUNDUP)
+            woi->resolution = coding_parameters->GetRoundUpResolution(resolution_size,
+                                                                       &res_image_size);
+        else
+            woi->resolution = coding_parameters->GetRoundDownResolution(resolution_size,
+                                                                         &res_image_size);
+
+        if (resolution_size.x > 0 && resolution_size.y > 0 &&
+            resolution_size != res_image_size) {
+            woi->position.x = Scale(woi->position.x, res_image_size.x,
+                                    resolution_size.x);
+            woi->position.y = Scale(woi->position.y, res_image_size.y,
+                                    resolution_size.y);
+            woi->size.x = Scale(woi->size.x, res_image_size.x, resolution_size.x);
+            woi->size.y = Scale(woi->size.y, res_image_size.y, resolution_size.y);
+        }
+        return res_image_size;
     }
 
     bool Request::Parse(const string &line) {

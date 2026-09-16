@@ -91,24 +91,7 @@ namespace jpip {
          * @return Image size at the selected resolution.
          */
         jpeg2000::Size GetResolution(
-                const jpeg2000::CodingParameters *coding_parameters, WOI *woi) const {
-            jpeg2000::Size res_image_size;
-
-            if (round_direction == Request::CLOSEST)
-                woi->resolution = coding_parameters->GetClosestResolution(resolution_size, &res_image_size);
-            else if (round_direction == Request::ROUNDUP)
-                woi->resolution = coding_parameters->GetRoundUpResolution(resolution_size, &res_image_size);
-            else if (round_direction == Request::ROUNDDOWN)
-                woi->resolution = coding_parameters->GetRoundDownResolution(resolution_size, &res_image_size);
-
-            if (resolution_size.x > 0 && resolution_size.y > 0 && resolution_size != res_image_size) {
-                woi->position.x = (int) ceil((double) woi->position.x * res_image_size.x / resolution_size.x);
-                woi->position.y = (int) ceil((double) woi->position.y * res_image_size.y / resolution_size.y);
-                woi->size.x = (int) ceil((double) woi->size.x * res_image_size.x / resolution_size.x);
-                woi->size.y = (int) ceil((double) woi->size.y * res_image_size.y / resolution_size.y);
-            }
-            return res_image_size;
-        }
+                const jpeg2000::CodingParameters *coding_parameters, WOI *woi) const;
     };
 }
 

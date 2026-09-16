@@ -24,6 +24,8 @@
   1 GiB active log with one backup.
 - Support PCRL and CPRL packet ordering for the verified origin-zero,
   single-tile geometry with unit component sampling.
+- Precompute per-resolution precinct geometry and use integer window scaling,
+  removing repeated floating-point work from packet traversal.
 - Reduce the parent process to supervising and restarting the serving process.
   Connection admission and channel routing now occur in one event loop, removing
   cross-process descriptor passing and duplicate client descriptors while

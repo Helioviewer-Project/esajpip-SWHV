@@ -1,8 +1,8 @@
 #ifndef _JPEG2000_CODING_PARAMETERS_H_
 #define _JPEG2000_CODING_PARAMETERS_H_
 
+#include <cstdint>
 #include <vector>
-#include <cmath>
 
 #include "point.h"
 #include "trace.h"
@@ -16,6 +16,13 @@ namespace jpeg2000 {
     private:
         int total_precincts;
 
+        static int DivideRoundUp(int value, uint64_t divisor) {
+            return static_cast<int>((static_cast<uint64_t>(value) + divisor - 1) /
+                                    divisor);
+        }
+
+        Size SizeAtLevel(int level) const;
+
         /**
          * Returns the index of a packet according to the RPCL progression.
          * @param l Quality layer.
@@ -25,9 +32,9 @@ namespace jpeg2000 {
          * @param py Precinct position Y.
          */
         int GetProgressionIndexRPCL(int l, int r, int c, int px, int py) const {
-            Size precinct_point = GetPrecincts(r, size);
+            const Size &precincts = resolutions[r].num_precincts;
             return (resolutions[r].first_precinct * num_components * num_layers) +
-                   (py * precinct_point.x * num_components * num_layers) +
+                   (py * precincts.x * num_components * num_layers) +
                    (px * num_components * num_layers) + (c * num_layers) + l;
         }
 
@@ -40,10 +47,10 @@ namespace jpeg2000 {
          * @param py Precinct position Y.
          */
         int GetProgressionIndexRLCP(int l, int r, int c, int px, int py) const {
-            Size precinct_point = GetPrecincts(r, size);
+            const Size &precincts = resolutions[r].num_precincts;
             return (resolutions[r].first_precinct * num_components * num_layers) +
-                   (l * num_components * precinct_point.x * precinct_point.y) +
-                   (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
+                   (l * num_components * precincts.x * precincts.y) +
+                   (c * precincts.x * precincts.y) + (py * precincts.x) + px;
         }
 
         /**
@@ -55,10 +62,10 @@ namespace jpeg2000 {
          * @param py Precinct position Y.
          */
         int GetProgressionIndexLRCP(int l, int r, int c, int px, int py) const {
-            Size precinct_point = GetPrecincts(r, size);
+            const Size &precincts = resolutions[r].num_precincts;
             return (l * total_precincts * num_components) +
                    (num_components * resolutions[r].first_precinct) +
-                   (c * precinct_point.x * precinct_point.y) + (py * precinct_point.x) + px;
+                   (c * precincts.x * precincts.y) + (py * precincts.x) + px;
         }
 
         int GetPositionIndex(int r, int px, int py, int *position_resolutions,
@@ -84,6 +91,7 @@ namespace jpeg2000 {
     public:
         struct Resolution {
             Size precinct_size;
+            Size num_precincts;
             int first_precinct;
 
             Resolution(int _width, int _height)
@@ -155,10 +163,11 @@ namespace jpeg2000 {
          * @param point Precinct coordinate.
          */
         Size GetPrecincts(int r, const Size &point) const {
-            return Size(
-                    (int) ceil(ceil((double) point.x / (1L << (num_levels - r))) / (double) resolutions[r].precinct_size.x),
-                    (int) ceil(ceil((double) point.y / (1L << (num_levels - r))) / (double) resolutions[r].precinct_size.y)
-            );
+            uint64_t scale = uint64_t(1) << (num_levels - r);
+            uint64_t width = scale * resolutions[r].precinct_size.x;
+            uint64_t height = scale * resolutions[r].precinct_size.y;
+            return Size(DivideRoundUp(point.x, width),
+                        DivideRoundUp(point.y, height));
         }
 
         /**
@@ -190,9 +199,9 @@ namespace jpeg2000 {
          * @param packet Packet information.
          */
         int GetPrecinctDataBinId(const Packet &packet) const {
-            Size precinct_point = GetPrecincts(packet.resolution, size);
+            const Size &precincts = resolutions[packet.resolution].num_precincts;
             int s = resolutions[packet.resolution].first_precinct +
-                    (precinct_point.x * packet.precinct_xy.y) +
+                    (precincts.x * packet.precinct_xy.y) +
                     packet.precinct_xy.x;
             return (packet.component + (s * num_components));
         }
