@@ -50,6 +50,9 @@
   image origins that the packet index cannot represent correctly.
 - Retain the coding parameters of each embedded JPX codestream instead of
   applying one shared set to the complete container.
+- Map and traverse each codestream in a multi-codestream window independently,
+  allowing one response to include frames with different dimensions, quality
+  layers, decomposition levels, or precinct layouts.
 - Reject invalid JPIP cache lengths, response limits, cache-model data-bin
   identifiers, and codestream selectors. Bound the total expanded codestream
   selection and use codestream zero when a window request omits its selector.

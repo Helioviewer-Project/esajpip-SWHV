@@ -196,7 +196,8 @@ int main() {
     WriteFile(directory + "nonzero-origin.jp2", MakeJP2(nonzero_origin));
     WriteFile(directory + "embedded.jpx", MakeEmbeddedJPX(codestream));
     WriteFile(directory + "embedded-two.jpx",
-              MakeEmbeddedJPX(codestream, MakeCodestream(0, 1, 2, 2)));
+              MakeEmbeddedJPX(codestream,
+                              MakeCodestream(0, 1, 2, 2, 0, 2, 1, 2)));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
 
@@ -291,6 +292,42 @@ int main() {
                       embedded_file, 1,
                       jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
           "Could not index the second embedded codestream");
+
+    jpip::Request multi_stream_request;
+    Check(multi_stream_request.Parse(
+              "GET /jpip?stream=0:1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
+          "Could not parse a multi-codestream window request");
+    jpip::DataBinServer multi_stream_server;
+    Check(multi_stream_server.SetRequest(embedded_two_manager,
+                                         multi_stream_request),
+          "Rejected a heterogeneous multi-codestream window");
+    char multi_stream_response[4096];
+    int multi_stream_length = sizeof multi_stream_response;
+    bool multi_stream_last = false;
+    Check(multi_stream_server.GenerateChunk(embedded_two_manager,
+                                             multi_stream_response,
+                                             &multi_stream_length,
+                                             &multi_stream_last) &&
+              multi_stream_length > 3 && multi_stream_last,
+          "Could not generate a heterogeneous multi-codestream response");
+
+    jpip::Request second_stream_request;
+    Check(second_stream_request.Parse(
+              "GET /jpip?stream=1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1") &&
+              multi_stream_server.SetRequest(embedded_two_manager,
+                                              second_stream_request),
+          "Could not select the second codestream after a range response");
+    multi_stream_length = sizeof multi_stream_response;
+    Check(multi_stream_server.GenerateChunk(embedded_two_manager,
+                                             multi_stream_response,
+                                             &multi_stream_length,
+                                             &multi_stream_last),
+          "Could not generate a response for the cached second codestream");
+    Check(multi_stream_length == 3 && multi_stream_last &&
+              multi_stream_response[0] == 0 &&
+              multi_stream_response[1] == jpip::EOR::WINDOW_DONE &&
+              multi_stream_response[2] == 0,
+          "The range response did not complete every selected codestream");
 
     jpeg2000::FileManager linked_manager;
     Check(OpenImage(directory, "linked.jpx", &linked_manager),

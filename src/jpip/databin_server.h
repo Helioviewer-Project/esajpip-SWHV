@@ -24,16 +24,20 @@ namespace jpip {
      */
     class DataBinServer {
     private:
-        WOI woi;             ///< Current WOI
-        int pending;         ///< Number of pending bytes
-        std::vector<int> codestreams;
-        std::vector<data::File *> files;
-        enum class WindowState {
-            NONE,
-            VALID,
-            EMPTY
+        struct Stream {
+            data::File *file;
+            WOIComposer composer;
+            WOI woi;
+            int id;
+            bool empty;
+
+            explicit Stream(int _id) : file(NULL), id(_id), empty(true) {
+            }
         };
-        WindowState window_state;
+
+        int pending;         ///< Number of pending bytes
+        std::vector<Stream> streams;
+        bool has_woi;
         size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
         int meta_offset;
@@ -41,7 +45,6 @@ namespace jpip {
         bool meta_bin0_done;
 
         CacheModel cache_model;     ///< Cache model of the client
-        WOIComposer woi_composer;   ///< WOI composer for determining the packets
         DataBinWriter data_writer;  ///< Data-bin writer for generating the chunks
 
         enum {
@@ -142,7 +145,7 @@ namespace jpip {
          */
         DataBinServer() {
             pending = 0;
-            window_state = WindowState::NONE;
+            has_woi = false;
             current_idx = 0;
             meta_idx = 0;
             meta_offset = 0;

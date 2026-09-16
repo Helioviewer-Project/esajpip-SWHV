@@ -69,6 +69,10 @@ namespace jpip {
             return current_packet;
         }
 
+        bool HasPacket() const {
+            return more_packets;
+        }
+
         /**
          * Moves to the next packet of the WOI.
          * @return <code>true</code> if another packet is available.

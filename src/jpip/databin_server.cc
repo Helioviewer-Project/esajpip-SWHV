@@ -79,7 +79,6 @@ namespace jpip {
     }
 
     bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
-        bool reset_woi = false;
         ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.StartResponse();
@@ -91,39 +90,53 @@ namespace jpip {
             for (int codestream : req.codestreams)
                 if (codestream < 0 || static_cast<size_t>(codestream) >= image_index->GetNumCodestreams())
                     return false;
-            if (codestreams != req.codestreams) {
-                codestreams = req.codestreams;
+
+            bool changed = streams.size() != req.codestreams.size();
+            for (size_t i = 0; !changed && i < streams.size(); ++i)
+                changed = streams[i].id != req.codestreams[i];
+            if (changed) {
+                streams.clear();
+                streams.reserve(req.codestreams.size());
+                for (int codestream : req.codestreams)
+                    streams.emplace_back(codestream);
                 current_idx = 0;
-                reset_woi = true;
             }
         }
 
-        window_state = req.HasWOI() ? WindowState::VALID : WindowState::NONE;
-        if (window_state == WindowState::VALID) {
-            if (codestreams.empty()) {
-                codestreams.push_back(0);
+        has_woi = req.HasWOI();
+        if (has_woi) {
+            if (streams.empty()) {
+                streams.emplace_back(0);
                 current_idx = 0;
-                reset_woi = true;
             }
-            int codestream = codestreams[current_idx];
-            const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
-            WOI new_woi;
-            new_woi.size = req.has.rsiz ? req.woi_size : req.resolution_size;
-            new_woi.position = req.has.roff ? req.woi_position : jpeg2000::Point();
+            jpeg2000::Size requested_size =
+                    req.has.rsiz ? req.woi_size : req.resolution_size;
             if (req.resolution_size.x <= 0 || req.resolution_size.y <= 0 ||
-                new_woi.size.x < 0 || new_woi.size.y < 0)
+                requested_size.x < 0 || requested_size.y < 0)
                 return false;
-            if (!CropWindow(&new_woi, req.resolution_size)) {
-                window_state = WindowState::EMPTY;
-                woi = WOI();
-            } else {
-                jpeg2000::Size resolution_size = req.GetResolution(coding_parameters, &new_woi);
+
+            for (Stream &stream : streams) {
+                WOI new_woi;
+                new_woi.size = requested_size;
+                new_woi.position = req.has.roff ? req.woi_position
+                                                 : jpeg2000::Point();
+                if (!CropWindow(&new_woi, req.resolution_size)) {
+                    stream.empty = true;
+                    stream.woi = WOI();
+                    continue;
+                }
+
+                const CodingParameters *coding_parameters =
+                        image_index->GetCodingParameters(stream.id);
+                jpeg2000::Size resolution_size =
+                        req.GetResolution(coding_parameters, &new_woi);
                 if (!CropWindow(&new_woi, resolution_size)) {
-                    window_state = WindowState::EMPTY;
-                    woi = WOI();
-                } else if (new_woi != woi) {
-                    reset_woi = true;
-                    woi = new_woi;
+                    stream.empty = true;
+                    stream.woi = WOI();
+                } else if (stream.empty || new_woi != stream.woi) {
+                    stream.empty = false;
+                    stream.woi = new_woi;
+                    stream.composer.Reset(coding_parameters, stream.woi);
                 }
             }
         }
@@ -135,11 +148,6 @@ namespace jpip {
         if (pending > 0 && pending < DataBinWriter::EOR_LENGTH)
             pending = 0;
 
-        if (reset_woi && window_state != WindowState::EMPTY) {
-            int codestream = codestreams[current_idx];
-            const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
-            woi_composer.Reset(coding_parameters, woi);
-        }
         return true;
     }
 
@@ -150,10 +158,15 @@ namespace jpip {
 
         data_writer.SetBuffer(buf, min(pending, *len));
 
-        if (pending > 0 && window_state == WindowState::EMPTY) {
-            if (!data_writer.WriteEOR(EOR::WINDOW_DONE))
-                return false;
-            pending = 0;
+        if (pending > 0 && has_woi) {
+            bool empty = true;
+            for (const Stream &stream : streams)
+                empty &= stream.empty;
+            if (empty) {
+                if (!data_writer.WriteEOR(EOR::WINDOW_DONE))
+                    return false;
+                pending = 0;
+            }
         }
 
         if (pending > 0) {
@@ -217,18 +230,22 @@ namespace jpip {
             }
 
             if (!chunk_full) {
-                if (files.empty()) {
-                    files.resize(codestreams.size());
-                    for (size_t i = 0; i < codestreams.size(); ++i) {
-                        files[i] = file_manager.GetFile(image_index->GetPathName(codestreams[i]));
-                        if (files[i] == NULL)
+                for (Stream &stream : streams) {
+                    if (has_woi && stream.empty)
+                        continue;
+                    if (stream.file == NULL) {
+                        stream.file = file_manager.GetFile(
+                                image_index->GetPathName(stream.id));
+                        if (stream.file == NULL)
                             return false;
                     }
                 }
-                for (size_t i = 0; i < codestreams.size(); ++i) {
+                for (Stream &stream : streams) {
+                    if (has_woi && stream.empty)
+                        continue;
                     res = WriteSegment<DataBinClass::MAIN_HEADER>(
-                            files[i], codestreams[i], 0,
-                            image_index->GetMainHeader(codestreams[i]));
+                            stream.file, stream.id, 0,
+                            image_index->GetMainHeader(stream.id));
                     if (res == SegmentResult::FAILED)
                         return false;
                     if (res == SegmentResult::FULL) {
@@ -237,7 +254,7 @@ namespace jpip {
                     }
 
                     res = WriteSegment<DataBinClass::TILE_HEADER>(
-                            files[i], codestreams[i], 0, FileSegment::Null);
+                            stream.file, stream.id, 0, FileSegment::Null);
                     if (res == SegmentResult::FAILED)
                         return false;
                     if (res == SegmentResult::FULL) {
@@ -246,43 +263,54 @@ namespace jpip {
                     }
                 }
 
-                if (!chunk_full && window_state == WindowState::VALID) {
+                if (!chunk_full && has_woi) {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;
-                    const CodingParameters *composer_parameters = image_index->GetCodingParameters(codestreams.front());
 
                     while (!chunk_full) {
-                        const Packet &packet = woi_composer.GetCurrentPacket();
-                        const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestreams[current_idx]);
+                        size_t checked = 0;
+                        while (checked < streams.size() &&
+                               (streams[current_idx].empty ||
+                                !streams[current_idx].composer.HasPacket())) {
+                            current_idx = (current_idx + 1) % streams.size();
+                            checked++;
+                        }
+                        if (checked == streams.size())
+                            break;
 
-                        File *file = files[current_idx];
-                        if (!image_index->GetPacket(file, codestreams[current_idx], packet, &segment, &bin_offset))
+                        Stream &stream = streams[current_idx];
+                        const Packet &packet = stream.composer.GetCurrentPacket();
+                        const CodingParameters *coding_parameters =
+                                image_index->GetCodingParameters(stream.id);
+
+                        if (!image_index->GetPacket(stream.file, stream.id, packet,
+                                                    &segment, &bin_offset))
                             return false;
                         bin_id = coding_parameters->GetPrecinctDataBinId(packet);
                         last_packet = packet.layer >= coding_parameters->num_layers - 1;
 
-                        if (segment.offset > file->GetSize() ||
-                            segment.length > file->GetSize() - segment.offset) {
-                            ERROR("Invalid packet segment: codestream=" << codestreams[current_idx]
-                                  << ", packet=" << packet << ", segment=" << segment << ", file_size=" << file->GetSize());
+                        if (segment.offset > stream.file->GetSize() ||
+                            segment.length > stream.file->GetSize() - segment.offset) {
+                            ERROR("Invalid packet segment: codestream=" << stream.id
+                                  << ", packet=" << packet << ", segment=" << segment
+                                  << ", file_size=" << stream.file->GetSize());
                             return false;
                         }
-                        res = WriteSegment<DataBinClass::PRECINCT>(file, codestreams[current_idx], bin_id, segment, bin_offset, last_packet);
+                        res = WriteSegment<DataBinClass::PRECINCT>(
+                                stream.file, stream.id, bin_id, segment,
+                                bin_offset, last_packet);
 
                         if (res == SegmentResult::FAILED) {
-                            ERROR("Could not write packet segment: codestream=" << codestreams[current_idx]
+                            ERROR("Could not write packet segment: codestream=" << stream.id
                                   << ", bin=" << bin_id << ", packet=" << packet << ", segment=" << segment);
                             return false;
                         }
                         if (res == SegmentResult::FULL) {
                             chunk_full = true;
                         } else {
-                            if (current_idx != codestreams.size() - 1) current_idx++;
-                            else {
-                                if (!woi_composer.GetNextPacket(composer_parameters)) break;
-                                else current_idx = 0;
-                            }
+                            stream.composer.GetNextPacket(coding_parameters);
+                            current_idx = (current_idx + 1) % streams.size();
                         }
                     }
                 }
@@ -311,7 +339,8 @@ namespace jpip {
 
         if (*last) {
             cache_model.Pack();
-            vector<File *>().swap(files);
+            for (Stream &stream : streams)
+                stream.file = NULL;
         }
 
         return true;
