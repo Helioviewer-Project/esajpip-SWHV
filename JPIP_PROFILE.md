@@ -68,7 +68,7 @@ Data-bin offsets and completion flags allow a client to assemble contributions
 across responses. The channel records the byte prefix sent for each metadata,
 header and precinct bin, and an additive `model` request can extend that record.
 The model is private to the channel. It is neither shared between clients nor
-recovered after the serving child or channel is lost.
+recovered after the serving process or channel is lost.
 
 On channel creation, the response includes `JPIP-cnew` with the assigned `cid`,
 `path=jpip` and `transport=http`. It also includes `JPIP-tid`, but the value is

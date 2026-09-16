@@ -15,7 +15,7 @@ The responsibilities are separated as follows:
 
 | Source | Responsibility |
 | --- | --- |
-| `esa_jpip_server.cc` | Configuration, status, and listening-socket setup |
+| `esa_jpip_server.cc` | Configuration and listening-socket setup |
 | `server/supervisor.cc` | Serving-process lifetime and restart |
 | `server/server.cc` | Connection admission, channel routing, and log output |
 | `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |
@@ -25,19 +25,19 @@ The responsibilities are separated as follows:
 ## Ownership
 
 The supervisor owns the listening socket but never accepts from it. The serving
-process accepts each connection and owns a small `Connection` record containing
-its stable identifier and, until identification, its descriptor and absolute
-deadline. Once identified, the descriptor passes directly to a
-`ConnectionQueue` in the same process. The serving loop retains only the stable
-identifier until the channel thread reports that the connection has closed.
+process accepts each connection and retains a small `PendingConnection` record
+containing its stable identifier, descriptor, and absolute deadline until the
+request is identified. The descriptor then passes directly to a
+`ConnectionQueue` in the same process, and the pending record is removed. The
+serving loop retains only the total physical-connection count.
 
 One channel thread exclusively owns its `FileManager`, `ImageIndex`, linked JPX
 graph, `DataBinServer`, cache model, traversal state, and response buffer.
 None of this JPEG 2000 state is shared with another channel thread. The serving
-loop and channel thread share only the queue: one connection identifier, one
-descriptor, two wake-up sockets, and their small synchronization state. Channel
-threads report connection and channel completion to the serving loop through
-an unnamed datagram socket pair within the serving process.
+loop and channel thread share only the queue: at most one descriptor, two
+wake-up sockets, and their small synchronization state. Channel threads report
+connection and channel completion to the serving loop through an unnamed
+datagram socket pair within the serving process.
 
 ## Initial request
 
@@ -113,8 +113,8 @@ that the client did not receive completely.
 On termination, the channel thread closes its current descriptor and any queued
 descriptor, reports each physical connection as complete, closes the queue, and
 reports that the channel has ended. The serving loop keeps table entries only
-for sockets awaiting identification; channel completion updates the total open
-connection count without retaining an active-socket record.
+for sockets awaiting identification; connection-completion notifications update
+the total open connection count without retaining an active-socket record.
 
 If the serving process restarts, accepted sockets and all per-channel state are
 lost. The supervisor retains the listening socket, so new connections remain in

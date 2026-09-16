@@ -46,9 +46,9 @@
   Use codestream zero when a window request omits its selector.
 - Accept valid HTTP header whitespace and exact-fit JPIP messages while
   rejecting incomplete headers and overfull messages.
-- Track completion with stable connection identifiers so descriptor reuse cannot
-  close an unrelated client. Expire inactive channels and terminate the child process
-  whenever its parent exits.
+- Remove identified sockets from the admission table so a reused descriptor
+  cannot close an unrelated client. Expire inactive channels and terminate the
+  serving process whenever its supervisor exits.
 - Close mappings and connections on parser and thread failures, and correct
   address-resolution and platform-specific alignment errors.
 

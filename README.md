@@ -67,9 +67,9 @@ server adds a trailing slash internally when needed.
 
 Channel threads submit log records through a bounded nonblocking queue. The
 serving event loop writes queued records only when no connection event or
-deadline needs attention. If logging cannot keep up, records are dropped and the next
-successfully queued record reports their number. Logging therefore cannot hold
-up an active JPIP response.
+deadline needs attention. If logging cannot keep up, records are dropped, and
+the next successfully queued record reports their number. Logging therefore
+cannot hold up an active JPIP response.
 
 The executable reads `server.ini` from its current directory. Run it from the
 installed server directory, either in a terminal or under the host's process
@@ -85,11 +85,11 @@ Stop the server through the host's process supervisor or by signaling the
 
 `connections.initial_timeout` limits how long a new connection has to send a
 valid initial JPIP request. Until the request is recognized, the serving process
-retains only the socket. It does not create a channel thread or allocate JPEG 2000
-state. After the initial request, `connections.timeout` limits channel
-inactivity. It closes an idle channel whether an HTTP connection is attached or
-the channel is waiting for a replacement. Values of `0` and `-1` disable this
-timeout.
+retains only the socket. It does not create a channel thread or allocate JPEG
+2000 state. After the initial request, `connections.timeout` limits channel
+inactivity. It closes an idle channel whether an HTTP connection is attached
+or the channel is waiting for a replacement. Values of `0` and `-1` disable
+this timeout.
 
 ## License
 
