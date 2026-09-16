@@ -13,7 +13,8 @@ namespace net {
 const int SERVER_STARTUP_FAILURE = 2;
 
 int RunServer(const AppConfig &cfg, AppInfo &app_info,
-              net::Socket &listen_socket, int supervisor_fd,
-              const std::string &log_name, const std::string &description);
+              net::Socket &listen_socket, int supervisor_fd, int crash_report_fd,
+              const std::string &log_name, const std::string &description,
+              const std::string &restart_message);
 
 #endif /* _SERVER_H_ */

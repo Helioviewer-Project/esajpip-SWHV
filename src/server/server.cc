@@ -18,6 +18,7 @@
 #include "net/poll_table.h"
 #include "net/socket.h"
 #include "server/channel.h"
+#include "server/crash_report.h"
 #include "server/initial_request.h"
 #include "server/server.h"
 
@@ -84,6 +85,7 @@ void *ChannelThread(void *argument) {
     shared_ptr<ConnectionQueue> queue = info->queue;
     delete info;
 
+    crash_report::SetChannel(id);
     RunChannel(*cfg, channel, queue, NotifyConnection);
     Notify(CHANNEL_COMPLETED, id);
     return NULL;
@@ -212,8 +214,13 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
 }
 
 int RunServer(const AppConfig &cfg, AppInfo &app_info,
-              Socket &listen_socket, int supervisor_fd,
-              const string &log_name, const string &description) {
+              Socket &listen_socket, int supervisor_fd, int crash_report_fd,
+              const string &log_name, const string &description,
+              const string &restart_message) {
+    if (!crash_report::Initialize(crash_report_fd)) {
+        cerr << "Crash reporting can not be initialized: " << strerror(errno) << endl;
+        return SERVER_STARTUP_FAILURE;
+    }
     if (!trace::Initialize(log_name)) {
         cerr << "The logging system can not be initialized" << endl;
         return SERVER_STARTUP_FAILURE;
@@ -221,6 +228,8 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
 
     signal(SIGPIPE, SIG_IGN);
     app_info->num_connections = 0;
+    if (!restart_message.empty())
+        LOG(restart_message);
     LOG(description << " started");
     LOG("Serving process created (PID = " << getpid() << ")");
 

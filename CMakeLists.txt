@@ -56,6 +56,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/net/socket.cc
     ${ESAJPIP_TOP}/server/channel.cc
     ${ESAJPIP_TOP}/server/connection_queue.cc
+    ${ESAJPIP_TOP}/server/crash_report.cc
     ${ESAJPIP_TOP}/server/initial_request.cc
     ${ESAJPIP_TOP}/server/server.cc
     ${ESAJPIP_TOP}/server/supervisor.cc
@@ -109,6 +110,7 @@ if(BUILD_TESTING)
         ${ESAJPIP_TOP}/jpip/request.cc
         ${ESAJPIP_TOP}/net/socket.cc
         ${ESAJPIP_TOP}/server/connection_queue.cc
+        ${ESAJPIP_TOP}/server/crash_report.cc
         ${ESAJPIP_TOP}/server/initial_request.cc
         ${ESAJPIP_TOP}/trace.cc)
     esajpip_configure_target(protocol_test)

@@ -112,13 +112,16 @@ that the client did not receive completely.
 
 On termination, the channel thread closes its current descriptor and any queued
 descriptor, reports each physical connection as complete, closes the queue, and
-reports that the channel has ended. The serving loop removes the corresponding
-records by their stable identifiers.
+reports that the channel has ended. The serving loop keeps table entries only
+for sockets awaiting identification; channel completion updates the total open
+connection count without retaining an active-socket record.
 
 If the serving process restarts, accepted sockets and all per-channel state are
 lost. The supervisor retains the listening socket, so new connections remain in
 the listen backlog while it creates the replacement process. Clients establish
-new channels after the restart.
+new channels after the restart. When a fatal signal originates in a channel
+thread, the replacement process records that channel number in its log. Failures
+outside a channel and uncatchable termination are recorded without one.
 
 The serving process polls a supervisor-lifetime pipe. The supervisor owns its
 only write end, so supervisor termination closes the pipe and makes the serving
