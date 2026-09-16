@@ -44,6 +44,8 @@
   linked-JPX external references before indexing or copying them.
 - Reject invalid JPIP cache lengths, response limits, and codestream selectors.
   Use codestream zero when a window request omits its selector.
+- Crop requested windows to the selected image resolution and reject empty or
+  non-overlapping windows before packet indexing.
 - Accept valid HTTP header whitespace and exact-fit JPIP messages while
   rejecting incomplete headers and overfull messages.
 - Remove identified sockets from the admission table so a reused descriptor

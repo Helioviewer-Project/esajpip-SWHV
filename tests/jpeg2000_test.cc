@@ -258,6 +258,34 @@ int main() {
           "Could not generate default-codestream response");
     Check(response_length > 0, "Generated empty default-codestream response");
 
+    jpip::Request cropped_request;
+    Check(cropped_request.Parse(
+              "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
+              "roff=-5,-5&len=512&cid=0 HTTP/1.1"),
+          "Could not parse a partially overlapping window");
+    jpip::DataBinServer cropped_server;
+    Check(cropped_server.SetRequest(manager, cropped_request),
+          "Rejected a partially overlapping window");
+    response_length = sizeof response;
+    Check(cropped_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a cropped-window response");
+
+    jpip::Request outside_request;
+    Check(outside_request.Parse(
+              "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
+              "roff=2000000000,2000000000&len=512&cid=0 HTTP/1.1"),
+          "Could not parse an out-of-range window");
+    jpip::DataBinServer outside_server;
+    Check(!outside_server.SetRequest(manager, outside_request),
+          "Accepted a window outside the image");
+
+    jpip::Request empty_request;
+    Check(empty_request.Parse(
+              "GET /jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
+          "Could not parse an empty window");
+    jpip::DataBinServer empty_server;
+    Check(!empty_server.SetRequest(manager, empty_request), "Accepted an empty window");
+
     Check(request.Parse("GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
           "Could not parse unavailable-codestream request");
     Check(!server.SetRequest(manager, request), "Accepted unavailable codestream");

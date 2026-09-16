@@ -1,5 +1,8 @@
 #include "databin_server.h"
 
+#include <algorithm>
+#include <cstdint>
+
 using namespace std;
 
 namespace jpip {
@@ -11,6 +14,29 @@ namespace jpip {
     using jpeg2000::ImageIndex;
     using jpeg2000::Metadata;
     using jpeg2000::Packet;
+
+    namespace {
+
+        bool CropWindow(WOI *woi, const jpeg2000::Size &bounds) {
+            if (woi->size.x <= 0 || woi->size.y <= 0 ||
+                bounds.x <= 0 || bounds.y <= 0)
+                return false;
+
+            int64_t left = max<int64_t>(0, woi->position.x);
+            int64_t top = max<int64_t>(0, woi->position.y);
+            int64_t right = min<int64_t>(bounds.x,
+                                         (int64_t) woi->position.x + woi->size.x);
+            int64_t bottom = min<int64_t>(bounds.y,
+                                          (int64_t) woi->position.y + woi->size.y);
+            if (right <= left || bottom <= top)
+                return false;
+
+            woi->position = jpeg2000::Point((int) left, (int) top);
+            woi->size = jpeg2000::Size((int) (right - left), (int) (bottom - top));
+            return true;
+        }
+
+    }
 
     bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
         bool reset_woi = false;
@@ -40,7 +66,11 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.woi_size;
             new_woi.position = req.woi_position;
-            req.GetResolution(coding_parameters, &new_woi);
+            if (!CropWindow(&new_woi, req.resolution_size))
+                return false;
+            jpeg2000::Size resolution_size = req.GetResolution(coding_parameters, &new_woi);
+            if (!CropWindow(&new_woi, resolution_size))
+                return false;
 
             if (new_woi != woi) {
                 reset_woi = true;
