@@ -1,7 +1,6 @@
 #ifndef _JPIP_REQUEST_H_
 #define _JPIP_REQUEST_H_
 
-#include <iosfwd>
 #include <string>
 #include <vector>
 #include "woi.h"
@@ -14,6 +13,7 @@ namespace jpip {
     class Request {
     private:
         bool valid;
+        void ParseURI(const std::string &uri);
 
     public:
         std::string object;
@@ -21,88 +21,20 @@ namespace jpip {
         std::string channel;
 
         bool Parse(const std::string &line);
-        void ParseURI(const std::string &uri);
 
-        /**
-         * Parses a cache model from an input stream.
-         * @param stream Input stream.
-         * @return The same input stream after the parsing.
-         */
-        std::istream &ParseModel(std::istream &stream);
-
-        /**
-         * Gets a coded char from an input stream.
-         * @param in Input stream.
-         * @param c Reference to store the char.
-         * @return The same input stream.
-         */
-        std::istream &GetCodedChar(std::istream &in, char &c);
-
-        /**
-         * Parses the parameters of a CGI HTTP request.
-         * @param stream Input stream.
-         */
-        void ParseParameters(std::istream &stream);
-
-        /**
-         * Parses one parameter of a CGI HTTP request.
-         * @param stream Input stream.
-         * @param param String to store the parameter name.
-         * @param value String to store the parameter value.
-         */
-        void ParseParameter(std::istream &stream, const std::string &param,
-                            std::string &value);
-
-        /**
-         * Union used to control the presence of the different
-         * JPIP parameters in a request.
-         */
-        union ParametersMask {
-            /**
-             * Parameters mask.
-             */
-            struct {
-                unsigned fsiz    : 1;
-                unsigned roff    : 1;
-                unsigned rsiz    : 1;
-                unsigned metareq : 1;
-                unsigned len     : 1;
-                unsigned target  : 1;
-                unsigned cid     : 1;
-                unsigned cnew    : 1;
-                unsigned cclose  : 1;
-                unsigned model   : 1;
-                unsigned stream  : 1;
-                unsigned context : 1;
-            } items;
-
-            /**
-             * Parameters mask as integer.
-             */
-            int value;
-
-            /**
-             * Initializes the mask to zero.
-             */
-            ParametersMask() {
-                value = 0;
-            }
-
-            /**
-             * Returns <code>true</code> if the mask
-             * contains the parameters associated to
-             * the WOI (fsiz, roff and rsiz).
-             */
-            bool HasWOI() const {
-                return (bool) (value & 7);
-            }
-
-            /**
-             * Sets the mask to zero.
-             */
-            void Clear() {
-                value = 0;
-            }
+        struct Parameters {
+            bool fsiz = false;
+            bool roff = false;
+            bool rsiz = false;
+            bool metareq = false;
+            bool len = false;
+            bool target = false;
+            bool cid = false;
+            bool cnew = false;
+            bool cclose = false;
+            bool model = false;
+            bool stream = false;
+            bool context = false;
         };
 
         /**
@@ -119,7 +51,7 @@ namespace jpip {
         jpeg2000::Point woi_position;      ///< WOI position
         std::vector<int> codestreams; ///< Requested codestreams
         int length_response;     ///< Maximum response length
-        ParametersMask mask;     ///< Parameters mask
+        Parameters has;          ///< Parameters present in the request
         jpeg2000::Size resolution_size;    ///< Size of the resolution level
         CacheModel cache_model;  ///< Cache model
 
@@ -137,6 +69,10 @@ namespace jpip {
             length_response = 0;
             round_direction = CLOSEST;
             codestreams.reserve(100);
+        }
+
+        bool HasWOI() const {
+            return has.fsiz || has.roff || has.rsiz;
         }
 
         /**

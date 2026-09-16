@@ -376,10 +376,10 @@ private:
             const char *err_msg = "";
             bool send_data = false;
 
-            if (req.mask.items.metareq && accept_gzip)
+            if (req.has.metareq && accept_gzip)
                 send_gzip = true;
 
-            if (req.mask.items.cclose) {
+            if (req.has.cclose) {
                 if (!opened) {
                     err_msg = "Close request received but there is not any channel opened";
                     LOG(err_msg);
@@ -400,12 +400,12 @@ private:
                     SendStream(fd, msg);
                     return CLOSE_CHANNEL;
                 }
-            } else if (req.mask.items.cnew) {
+            } else if (req.has.cnew) {
                 if (opened) {
                     err_msg = "There already is a channel opened. Only one channel per client is supported";
                     LOG(err_msg);
                 } else {
-                    string file_name = req.mask.items.target ? req.target : req.object;
+                    string file_name = req.has.target ? req.target : req.object;
 
                     if (!file_manager.OpenImage(file_name)) {
                         ERROR("The image file '" << file_name << "' can not be read");
@@ -429,7 +429,7 @@ private:
                         }
                     }
                 }
-            } else if (req.mask.items.cid) {
+            } else if (req.has.cid) {
                 if (!opened) {
                     err_msg = "Request received but no channel is opened";
                     LOG(err_msg);

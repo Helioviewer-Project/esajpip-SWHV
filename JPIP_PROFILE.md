@@ -27,7 +27,10 @@ compatibility. Acceptance alone does not indicate support.
 Initial inspection examines at most a 2 KiB request line. The JPIP parser uses at most
 the first 1,023 characters of the URI. Request paths and `target` values are not
 subject to general URI decoding, so clients should use the literal file names
-known to the server.
+known to the server. Percent escapes are decoded only within the supported
+`model` and `context` grammars. Initial routing and full request parsing use the
+same query-field splitter and URI limit. If a non-conforming request repeats a
+routing field, both stages use its last value.
 
 The detailed connection ownership, timeout and cleanup rules are documented in
 [Connections and JPIP channels](CHANNELS.md).

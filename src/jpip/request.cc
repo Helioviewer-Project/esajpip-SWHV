@@ -1,16 +1,207 @@
 #include "trace.h"
 #include "request.h"
+#include "query.h"
 
-#include <cstring>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <sstream>
 
-#define MAX_URI 1023
 #define MAXC 100000
-#define CLAMP(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
 
 using namespace std;
 
 namespace jpip {
+
+    namespace {
+
+        int Clamp(int value, int minimum, int maximum) {
+            return value < minimum ? minimum : (value > maximum ? maximum : value);
+        }
+
+        bool ParseInteger(const char **position, int *value) {
+            char *end;
+            errno = 0;
+            long number = strtol(*position, &end, 10);
+            if (end == *position || errno == ERANGE || number < INT_MIN || number > INT_MAX)
+                return false;
+            *position = end;
+            *value = number;
+            return true;
+        }
+
+        bool ParsePair(const string &text, int *x, int *y, string *suffix = NULL) {
+            const char *position = text.c_str();
+            if (!ParseInteger(&position, x) || *position++ != ',' ||
+                !ParseInteger(&position, y))
+                return false;
+            if (*position == '\0') {
+                if (suffix)
+                    suffix->clear();
+                return true;
+            }
+            if (!suffix || *position++ != ',')
+                return false;
+            *suffix = position;
+            return !suffix->empty();
+        }
+
+        bool ParseRange(const string &text, char separator, int *first, int *last) {
+            const char *position = text.c_str();
+            if (!ParseInteger(&position, first))
+                return false;
+            *last = *first;
+            if (*position != '\0') {
+                if (*position++ != separator || !ParseInteger(&position, last))
+                    return false;
+            }
+            return *position == '\0';
+        }
+
+        bool HexDigit(char character, unsigned char *value) {
+            if (character >= '0' && character <= '9')
+                *value = character - '0';
+            else if (character >= 'a' && character <= 'f')
+                *value = character - 'a' + 10;
+            else if (character >= 'A' && character <= 'F')
+                *value = character - 'A' + 10;
+            else
+                return false;
+            return true;
+        }
+
+        bool Decode(const string &text, string *decoded) {
+            decoded->clear();
+            decoded->reserve(text.size());
+            for (size_t i = 0; i < text.size(); ++i) {
+                if (text[i] != '%') {
+                    decoded->push_back(text[i]);
+                    continue;
+                }
+                unsigned char high, low;
+                if (i + 2 >= text.size() ||
+                    !HexDigit(text[i + 1], &high) || !HexDigit(text[i + 2], &low))
+                    return false;
+                char character = static_cast<char>((high << 4) | low);
+                if (character == '\0')
+                    return false;
+                decoded->push_back(character);
+                i += 2;
+            }
+            return true;
+        }
+
+        void AppendRange(int first, int last, vector<int> *values) {
+            if (first > last) {
+                for (int i = first; i >= last; --i)
+                    values->push_back(i);
+            } else {
+                for (int i = first; i <= last; ++i)
+                    values->push_back(i);
+            }
+        }
+
+        bool ParseContext(const string &value, vector<int> *codestreams) {
+            string decoded;
+            if (!Decode(value, &decoded) || decoded.compare(0, 5, "jpxl<") != 0 ||
+                decoded.size() < 7 || decoded.back() != '>')
+                return false;
+
+            int first, last;
+            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', &first, &last))
+                return false;
+            first = Clamp(first, 0, MAXC);
+            last = Clamp(last, 0, MAXC);
+            AppendRange(first, last, codestreams);
+            return true;
+        }
+
+        bool ParseModel(const string &value, CacheModel *model) {
+            string text;
+            if (!Decode(value, &text) || text.empty())
+                return false;
+
+            model->Clear();
+            int minimum_codestream = 0;
+            int maximum_codestream = 0;
+            bool descriptor_found = false;
+            const char *position = text.c_str();
+
+            while (*position != '\0') {
+                if (*position == ',') {
+                    if (*++position == '\0')
+                        return false;
+                    continue;
+                }
+                if (*position == '[') {
+                    ++position;
+                    if (!ParseInteger(&position, &minimum_codestream))
+                        return false;
+                    minimum_codestream = Clamp(minimum_codestream, 0, MAXC);
+                    maximum_codestream = minimum_codestream;
+                    if (*position == '-') {
+                        ++position;
+                        if (!ParseInteger(&position, &maximum_codestream))
+                            return false;
+                        maximum_codestream = Clamp(maximum_codestream,
+                                                   minimum_codestream, MAXC);
+                    }
+                    if (*position++ != ']')
+                        return false;
+                    continue;
+                }
+                if (*position == '-') {
+                    ERROR("Subtractive bin-descriptors are not supported for model updating");
+                    return false;
+                }
+
+                char type = *position++;
+                int id = 0;
+                if (type == 'H' && *position == 'm') {
+                    type = 'h';
+                    ++position;
+                } else if (!ParseInteger(&position, &id) || id < 0) {
+                    return false;
+                }
+
+                int amount = INT_MAX;
+                if (*position == ':') {
+                    ++position;
+                    if (*position == 'L') {
+                        ERROR("Number of layers can not be used for model updating");
+                        return false;
+                    }
+                    if (!ParseInteger(&position, &amount) || amount < 0)
+                        return false;
+                }
+
+                if (type == 'M') {
+                    model->AddToMetadata(id, amount);
+                    TRACE("Model updating: M" << id << ":" << (amount == INT_MAX ? -1 : amount));
+                } else if (type == 'H' || type == 'h' || type == 'P') {
+                    for (int i = minimum_codestream; i <= maximum_codestream; ++i) {
+                        CacheModel::Codestream &codestream = model->GetCodestream(i);
+                        if (type == 'h') {
+                            codestream.AddToMainHeader(amount);
+                            TRACE("Model updating: Hm:" << (amount == INT_MAX ? -1 : amount));
+                        } else if (type == 'H') {
+                            codestream.AddToTileHeader(amount);
+                            TRACE("Model updating: H" << id << ":" << (amount == INT_MAX ? -1 : amount));
+                        } else {
+                            codestream.AddToPrecinct(id, amount);
+                            TRACE("Model updating: P" << id << ":" << (amount == INT_MAX ? -1 : amount));
+                        }
+                    }
+                } else {
+                    ERROR("The bin-descriptor '" << type << "' is not supported for model updating");
+                    return false;
+                }
+                descriptor_found = true;
+            }
+            return descriptor_found;
+        }
+
+    }
 
     bool Request::Parse(const string &line) {
         string method, uri, protocol;
@@ -24,251 +215,99 @@ namespace jpip {
             (protocol.compare(0, 8, "HTTP/1.0") && protocol.compare(0, 8, "HTTP/1.1")))
             return false;
 
-        ParseURI(uri.substr(0, MAX_URI));
+        ParseURI(uri.substr(0, MAX_URI_LENGTH));
         return valid;
     }
 
     void Request::ParseURI(const string &uri) {
-        istringstream uri_stream(uri);
-        getline(uri_stream, object, '?');
-        ParseParameters(uri_stream);
-    }
+        size_t question = uri.find('?');
+        object = uri.substr(0, question);
 
-    void Request::ParseParameters(istream &stream) {
-        string param, value;
-
-        mask.Clear();
+        has = Parameters();
         codestreams.clear();
         target.clear();
         channel.clear();
+        if (question == string::npos)
+            return;
 
-        while (stream.good()) {
-            value.clear();
-            getline(stream, param, '=');
-            ParseParameter(stream, param, value);
-        }
-    }
+        Query query = ParseQuery(uri.data() + question + 1, uri.data() + uri.size());
+        for (const QueryParameter &parameter : query) {
+            const string &name = parameter.name;
+            const string &value = parameter.value;
+            int x, y;
 
-    void Request::ParseParameter(istream &stream, const string &param, string &value) {
-        char c;
-        int x, y;
-        string aux;
-
-        if (param == "target") mask.items.target = 1;
-        else if (param == "cid") mask.items.cid = 1;
-        else if (param == "cnew") mask.items.cnew = 1;
-        else if (param == "cclose") mask.items.cclose = 1;
-        else if (param == "metareq") mask.items.metareq = 1;
-        else if (param == "fsiz") {
-            if ((stream >> x >> c >> y) && (c == ',')) {
-                resolution_size.x = x;
-                resolution_size.y = y;
-                mask.items.fsiz = 1;
-
-                if (stream.peek() == ',') {
-                    std::getline(stream.ignore(1), aux, '&');
-                    if (!stream.eof()) stream.unget();
-
-                    if (aux == "round-up") round_direction = ROUNDUP;
-                    else if (aux == "round-down") round_direction = ROUNDDOWN;
-                    else round_direction = CLOSEST;
+            if (name == "target") {
+                has.target = true;
+                target = value;
+            } else if (name == "cid") {
+                has.cid = true;
+            } else if (name == "cnew") {
+                has.cnew = true;
+            } else if (name == "cclose") {
+                has.cclose = true;
+            } else if (name == "metareq") {
+                has.metareq = true;
+            } else if (name == "fsiz") {
+                string round;
+                if (ParsePair(value, &x, &y, &round)) {
+                    resolution_size = jpeg2000::Size(x, y);
+                    has.fsiz = true;
+                    if (round == "round-up")
+                        round_direction = ROUNDUP;
+                    else if (round == "round-down")
+                        round_direction = ROUNDDOWN;
+                    else
+                        round_direction = CLOSEST;
+                    TRACE("JPIP parameter: fsiz=" << x << "," << y << "," << round);
                 }
-
-                TRACE("JPIP parameter: fsiz=" << resolution_size.x << "," << resolution_size.y << "," << aux);
-            }
-        } else if (param == "roff") {
-            if ((stream >> x >> c >> y) && (c == ',')) {
-                woi_position.x = x;
-                woi_position.y = y;
-                mask.items.roff = 1;
-
-                TRACE("JPIP parameter: roff=" << woi_position.x << "," << woi_position.y);
-            }
-        } else if (param == "rsiz") {
-            if ((stream >> x >> c >> y) && (c == ',')) {
-                woi_size.x = x;
-                woi_size.y = y;
-                mask.items.rsiz = 1;
-
-                TRACE("JPIP parameter: rsiz=" << woi_size.x << "," << woi_size.y);
-            }
-        } else if (param == "len") {
-            if ((stream >> x) && x >= 0) {
-                length_response = x;
-                mask.items.len = 1;
-
-                TRACE("JPIP parameter: len=" << length_response);
-            } else
-                valid = false;
-        } else if (param == "stream") {
-            if (stream >> x) {
-                x = CLAMP(x, 0, MAXC);
-                y = x;
-
-                if (stream.peek() == ':') {
-                    stream.ignore(1) >> y;
-                    y = CLAMP(y, 0, MAXC);
+            } else if (name == "roff") {
+                if (ParsePair(value, &x, &y)) {
+                    woi_position = jpeg2000::Point(x, y);
+                    has.roff = true;
+                    TRACE("JPIP parameter: roff=" << x << "," << y);
                 }
-
-                if (stream) {
-                    if (x > y) { // not standard
-                        for (int i = x; i >= y; --i)
-                            codestreams.push_back(i);
-                    } else {
-                        for (int i = x; i <= y; ++i)
-                            codestreams.push_back(i);
-                    }
-                    mask.items.stream = 1;
+            } else if (name == "rsiz") {
+                if (ParsePair(value, &x, &y)) {
+                    woi_size = jpeg2000::Size(x, y);
+                    has.rsiz = true;
+                    TRACE("JPIP parameter: rsiz=" << x << "," << y);
                 }
-
-                TRACE("JPIP parameter: stream=" << x << ":" << y);
-            }
-        } else if (param == "model") {
-            if (ParseModel(stream))
-                mask.items.model = 1;
-            else
-                valid = false;
-        } else if (param == "context") {
-            char jpxl_param[5];
-            stream.get(jpxl_param, 5);
-
-            if (!strcmp(jpxl_param, "jpxl")) {
-                GetCodedChar(stream, c);
-                if (c == '<') {
-                    if (stream >> x) {
-                        x = CLAMP(x, 0, MAXC);
-                        y = x;
-
-                        if (stream.peek() == '-') {
-                            stream.ignore(1) >> y;
-                            y = CLAMP(y, 0, MAXC);
-                        }
-
-                        GetCodedChar(stream, c);
-                        if (c == '>') {
-                            if (x > y) { // not standard
-                                for (int i = x; i >= y; --i)
-                                    codestreams.push_back(i);
-                            } else {
-                                for (int i = x; i <= y; ++i)
-                                    codestreams.push_back(i);
-                            }
-                            mask.items.context = 1;
-                        }
-                    }
+            } else if (name == "len") {
+                const char *position = value.c_str();
+                if (ParseInteger(&position, &x) && *position == '\0' && x >= 0) {
+                    length_response = x;
+                    has.len = true;
+                    TRACE("JPIP parameter: len=" << x);
+                } else {
+                    valid = false;
                 }
-                TRACE("JPIP parameter: context=" << x << ":" << y);
+            } else if (name == "stream") {
+                if (ParseRange(value, ':', &x, &y)) {
+                    x = Clamp(x, 0, MAXC);
+                    y = Clamp(y, 0, MAXC);
+                    AppendRange(x, y, &codestreams);
+                    has.stream = true;
+                    TRACE("JPIP parameter: stream=" << x << ":" << y);
+                }
+            } else if (name == "model") {
+                if (ParseModel(value, &cache_model))
+                    has.model = true;
+                else
+                    valid = false;
+            } else if (name == "context") {
+                if (ParseContext(value, &codestreams)) {
+                    has.context = true;
+                    TRACE("JPIP parameter: context=" << value);
+                }
             }
+
+            if (!value.empty())
+                TRACE("JPIP parameter: " << name << "=" << value);
         }
 
-        getline(stream, value, '&');
-
-        if (param == "target")
-            target = value;
-        else if (param == "cid" || param == "cclose")
-            channel = value;
-
-        if (!value.empty()) { TRACE("JPIP parameter: " << param << "=" << value); }
-    }
-
-    istream &Request::GetCodedChar(istream &in, char &c) {
-        if (in.get(c)) {
-            if (c == '%') {
-                int cval;
-                stringstream hex_str;
-
-                hex_str.put(in.get());
-                hex_str.put(in.get());
-
-                if (hex_str >> hex >> cval) c = (char) cval;
-                else {
-                    in.setstate(istream::failbit);
-                    c = EOF;
-                }
-            }
-        }
-        return in;
-    }
-
-    istream &Request::ParseModel(istream &in) {
-        char c;
-        int id, amount;
-        int minc = 0, maxc = 0;
-
-        cache_model.Clear();
-
-        while (in.good()) {
-            if (!GetCodedChar(in, c))
-                break;
-
-            if (c == ',') continue;
-            else if (c == '&') {
-                in.unget();
-                break;
-            } else if (c == '[') {
-                if (in >> minc) {
-                    minc = CLAMP(minc, 0, MAXC);
-                    maxc = minc;
-
-                    if (in.peek() == '-') {
-                        in.ignore(1) >> maxc;
-                        maxc = CLAMP(maxc, minc, MAXC);
-                    }
-                    if (!GetCodedChar(in, c) || (c != ']'))
-                        in.setstate(istream::failbit);
-
-                    TRACE("Model updating: [" << minc << "-" << maxc << "]");
-                }
-            } else if (c == '-') {
-                ERROR("Subtractive bin-descriptors are not supported for model updating");
-                in.setstate(istream::failbit);
-            } else {
-                if ((c == 'H') && (in.peek() == 'm')) {
-                    in.ignore(1);
-                    c = 'h';
-                } else if (!(in >> id) || id < 0)
-                    in.setstate(istream::failbit);
-
-                amount = INT_MAX;
-                if (in.rdbuf()->sgetc() == ':') {
-                    if (in.ignore(1).peek() != 'L') {
-                        if (!(in >> amount) || amount < 0)
-                            in.setstate(istream::failbit);
-                    } else {
-                        ERROR("Number of layers can not be used for model updating");
-                        in.setstate(istream::failbit);
-                    }
-                }
-
-                if (in) {
-                    if (c == 'M') {
-                        cache_model.AddToMetadata(id, amount);
-                        TRACE("Model updating: M" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                    } else {
-                        for (int i = minc; i <= maxc; ++i) {
-                            CacheModel::Codestream &cod = cache_model.GetCodestream(i);
-
-                            if (c == 'h') {
-                                cod.AddToMainHeader(amount);
-                                TRACE("Model updating: Hm" << ":" << (amount == INT_MAX ? -1 : amount));
-                            } else if (c == 'H') {
-                                cod.AddToTileHeader(amount);
-                                TRACE("Model updating: H" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                            } else if (c == 'P') {
-                                cod.AddToPrecinct(id, amount);
-                                TRACE("Model updating: P" << id << ":" << (amount == INT_MAX ? -1 : amount));
-                            } else {
-                                ERROR("The bin-descriptor '" << c << "' is not supported for model updating");
-                                in.setstate(istream::failbit);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return in;
+        const string *route = FindParameter(query, has.cclose ? "cclose" : "cid");
+        if (route)
+            channel = *route;
     }
 
 }

@@ -8,6 +8,7 @@
 #include <limits>
 #include <string>
 #include "initial_request.h"
+#include "jpip/query.h"
 
 using namespace std;
 
@@ -28,25 +29,6 @@ static bool ParseChannel(const string &text, uint64_t *channel) {
     }
     *channel = value;
     return true;
-}
-
-static bool GetParameter(const char *begin, const char *end, const char *name,
-                         size_t name_length, string *value) {
-    while (begin < end) {
-        const char *separator = static_cast<const char *>(memchr(begin, '&', end - begin));
-        const char *parameter_end = separator ? separator : end;
-        const char *equals = static_cast<const char *>(memchr(begin, '=', parameter_end - begin));
-        const char *parameter_name_end = equals ? equals : parameter_end;
-        if (static_cast<size_t>(parameter_name_end - begin) == name_length &&
-            memcmp(begin, name, name_length) == 0) {
-            value->assign(equals ? equals + 1 : parameter_end, parameter_end);
-            return true;
-        }
-        if (!separator)
-            break;
-        begin = separator + 1;
-    }
-    return false;
 }
 
 InitialRequest InspectInitialRequest(int fd) {
@@ -85,29 +67,27 @@ InitialRequest InspectInitialRequest(int fd) {
         (memcmp(protocol, "HTTP/1.0", 8) != 0 && memcmp(protocol, "HTTP/1.1", 8) != 0))
         return {REQUEST_REJECTED, false, 0};
 
-    const char *query = static_cast<const char *>(memchr(uri, '?', uri_end - uri));
+    const char *parsed_uri_end = min(uri_end, uri + jpip::MAX_URI_LENGTH);
+    const char *query = static_cast<const char *>(memchr(uri, '?', parsed_uri_end - uri));
     if (!query)
         return {REQUEST_REJECTED, false, 0};
 
-    string cid;
-    string cclose;
-    string cnew;
-    bool has_cid = GetParameter(query + 1, uri_end, "cid", 3, &cid);
-    bool has_close = GetParameter(query + 1, uri_end, "cclose", 6, &cclose);
-    bool has_new = GetParameter(query + 1, uri_end, "cnew", 4, &cnew);
+    jpip::Query parameters = jpip::ParseQuery(query + 1, parsed_uri_end);
+    const string *cid = jpip::FindParameter(parameters, "cid");
+    const string *cclose = jpip::FindParameter(parameters, "cclose");
+    const string *cnew = jpip::FindParameter(parameters, "cnew");
 
-    if (has_close) {
-        if (cclose == "*" && has_cid)
-            cclose = cid;
+    if (cclose) {
+        const string *route = *cclose == "*" && cid ? cid : cclose;
         uint64_t channel;
-        return ParseChannel(cclose, &channel)
+        return ParseChannel(*route, &channel)
                    ? InitialRequest{REQUEST_ACCEPTED, false, channel}
                    : InitialRequest{REQUEST_REJECTED, false, 0};
     }
-    if (has_new)
+    if (cnew)
         return {REQUEST_ACCEPTED, true, 0};
     uint64_t channel;
-    if (has_cid && ParseChannel(cid, &channel))
+    if (cid && ParseChannel(*cid, &channel))
         return {REQUEST_ACCEPTED, false, channel};
     return {REQUEST_REJECTED, false, 0};
 }

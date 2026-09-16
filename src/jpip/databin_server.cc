@@ -44,7 +44,7 @@ namespace jpip {
 
         data_writer.StartResponse();
 
-        if (req.mask.items.stream || req.mask.items.context) {
+        if (req.has.stream || req.has.context) {
             for (int codestream : req.codestreams)
                 if (codestream < 0 || static_cast<size_t>(codestream) >= image_index->GetNumCodestreams())
                     return false;
@@ -55,7 +55,7 @@ namespace jpip {
             }
         }
 
-        if ((has_woi = req.mask.HasWOI())) {
+        if ((has_woi = req.HasWOI())) {
             if (codestreams.empty()) {
                 codestreams.push_back(0);
                 current_idx = 0;
@@ -78,10 +78,10 @@ namespace jpip {
             }
         }
 
-        if (req.mask.items.model)
+        if (req.has.model)
             cache_model += req.cache_model;
 
-        pending = req.mask.items.len ? req.length_response : INT_MAX;
+        pending = req.has.len ? req.length_response : INT_MAX;
 
         if (reset_woi) {
             int codestream = codestreams[current_idx];

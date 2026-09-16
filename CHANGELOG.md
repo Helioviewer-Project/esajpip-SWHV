@@ -48,6 +48,9 @@
   image origins that the packet index cannot represent correctly.
 - Reject invalid JPIP cache lengths, response limits, and codestream selectors.
   Use codestream zero when a window request omits its selector.
+- Use the same query-field parser for connection routing and full JPIP request
+  handling, so repeated channel fields cannot select different channels in the
+  two stages.
 - Treat an omitted response-length limit as unlimited, so the server sends the
   complete available response and its end-of-response message.
 - Crop requested windows to the selected image resolution and reject empty or

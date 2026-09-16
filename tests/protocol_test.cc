@@ -196,6 +196,14 @@ static void CheckInitialRequest() {
     Check(Inspect("GET /jpip?cid=18446744073709551616 HTTP/1.1\r\n").state ==
                   REQUEST_REJECTED,
           "Accepted an overflowing channel ID");
+
+    InitialRequest duplicate = Inspect("GET /jpip?cid=46&cid=47 HTTP/1.1\r\n");
+    Check(duplicate.state == REQUEST_ACCEPTED && duplicate.channel == 47,
+          "Initial inspection did not use the last channel ID");
+
+    InitialRequest mixed = Inspect("GET /jpip?cclose=47&cid=48 HTTP/1.1\r\n");
+    Check(mixed.state == REQUEST_ACCEPTED && mixed.channel == 47,
+          "Initial inspection did not give cclose routing priority");
 }
 
 static void CheckConnectionQueue() {
@@ -223,24 +231,24 @@ static void CheckJHVRequests() {
     Check(req.Parse("GET /movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512 HTTP/1.1"),
           "Could not parse JHV channel request");
     Check(req.object == "/movie.jpx", "Wrong channel target");
-    Check(req.mask.items.cnew, "Missing cnew field");
-    Check(req.mask.items.len && req.length_response == 512, "Wrong channel response limit");
+    Check(req.has.cnew, "Missing cnew field");
+    Check(req.has.len && req.length_response == 512, "Wrong channel response limit");
 
     Check(req.Parse("GET /jpip?target=movie.jpx&cnew=http&len=512 HTTP/1.1"),
           "Could not parse target-form channel request");
-    Check(req.mask.items.target && req.target == "movie.jpx", "Missing target field");
+    Check(req.has.target && req.target == "movie.jpx", "Missing target field");
 
     Check(req.Parse("GET /jpip?stream=0&metareq=[*]!!&len=2000000&cid=7 HTTP/1.1"),
           "Could not parse JHV metadata request");
-    Check(req.mask.items.cid && req.channel == "7", "Missing channel ID");
+    Check(req.has.cid && req.channel == "7", "Missing channel ID");
     Check(req.target.empty(), "Previous target was retained");
-    Check(req.mask.items.metareq, "Missing metadata request");
+    Check(req.has.metareq, "Missing metadata request");
     Check(req.codestreams == vector<int>(1, 0), "Wrong metadata codestream");
     Check(req.length_response == 2000000, "Wrong metadata response limit");
 
     Check(req.Parse("GET /jpip?stream=4013&fsiz=4096,4096,closest&rsiz=4096,4096&roff=0,0&len=2097152&cid=7 HTTP/1.1"),
           "Could not parse JHV frame request");
-    Check(req.mask.HasWOI(), "Missing frame window");
+    Check(req.HasWOI(), "Missing frame window");
     Check(req.codestreams == vector<int>(1, 4013), "Wrong frame codestream");
     Check(req.resolution_size == jpeg2000::Size(4096, 4096), "Wrong frame resolution size");
     Check(req.woi_size == jpeg2000::Size(4096, 4096), "Wrong frame region size");
@@ -250,12 +258,12 @@ static void CheckJHVRequests() {
 
     Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
           "Could not parse terminal cache model");
-    Check(req.mask.items.model, "Missing terminal cache model");
+    Check(req.has.model, "Missing terminal cache model");
     Check(req.cache_model.GetMetadata(0) == INT_MAX, "Wrong terminal metadata model");
 
     Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
           "Could not parse terminal partial cache model");
-    Check(req.mask.items.model, "Missing terminal partial cache model");
+    Check(req.has.model, "Missing terminal partial cache model");
     Check(req.cache_model.GetMetadata(0) == 446, "Wrong terminal partial metadata model");
 
     Check(req.Parse("GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
@@ -275,15 +283,44 @@ static void CheckJHVRequests() {
     Check(!req.Parse("GET /jpip?model=M0:-1 HTTP/1.1"), "Accepted negative model length");
     Check(!req.Parse("GET /jpip?model= HTTP/1.1"), "Accepted empty cache model");
     Check(!req.Parse("GET /jpip?model=M0% HTTP/1.1"), "Accepted truncated cache-model escape");
+    Check(!req.Parse("GET /jpip?model=M0%00M1 HTTP/1.1"), "Accepted a cache model containing NUL");
     Check(!req.Parse("GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
 
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
-    Check(req.mask.items.cclose && req.channel == "7", "Missing close field");
+    Check(req.has.cclose && req.channel == "7", "Missing close field");
     Check(req.codestreams.empty(), "A reused request retained its codestreams");
 
     Check(req.Parse("GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
           "Could not reuse request for a new channel");
     Check(req.channel.empty(), "Previous channel ID was retained");
+
+    Check(req.Parse("GET /jpip?cid=46&cid=47 HTTP/1.1") && req.channel == "47",
+          "Full parsing did not use the last channel ID");
+    Check(req.Parse("GET /jpip?cid=47&cclose=* HTTP/1.1") &&
+              req.has.cclose && req.channel == "*",
+          "Could not parse the all-channel close form");
+    Check(req.Parse("GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
+              req.has.cclose && req.channel == "47",
+          "Full parsing did not give cclose routing priority");
+
+    Check(req.Parse("GET /jpip?stream=3:1&context=jpxl%3C4-6%3E&cid=7 HTTP/1.1"),
+          "Could not parse reduced codestream selectors");
+    Check(req.codestreams == vector<int>({3, 2, 1, 4, 5, 6}),
+          "Wrong codestream selector ranges");
+
+    Check(req.Parse("GET /jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7 HTTP/1.1"),
+          "Could not parse encoded cache-model descriptors");
+    Check(req.cache_model.GetCodestream(1).GetMainHeader() == 3 &&
+              req.cache_model.GetCodestream(2).GetTileHeader() == 5 &&
+              req.cache_model.GetCodestream(1).GetPrecinct(6) == 7 &&
+              req.cache_model.GetMetadata(8) == 9,
+          "Wrong encoded cache model");
+
+    Check(req.Parse("GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&
+              req.target == "movie%20name.jpx",
+          "Unexpectedly decoded a target value");
+    Check(!req.Parse("GET /jpip?len=12junk&cid=7 HTTP/1.1"),
+          "Accepted a response length with trailing data");
 }
 
 static void CheckInetAddress() {
