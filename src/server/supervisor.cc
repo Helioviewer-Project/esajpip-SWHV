@@ -68,10 +68,12 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
             if (signal_error != 0) {
                 cerr << "The serving-process signals can not be unblocked: "
                      << strerror(signal_error) << endl;
-                return SERVER_STARTUP_FAILURE;
+                _exit(SERVER_STARTUP_FAILURE);
             }
-            return RunServer(cfg, app_info, listen_socket, supervisor_sockets[1],
-                             log_name, description, restart_message);
+            int result = RunServer(cfg, app_info, listen_socket,
+                                   supervisor_sockets[1], log_name, description,
+                                   restart_message);
+            _exit(result);
         }
 
         close(supervisor_sockets[1]);
