@@ -2,10 +2,8 @@
 #include "request.h"
 #include "query.h"
 
-#include <cerrno>
 #include <cstdint>
 #include <climits>
-#include <cstdlib>
 #include <sstream>
 
 #define MAXC 100000
@@ -26,13 +24,20 @@ namespace jpip {
         }
 
         bool ParseInteger(const char **position, int *value) {
-            char *end;
-            errno = 0;
-            long number = strtol(*position, &end, 10);
-            if (end == *position || errno == ERANGE || number < INT_MIN || number > INT_MAX)
+            const char *current = *position;
+            bool negative = *current == '-';
+            if (negative)
+                ++current;
+
+            uint64_t maximum = negative ? static_cast<uint64_t>(INT_MAX) + 1 : INT_MAX;
+            uint64_t number;
+            if (!ParseUnsignedInteger(&current, maximum, &number))
                 return false;
-            *position = end;
-            *value = number;
+            *position = current;
+            if (negative)
+                *value = number == maximum ? INT_MIN : -static_cast<int>(number);
+            else
+                *value = static_cast<int>(number);
             return true;
         }
 
@@ -101,6 +106,7 @@ namespace jpip {
             size_t count = static_cast<size_t>(first > last ? first - last : last - first) + 1;
             if (values->size() > MAXC + 1 - count)
                 return false;
+            values->reserve(values->size() + count);
             if (first > last) {
                 for (int i = first; i >= last; --i)
                     values->push_back(i);

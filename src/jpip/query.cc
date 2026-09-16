@@ -32,4 +32,23 @@ namespace jpip {
         return NULL;
     }
 
+    bool ParseUnsignedInteger(const char **position, uint64_t maximum, uint64_t *value) {
+        const char *current = *position;
+        if (*current < '0' || *current > '9')
+            return false;
+
+        uint64_t number = 0;
+        do {
+            uint64_t digit = *current - '0';
+            if (digit > maximum || number > (maximum - digit) / 10)
+                return false;
+            number = number * 10 + digit;
+            ++current;
+        } while (*current >= '0' && *current <= '9');
+
+        *position = current;
+        *value = number;
+        return true;
+    }
+
 }

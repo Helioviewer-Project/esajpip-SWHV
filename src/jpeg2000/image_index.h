@@ -1,5 +1,5 @@
-#ifndef _JPEG2000_INDEX_NODE_H_
-#define _JPEG2000_INDEX_NODE_H_
+#ifndef _JPEG2000_IMAGE_INDEX_H_
+#define _JPEG2000_IMAGE_INDEX_H_
 
 //#define SHOW_TRACES
 #include "trace.h"
@@ -21,25 +21,19 @@ namespace jpeg2000 {
     private:
         friend class FileManager;
 
-        struct Stream {
+        struct Codestream {
+            std::string path;
+            CodingParameters parameters;
             int last_plt;
             int last_packet;
             uint64_t last_offset_PLT;
             uint64_t last_offset_packet;
             int max_resolution;
             PacketIndex packet_index;
-            CodestreamIndex codestream;
-
-            explicit Stream(CodestreamIndex &&_codestream);
-        };
-
-        struct Codestream {
-            std::string path;
-            CodingParameters parameters;
-            Stream stream;
+            CodestreamIndex index;
 
             Codestream(const std::string &_path, CodingParameters &&_params,
-                       CodestreamIndex &&_codestream);
+                       CodestreamIndex &&_index);
         };
 
         std::string path_name;           ///< Image file name
@@ -49,28 +43,29 @@ namespace jpeg2000 {
         /**
          * Gets the packet lengths from a PLT marker.
          * @param file File where to read the data from.
-         * @param stream Codestream index.
+         * @param codestream Codestream state.
          * @param length_packet It is returned the length of the packet.
          * @return <code>true</code> if successful.
          */
-        static bool GetPLTLength(data::File *file, Stream &stream, uint64_t *length_packet);
+        static bool GetPLTLength(data::File *file, Codestream &codestream,
+                                 uint64_t *length_packet);
 
         /**
          * Gets the packet offsets.
          * @param file File where to read the data from.
-         * @param stream Codestream index.
+         * @param codestream Codestream state.
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        static bool GetOffsetPacket(Stream &stream, uint64_t length_packet);
+        static bool GetOffsetPacket(Codestream &codestream, uint64_t length_packet);
 
         /**
          * Builds the required index for the required resolution levels.
-         * @param stream Codestream index.
+         * @param codestream Codestream state.
          * @param r Maximum resolution level.
          * @return <code>true</code> if successful
          */
-        static bool BuildIndex(data::File *file, Stream &stream,
+        static bool BuildIndex(data::File *file, Codestream &codestream,
                                const CodingParameters &coding_parameters, int r);
 
         explicit ImageIndex(const std::string &_path);
@@ -112,7 +107,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const data::FileSegment &GetMainHeader(int num_codestream) const {
-            return codestreams[num_codestream].stream.codestream.header;
+            return codestreams[num_codestream].index.header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
@@ -135,4 +130,4 @@ namespace jpeg2000 {
     };
 }
 
-#endif /* _JPEG2000_INDEX_NODE_H_ */
+#endif /* _JPEG2000_IMAGE_INDEX_H_ */

@@ -76,7 +76,6 @@ namespace jpip {
             valid = true;
             length_response = 0;
             round_direction = CLOSEST;
-            codestreams.reserve(100);
         }
 
         bool HasWOI() const {

@@ -568,12 +568,12 @@ namespace jpeg2000 {
                 break;
 
             if (linked_image.codestreams.empty() ||
-                linked_image.codestreams.back().stream.codestream.packets.empty()) {
+                linked_image.codestreams.back().index.packets.empty()) {
                 res = false;
                 break;
             }
             const CodestreamIndex &codestream =
-                    linked_image.codestreams.back().stream.codestream;
+                    linked_image.codestreams.back().index;
             const FileSegment &last_packet_data = codestream.packets.back();
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;

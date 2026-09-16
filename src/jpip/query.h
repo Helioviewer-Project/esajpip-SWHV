@@ -2,6 +2,7 @@
 #define _JPIP_QUERY_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace jpip {
 
     Query ParseQuery(const char *begin, const char *end);
     const std::string *FindParameter(const Query &query, const char *name);
+    bool ParseUnsignedInteger(const char **position, uint64_t maximum, uint64_t *value);
 
 }
 

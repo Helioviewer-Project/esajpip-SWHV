@@ -195,6 +195,12 @@ static void CheckInitialRequest() {
 
     Check(Inspect("GET /jpip?cid=047 HTTP/1.1\r\n").state == REQUEST_REJECTED,
           "Accepted a non-canonical channel ID");
+    Check(Inspect("GET /jpip?cid=+47 HTTP/1.1\r\n").state == REQUEST_REJECTED,
+          "Accepted a signed channel ID");
+    InitialRequest maximum =
+            Inspect("GET /jpip?cid=18446744073709551615 HTTP/1.1\r\n");
+    Check(maximum.state == REQUEST_ACCEPTED && maximum.channel == UINT64_MAX,
+          "Rejected the maximum channel ID");
     Check(Inspect("GET /jpip?cid=18446744073709551616 HTTP/1.1\r\n").state ==
                   REQUEST_REJECTED,
           "Accepted an overflowing channel ID");
@@ -291,6 +297,12 @@ static void CheckJHVRequests() {
     Check(!req.Parse("GET /jpip?model=M0% HTTP/1.1"), "Accepted truncated cache-model escape");
     Check(!req.Parse("GET /jpip?model=M0%00M1 HTTP/1.1"), "Accepted a cache model containing NUL");
     Check(!req.Parse("GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
+    Check(!req.Parse("GET /jpip?len=+1&cid=7 HTTP/1.1"), "Accepted a signed response length");
+    Check(!req.Parse("GET /jpip?len=2147483648&cid=7 HTTP/1.1"),
+          "Accepted an overflowing response length");
+    Check(req.Parse("GET /jpip?roff=-2147483648,0&cid=7 HTTP/1.1") &&
+              req.woi_position.x == INT_MIN,
+          "Could not parse the minimum signed window offset");
 
     Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.has.cclose && req.channel == "7", "Missing close field");

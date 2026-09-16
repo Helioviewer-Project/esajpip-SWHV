@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <string>
 #include "initial_request.h"
 #include "jpip/query.h"
@@ -18,17 +17,8 @@ static bool ParseChannel(const string &text, uint64_t *channel) {
     if (text.empty() || (text.size() > 1 && text[0] == '0'))
         return false;
 
-    uint64_t value = 0;
-    for (char character : text) {
-        if (character < '0' || character > '9')
-            return false;
-        uint64_t digit = character - '0';
-        if (value > (numeric_limits<uint64_t>::max() - digit) / 10)
-            return false;
-        value = value * 10 + digit;
-    }
-    *channel = value;
-    return true;
+    const char *position = text.c_str();
+    return jpip::ParseUnsignedInteger(&position, UINT64_MAX, channel) && *position == '\0';
 }
 
 InitialRequest InspectInitialRequest(int fd) {
