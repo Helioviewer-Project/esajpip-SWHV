@@ -18,10 +18,6 @@ namespace jpip {
     namespace {
 
         bool CropWindow(WOI *woi, const jpeg2000::Size &bounds) {
-            if (woi->size.x <= 0 || woi->size.y <= 0 ||
-                bounds.x <= 0 || bounds.y <= 0)
-                return false;
-
             int64_t left = max<int64_t>(0, woi->position.x);
             int64_t top = max<int64_t>(0, woi->position.y);
             int64_t right = min<int64_t>(bounds.x,
@@ -102,7 +98,8 @@ namespace jpip {
             }
         }
 
-        if ((has_woi = req.HasWOI())) {
+        window_state = req.HasWOI() ? WindowState::VALID : WindowState::NONE;
+        if (window_state == WindowState::VALID) {
             if (codestreams.empty()) {
                 codestreams.push_back(0);
                 current_idx = 0;
@@ -113,15 +110,21 @@ namespace jpip {
             WOI new_woi;
             new_woi.size = req.has.rsiz ? req.woi_size : req.resolution_size;
             new_woi.position = req.has.roff ? req.woi_position : jpeg2000::Point();
-            if (!CropWindow(&new_woi, req.resolution_size))
+            if (req.resolution_size.x <= 0 || req.resolution_size.y <= 0 ||
+                new_woi.size.x < 0 || new_woi.size.y < 0)
                 return false;
-            jpeg2000::Size resolution_size = req.GetResolution(coding_parameters, &new_woi);
-            if (!CropWindow(&new_woi, resolution_size))
-                return false;
-
-            if (new_woi != woi) {
-                reset_woi = true;
-                woi = new_woi;
+            if (!CropWindow(&new_woi, req.resolution_size)) {
+                window_state = WindowState::EMPTY;
+                woi = WOI();
+            } else {
+                jpeg2000::Size resolution_size = req.GetResolution(coding_parameters, &new_woi);
+                if (!CropWindow(&new_woi, resolution_size)) {
+                    window_state = WindowState::EMPTY;
+                    woi = WOI();
+                } else if (new_woi != woi) {
+                    reset_woi = true;
+                    woi = new_woi;
+                }
             }
         }
 
@@ -132,7 +135,7 @@ namespace jpip {
         if (pending > 0 && pending < DataBinWriter::EOR_LENGTH)
             pending = 0;
 
-        if (reset_woi) {
+        if (reset_woi && window_state != WindowState::EMPTY) {
             int codestream = codestreams[current_idx];
             const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
             woi_composer.Reset(coding_parameters, woi);
@@ -146,6 +149,12 @@ namespace jpip {
         ImageIndex *image_index = file_manager.GetImage();
 
         data_writer.SetBuffer(buf, min(pending, *len));
+
+        if (pending > 0 && window_state == WindowState::EMPTY) {
+            if (!data_writer.WriteEOR(EOR::WINDOW_DONE))
+                return false;
+            pending = 0;
+        }
 
         if (pending > 0) {
             if (!cache_model.IsFullMetadata()) {
@@ -237,7 +246,7 @@ namespace jpip {
                     }
                 }
 
-                if (!chunk_full && has_woi) {
+                if (!chunk_full && window_state == WindowState::VALID) {
                     FileSegment segment;
                     int bin_id, bin_offset;
                     bool last_packet;

@@ -28,7 +28,12 @@ namespace jpip {
         int pending;         ///< Number of pending bytes
         std::vector<int> codestreams;
         std::vector<data::File *> files;
-        bool has_woi;        ///< <code>true</code> if the last request contained a WOI
+        enum class WindowState {
+            NONE,
+            VALID,
+            EMPTY
+        };
+        WindowState window_state;
         size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
         int meta_offset;
@@ -137,7 +142,7 @@ namespace jpip {
          */
         DataBinServer() {
             pending = 0;
-            has_woi = false;
+            window_state = WindowState::NONE;
             current_idx = 0;
             meta_idx = 0;
             meta_offset = 0;

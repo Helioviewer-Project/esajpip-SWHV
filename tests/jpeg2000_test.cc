@@ -440,15 +440,27 @@ int main() {
               "roff=2000000000,2000000000&len=512&cid=0 HTTP/1.1"),
           "Could not parse an out-of-range window");
     jpip::DataBinServer outside_server;
-    Check(!outside_server.SetRequest(manager, outside_request),
-          "Accepted a window outside the image");
+    Check(outside_server.SetRequest(manager, outside_request),
+          "Rejected a window outside the image");
+    response_length = sizeof response;
+    Check(outside_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate an empty-window response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "An outside window did not produce only a window-done EOR");
 
     jpip::Request empty_request;
     Check(empty_request.Parse(
               "GET /jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
           "Could not parse an empty window");
     jpip::DataBinServer empty_server;
-    Check(!empty_server.SetRequest(manager, empty_request), "Accepted an empty window");
+    Check(empty_server.SetRequest(manager, empty_request), "Rejected an empty window");
+    response_length = sizeof response;
+    Check(empty_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a zero-sized-window response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A zero-sized window did not produce only a window-done EOR");
 
     Check(request.Parse("GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
           "Could not parse unavailable-codestream request");
