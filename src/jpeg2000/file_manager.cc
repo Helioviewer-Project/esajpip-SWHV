@@ -161,9 +161,11 @@ namespace jpeg2000 {
                     break;
 
                 case COD_MARKER: TRACE("COD marker...");
-                    if (!ReadCODMarker(file, marker_limit, params))
+                    if ((!tile_header && cod) ||
+                        !ReadCODMarker(file, marker_limit, params))
                         return false;
-                    cod = true;
+                    if (!tile_header)
+                        cod = true;
                     break;
 
                 case SOT_MARKER: TRACE("SOT marker...");
@@ -173,10 +175,11 @@ namespace jpeg2000 {
                     break;
 
                 case QCD_MARKER:
+                    if ((!tile_header && qcd) ||
+                        !SkipMarker(file, marker_limit))
+                        return false;
                     if (!tile_header)
                         qcd = true;
-                    if (!SkipMarker(file, marker_limit))
-                        return false;
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");

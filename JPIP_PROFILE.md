@@ -100,9 +100,10 @@ JPX specifications allow.
 - Explicit precinct dimensions and the Part 1 default of 32,768 by 32,768
   samples are supported. An explicit zero exponent is accepted only at the
   lowest resolution.
-- The main `SIZ`, `COD`, and `QCD` information must describe the packet layout.
-  Marker features that change that layout without being represented there,
-  such as progression changes through `POC`, are outside the supported profile.
+- The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
+  marker. They must describe the packet layout. Features that change that
+  layout elsewhere, such as progression changes through `POC`, are outside the
+  supported profile.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the

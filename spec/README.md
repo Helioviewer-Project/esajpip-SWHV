@@ -307,25 +307,25 @@ the parser code involved: a length mutant points at `ReadBoxHeader` /
 
 Places where the server is *more lenient* than T.800. A subtype cannot widen
 its base, so each needs a decision: tighten the parser, or relax the model
-and document the leniency in `JPIP_PROFILE.md`. Three earlier ones were
+and document the leniency in `JPIP_PROFILE.md`. Four earlier ones were
 resolved in the parser (`e1b48dd` reserved code-block style bits, `63161e4`
-zero precinct exponents above r = 0, `c309867` the `jP`/`ftyp` preamble);
-the corpus expects rejection for those, matching the hand-written tests
-added with each fix.
+zero precinct exponents above r = 0, `c309867` the `jP`/`ftyp` preamble,
+`219d14b` a repeated COD or QCD in the main header); the corpus expects
+rejection for those, matching the hand-written tests added with each fix
+(the `codestream.one-cod-before-sot-0` and `one-qcd-before-sot-1` vectors
+are the corpus twins of `duplicate-cod.jp2` / `duplicate-qcd.jp2`).
 
-The remaining ones are all in `ReadCodestream`'s marker loop, which
-dispatches on the marker code with no notion of "main header has ended":
+The remaining ones are both in `ReadCodestream`'s marker loop, which
+dispatches on the marker code with no notion of "the tile-parts have
+started":
 
-1. **A second COD (or QCD) in the main header.** Vector
-   `jp2-rule-codestream.one-cod-before-sot-0`. T.800 A.6.1: COD appears once
-   in the main header. `ReadCODMarker` runs again and overwrites the
-   parameters. Fix: `if (cod) return false;` before the call (mirror `siz`).
-2. **A marker segment between tile-parts.** Vector
-   `jp2-rule-codestream.segment-after-sot-2` (QCD after the first tile-part's
+1. **A marker segment between tile-parts.** Vector
+   `jp2-rule-codestream.segment-after-sot-3` (QCD after the first tile-part's
    data). T.800 A.3: after the first SOT only SOT and EOC may follow a
-   tile-part. The loop accepts any segment there and skips or re-parses it.
-   Fix: once a SOD has been passed, reject every code except SOT and EOC.
-3. **TNsot inconsistent with the tile-part count.** Vector
+   tile-part. `219d14b` rejects a repeat only while `tile_header` is false,
+   so a QCD here is still skipped. Fix: once a SOD has been passed, reject
+   every code except SOT and EOC.
+2. **TNsot inconsistent with the tile-part count.** Vector
    `jp2-sot.tnsot-2` (one tile-part, TNsot = 2). A.4.2: a non-zero TNsot is
    the number of tile-parts of the tile. `ReadSOTMarker` checks only
    `tpsot < tnsot` per segment. Fix: remember the first non-zero TNsot and,
@@ -333,8 +333,8 @@ dispatches on the marker code with no notion of "main header has ended":
    0, 1, 2, … (the model checks the sequence too; today a codestream whose
    first tile-part has TPsot = 1 with TNsot = 0 would be accepted).
 
-None of the three affects serving of well-formed files; all three are a few
-lines in `file_manager.cc`.
+Neither affects serving of well-formed files; both are a few lines in
+`file_manager.cc`.
 
 A JPX carrying both `jp2c` and `ftbl` boxes is *not* a failure: links take
 precedence and embedded codestreams are ignored (`JPIP_PROFILE.md`), and the
@@ -402,10 +402,10 @@ From each base:
    bound, and semantically loaded values (`xtsiz = 3` below `xsiz`,
    `progression = 3`). Names look like `jp2-siz.xosiz-1`.
 3. **Rule mutants** (`rule_mutants[]`, `linked_rule_mutants[]`): one
-   structural change per cross-field rule — a second COD, no QCD, a QCD
+   structural change per cross-field rule — a second COD or QCD, no QCD, a QCD
    after the tile-part, no PLT, 65 tile-parts, a packet length beyond the
    data, no `jP` box, two `jp2c`, `DR = 0`, `NDR` mismatch, two `flst`, an
-   `http` URL. Names look like `jp2-rule-codestream.no-plt-3`.
+   `http` URL. Names look like `jp2-rule-codestream.no-plt-4`.
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
    `n + 1`, and below its minimum. Names: `jp2-len-<offset>-<value>`.
 5. **Code mutants**: each marker code patched to `FF70` (undefined), `FF51`

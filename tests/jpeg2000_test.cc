@@ -139,6 +139,24 @@ static vector<unsigned char> MakePrecinctCodestream(uint8_t lowest,
                           vector<unsigned char>{lowest, higher});
 }
 
+static vector<unsigned char> DuplicateMarker(vector<unsigned char> codestream,
+                                              uint16_t marker) {
+    for (size_t i = 0; i + 4 <= codestream.size(); ++i) {
+        if (codestream[i] != (marker >> 8) || codestream[i + 1] != (marker & 0xFF))
+            continue;
+        size_t length = (codestream[i + 2] << 8) | codestream[i + 3];
+        Check(length >= 2 && length <= codestream.size() - i - 2,
+              "Invalid marker in JPEG 2000 test fixture");
+        vector<unsigned char> segment(codestream.begin() + i,
+                                      codestream.begin() + i + length + 2);
+        codestream.insert(codestream.begin() + i + length + 2,
+                          segment.begin(), segment.end());
+        return codestream;
+    }
+    Check(false, "Marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
     vector<unsigned char> file = MakePreamble(0x6A703220); // jp2
     AppendBox(file, 0x6A703263, codestream); // jp2c
@@ -207,6 +225,10 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    WriteFile(directory + "duplicate-cod.jp2",
+              MakeJP2(DuplicateMarker(codestream, 0xFF52)));
+    WriteFile(directory + "duplicate-qcd.jp2",
+              MakeJP2(DuplicateMarker(codestream, 0xFF5C)));
     WriteFile(directory + "missing-signature.jp2",
               vector<unsigned char>(jp2.begin() + 12, jp2.end()));
     vector<unsigned char> bad_signature = jp2;
@@ -255,6 +277,12 @@ int main() {
     jpeg2000::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
     Check(manager.GetImage()->GetNumCodestreams() == 1, "Wrong JP2 codestream count");
+
+    for (const char *name : {"duplicate-cod.jp2", "duplicate-qcd.jp2"}) {
+        jpeg2000::FileManager duplicate_marker_manager;
+        Check(!OpenImage(directory, name, &duplicate_marker_manager),
+              "Accepted a repeated main-header COD or QCD marker");
+    }
 
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
                              "missing-file-type.jp2"}) {

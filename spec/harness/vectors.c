@@ -662,6 +662,12 @@ static void rule_second_cod(Jp2Family *f, int box) {
     cs->segments.arr[2] = cs->segments.arr[0];           /* duplicate COD */
     cs->segments.nCount = 4;
 }
+static void rule_second_qcd(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    cs->segments.arr[3] = cs->segments.arr[2];           /* tile-part moves to 3 */
+    cs->segments.arr[2] = cs->segments.arr[1];           /* duplicate QCD */
+    cs->segments.nCount = 4;
+}
 static void rule_no_qcd(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     cs->segments.arr[1] = cs->segments.arr[2];
@@ -753,6 +759,7 @@ typedef struct {
 
 static const RuleMutant rule_mutants[] = {
     { "codestream.one-cod-before-sot",  rule_second_cod,        "two COD in main header", 0 },
+    { "codestream.one-qcd-before-sot",  rule_second_qcd,        "two QCD in main header", 0 },
     { "codestream.one-qcd-before-sot",  rule_no_qcd,            "no QCD", 0 },
     { "codestream.segment-after-sot",   rule_qcd_after_sot,     "QCD after the tile-part data", 0 },
     { "codestream.no-plt",              rule_no_plt,            "no PLT: standard valid, profile invalid", 0 },
