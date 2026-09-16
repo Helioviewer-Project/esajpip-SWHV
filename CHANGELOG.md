@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- Report the actual JP2 filename when a linked source prevents a JPX from being
+  parsed, making corrupted movie frames identifiable from the server log.
 - Reject unsupported multi-tile and PCRL/CPRL geometries instead of indexing
   them with incorrect single-tile assumptions.
 - Validate JPEG 2000 markers, tile parts, packets, boxes, codestream bounds, and

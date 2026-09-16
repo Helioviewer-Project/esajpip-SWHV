@@ -13,14 +13,15 @@ namespace jpeg2000 {
     using data::FileSegment;
 
     bool FileManager::OpenImage(string &path_image_file) {
-        if (path_image_file.empty())
+        if (path_image_file.empty()) {
+            ERROR("The image file name is empty");
             return false;
+        }
         if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
         path_image_file = root_dir_ + path_image_file;
 
         unique_ptr<ImageIndex> image_index(new ImageIndex(path_image_file));
         if (!ReadImage(path_image_file, image_index.get())) {
-            ERROR("The image file '" << path_image_file << "' can not be read");
             ClearFiles();
             return false;
         }
@@ -63,13 +64,13 @@ namespace jpeg2000 {
         if (pos != string::npos) extension = name_image_file.substr(pos);
 
         if (extension != ".jp2" && extension != ".jpx") {
-            ERROR("File type not supported...");
+            ERROR("Unsupported image file type: '" << name_image_file << "'");
             return false;
         }
 
         File file;
         if (!file.Open(name_image_file)) {
-            ERROR("Unable to open file: '" << name_image_file << "'...");
+            ERROR("Could not open image file '" << name_image_file << "'");
             return false;
         }
 
@@ -78,6 +79,8 @@ namespace jpeg2000 {
             res = ReadJP2(&file, image_index);
         else
             res = ReadJPX(&file, image_index);
+        if (!res)
+            ERROR("Could not parse image file '" << name_image_file << "'");
         return res;
     }
 

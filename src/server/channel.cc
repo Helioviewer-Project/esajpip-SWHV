@@ -404,9 +404,7 @@ private:
                 } else {
                     string file_name = req.has.target ? req.target : req.object;
 
-                    if (!file_manager.OpenImage(file_name)) {
-                        ERROR("The image file '" << file_name << "' can not be read");
-                    } else {
+                    if (file_manager.OpenImage(file_name)) {
                         if (!data_server.SetRequest(file_manager, req)) {
                             err_msg = "Invalid JPIP request for the selected image";
                             LOG(err_msg);

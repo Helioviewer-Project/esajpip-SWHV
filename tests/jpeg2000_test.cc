@@ -351,6 +351,12 @@ int main() {
     Check(!OpenImage(directory, "truncated.jp2", &truncated_manager),
           "Accepted truncated JP2");
 
+    WriteFile(directory + "truncated-linked.jpx",
+              MakeLinkedJPX(directory + "truncated.jp2", codestream.size()));
+    jpeg2000::FileManager truncated_linked_manager;
+    Check(!OpenImage(directory, "truncated-linked.jpx", &truncated_linked_manager),
+          "Accepted a JPX linked to a truncated JP2");
+
     WriteFile(directory + "bad-reference.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size(), 2));
     jpeg2000::FileManager reference_manager;
@@ -527,6 +533,7 @@ int main() {
     remove((directory + "linked.jpx").c_str());
     remove((directory + "bad-plt.jp2").c_str());
     remove((directory + "truncated.jp2").c_str());
+    remove((directory + "truncated-linked.jpx").c_str());
     remove((directory + "bad-reference.jpx").c_str());
     remove((directory + "bad-fragment.jpx").c_str());
     rmdir(directory_name);
