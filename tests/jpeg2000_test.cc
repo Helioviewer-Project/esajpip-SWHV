@@ -55,7 +55,8 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
                                             uint16_t tile_index = 0,
                                             uint16_t quality_layers = 1,
                                             uint8_t tile_parts = 1,
-                                            uint8_t packets_per_tile_part = 1) {
+                                            uint8_t packets_per_tile_part = 1,
+                                            uint8_t code_block_style = 0) {
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
@@ -84,7 +85,7 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     codestream.push_back(0);      // decomposition levels
     codestream.push_back(0);      // code-block width
     codestream.push_back(0);      // code-block height
-    codestream.push_back(0);      // code-block style
+    codestream.push_back(code_block_style); // code-block style
     codestream.push_back(1);      // reversible transform
 
     Append16(codestream, 0xFF5C); // QCD
@@ -191,6 +192,12 @@ int main() {
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 65, 65)));
     WriteFile(directory + "default-precincts.jp2",
               MakeJP2(MakeCodestream(0, 1, 65537, 65537, 0, 1, 1, 3)));
+    WriteFile(directory + "code-block-style-63.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 63)));
+    WriteFile(directory + "code-block-style-64.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 64)));
+    WriteFile(directory + "code-block-style-255.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 255)));
     vector<unsigned char> nonzero_origin = MakeCodestream(0, 1, 2, 2);
     Set32(nonzero_origin, 16, 1); // XOsiz
     WriteFile(directory + "nonzero-origin.jp2", MakeJP2(nonzero_origin));
@@ -275,6 +282,17 @@ int main() {
     jpeg2000::FileManager nonzero_origin_manager;
     Check(!OpenImage(directory, "nonzero-origin.jp2", &nonzero_origin_manager),
           "Accepted an unsupported nonzero image origin");
+
+    jpeg2000::FileManager maximum_code_block_style_manager;
+    Check(OpenImage(directory, "code-block-style-63.jp2",
+                    &maximum_code_block_style_manager),
+          "Rejected the maximum Part 1 code-block style");
+    for (const char *name : {"code-block-style-64.jp2",
+                             "code-block-style-255.jp2"}) {
+        jpeg2000::FileManager reserved_code_block_style_manager;
+        Check(!OpenImage(directory, name, &reserved_code_block_style_manager),
+              "Accepted a reserved code-block style bit");
+    }
 
     jpeg2000::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),

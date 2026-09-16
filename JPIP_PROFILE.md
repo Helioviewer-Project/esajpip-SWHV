@@ -100,6 +100,8 @@ JPX specifications allow.
 - The main `SIZ`, `COD`, and `QCD` information must describe the packet layout.
   Marker features that change that layout without being represented there,
   such as progression changes through `POC`, are outside the supported profile.
+- Code-block style bits defined by Part 1 are accepted. Reserved bits, including
+  the HTJ2K flag, are not supported.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
   validated marker, packet, and tile-part bounds.
 - Packet locations and file-backed data-bin offsets must fit the signed 32-bit
@@ -112,15 +114,17 @@ transcoding step required for such inputs.
 ### JPX
 
 - The file name must end in `.jpx`.
-- JPX files may contain one or more embedded codestreams, or every declared
-  codestream may be linked through the supported fragment-table/data-reference
-  form. Embedded codestreams keep their own coding parameters.
+- A JPX with no links must contain every declared codestream. Each embedded
+  codestream keeps its own coding parameters.
+- If links are present, every declared codestream must have a link in the
+  supported fragment-table/data-reference form. Any embedded codestreams in the
+  same JPX are ignored, and the linked codestreams are served instead.
 - A linked codestream uses one `flst` entry containing exactly one fragment.
   The fragment must describe the complete codestream indexed in the referenced
   file.
 - Data references use version-zero `file://` URL boxes. Remote HTTP URLs,
-  multiple-fragment codestreams, and mixed embedded/linked codestream sets are
-  not supported.
+  multiple-fragment codestreams, and serving a mixture of embedded and linked
+  codestreams are not supported.
 - Each link must resolve to a file with an embedded codestream. Recursion through
   another linked JPX is not supported.
 - Top-level association boxes are exposed as separate metadata bins. Other box

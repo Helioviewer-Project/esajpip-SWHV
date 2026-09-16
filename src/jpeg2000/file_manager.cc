@@ -244,20 +244,21 @@ namespace jpeg2000 {
         uint8_t transform_levels = 0;
         uint8_t cb_width = 0;
         uint8_t cb_height = 0;
+        uint8_t cb_style = 0;
         uint8_t transform = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < 12 ||
             static_cast<uint64_t>(lcod) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&cs_buf) || !file->ReadReverse(&progression) ||
             !file->ReadReverse(&quality_layers) || !file->ReadReverse(&mct) ||
             !file->ReadReverse(&transform_levels) || !file->ReadReverse(&cb_width) ||
-            !file->ReadReverse(&cb_height) || !file->Seek(1, SEEK_CUR) ||
+            !file->ReadReverse(&cb_height) || !file->ReadReverse(&cb_style) ||
             !file->ReadReverse(&transform))
             return false;
 
         uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
         if (lcod != expected_length || (cs_buf & 0xF8) != 0 || progression > 4 || quality_layers == 0 ||
             mct > 1 || transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
-            cb_width + cb_height > 8 || transform > 1 ||
+            cb_width + cb_height > 8 || cb_style > 63 || transform > 1 ||
             (progression >= CodingParameters::PCRL_PROGRESSION && !params->position_order_supported))
             return false;
 
