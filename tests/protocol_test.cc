@@ -1,8 +1,5 @@
 #include <sys/socket.h>
-#include <sys/resource.h>
-#include <sys/wait.h>
 
-#include <csignal>
 #include <cstdlib>
 #include <cstdio>
 #include <cstdint>
@@ -15,7 +12,6 @@
 
 #include "app_config.h"
 #include "server/connection_queue.h"
-#include "server/crash_report.h"
 #include "server/initial_request.h"
 #include "data/file.h"
 #include "data/file_segment.h"
@@ -219,38 +215,6 @@ static void CheckConnectionQueue() {
     Check(pending == 9,
           "Connection queue did not return its pending connection");
     Check(!queue.Push(10), "Connection queue accepted a connection after closing");
-}
-
-static void CheckCrashReport() {
-    int report_sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, report_sockets) == 0,
-          "Could not create crash-report test sockets");
-
-    pid_t child = fork();
-    Check(child >= 0, "Could not create crash-report test process");
-    if (child == 0) {
-        close(report_sockets[0]);
-        rlimit core_limit = {0, 0};
-        setrlimit(RLIMIT_CORE, &core_limit);
-        if (!crash_report::Initialize(report_sockets[1]))
-            _exit(EXIT_FAILURE);
-        crash_report::SetChannel(47);
-        raise(SIGABRT);
-        _exit(EXIT_FAILURE);
-    }
-
-    close(report_sockets[1]);
-    uint64_t channel;
-    ssize_t length = read(report_sockets[0], &channel, sizeof channel);
-    close(report_sockets[0]);
-
-    int status;
-    Check(waitpid(child, &status, 0) == child,
-          "Could not observe crash-report test process");
-    Check(length == sizeof channel && channel == 47,
-          "Crash report did not preserve the channel");
-    Check(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT,
-          "Crash reporting changed fatal-signal behavior");
 }
 
 static void CheckJHVRequests() {
@@ -657,7 +621,6 @@ int main() {
     CheckAppConfig();
     CheckInitialRequest();
     CheckConnectionQueue();
-    CheckCrashReport();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

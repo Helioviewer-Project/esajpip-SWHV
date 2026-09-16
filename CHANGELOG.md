@@ -28,7 +28,8 @@
   Connection admission and channel routing now occur in one event loop, removing
   cross-process descriptor passing and duplicate client descriptors while
   retaining bounded pre-identification and channel-owned JPEG 2000 state. A
-  replacement process records the failed channel number when one is available.
+  replacement process records whether its predecessor was killed or exited
+  unexpectedly.
 
 ### Fixed
 

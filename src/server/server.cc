@@ -18,7 +18,6 @@
 #include "net/address.h"
 #include "net/poll_table.h"
 #include "server/channel.h"
-#include "server/crash_report.h"
 #include "server/initial_request.h"
 #include "server/server.h"
 
@@ -82,7 +81,6 @@ void *ChannelThread(void *argument) {
     shared_ptr<ConnectionQueue> queue = info->queue;
     delete info;
 
-    crash_report::SetChannel(id);
     RunChannel(*cfg, to_string(id), queue, NotifyConnection);
     Notify(CHANNEL_COMPLETED, id);
     return NULL;
@@ -212,10 +210,6 @@ int RunServer(const AppConfig &cfg, AppInfo &app_info,
               int listen_socket, int supervisor_fd,
               const string &log_name, const string &description,
               const string &restart_message) {
-    if (!crash_report::Initialize(supervisor_fd)) {
-        cerr << "Crash reporting can not be initialized: " << strerror(errno) << endl;
-        return SERVER_STARTUP_FAILURE;
-    }
     if (!trace::Initialize(log_name)) {
         cerr << "The logging system can not be initialized" << endl;
         return SERVER_STARTUP_FAILURE;

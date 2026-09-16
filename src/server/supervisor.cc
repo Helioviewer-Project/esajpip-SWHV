@@ -3,12 +3,9 @@
 
 #include <cerrno>
 #include <csignal>
-#include <cstdint>
 #include <cstring>
 #include <iostream>
-#include <limits>
 #include <pthread.h>
-#include <sstream>
 #include <unistd.h>
 
 #include "app_config.h"
@@ -110,15 +107,8 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
             }
         }
 
-        uint64_t crash_channel = numeric_limits<uint64_t>::max();
-        ssize_t report_size = 0;
-        if (!stopping) {
-            do {
-                report_size = read(supervisor_sockets[0], &crash_channel,
-                                   sizeof crash_channel);
-            } while (report_size < 0 && errno == EINTR);
+        if (!stopping)
             close(supervisor_sockets[0]);
-        }
 
         app_info->child_pid = 0;
         app_info->num_connections = 0;
@@ -128,13 +118,10 @@ int RunSupervisor(const AppConfig &cfg, AppInfo &app_info,
         if (WIFEXITED(status) && WEXITSTATUS(status) == SERVER_STARTUP_FAILURE)
             return -1;
 
-        ostringstream message;
-        message << "The serving process died";
-        if (report_size == sizeof crash_channel &&
-            crash_channel != numeric_limits<uint64_t>::max())
-            message << " in channel " << crash_channel;
-        message << "; restarting";
-        restart_message = message.str();
+        if (WIFSIGNALED(status))
+            restart_message = "The serving process was killed; restarting";
+        else
+            restart_message = "The serving process exited unexpectedly; restarting";
         cerr << restart_message << endl;
     }
 }
