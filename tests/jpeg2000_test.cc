@@ -225,6 +225,11 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    vector<unsigned char> marker_after_tile_part = codestream;
+    marker_after_tile_part.insert(marker_after_tile_part.end() - 2,
+                                  {0xFF, 0x5C, 0x00, 0x03, 0x00});
+    WriteFile(directory + "marker-after-tile-part.jp2",
+              MakeJP2(marker_after_tile_part));
     WriteFile(directory + "duplicate-cod.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF52)));
     WriteFile(directory + "duplicate-qcd.jp2",
@@ -277,6 +282,11 @@ int main() {
     jpeg2000::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
     Check(manager.GetImage()->GetNumCodestreams() == 1, "Wrong JP2 codestream count");
+
+    jpeg2000::FileManager marker_after_tile_part_manager;
+    Check(!OpenImage(directory, "marker-after-tile-part.jp2",
+                     &marker_after_tile_part_manager),
+          "Accepted a marker segment after tile-part data");
 
     for (const char *name : {"duplicate-cod.jp2", "duplicate-qcd.jp2"}) {
         jpeg2000::FileManager duplicate_marker_manager;

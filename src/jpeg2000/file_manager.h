@@ -128,31 +128,16 @@ namespace jpeg2000 {
     public:
         /**
          * Initializes the object.
-         */
-        FileManager() {
-        }
-
-        /**
-         * Initializes the object.
          * @param root_dir Root directory of the image repository.
          * @return <code>true</code> if successful
          */
         bool Init(const std::string &root_dir) {
-            if (root_dir.empty()) return false;
-            else {
-                if (root_dir.at(root_dir.size() - 1) == '/')
-                    root_dir_ = root_dir;
-                else
-                    root_dir_ = root_dir + '/';
-                return true;
-            }
-        }
-
-        /**
-         * Returns the root directory of the image repository.
-         */
-        const std::string &root_dir() const {
-            return root_dir_;
+            if (root_dir.empty())
+                return false;
+            root_dir_ = root_dir;
+            if (root_dir_.back() != '/')
+                root_dir_ += '/';
+            return true;
         }
 
         ImageIndex *GetImage() {

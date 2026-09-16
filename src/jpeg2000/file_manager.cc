@@ -42,12 +42,11 @@ namespace jpeg2000 {
         path_image_file = root_dir_ + path_image_file;
 
         unique_ptr<ImageIndex> image_index(new ImageIndex(path_image_file));
-        if (!ReadImage(path_image_file, image_index.get())) {
-            ClearFiles();
-            return false;
-        }
-        image = std::move(image_index);
+        bool loaded = ReadImage(path_image_file, image_index.get());
         ClearFiles();
+        if (!loaded)
+            return false;
+        image = std::move(image_index);
         return true;
     }
 
@@ -63,7 +62,6 @@ namespace jpeg2000 {
 #define JP2C_BOX_ID 0x6A703263
 #define FILE_TYPE_BOX_ID 0x66747970
 #define ASOC_BOX_ID 0x61736F63
-#define NLST_BOX_ID 0x6E6C7374
 #define JPCH_BOX_ID 0x6A706368
 #define FTBL_BOX_ID 0x6674626C
 #define DBTL_BOX_ID 0x6474626C
@@ -126,17 +124,22 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadCodestream(File *file, uint64_t length, CodingParameters *params, CodestreamIndex *index) {
+        enum Phase {
+            MAIN_HEADER,
+            TILE_HEADER,
+            BETWEEN_TILE_PARTS
+        };
+
         if (file->GetSize() > INT_MAX || length < 4 ||
             length > file->GetSize() - file->GetOffset())
             return false;
 
         uint64_t limit = file->GetOffset() + length;
-        bool plts = false;
-        bool tile_header = false;
         bool siz = false;
         bool cod = false;
         bool qcd = false;
         bool first_marker = true;
+        Phase phase = MAIN_HEADER;
         uint16_t value = 0;
 
         if (!file->ReadReverse(&value) || value != SOC_MARKER)
@@ -149,55 +152,61 @@ namespace jpeg2000 {
             if ((value & 0xFF00) != 0xFF00 || value == 0xFFFF ||
                 (first_marker && value != SIZ_MARKER))
                 return false;
+            if (phase == BETWEEN_TILE_PARTS &&
+                value != SOT_MARKER && value != EOC_MARKER)
+                return false;
             first_marker = false;
             uint64_t marker_limit = limit;
-            if (tile_header && !index->packets.empty() && index->packets.back().length != 0)
+            if (phase == TILE_HEADER && !index->packets.empty() &&
+                index->packets.back().length != 0)
                 marker_limit = index->packets.back().offset + index->packets.back().length;
             switch (value) {
                 case SIZ_MARKER: TRACE("SIZ marker...");
-                    if (tile_header || siz || !ReadSIZMarker(file, limit, params))
+                    if (phase != MAIN_HEADER || siz ||
+                        !ReadSIZMarker(file, limit, params))
                         return false;
                     siz = true;
                     break;
 
                 case COD_MARKER: TRACE("COD marker...");
-                    if ((!tile_header && cod) ||
+                    if ((phase == MAIN_HEADER && cod) ||
                         !ReadCODMarker(file, marker_limit, params))
                         return false;
-                    if (!tile_header)
+                    if (phase == MAIN_HEADER)
                         cod = true;
                     break;
 
                 case SOT_MARKER: TRACE("SOT marker...");
-                    if (tile_header || !siz || !cod || !qcd || !ReadSOTMarker(file, limit, index))
+                    if (phase == TILE_HEADER || !siz || !cod || !qcd ||
+                        !ReadSOTMarker(file, limit, index))
                         return false;
-                    tile_header = true;
+                    phase = TILE_HEADER;
                     break;
 
                 case QCD_MARKER:
-                    if ((!tile_header && qcd) ||
+                    if ((phase == MAIN_HEADER && qcd) ||
                         !SkipMarker(file, marker_limit))
                         return false;
-                    if (!tile_header)
+                    if (phase == MAIN_HEADER)
                         qcd = true;
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");
-                    if (!tile_header || !ReadPLTMarker(file, limit, index))
+                    if (phase != TILE_HEADER || !ReadPLTMarker(file, limit, index))
                         return false;
-                    plts = true;
                     break;
 
                 case SOD_MARKER: TRACE("SOD marker...");
-                    if (!tile_header || !ReadSODMarker(file, limit, index))
+                    if (phase != TILE_HEADER || !ReadSODMarker(file, limit, index))
                         return false;
-                    tile_header = false;
+                    phase = BETWEEN_TILE_PARTS;
                     break;
 
                 case EOC_MARKER:
-                    if (tile_header || index->packets.empty() || file->GetOffset() != limit)
+                    if (phase == TILE_HEADER || index->packets.empty() ||
+                        file->GetOffset() != limit)
                         return false;
-                    if (plts)
+                    if (!index->PLT_markers.empty())
                         return true;
                     ERROR("The code-stream does not include any PLT marker");
                     return false;
@@ -406,198 +415,193 @@ namespace jpeg2000 {
     }
 
     bool FileManager::ReadJP2(File *file, ImageIndex *image_index) {
-        bool res = true;
-        bool codestream = false;
-        // Get boxes
-        uint32_t type_box;
-        uint64_t length_box;
-        uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
+        bool found_codestream = false;
+        uint64_t meta_start = 0;
         CodingParameters coding_parameters;
         CodestreamIndex codestream_index;
-        while (file->GetOffset() != file->GetSize() && res) {
-            pini_box = file->GetOffset();
-            plen = pini_box - pini;
+        while (file->GetOffset() != file->GetSize()) {
+            uint64_t box_start = file->GetOffset();
+            uint64_t prefix_length = box_start - meta_start;
+            uint32_t type_box;
+            uint64_t length_box;
             if (!ReadBoxHeader(file, file->GetSize(), &type_box, &length_box))
                 return false;
-            plen_box = file->GetOffset() - pini_box;
+            uint64_t header_length = file->GetOffset() - box_start;
             switch (type_box) {
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    if (codestream)
+                    if (found_codestream ||
+                        !ReadCodestream(file, length_box, &coding_parameters,
+                                       &codestream_index))
                         return false;
-                    codestream = true;
-                    res = ReadCodestream(file, length_box, &coding_parameters,
-                                         &codestream_index);
+                    found_codestream = true;
                     image_index->meta_data.bin0.emplace_back(
-                            FileSegment(pini, plen),
+                            FileSegment(meta_start, prefix_length),
                             PlaceHolder(0, true,
-                                        FileSegment(pini_box, plen_box)));
-                    pini = file->GetOffset();
+                                        FileSegment(box_start, header_length)));
+                    meta_start = file->GetOffset();
                     break;
 
                 default:
-                    res = res && file->Seek(length_box, SEEK_CUR);
+                    file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
-        if (res && codestream) {
-            coding_parameters.FillPrecinctCounts();
-            image_index->codestreams.emplace_back(image_index->path_name,
-                                                  std::move(coding_parameters),
-                                                  std::move(codestream_index));
-        }
-        return res && codestream;
+        image_index->meta_data.tail =
+                FileSegment(meta_start, file->GetOffset() - meta_start);
+        if (!found_codestream)
+            return false;
+
+        coding_parameters.FillPrecinctCounts();
+        image_index->codestreams.emplace_back(image_index->path_name,
+                                              std::move(coding_parameters),
+                                              std::move(codestream_index));
+        return true;
     }
 
     bool FileManager::ReadJPX(File *file, ImageIndex *image_index) {
-        bool res = true;
-        // Get boxes
-        uint32_t type_box;
-        uint64_t length_box;
-        string path_file;
-        uint16_t data_reference;
-        FileSegment fragment;
-        vector<uint16_t> v_data_reference;
-        vector<FileSegment> fragments;
-        vector<string> v_path_file;
-        uint64_t pini = 0, plen = 0, pini_box = 0, plen_box = 0;
-        uint64_t pini_ftbl = 0, plen_ftbl = 0;
-        FileSegment ftbl_metadata;
+        struct Container {
+            uint32_t type;
+            uint64_t end;
+        };
+        struct Link {
+            uint16_t reference;
+            FileSegment fragment;
+        };
+
+        vector<string> references;
+        uint64_t meta_start = 0;
+        FileSegment ftbl_prefix;
+        FileSegment ftbl_header;
         int num_flst = 0;
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
         vector<ImageIndex::Codestream> codestreams;
         size_t num_codestreams = 0;
-        vector<pair<uint32_t, uint64_t>> containers;
-        containers.emplace_back(0, file->GetSize());
+        vector<Link> links;
+        vector<Container> containers{{0, file->GetSize()}};
 
-        while (res) {
-            while (containers.size() > 1 && file->GetOffset() == containers.back().second) {
-                if (containers.back().first == FTBL_BOX_ID && num_flst != 1) {
-                    res = false;
-                    break;
-                }
+        while (true) {
+            while (containers.size() > 1 && file->GetOffset() == containers.back().end) {
+                if (containers.back().type == FTBL_BOX_ID && num_flst != 1)
+                    return false;
                 containers.pop_back();
             }
-            if (!res || file->GetOffset() == file->GetSize())
+            if (file->GetOffset() == file->GetSize())
                 break;
-            if (file->GetOffset() > containers.back().second) {
-                res = false;
-                break;
-            }
+            if (file->GetOffset() > containers.back().end)
+                return false;
 
-            pini_box = file->GetOffset();
-            plen = pini_box - pini;
-            res = ReadBoxHeader(file, containers.back().second, &type_box, &length_box);
-            if (!res)
-                break;
-            plen_box = file->GetOffset() - pini_box;
+            uint64_t box_start = file->GetOffset();
+            uint64_t prefix_length = box_start - meta_start;
+            uint32_t type_box;
+            uint64_t length_box;
+            if (!ReadBoxHeader(file, containers.back().end, &type_box, &length_box))
+                return false;
+            uint64_t header_length = file->GetOffset() - box_start;
             uint64_t box_end = file->GetOffset() + length_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
                     num_codestreams++;
                     if (length_box != 0)
-                        containers.emplace_back(type_box, box_end);
+                        containers.push_back({type_box, box_end});
                     break;
                 case JP2C_BOX_ID: {
                     TRACE("JP2C box...");
-                    if (num_codestreams == 0 || codestreams.size() >= num_codestreams) {
-                        res = false;
-                        break;
-                    }
+                    if (num_codestreams == 0 || codestreams.size() >= num_codestreams)
+                        return false;
                     CodingParameters coding_parameters;
                     CodestreamIndex codestream_index;
-                    res = ReadCodestream(file, length_box, &coding_parameters,
-                                         &codestream_index);
-                    if (res) {
-                        coding_parameters.FillPrecinctCounts();
-                        codestreams.emplace_back(image_index->path_name,
-                                                 std::move(coding_parameters),
-                                                 std::move(codestream_index));
-                    }
+                    if (!ReadCodestream(file, length_box, &coding_parameters,
+                                        &codestream_index))
+                        return false;
+                    coding_parameters.FillPrecinctCounts();
+                    codestreams.emplace_back(image_index->path_name,
+                                             std::move(coding_parameters),
+                                             std::move(codestream_index));
                     image_index->meta_data.bin0.emplace_back(
-                            FileSegment(pini, plen),
+                            FileSegment(meta_start, prefix_length),
                             PlaceHolder(num_codestreams - 1, true,
-                                        FileSegment(pini_box, plen_box)));
-                    pini = file->GetOffset();
+                                        FileSegment(box_start, header_length)));
+                    meta_start = file->GetOffset();
                     break;
                 }
                 case ASOC_BOX_ID: TRACE("ASOC box...");
-                    res = res && file->Seek(length_box, SEEK_CUR);
-                    image_index->meta_data.bins.emplace_back(pini_box + plen_box, length_box);
+                    file->Seek(length_box, SEEK_CUR);
+                    image_index->meta_data.bins.emplace_back(box_start + header_length,
+                                                             length_box);
                     image_index->meta_data.bin0.emplace_back(
-                            FileSegment(pini, plen),
+                            FileSegment(meta_start, prefix_length),
                             PlaceHolder(image_index->meta_data.bins.size(), false,
-                                        FileSegment(pini_box, plen_box)));
-                    pini = file->GetOffset();
+                                        FileSegment(box_start, header_length)));
+                    meta_start = file->GetOffset();
                     break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
                     num_flst = 0;
-                    pini_ftbl = pini_box;
-                    plen_ftbl = plen_box;
-                    ftbl_metadata = FileSegment(pini, plen);
+                    ftbl_prefix = FileSegment(meta_start, prefix_length);
+                    ftbl_header = FileSegment(box_start, header_length);
                     if (length_box < 8)
-                        res = false;
-                    else
-                        containers.emplace_back(type_box, box_end);
+                        return false;
+                    containers.push_back({type_box, box_end});
                     break;
                     // 'flst' box assumed to be contained within a 'ftbl' superbox
-                case FLST_BOX_ID: TRACE("FLST box...");
-                    if (containers.back().first != FTBL_BOX_ID || num_flst != 0 ||
-                        !ReadFlstBox(file, length_box, &fragment, &data_reference)) {
-                        res = false;
-                        break;
-                    }
+                case FLST_BOX_ID: {
+                    TRACE("FLST box...");
+                    FileSegment fragment;
+                    uint16_t data_reference;
+                    if (containers.back().type != FTBL_BOX_ID || num_flst != 0 ||
+                        !ReadFlstBox(file, length_box, &fragment, &data_reference))
+                        return false;
                     num_flst++;
                     image_index->meta_data.bin0.emplace_back(
-                            ftbl_metadata,
-                            PlaceHolder(v_data_reference.size(), true,
-                                        FileSegment(pini_ftbl, plen_ftbl)));
-                    v_data_reference.push_back(data_reference);
-                    fragments.push_back(fragment);
-                    pini = file->GetOffset();
+                            ftbl_prefix,
+                            PlaceHolder(links.size(), true, ftbl_header));
+                    links.push_back({data_reference, fragment});
+                    meta_start = file->GetOffset();
                     break;
+                }
                 case DBTL_BOX_ID: TRACE("DBTL box...");
                     if (containers.size() != 1 || has_data_reference_box || length_box < 2)
-                        res = false;
-                    else {
-                        res = file->ReadReverse(&num_data_references);
-                        has_data_reference_box = true;
-                        if (res && file->GetOffset() != box_end)
-                            containers.emplace_back(type_box, box_end);
-                    }
+                        return false;
+                    if (!file->ReadReverse(&num_data_references))
+                        return false;
+                    has_data_reference_box = true;
+                    if (file->GetOffset() != box_end)
+                        containers.push_back({type_box, box_end});
                     break;
-                case URL__BOX_ID: TRACE("URL box...");
-                    // Add the paths of the hyperlinked images to the paths vector
-                    res = containers.back().first == DBTL_BOX_ID &&
-                          ReadUrlBox(file, length_box, &path_file);
-                    if (res)
-                        v_path_file.push_back(path_file);
+                case URL__BOX_ID: {
+                    TRACE("URL box...");
+                    string path_file;
+                    if (containers.back().type != DBTL_BOX_ID ||
+                        !ReadUrlBox(file, length_box, &path_file))
+                        return false;
+                    references.push_back(std::move(path_file));
                     break;
+                }
                 default:
-                    res = res && file->Seek(length_box, SEEK_CUR);
+                    file->Seek(length_box, SEEK_CUR);
             }
         }
-        image_index->meta_data.tail = FileSegment(pini, file->GetOffset() - pini);
+        image_index->meta_data.tail =
+                FileSegment(meta_start, file->GetOffset() - meta_start);
 
-        if (!res || containers.size() != 1 || num_codestreams == 0 ||
-            v_path_file.size() != num_data_references)
+        if (containers.size() != 1 || num_codestreams == 0 ||
+            references.size() != num_data_references)
             return false;
 
-        bool sequential_references = v_data_reference.size() == v_path_file.size();
-        for (size_t i = 0; i < v_data_reference.size(); ++i) {
-            if (v_data_reference[i] == 0 || v_data_reference[i] > v_path_file.size())
+        bool sequential_references = links.size() == references.size();
+        for (size_t i = 0; i < links.size(); ++i) {
+            if (links[i].reference == 0 || links[i].reference > references.size())
                 return false;
-            if (v_data_reference[i] != i + 1)
+            if (links[i].reference != i + 1)
                 sequential_references = false;
         }
         vector<string> paths;
         if (sequential_references)
-            paths = std::move(v_path_file);
+            paths = std::move(references);
         else {
-            paths.reserve(v_data_reference.size());
-            for (uint16_t reference : v_data_reference)
-                paths.push_back(v_path_file[reference - 1]);
+            paths.reserve(links.size());
+            for (const Link &link : links)
+                paths.push_back(references[link.reference - 1]);
         }
 
         // Resolve the linked codestreams.
@@ -612,32 +616,28 @@ namespace jpeg2000 {
             return false;
         vector<ImageIndex::Codestream>().swap(codestreams);
         image_index->codestreams.reserve(paths.size());
-        for (size_t i = 0; i < paths.size() && res; ++i) {
+        for (size_t i = 0; i < paths.size(); ++i) {
             ImageIndex linked_image(paths[i]);
-            res = ReadImage(paths[i], &linked_image);
-            if (!res)
-                break;
+            if (!ReadImage(paths[i], &linked_image))
+                return false;
 
             if (linked_image.codestreams.empty() ||
-                linked_image.codestreams.back().index.packets.empty()) {
-                res = false;
-                break;
-            }
+                linked_image.codestreams.back().index.packets.empty())
+                return false;
             const CodestreamIndex &codestream =
                     linked_image.codestreams.back().index;
             const FileSegment &last_packet_data = codestream.packets.back();
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
-            if (fragments[i] != FileSegment(codestream.header.offset, codestream_length)) {
-                res = false;
-                break;
-            }
+            if (links[i].fragment != FileSegment(codestream.header.offset,
+                                                  codestream_length))
+                return false;
 
             linked_image.codestreams.back().path = std::move(paths[i]);
             image_index->codestreams.push_back(
                     std::move(linked_image.codestreams.back()));
         }
-        return res;
+        return true;
     }
 
     bool FileManager::ReadFlstBox(File *file, uint64_t length_box, FileSegment *fragment, uint16_t *data_reference) {
