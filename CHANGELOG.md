@@ -61,8 +61,9 @@
 - Apply additive cache-model descriptors as minimum cached lengths instead of
   accumulating repeated values, and resume metadata correctly when a model
   ends within a JPX placeholder.
-- Crop requested windows to the selected image resolution and reject empty or
-  non-overlapping windows before packet indexing.
+- Apply the standard offset and region-size defaults, crop requested windows to
+  the selected image resolution, and reject empty or non-overlapping windows
+  before packet indexing.
 - Accept valid HTTP header whitespace and exact-fit JPIP messages while
   rejecting incomplete headers and overfull messages.
 - Remove identified sockets from the admission table so a reused descriptor

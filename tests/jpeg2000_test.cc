@@ -343,6 +343,18 @@ int main() {
               response[response_length - 1] == 0,
           "Unlimited response has no window-done EOR");
 
+    jpip::Request default_window_request;
+    Check(default_window_request.Parse("GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
+          "Could not parse a window with default region and offset");
+    jpip::DataBinServer default_window_server;
+    Check(default_window_server.SetRequest(manager, default_window_request),
+          "Rejected a window with default region and offset");
+    response_length = sizeof response;
+    Check(default_window_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a response for a window with defaults");
+    Check(response_length > 0 && last,
+          "Did not complete a response for a window with defaults");
+
     jpip::Request short_request;
     Check(short_request.Parse("GET /jpip?len=2&cid=0 HTTP/1.1"),
           "Could not parse a response limit shorter than an EOR message");

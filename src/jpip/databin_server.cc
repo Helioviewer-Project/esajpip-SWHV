@@ -111,8 +111,8 @@ namespace jpip {
             int codestream = codestreams[current_idx];
             const CodingParameters *coding_parameters = image_index->GetCodingParameters(codestream);
             WOI new_woi;
-            new_woi.size = req.woi_size;
-            new_woi.position = req.woi_position;
+            new_woi.size = req.has.rsiz ? req.woi_size : req.resolution_size;
+            new_woi.position = req.has.roff ? req.woi_position : jpeg2000::Point();
             if (!CropWindow(&new_woi, req.resolution_size))
                 return false;
             jpeg2000::Size resolution_size = req.GetResolution(coding_parameters, &new_woi);
