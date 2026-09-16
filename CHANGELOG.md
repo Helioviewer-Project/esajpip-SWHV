@@ -49,6 +49,9 @@
 - Remove identified sockets from the admission table so a reused descriptor
   cannot close an unrelated client. Expire inactive channels and terminate the
   serving process whenever its supervisor exits.
+- Route process-group termination through the supervisor so the serving process
+  records an orderly stop and drains queued log messages regardless of signal
+  delivery order.
 - Close mappings and connections on parser and thread failures, and correct
   address-resolution and platform-specific alignment errors.
 

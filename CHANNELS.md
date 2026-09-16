@@ -123,9 +123,10 @@ new channels after the restart. If the serving process is killed, the
 replacement records that fact in its log. Other unexpected exits are recorded
 separately.
 
-The serving process polls one end of a private Unix socket pair. Supervisor
-termination closes the other end and makes the serving process exit on every
-supported platform. Each replacement process receives a fresh pair.
+The serving process ignores `SIGINT` and `SIGTERM` and polls one end of a
+private Unix socket pair. The supervisor handles those signals, closes the
+other endpoint, and gives the serving process one orderly shutdown path on
+every supported platform. Each replacement process receives a fresh pair.
 
 ## Deliberate limits
 

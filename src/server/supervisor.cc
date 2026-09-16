@@ -16,6 +16,8 @@ using namespace std;
 
 namespace {
 
+// macOS discards SIGCHLD under its default disposition even while it is
+// blocked. A no-op disposition keeps it available to sigwait().
 void ChildExited(int) {
 }
 
@@ -59,6 +61,12 @@ int RunSupervisor(const AppConfig &cfg, int listen_socket,
         }
         if (child_pid == 0) {
             close(supervisor_sockets[0]);
+            if (signal(SIGINT, SIG_IGN) == SIG_ERR ||
+                signal(SIGTERM, SIG_IGN) == SIG_ERR) {
+                cerr << "The serving-process stop signals can not be ignored: "
+                     << strerror(errno) << endl;
+                _exit(SERVER_STARTUP_FAILURE);
+            }
             signal_error = pthread_sigmask(SIG_UNBLOCK, &signals, NULL);
             if (signal_error != 0) {
                 cerr << "The serving-process signals can not be unblocked: "
