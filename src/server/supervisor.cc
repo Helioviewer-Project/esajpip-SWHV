@@ -89,8 +89,6 @@ int RunSupervisor(const Config &cfg, int listen_socket,
             if (waited == child_pid)
                 break;
             if (waited < 0) {
-                if (!stopping)
-                    close(supervisor_sockets[0]);
                 cerr << "The serving process can not be observed: "
                      << strerror(errno) << endl;
                 return -1;
@@ -100,8 +98,6 @@ int RunSupervisor(const Config &cfg, int listen_socket,
             signal_error = sigwait(&signals, &signal_number);
 
             if (signal_error != 0) {
-                if (!stopping)
-                    close(supervisor_sockets[0]);
                 cerr << "The supervisor can not wait for signals: "
                      << strerror(signal_error) << endl;
                 return -1;
