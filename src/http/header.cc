@@ -1,7 +1,6 @@
 #include "header.h"
 
 #include <cstring>
-#include <istream>
 #include <ostream>
 
 #include "protocol.h"
@@ -40,22 +39,4 @@ namespace http {
         return out << header.name << ": " << header.value << CRLF;
     }
 
-    std::istream &operator>>(std::istream &in, Header &header) {
-        std::string line;
-
-        if (getline(in, line)) {
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-
-            if (line.empty()) {
-                in.setstate(std::istream::eofbit);
-                return in;
-            }
-
-            if (!header.Parse(line))
-                in.setstate(std::istream::failbit);
-        }
-
-        return in;
-    }
 }

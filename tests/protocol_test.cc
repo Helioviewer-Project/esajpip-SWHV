@@ -375,28 +375,21 @@ static void CheckHTTPResponse() {
 
 static void CheckHTTPHeaders() {
     const char *lines[] = {
-        "Accept-Encoding: gzip\r\n",
-        "Accept-Encoding:gzip\r\n",
-        "Accept-Encoding:\tgzip \t\r\n",
-        "Accept-Encoding: gzip\n"
+        "Accept-Encoding: gzip",
+        "Accept-Encoding:gzip",
+        "Accept-Encoding:\tgzip \t"
     };
 
     for (const char *line : lines) {
-        istringstream in(line);
         http::Header header;
-        Check(static_cast<bool>(in >> header), "Could not parse an HTTP header");
+        Check(header.Parse(line), "Could not parse an HTTP header");
         Check(header.name == "Accept-Encoding", "Wrong HTTP header name");
         Check(header.value == "gzip", "Wrong HTTP header value");
     }
 
-    istringstream empty_value("X-Empty:\r\n");
     http::Header header;
-    Check(static_cast<bool>(empty_value >> header), "Could not parse an empty HTTP header");
+    Check(header.Parse("X-Empty:"), "Could not parse an empty HTTP header");
     Check(header.name == "X-Empty" && header.value.empty(), "Wrong empty HTTP header");
-
-    istringstream end_of_headers("\r\n");
-    end_of_headers >> header;
-    Check(!end_of_headers.good() && end_of_headers.eof(), "Did not recognize the end of HTTP headers");
 }
 
 static void CheckCacheModel() {
