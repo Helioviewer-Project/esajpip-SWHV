@@ -1,6 +1,7 @@
 #include <sys/socket.h>
 
 #include <cerrno>
+#include <fcntl.h>
 #include <string>
 
 #include "trace.h"
@@ -42,6 +43,10 @@ int main(int argc, char **argv) {
         ::bind(listen_socket, listen_addr.GetSockAddr(), listen_addr.GetSize()) != 0 ||
         listen(listen_socket, 10) != 0)
         return CERR("The server listen socket can not be initialized: " << strerror(errno));
+    int flags = fcntl(listen_socket, F_GETFL);
+    if (flags < 0 || fcntl(listen_socket, F_SETFL, flags | O_NONBLOCK) != 0)
+        return CERR("The server listen socket can not be made nonblocking: "
+                    << strerror(errno));
 
     string log_name = cfg.file_logging()
             ? cfg.log_directory() + SERVER_LOG_NAME + "." +

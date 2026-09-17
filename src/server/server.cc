@@ -7,6 +7,7 @@
 #include <csignal>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -65,6 +66,12 @@ struct Completion {
 };
 
 int completion_socket = -1;
+
+bool SetBlocking(int fd) {
+    int flags = fcntl(fd, F_GETFL);
+    return flags >= 0 &&
+           fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == 0;
+}
 
 void SendUnavailableChannel(int fd) {
     static const char response[] =
@@ -280,7 +287,14 @@ int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
                 int fd = accept(listen_socket, from_address.GetSockAddr(),
                                 &from_size);
                 if (fd < 0) {
-                    ERROR("Error accepting a new connection: " << strerror(errno));
+                    if (errno != EAGAIN && errno != EWOULDBLOCK &&
+                        errno != ECONNABORTED && errno != EINTR)
+                        ERROR("Error accepting a new connection: "
+                              << strerror(errno));
+                } else if (!SetBlocking(fd)) {
+                    ERROR("The accepted connection can not be made blocking: "
+                          << strerror(errno));
+                    close(fd);
                 } else if (num_connections >= cfg.max_connections()) {
                     LOG("Connection refused because the limit has been reached");
                     close(fd);
