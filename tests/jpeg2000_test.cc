@@ -222,6 +222,28 @@ static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream) {
     return codestream;
 }
 
+static vector<unsigned char> SplitFirstPLT(vector<unsigned char> codestream) {
+    size_t sot = 0;
+    for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x90)
+            sot = i;
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x58)
+            continue;
+        Check(codestream[i + 2] == 0 && codestream[i + 3] == 5,
+              "Unexpected PLT marker in JPEG 2000 test fixture");
+        codestream[i + 3] = 4;
+        codestream.insert(codestream.begin() + i + 6,
+                          {0xFF, 0x58, 0, 4, 1});
+        uint32_t psot = (codestream[sot + 6] << 24) |
+                        (codestream[sot + 7] << 16) |
+                        (codestream[sot + 8] << 8) | codestream[sot + 9];
+        Set32(codestream, sot + 6, psot + 5);
+        return codestream;
+    }
+    Check(false, "PLT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
     vector<unsigned char> file = MakePreamble(0x6A703220); // jp2
     AppendBox(file, 0x6A703263, codestream); // jp2c
@@ -317,6 +339,9 @@ int main() {
     WriteFile(directory + "short-plt.jp2",
               MakeJP2(ShortenFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
+    WriteFile(directory + "multiple-plt.jp2",
+              MakeJP2(SplitFirstPLT(
+                  MakeCodestream(0, 1, 1, 1, 0, 2, 1, 2))));
     WriteFile(directory + "missing-signature.jp2",
               vector<unsigned char>(jp2.begin() + 12, jp2.end()));
     vector<unsigned char> bad_signature = jp2;
@@ -444,6 +469,17 @@ int main() {
               short_plt_file, 0,
               jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
           "Accepted PLT lengths shorter than their tile-part data");
+
+    jpeg2000::FileManager multiple_plt_manager;
+    Check(OpenImage(directory, "multiple-plt.jp2", &multiple_plt_manager),
+          "Rejected multiple PLT markers in one tile-part");
+    data::File *multiple_plt_file =
+            multiple_plt_manager.GetFile(directory + "multiple-plt.jp2");
+    Check(multiple_plt_file != NULL &&
+              multiple_plt_manager.GetImage()->GetPacket(
+                      multiple_plt_file, 0,
+                      jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
+          "Could not index packets across PLT markers");
 
     for (const char *name : {"pcrl.jp2", "cprl.jp2"}) {
         jpeg2000::FileManager progression_manager;
@@ -859,6 +895,7 @@ int main() {
     remove((directory + "tile-cod.jp2").c_str());
     remove((directory + "tile-qcd.jp2").c_str());
     remove((directory + "short-plt.jp2").c_str());
+    remove((directory + "multiple-plt.jp2").c_str());
     remove(large_file.c_str());
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());

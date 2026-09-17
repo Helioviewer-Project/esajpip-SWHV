@@ -27,6 +27,14 @@ namespace jpip {
         jpeg2000::Size max_precinct_xy;  ///< Maximum precinct
         jpeg2000::Packet current_packet; ///< Current packet
 
+        void SetResolution(const jpeg2000::CodingParameters *coding_parameters) {
+            min_precinct_xy = coding_parameters->GetPrecinctIndex(
+                    current_packet.resolution, pxy1);
+            max_precinct_xy = coding_parameters->GetPrecinctIndex(
+                    current_packet.resolution, pxy2);
+            current_packet.precinct_xy = min_precinct_xy;
+        }
+
     public:
         /**
          * Initializes the object. No packets are available.
@@ -51,12 +59,7 @@ namespace jpip {
             pxy1 = woi.position * (1L << (coding_parameters->num_levels - woi.resolution));
             pxy2 = (woi.position + woi.size - 1) * (1L << (coding_parameters->num_levels - woi.resolution));
 
-            min_precinct_xy = coding_parameters->GetPrecinctIndex(
-                    current_packet.resolution, pxy1);
-            max_precinct_xy = coding_parameters->GetPrecinctIndex(
-                    current_packet.resolution, pxy2);
-
-            current_packet.precinct_xy = min_precinct_xy;
+            SetResolution(coding_parameters);
         }
 
         /**
@@ -101,12 +104,7 @@ namespace jpip {
                                 }
                             }
 
-                            min_precinct_xy = coding_parameters->GetPrecinctIndex(
-                                    current_packet.resolution, pxy1);
-                            max_precinct_xy = coding_parameters->GetPrecinctIndex(
-                                    current_packet.resolution, pxy2);
-
-                            current_packet.precinct_xy = min_precinct_xy;
+                            SetResolution(coding_parameters);
                         }
                     }
                 }

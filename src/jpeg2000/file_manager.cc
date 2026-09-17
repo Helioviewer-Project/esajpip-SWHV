@@ -256,6 +256,10 @@ namespace jpeg2000 {
                         (declared_tile_parts != 0 &&
                          codestream.tile_parts.size() != declared_tile_parts))
                         return false;
+                    codestream.data_cursor.offset =
+                            codestream.tile_parts[0].data.offset;
+                    codestream.plt_cursor.offset =
+                            codestream.tile_parts[0].plt[0].offset;
                     return true;
 
                 case SOC_MARKER:
@@ -347,10 +351,9 @@ namespace jpeg2000 {
         params->progression = progression;
         params->num_layers = quality_layers;
         params->num_levels = transform_levels;
-        int height, width;
-        uint8_t size_precinct;
         params->resolutions.clear();
         for (int i = 0; i <= params->num_levels; ++i) {
+            uint8_t size_precinct = 0xFF;
             if (cs_buf & 1) {
                 if (!file->ReadReverse(&size_precinct))
                     return false;
@@ -358,14 +361,10 @@ namespace jpeg2000 {
                               (size_precinct & 0xF0) == 0))
                     return false;
 
-                height = 1 << ((size_precinct & 0xF0) >> 4);
-                width = 1 << (size_precinct & 0x0F);
-                params->resolutions.emplace_back(width, height);
-            } else {
-                height = width = 1 << 15;
-                params->resolutions.insert(params->resolutions.begin(),
-                                           CodingParameters::Resolution(width, height));
             }
+            params->resolutions.emplace_back(
+                    1 << (size_precinct & 0x0F),
+                    1 << ((size_precinct & 0xF0) >> 4));
         }
         return true;
     }

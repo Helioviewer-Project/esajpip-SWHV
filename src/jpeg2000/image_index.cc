@@ -8,12 +8,7 @@ namespace jpeg2000 {
     using data::File;
     using data::FileSegment;
 
-    ImageIndex::Codestream::Codestream(const string &_path)
-            : path(_path),
-              last_plt(0),
-              last_tile_part(0),
-              last_offset_PLT(0),
-              last_offset_packet(0) {
+    ImageIndex::Codestream::Codestream(const string &_path) : path(_path) {
     }
 
     ImageIndex::ImageIndex(const string &_path) : path_name(_path) {
@@ -31,19 +26,15 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetPLTLength(File *file, Codestream &codestream,
                                   uint64_t *length_packet) {
-        if (codestream.last_tile_part >= (int) codestream.tile_parts.size())
+        if (codestream.data_cursor.index >= codestream.tile_parts.size())
             return false;
         vector<FileSegment> &plt =
-                codestream.tile_parts[codestream.last_tile_part].plt;
-        if (codestream.last_plt >= (int) plt.size())
+                codestream.tile_parts[codestream.data_cursor.index].plt;
+        if (codestream.plt_cursor.index >= plt.size())
             return false;
-        const FileSegment &marker = plt[codestream.last_plt];
+        const FileSegment &marker = plt[codestream.plt_cursor.index];
 
-        // Get packet plt offset
-        uint64_t offset = codestream.last_offset_PLT;
-        if (offset == 0)
-            offset = marker.offset;
-        file->Seek(offset);
+        file->Seek(codestream.plt_cursor.offset);
 
         // Get packet length
         uint8_t buf_packet = 0;
@@ -56,40 +47,44 @@ namespace jpeg2000 {
             *length_packet = (*length_packet << 7) | (buf_packet & (uint8_t) 127);
         } while (buf_packet & (uint8_t) 128);
 
-        codestream.last_offset_PLT = file->GetOffset();
-        if (codestream.last_offset_PLT == marker.offset + marker.length) {
-            codestream.last_plt++;
-            codestream.last_offset_PLT = 0;
+        codestream.plt_cursor.offset = file->GetOffset();
+        if (codestream.plt_cursor.offset == marker.offset + marker.length) {
+            codestream.plt_cursor.index++;
+            if (codestream.plt_cursor.index < plt.size())
+                codestream.plt_cursor.offset =
+                        plt[codestream.plt_cursor.index].offset;
         }
         return true;
     }
 
     bool ImageIndex::GetOffsetPacket(Codestream &codestream, uint64_t length_packet) {
-        if (codestream.last_tile_part >= (int) codestream.tile_parts.size())
+        if (codestream.data_cursor.index >= codestream.tile_parts.size())
             return false;
-        TilePart &tile_part = codestream.tile_parts[codestream.last_tile_part];
+        TilePart &tile_part = codestream.tile_parts[codestream.data_cursor.index];
         const FileSegment &segment = tile_part.data;
 
-        uint64_t offset = codestream.last_offset_packet;
-        if (offset == 0)
-            offset = segment.offset;
+        uint64_t offset = codestream.data_cursor.offset;
         uint64_t used = offset - segment.offset;
         if (used > segment.length || length_packet > segment.length - used)
             return false;
 
         uint64_t next_offset = offset + length_packet;
         bool packet_data_done = next_offset == segment.offset + segment.length;
-        bool plt_done = codestream.last_plt == (int) tile_part.plt.size() &&
-                        codestream.last_offset_PLT == 0;
+        bool plt_done = codestream.plt_cursor.index == tile_part.plt.size();
         if (packet_data_done != plt_done)
             return false;
 
         codestream.packet_index.Add(FileSegment(offset, length_packet));
-        codestream.last_offset_packet = next_offset;
+        codestream.data_cursor.offset = next_offset;
         if (packet_data_done) {
-            codestream.last_tile_part++;
-            codestream.last_plt = 0;
-            codestream.last_offset_packet = 0;
+            codestream.data_cursor.index++;
+            if (codestream.data_cursor.index < codestream.tile_parts.size()) {
+                TilePart &next =
+                        codestream.tile_parts[codestream.data_cursor.index];
+                codestream.data_cursor.offset = next.data.offset;
+                codestream.plt_cursor.index = 0;
+                codestream.plt_cursor.offset = next.plt[0].offset;
+            }
         }
         return true;
     }

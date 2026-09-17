@@ -28,15 +28,18 @@ namespace jpeg2000 {
             }
         };
 
+        struct Cursor {
+            uint32_t index = 0;
+            uint32_t offset = 0;
+        };
+
         struct Codestream {
             std::string path;
             CodingParameters parameters;
             data::FileSegment header;
             std::vector<TilePart> tile_parts;
-            int last_plt;
-            int last_tile_part;
-            uint64_t last_offset_PLT;
-            uint64_t last_offset_packet;
+            Cursor plt_cursor;
+            Cursor data_cursor;
             PacketIndex packet_index;
 
             explicit Codestream(const std::string &_path);
