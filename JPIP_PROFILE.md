@@ -2,18 +2,39 @@
 
 esajpip implements the part of JPIP needed to serve JP2 and JPX imagery to
 JHelioviewer. It is not a complete implementation of
-[ITU-T T.808 / ISO/IEC 15444-9](https://www.itu.int/rec/T-REC-T.808/en).
+[ITU-T T.808 (12/2022) / ISO/IEC 15444-9:2023](https://www.itu.int/rec/T-REC-T.808-202212-I/en).
+The profile terminology below follows Annex J of ITU-T T.808 (12/2022), the
+common text published as ISO/IEC 15444-9:2023.
 
 This document defines the wire behavior and source-file structures that the
-server supports. **Reduced** means that esajpip implements only the behavior
-described here. Unknown request fields may be ignored for compatibility, so an
-accepted request does not by itself prove that every field was honored.
+server supports. It is the implementation profile for esajpip, not a claim of
+conformance to one of the profiles in T.808 Annex J. Unknown request fields may
+be ignored for compatibility, so an accepted request does not by itself prove
+that every field was honored.
+
+## Relationship to T.808 Annex J
+
+esajpip does not implement Annex J Profile 0, Profile 1, or the Full Profile.
+Even Profile 0 requires semantics for fields such as `type`, `tid`, and `pref`;
+esajpip accepts those fields but does not interpret them. Its implemented
+subset instead draws from more than one Annex J level:
+
+| Annex J area | esajpip behavior |
+| --- | --- |
+| Profile level | Some Profile 0 fields are supported, additive explicit cache-model descriptors from Profile 1 are supported in reduced form, and reduced `stream` and `context` selection comes from the Full Profile. No numbered profile is claimed. |
+| Return-data variant P | JPP-stream data is returned. JPT-stream and complete-file return types are not implemented. |
+| Cache variants N and S | Additive explicit byte-count cache descriptors provide part of N behavior. A reduced S channel model lets `cnew`, `cid`, and `cclose` maintain a persistent cache for one target. Neither formal variant is claimed: the complete N grammar, session grouping, several channels in one session, and concurrent channel requests are not implemented. |
+| Incremental codestream variant C | Main-header, tile-header, and precinct data-bins are delivered incrementally, but the `meta:incr` preference behavior required by the formal variant is not implemented. |
+| Metadata variant M | JP2 and JPX box contents are delivered in metadata data-bins and `metareq` is recognized in reduced form, but the standard metadata-request grammar and `meta:orig` preference behavior are not implemented. |
+
+The labels **Supported** and **Reduced** below describe this implementation,
+not formal Annex J conformance.
 
 ## Wire profile
 
 | Area | Support | Behavior and reason |
 | --- | --- | --- |
-| HTTP | Reduced | HTTP/1.1 `GET` requests are accepted. Successful responses use chunked transfer encoding. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
+| HTTP | Reduced | HTTP/1.1 `GET` requests are accepted. Successful image responses use chunked transfer encoding; a successful `cclose` has an empty fixed-length body. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
 | Return type | JPP-stream only | Successful image responses use `image/jpp-stream`. JPT-stream, complete-file return types, and return-type negotiation are not implemented because JHelioviewer consumes precinct-based JPP-streams. |
 | Transport | HTTP only | `JPIP-cnew` advertises `transport=http`. Auxiliary TCP, UDP, and upload transports are not implemented. |
 | Sessions and channels | Stateful, reduced | `cnew`, `cid`, and `cclose` are supported. One channel owns one target and processes one request and response at a time. This matches JHelioviewer's access pattern and keeps cache and JPEG 2000 ownership explicit. |
@@ -21,7 +42,7 @@ accepted request does not by itself prove that every field was honored.
 | Stateless requests | Not supported | Initial inspection requires `cnew`, `cid`, or a usable `cclose`. All cache and image state belongs to one channel thread. |
 | Concurrent requests | Not supported | Responses are not preempted by a newer request and requests are not served concurrently within a channel. `qid`, `wait`, and window-change cancellation are not implemented. Serial service avoids shared JPEG 2000 state and is compatible with JHelioviewer. |
 | Compression | Reduced | If a request contains `metareq` and `Accept-Encoding` contains `gzip`, the JPP response is gzip encoded. Other content codings and general HTTP content negotiation are not implemented. |
-| Errors | Reduced | Valid requests receive `200`. Malformed supported fields receive `400`, missing targets receive `404`, and unknown channels receive `503`. Other request or serving failures receive `500`. Errors terminate the connection and, after channel creation, the channel. The complete JPIP correction-header model is not implemented. |
+| Errors | Reduced | Requests that reach a channel receive `400` for malformed supported fields, `404` for a missing target, or `500` for other failures. The dispatcher returns `503` for an unknown `cid`. Errors terminate the connection and, after channel creation, the channel. Traffic rejected during initial inspection is closed without an HTTP response. The complete JPIP correction-header model is not implemented. |
 
 Initial inspection examines at most a 2 KiB request line. The JPIP parser uses
 at most the first 1,023 characters of the URI. Request paths and `target` values
@@ -42,17 +63,17 @@ The detailed connection ownership, timeout and cleanup rules are documented in
 | Field | Support | Current interpretation |
 | --- | --- | --- |
 | `target` | Supported on `cnew` | Selects the file. If absent, the request URI path selects it. A channel cannot change target after creation. Parent-directory path segments are rejected. |
-| `cnew` | Reduced | Creates one HTTP channel. The requested transport list and other negotiation details are not interpreted. The response always selects HTTP. |
-| `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. |
-| `cclose` | Supported | Closes the named channel. `cclose=*` is accepted when the request also supplies the channel to route. There is no multi-channel session to close. |
-| `fsiz`, `roff`, `rsiz` | Supported profile | Select resolution and a rectangular window of interest. JHelioviewer supplies these fields together. When omitted, `roff` defaults to `(0,0)` and `rsiz` extends to the lower-right corner. `round-up`, `round-down`, and `closest` are recognized on `fsiz`. The region is cropped to the selected image resolution. An empty intersection returns only `EOR WINDOW_DONE`. Server-adjusted window response headers are not generated. |
+| `cnew` | Reduced | Creates one independent HTTP channel. Its value is not parsed, so requested transports and channel association are ignored. The response always selects HTTP. |
+| `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. Channel IDs are server-generated canonical unsigned decimal integers. |
+| `cclose` | Reduced | Closes one channel named by a canonical decimal ID. `cclose=*` is accepted when `cid` also identifies the channel to route. Lists and multi-channel session closure are not implemented. |
+| `fsiz`, `roff`, `rsiz` | Reduced | Select a resolution and rectangular window of interest. `fsiz` must have positive dimensions and is required when either other window field is present. `roff` defaults to `(0,0)` and `rsiz` defaults to the area from that offset to the lower-right corner. `round-up`, `round-down`, and `closest` are recognized on `fsiz`. As a compatibility extension, signed offsets are accepted and cropped to the image; request-region sizes must be non-negative. An empty intersection returns only `EOR WINDOW_DONE`. Server-adjusted window response fields are not generated. |
 | `stream` | Reduced | Selects one codestream or one inclusive numeric range, with selector values capped at 100,000. At most 100,001 codestreams may be selected across all `stream` and `context` fields in one request. Each selected codestream maps the requested window through its own dimensions and packet geometry, and their packets are delivered in interleaved order. The implementation also retains the historical descending-range extension used by existing clients. Lists and the complete standard sampled-range syntax are not supported. |
 | `context` | Reduced | Recognizes `jpxl` with one layer number or one inclusive range, capped at 100,000, and treats the selected compositing-layer numbers as codestream numbers. The combined selection limit described for `stream` applies. JPX composition instructions, remapping, and the complete context syntax are not evaluated. This is sufficient for the one-codestream-per-frame JPX movies served to JHelioviewer. |
-| `len` | Supported | Limits the number of JPP data-bin bytes generated for the response. The three-byte EOR does not count toward the limit. When omitted, the server sends all data relevant to the request. A client can issue further requests using the same channel and cache model. Negative values are rejected. |
-| `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional codestream range. Descriptors are validated against the selected image before they update channel state. Since the source profile has one tile, only tile-header bin zero is valid. Subtractive descriptors, wildcard descriptors, and layer-count descriptors are rejected or unsupported. |
+| `len` | Supported | Limits the JPP message headers and data-bin payload generated for the response; the EOR message does not count toward the limit. When omitted, the server sends all data relevant to the request. Values below the three-byte EOR size are raised so that a valid EOR can still be sent. Negative and overflowing values are rejected. |
+| `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional explicit codestream range. Descriptors are validated against the selected image before they update channel state. Since the source profile has one tile, only tile-header bin zero is valid. Implicit descriptors, subtractive descriptors, wildcards, tile descriptors, and layer-count descriptors are not supported. |
 | `metareq` | Compatibility subset | Its presence is recognized, including JHelioviewer's `[*]!!` form, but the expression is not parsed. Metadata is sent according to the server's fixed JPX metadata-bin representation. The field also enables gzip when the HTTP client accepts it. |
-| `type`, `tid` and unknown fields | Accepted but ignored | They do not affect serving. This tolerance preserves existing JHelioviewer requests, but it does not provide return-type negotiation or target-ID recovery. |
-| Other standard fields | Not supported | `subtarget`, `qid`, `comps`, `srate`, `roi`, `layers`, `quality`, `align`, `wait`, `drate`, `tpmodel`, `need`, `tpneed`, `mset`, upload, capability and preference fields have no implemented semantics. |
+| `type`, `tid`, `pref`, and unknown fields | Accepted but ignored | They do not affect serving. The server always returns JPP-stream and reports target ID zero. This tolerance preserves existing JHelioviewer requests, but is one reason this is not an Annex J profile. |
+| Other standard fields | Not supported | Fields including `subtarget`, `qid`, `comps`, `srate`, `roi`, `layers`, `quality`, `align`, `wait`, `drate`, `tpmodel`, `need`, `tpneed`, `mset`, upload, capability, timed-request, and delivery-control fields have no implemented semantics. |
 
 The server does not reject every unsupported field. Clients should rely on the
 table above rather than treating a successful response as proof that every
@@ -60,12 +81,14 @@ field was understood.
 
 ## Responses and cache model
 
-The response body contains a sequence of JPP data-bin messages followed by an
-end-of-response message. The server emits:
+A completed successful image response contains a sequence of JPP messages
+followed by exactly one end-of-response message. As needed for the request and
+the channel's cache model, the server emits:
 
 - Metadata data-bins for the JP2 or JPX box structure.
 - Codestream main-header data-bins.
-- An empty, complete tile-header data-bin for tile 0.
+- An empty, complete tile-header data-bin for tile 0. Tile-part header marker
+  segments from the source are not delivered to the client.
 - Precinct data-bins containing packets relevant to the requested window.
 - `window done` or `byte limit reached` end-of-response reasons.
 
@@ -101,9 +124,12 @@ JPX specifications allow.
   samples are supported. An explicit zero exponent is accepted only at the
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
-  marker. They must describe the packet layout. Features that change that
-  layout elsewhere, such as progression changes through `POC`, are outside the
-  supported profile.
+  marker and must contain all information needed to decode every tile-part.
+  Tile-part header overrides are not delivered to the client. Features that
+  change the packet layout elsewhere, including `POC`, component-specific
+  coding or quantization parameters, and tile-part header overrides, are
+  outside the supported source profile even if the parser accepts their marker
+  segments.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
