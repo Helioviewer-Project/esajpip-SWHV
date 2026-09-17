@@ -73,6 +73,23 @@ namespace jpeg2000 {
         0x0D, 0x0A, 0x87, 0x0A
     };
 
+    static bool ReadBoxHeader(File *file, uint64_t limit, uint32_t *type_box,
+                              uint64_t *length_box);
+    static bool ReadSIZMarker(File *file, uint64_t limit,
+                              CodingParameters *params);
+    static bool ReadCODMarker(File *file, uint64_t limit,
+                              CodingParameters *params);
+    static bool ReadSOTMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index,
+                              uint8_t *declared_tile_parts);
+    static bool ReadPLTMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index);
+    static bool ReadSODMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index);
+    static bool ReadFlstBox(File *file, uint64_t length_box,
+                            FileSegment *fragment,
+                            uint16_t *data_reference);
+
     static bool SkipMarker(File *file, uint64_t limit) {
         uint16_t length = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&length) || length < 2 ||
@@ -123,7 +140,9 @@ namespace jpeg2000 {
         return res;
     }
 
-    bool FileManager::ReadCodestream(File *file, uint64_t length, CodingParameters *params, CodestreamIndex *index) {
+    static bool ReadCodestream(File *file, uint64_t length,
+                               CodingParameters *params,
+                               CodestreamIndex *index) {
         enum Phase {
             MAIN_HEADER,
             TILE_HEADER,
@@ -227,7 +246,8 @@ namespace jpeg2000 {
         return false;
     }
 
-    bool FileManager::ReadSIZMarker(File *file, uint64_t limit, CodingParameters *params) {
+    static bool ReadSIZMarker(File *file, uint64_t limit,
+                              CodingParameters *params) {
         uint16_t lsiz = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < 41 ||
             static_cast<uint64_t>(lsiz) - 2 > limit - file->GetOffset())
@@ -271,7 +291,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadCODMarker(File *file, uint64_t limit, CodingParameters *params) {
+    static bool ReadCODMarker(File *file, uint64_t limit,
+                              CodingParameters *params) {
         uint16_t lcod = 0;
         uint8_t cs_buf = 0;
         uint8_t progression = 0;
@@ -324,8 +345,9 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadSOTMarker(File *file, uint64_t limit, CodestreamIndex *index,
-                                    uint8_t *declared_tile_parts) {
+    static bool ReadSOTMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index,
+                              uint8_t *declared_tile_parts) {
         uint64_t marker_offset = file->GetOffset() - 2;
         uint16_t lsot = 0;
         uint16_t isot = 0;
@@ -351,7 +373,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadPLTMarker(File *file, uint64_t limit, CodestreamIndex *index) {
+    static bool ReadPLTMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index) {
         if (!index->packets.empty() && index->packets.back().length != 0)
             limit = index->packets.back().offset + index->packets.back().length;
 
@@ -367,7 +390,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadSODMarker(File *file, uint64_t limit, CodestreamIndex *index) {
+    static bool ReadSODMarker(File *file, uint64_t limit,
+                              CodestreamIndex *index) {
         if (index->packets.empty())
             return false;
 
@@ -398,7 +422,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadBoxHeader(File *file, uint64_t limit, uint32_t *type_box, uint64_t *length_box) {
+    static bool ReadBoxHeader(File *file, uint64_t limit,
+                              uint32_t *type_box, uint64_t *length_box) {
         if (limit > file->GetSize() || file->GetOffset() > limit || limit - file->GetOffset() < 8)
             return false;
 
@@ -650,7 +675,9 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadFlstBox(File *file, uint64_t length_box, FileSegment *fragment, uint16_t *data_reference) {
+    static bool ReadFlstBox(File *file, uint64_t length_box,
+                            FileSegment *fragment,
+                            uint16_t *data_reference) {
         if (length_box != 16)
             return false;
 
