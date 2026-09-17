@@ -162,9 +162,11 @@ namespace jpip {
         /**
          * Sets the new current request to take into account for
          * generating the chunks of data.
+         * @param image_index Index of the selected image.
          * @param req Request.
          */
-        bool SetRequest(jpeg2000::FileManager &file_manager, const Request &req);
+        bool SetRequest(const jpeg2000::ImageIndex &image_index,
+                        const Request &req);
 
         /**
          * Generates a new chunk of data for the current image and

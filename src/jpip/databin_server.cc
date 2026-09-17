@@ -32,14 +32,16 @@ namespace jpip {
             return true;
         }
 
-        bool ValidateModel(const ImageIndex &image_index,
-                           const vector<Request::ModelUpdate> &model) {
+        bool ApplyModel(const ImageIndex &image_index, CacheModel &cache_model,
+                        const vector<Request::ModelUpdate> &model) {
             for (const Request::ModelUpdate &update : model) {
                 if (update.id < 0 || update.amount < 0)
                     return false;
                 if (update.bin_class == DataBinClass::META_DATA) {
                     if (static_cast<size_t>(update.id) > image_index.GetMetadata().bins.size())
                         return false;
+                    cache_model.AugmentDataBin(update.bin_class, 0, update.id,
+                                               update.amount);
                     continue;
                 }
 
@@ -53,47 +55,32 @@ namespace jpip {
                     return false;
                 if (update.bin_class == DataBinClass::TILE_HEADER && update.id != 0)
                     return false;
-                if (update.bin_class == DataBinClass::PRECINCT) {
-                    for (int i = update.first_codestream; i <= update.last_codestream; ++i)
-                        if (update.id >= image_index.GetCodingParameters(i)->GetNumPrecinctDataBins())
-                            return false;
+                for (int i = update.first_codestream; i <= update.last_codestream; ++i) {
+                    if (update.bin_class == DataBinClass::PRECINCT &&
+                        update.id >= image_index.GetCodingParameters(i)->GetNumPrecinctDataBins())
+                        return false;
+                    cache_model.AugmentDataBin(update.bin_class, i, update.id,
+                                               update.amount);
                 }
             }
             return true;
         }
 
-        void ApplyModel(CacheModel *cache_model,
-                        const vector<Request::ModelUpdate> &model) {
-            for (const Request::ModelUpdate &update : model) {
-                if (update.bin_class == DataBinClass::META_DATA) {
-                    cache_model->AugmentDataBin(update.bin_class, 0, update.id,
-                                                update.amount);
-                    continue;
-                }
-                for (int i = update.first_codestream; i <= update.last_codestream; ++i)
-                    cache_model->AugmentDataBin(update.bin_class, i, update.id,
-                                                update.amount);
-            }
-        }
-
     }
 
-    bool DataBinServer::SetRequest(FileManager &file_manager, const Request &req) {
-        ImageIndex *image_index = file_manager.GetImage();
-
+    bool DataBinServer::SetRequest(const ImageIndex &image_index, const Request &req) {
         data_writer.StartResponse();
 
-        if (req.has.model && !ValidateModel(*image_index, req.model))
-            return false;
-
         if (req.has.stream || req.has.context) {
-            for (int codestream : req.codestreams)
-                if (codestream < 0 || static_cast<size_t>(codestream) >= image_index->GetNumCodestreams())
-                    return false;
-
             bool changed = streams.size() != req.codestreams.size();
-            for (size_t i = 0; !changed && i < streams.size(); ++i)
-                changed = streams[i].id != req.codestreams[i];
+            for (size_t i = 0; i < req.codestreams.size(); ++i) {
+                int codestream = req.codestreams[i];
+                if (codestream < 0 ||
+                    static_cast<size_t>(codestream) >= image_index.GetNumCodestreams())
+                    return false;
+                if (!changed && streams[i].id != codestream)
+                    changed = true;
+            }
             if (changed) {
                 streams.clear();
                 streams.reserve(req.codestreams.size());
@@ -127,7 +114,7 @@ namespace jpip {
                 }
 
                 const CodingParameters *coding_parameters =
-                        image_index->GetCodingParameters(stream.id);
+                        image_index.GetCodingParameters(stream.id);
                 jpeg2000::Size resolution_size =
                         req.GetResolution(coding_parameters, &new_woi);
                 if (!CropWindow(&new_woi, resolution_size)) {
@@ -141,8 +128,8 @@ namespace jpip {
             }
         }
 
-        if (req.has.model)
-            ApplyModel(&cache_model, req.model);
+        if (req.has.model && !ApplyModel(image_index, cache_model, req.model))
+            return false;
 
         pending = req.has.len ? req.length_response : INT_MAX;
         if (pending < DataBinWriter::EOR_LENGTH)

@@ -432,7 +432,7 @@ private:
                     FileManager::OpenResult open_result =
                             file_manager.OpenImage(file_name);
                     if (open_result == FileManager::OpenResult::OPENED) {
-                        if (!data_server.SetRequest(file_manager, req)) {
+                        if (!data_server.SetRequest(*file_manager.GetImage(), req)) {
                             err_msg = "Invalid JPIP request for the selected image";
                             error_code = 400;
                             error_reason = "Bad Request";
@@ -470,7 +470,7 @@ private:
                         err_msg = "Request related to another channel";
                         LOG(err_msg);
                     } else {
-                        if (!data_server.SetRequest(file_manager, req)) {
+                        if (!data_server.SetRequest(*file_manager.GetImage(), req)) {
                             err_msg = "Invalid JPIP request for the selected image";
                             error_code = 400;
                             error_reason = "Bad Request";

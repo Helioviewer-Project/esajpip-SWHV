@@ -314,7 +314,8 @@ static bool RejectDataRequest(jpeg2000::FileManager &manager,
                               const string &line) {
     jpip::Request request;
     jpip::DataBinServer server;
-    return request.Parse(line) && !server.SetRequest(manager, request);
+    return request.Parse(line) &&
+           !server.SetRequest(*manager.GetImage(), request);
 }
 
 int main() {
@@ -648,7 +649,7 @@ int main() {
               "GET /jpip?stream=0:1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a multi-codestream window request");
     jpip::DataBinServer multi_stream_server;
-    Check(multi_stream_server.SetRequest(embedded_two_manager,
+    Check(multi_stream_server.SetRequest(*embedded_two_manager.GetImage(),
                                          multi_stream_request),
           "Rejected a heterogeneous multi-codestream window");
     char multi_stream_response[4096];
@@ -664,7 +665,7 @@ int main() {
     jpip::Request second_stream_request;
     Check(second_stream_request.Parse(
               "GET /jpip?stream=1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1") &&
-              multi_stream_server.SetRequest(embedded_two_manager,
+              multi_stream_server.SetRequest(*embedded_two_manager.GetImage(),
                                               second_stream_request),
           "Could not select the second codestream after a range response");
     multi_stream_length = sizeof multi_stream_response;
@@ -754,7 +755,8 @@ int main() {
     Check(request.Parse("GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse default-codestream request");
     jpip::DataBinServer server;
-    Check(server.SetRequest(manager, request), "Rejected default codestream");
+    Check(server.SetRequest(*manager.GetImage(), request),
+          "Rejected default codestream");
     char response[4096];
     int response_length = sizeof response;
     bool last = false;
@@ -771,7 +773,8 @@ int main() {
     Check(default_window_request.Parse("GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
           "Could not parse a window with default region and offset");
     jpip::DataBinServer default_window_server;
-    Check(default_window_server.SetRequest(manager, default_window_request),
+    Check(default_window_server.SetRequest(*manager.GetImage(),
+                                           default_window_request),
           "Rejected a window with default region and offset");
     response_length = sizeof response;
     Check(default_window_server.GenerateChunk(manager, response, &response_length, &last),
@@ -786,7 +789,7 @@ int main() {
         Check(short_request.Parse("GET /jpip?len=" + to_string(response_limit) +
                                   "&cid=0 HTTP/1.1"),
               "Could not parse a response limit shorter than an EOR message");
-        Check(short_server.SetRequest(manager, short_request),
+        Check(short_server.SetRequest(*manager.GetImage(), short_request),
               "Rejected a short response limit");
         response_length = sizeof response;
         Check(short_server.GenerateChunk(manager, response, &response_length, &last),
@@ -803,7 +806,7 @@ int main() {
     Check(limited_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0 HTTP/1.1"),
           "Could not parse a limited request");
-    Check(limited_server.SetRequest(manager, limited_request),
+    Check(limited_server.SetRequest(*manager.GetImage(), limited_request),
           "Rejected a limited request");
     response_length = sizeof response;
     Check(limited_server.GenerateChunk(manager, response, &response_length, &last),
@@ -817,7 +820,7 @@ int main() {
     jpip::DataBinServer model_server;
     jpip::Request model_request;
     Check(model_request.Parse("GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
-              model_server.SetRequest(manager, model_request),
+              model_server.SetRequest(*manager.GetImage(), model_request),
           "Rejected a valid cache model");
     Check(RejectDataRequest(manager,
                            "GET /jpip?model=M2147483647&cid=0 HTTP/1.1"),
@@ -835,7 +838,8 @@ int main() {
     Check(headers_only_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0 HTTP/1.1"),
           "Could not parse a headers-only request");
-    Check(server.SetRequest(manager, headers_only_request), "Rejected a headers-only request");
+    Check(server.SetRequest(*manager.GetImage(), headers_only_request),
+          "Rejected a headers-only request");
     response_length = sizeof response;
     Check(server.GenerateChunk(manager, response, &response_length, &last),
           "Could not generate a headers-only response");
@@ -848,7 +852,8 @@ int main() {
     Check(unlimited_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a second unlimited request");
-    Check(server.SetRequest(manager, unlimited_request), "Rejected a second unlimited request");
+    Check(server.SetRequest(*manager.GetImage(), unlimited_request),
+          "Rejected a second unlimited request");
     response_length = sizeof response;
     Check(server.GenerateChunk(manager, response, &response_length, &last),
           "Could not generate a second unlimited response");
@@ -862,7 +867,7 @@ int main() {
               "roff=-5,-5&len=512&cid=0 HTTP/1.1"),
           "Could not parse a partially overlapping window");
     jpip::DataBinServer cropped_server;
-    Check(cropped_server.SetRequest(manager, cropped_request),
+    Check(cropped_server.SetRequest(*manager.GetImage(), cropped_request),
           "Rejected a partially overlapping window");
     response_length = sizeof response;
     Check(cropped_server.GenerateChunk(manager, response, &response_length, &last),
@@ -874,7 +879,7 @@ int main() {
               "roff=2000000000,2000000000&len=512&cid=0 HTTP/1.1"),
           "Could not parse an out-of-range window");
     jpip::DataBinServer outside_server;
-    Check(outside_server.SetRequest(manager, outside_request),
+    Check(outside_server.SetRequest(*manager.GetImage(), outside_request),
           "Rejected a window outside the image");
     response_length = sizeof response;
     Check(outside_server.GenerateChunk(manager, response, &response_length, &last),
@@ -888,7 +893,8 @@ int main() {
               "GET /jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
           "Could not parse an empty window");
     jpip::DataBinServer empty_server;
-    Check(empty_server.SetRequest(manager, empty_request), "Rejected an empty window");
+    Check(empty_server.SetRequest(*manager.GetImage(), empty_request),
+          "Rejected an empty window");
     response_length = sizeof response;
     Check(empty_server.GenerateChunk(manager, response, &response_length, &last),
           "Could not generate a zero-sized-window response");
@@ -903,7 +909,8 @@ int main() {
     Check(missing_file_request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");
     jpip::DataBinServer missing_file_server;
-    Check(missing_file_server.SetRequest(manager, missing_file_request),
+    Check(missing_file_server.SetRequest(*manager.GetImage(),
+                                        missing_file_request),
           "Rejected valid missing-file request state");
     manager.ClearFiles();
 
