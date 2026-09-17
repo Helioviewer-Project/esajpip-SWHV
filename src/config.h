@@ -1,5 +1,5 @@
-#ifndef _CONFIG_H_
-#define _CONFIG_H_
+#ifndef _ESAJPIP_CONFIG_H_
+#define _ESAJPIP_CONFIG_H_
 
 #include <cstdint>
 #include <string>
@@ -135,4 +135,4 @@ public:
 
 };
 
-#endif /* _CONFIG_H_ */
+#endif /* _ESAJPIP_CONFIG_H_ */

@@ -1,5 +1,5 @@
-#ifndef _INITIAL_REQUEST_H_
-#define _INITIAL_REQUEST_H_
+#ifndef _SERVER_INITIAL_REQUEST_H_
+#define _SERVER_INITIAL_REQUEST_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -19,4 +19,4 @@ struct InitialRequest {
 InitialRequest ClassifyInitialRequest(const char *data, std::size_t length);
 InitialRequest InspectInitialRequest(int fd);
 
-#endif /* _INITIAL_REQUEST_H_ */
+#endif /* _SERVER_INITIAL_REQUEST_H_ */

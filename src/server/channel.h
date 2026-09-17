@@ -1,5 +1,5 @@
-#ifndef _CHANNEL_H_
-#define _CHANNEL_H_
+#ifndef _SERVER_CHANNEL_H_
+#define _SERVER_CHANNEL_H_
 
 #include <memory>
 #include <string>
@@ -12,4 +12,4 @@ void RunChannel(const Config &cfg, const std::string &channel,
                 const std::shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed);
 
-#endif /* _CHANNEL_H_ */
+#endif /* _SERVER_CHANNEL_H_ */

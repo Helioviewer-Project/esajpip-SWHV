@@ -1,5 +1,5 @@
-#ifndef _TRACE_H_
-#define _TRACE_H_
+#ifndef _ESAJPIP_TRACE_H_
+#define _ESAJPIP_TRACE_H_
 
 #include <iostream>
 #include <sstream>
@@ -38,7 +38,7 @@ void Write(const std::string &message);
     } while (false)
 #else
 #define TRACE(a) do { } while (false)
-#endif
+#endif /* _ESAJPIP_TRACE_H_ */
 
 #define CERR(a) (std::cerr << a << std::endl, -1)
 

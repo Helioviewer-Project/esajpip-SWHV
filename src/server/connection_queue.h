@@ -1,5 +1,5 @@
-#ifndef _CONNECTION_QUEUE_H_
-#define _CONNECTION_QUEUE_H_
+#ifndef _SERVER_CONNECTION_QUEUE_H_
+#define _SERVER_CONNECTION_QUEUE_H_
 
 #include <mutex>
 
@@ -27,4 +27,4 @@ public:
     ConnectionQueue &operator=(const ConnectionQueue &) = delete;
 };
 
-#endif /* _CONNECTION_QUEUE_H_ */
+#endif /* _SERVER_CONNECTION_QUEUE_H_ */

@@ -1,5 +1,5 @@
-#ifndef _SERVER_H_
-#define _SERVER_H_
+#ifndef _SERVER_SERVER_H_
+#define _SERVER_SERVER_H_
 
 #include <string>
 
@@ -11,4 +11,4 @@ int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
               const std::string &log_name, const std::string &description,
               const std::string &restart_message);
 
-#endif /* _SERVER_H_ */
+#endif /* _SERVER_SERVER_H_ */
