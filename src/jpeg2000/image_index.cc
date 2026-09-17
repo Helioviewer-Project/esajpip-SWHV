@@ -32,7 +32,8 @@ namespace jpeg2000 {
     bool ImageIndex::GetPLTLength(File *file, Codestream &codestream,
                                   uint64_t *length_packet) {
         vector<FileSegment> &plt = codestream.plt;
-        if (codestream.last_plt >= (int) plt.size())
+        if (codestream.last_packet >= (int) codestream.plt_ends.size() ||
+            codestream.last_plt >= (int) codestream.plt_ends[codestream.last_packet])
             return false;
         const FileSegment &marker = plt[codestream.last_plt];
 
@@ -74,10 +75,17 @@ namespace jpeg2000 {
         if (used > segment.length || length_packet > segment.length - used)
             return false;
 
-        codestream.packet_index.Add(FileSegment(offset, length_packet));
-        codestream.last_offset_packet = offset + length_packet;
+        uint64_t next_offset = offset + length_packet;
+        bool packet_data_done = next_offset == segment.offset + segment.length;
+        bool plt_done = codestream.last_plt ==
+                            (int) codestream.plt_ends[codestream.last_packet] &&
+                        codestream.last_offset_PLT == 0;
+        if (packet_data_done != plt_done)
+            return false;
 
-        if (codestream.last_offset_packet == segment.offset + segment.length) {
+        codestream.packet_index.Add(FileSegment(offset, length_packet));
+        codestream.last_offset_packet = next_offset;
+        if (packet_data_done) {
             codestream.last_packet++;
             codestream.last_offset_packet = 0;
         }

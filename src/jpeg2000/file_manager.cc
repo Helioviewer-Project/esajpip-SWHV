@@ -89,7 +89,9 @@ namespace jpeg2000 {
                               const vector<FileSegment> &packet_data,
                               vector<FileSegment> &plt);
     static bool ReadSODMarker(File *file, uint64_t limit,
-                              vector<FileSegment> &packet_data);
+                              vector<FileSegment> &packet_data,
+                              const vector<FileSegment> &plt,
+                              vector<size_t> &plt_ends);
     static bool ReadFlstBox(File *file, uint64_t length_box,
                             FileSegment *fragment,
                             uint16_t *data_reference);
@@ -160,6 +162,8 @@ namespace jpeg2000 {
         bool siz = false;
         bool cod = false;
         bool qcd = false;
+        bool tile_cod = false;
+        bool tile_qcd = false;
         bool first_marker = true;
         Phase phase = MAIN_HEADER;
         uint8_t declared_tile_parts = 0;
@@ -194,11 +198,15 @@ namespace jpeg2000 {
 
                 case COD_MARKER: TRACE("COD marker...");
                     if ((phase == MAIN_HEADER && cod) ||
+                        (phase == TILE_HEADER &&
+                         (codestream.packet_data.size() != 1 || tile_cod)) ||
                         !ReadCODMarker(file, marker_limit,
                                        &codestream.parameters))
                         return false;
                     if (phase == MAIN_HEADER)
                         cod = true;
+                    else
+                        tile_cod = true;
                     break;
 
                 case SOT_MARKER: TRACE("SOT marker...");
@@ -212,10 +220,14 @@ namespace jpeg2000 {
 
                 case QCD_MARKER:
                     if ((phase == MAIN_HEADER && qcd) ||
+                        (phase == TILE_HEADER &&
+                         (codestream.packet_data.size() != 1 || tile_qcd)) ||
                         !SkipMarker(file, marker_limit))
                         return false;
                     if (phase == MAIN_HEADER)
                         qcd = true;
+                    else
+                        tile_qcd = true;
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");
@@ -227,7 +239,8 @@ namespace jpeg2000 {
 
                 case SOD_MARKER: TRACE("SOD marker...");
                     if (phase != TILE_HEADER ||
-                        !ReadSODMarker(file, limit, codestream.packet_data))
+                        !ReadSODMarker(file, limit, codestream.packet_data,
+                                       codestream.plt, codestream.plt_ends))
                         return false;
                     phase = BETWEEN_TILE_PARTS;
                     break;
@@ -235,6 +248,7 @@ namespace jpeg2000 {
                 case EOC_MARKER:
                     if (phase == TILE_HEADER || codestream.packet_data.empty() ||
                         file->GetOffset() != limit ||
+                        codestream.plt_ends.size() != codestream.packet_data.size() ||
                         (declared_tile_parts != 0 &&
                          codestream.packet_data.size() != declared_tile_parts))
                         return false;
@@ -403,9 +417,13 @@ namespace jpeg2000 {
     }
 
     static bool ReadSODMarker(File *file, uint64_t limit,
-                              vector<FileSegment> &packet_data) {
-        if (packet_data.empty())
+                              vector<FileSegment> &packet_data,
+                              const vector<FileSegment> &plt,
+                              vector<size_t> &plt_ends) {
+        size_t previous_plt_end = plt_ends.empty() ? 0 : plt_ends.back();
+        if (packet_data.empty() || plt.size() == previous_plt_end)
             return false;
+        plt_ends.push_back(plt.size());
 
         FileSegment &fs = packet_data.back();
         if (fs.length == 0) {

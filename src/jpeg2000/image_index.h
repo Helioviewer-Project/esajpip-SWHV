@@ -26,6 +26,7 @@ namespace jpeg2000 {
             data::FileSegment header;
             std::vector<data::FileSegment> packet_data;
             std::vector<data::FileSegment> plt;
+            std::vector<size_t> plt_ends;
             int last_plt;
             int last_packet;
             uint64_t last_offset_PLT;

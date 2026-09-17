@@ -176,6 +176,52 @@ static vector<unsigned char> SetTilePartNumbers(vector<unsigned char> codestream
     return codestream;
 }
 
+static vector<unsigned char> InsertMarkerInTilePart(
+        vector<unsigned char> codestream, uint16_t marker, size_t tile_part) {
+    size_t marker_offset = 0;
+    for (; marker_offset + 4 <= codestream.size(); ++marker_offset) {
+        if (codestream[marker_offset] == (marker >> 8) &&
+            codestream[marker_offset + 1] == (marker & 0xFF))
+            break;
+    }
+    Check(marker_offset + 4 <= codestream.size(),
+          "Marker not found in JPEG 2000 test fixture");
+    size_t marker_length = (codestream[marker_offset + 2] << 8) |
+                           codestream[marker_offset + 3];
+    vector<unsigned char> segment(codestream.begin() + marker_offset,
+                                  codestream.begin() + marker_offset +
+                                      marker_length + 2);
+
+    for (size_t i = 0; i + 12 <= codestream.size(); ++i) {
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x90)
+            continue;
+        if (tile_part != 0) {
+            --tile_part;
+            continue;
+        }
+        uint32_t psot = (codestream[i + 6] << 24) |
+                        (codestream[i + 7] << 16) |
+                        (codestream[i + 8] << 8) | codestream[i + 9];
+        Set32(codestream, i + 6, psot + segment.size());
+        codestream.insert(codestream.begin() + i + 12,
+                          segment.begin(), segment.end());
+        return codestream;
+    }
+    Check(false, "Tile-part not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
+static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream) {
+    for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x58) {
+            codestream[i + 6] = 0;
+            return codestream;
+        }
+    }
+    Check(false, "PLT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> MakeJP2(const vector<unsigned char> &codestream) {
     vector<unsigned char> file = MakePreamble(0x6A703220); // jp2
     AppendBox(file, 0x6A703263, codestream); // jp2c
@@ -259,6 +305,18 @@ int main() {
     WriteFile(directory + "inconsistent-tile-part-count.jp2",
               MakeJP2(SetTilePartNumbers(
                   MakeCodestream(0, 1, 1, 1, 0, 2, 2), 1, 1, 3)));
+    for (uint16_t marker : {0xFF52, 0xFF5C}) {
+        string name = marker == 0xFF52 ? "late-cod.jp2" : "late-qcd.jp2";
+        WriteFile(directory + name,
+                  MakeJP2(InsertMarkerInTilePart(
+                      MakeCodestream(0, 1, 1, 1, 0, 2, 2), marker, 1)));
+        name = marker == 0xFF52 ? "tile-cod.jp2" : "tile-qcd.jp2";
+        WriteFile(directory + name,
+                  MakeJP2(InsertMarkerInTilePart(MakeCodestream(), marker, 0)));
+    }
+    WriteFile(directory + "short-plt.jp2",
+              MakeJP2(ShortenFirstPLT(
+                  MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
     WriteFile(directory + "missing-signature.jp2",
               vector<unsigned char>(jp2.begin() + 12, jp2.end()));
     vector<unsigned char> bad_signature = jp2;
@@ -345,6 +403,17 @@ int main() {
               "Accepted inconsistent JPEG 2000 tile-part numbering");
     }
 
+    for (const char *name : {"late-cod.jp2", "late-qcd.jp2"}) {
+        jpeg2000::FileManager late_marker_manager;
+        Check(!OpenImage(directory, name, &late_marker_manager),
+              "Accepted COD or QCD in a later tile-part header");
+    }
+    for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2"}) {
+        jpeg2000::FileManager tile_marker_manager;
+        Check(OpenImage(directory, name, &tile_marker_manager),
+              "Rejected COD or QCD in the first tile-part header");
+    }
+
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
                              "missing-file-type.jp2"}) {
         jpeg2000::FileManager preamble_manager;
@@ -360,6 +429,21 @@ int main() {
                                         &packet),
           "Could not index valid JP2 packet");
     Check(packet.length == 1, "Wrong JP2 packet length");
+
+    jpeg2000::FileManager short_plt_manager;
+    Check(OpenImage(directory, "short-plt.jp2", &short_plt_manager),
+          "Rejected a lazy-indexed PLT coverage fixture during parsing");
+    data::File *short_plt_file =
+            short_plt_manager.GetFile(directory + "short-plt.jp2");
+    Check(short_plt_file != NULL, "Could not open PLT coverage fixture");
+    Check(short_plt_manager.GetImage()->GetPacket(
+              short_plt_file, 0,
+              jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Could not index the first packet in the PLT coverage fixture");
+    Check(!short_plt_manager.GetImage()->GetPacket(
+              short_plt_file, 0,
+              jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
+          "Accepted PLT lengths shorter than their tile-part data");
 
     for (const char *name : {"pcrl.jp2", "cprl.jp2"}) {
         jpeg2000::FileManager progression_manager;
@@ -770,6 +854,11 @@ int main() {
     remove((directory + "bad-tile-index.jp2").c_str());
     remove((directory + "64-tile-parts.jp2").c_str());
     remove((directory + "65-tile-parts.jp2").c_str());
+    remove((directory + "late-cod.jp2").c_str());
+    remove((directory + "late-qcd.jp2").c_str());
+    remove((directory + "tile-cod.jp2").c_str());
+    remove((directory + "tile-qcd.jp2").c_str());
+    remove((directory + "short-plt.jp2").c_str());
     remove(large_file.c_str());
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());
