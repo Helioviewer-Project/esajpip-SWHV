@@ -30,6 +30,9 @@ int main(int argc, char **argv) {
     net::InetAddress listen_addr = cfg.address().empty()
                                        ? net::InetAddress(cfg.port())
                                        : net::InetAddress(cfg.address().c_str(), cfg.port());
+    if (!listen_addr.IsValid())
+        return CERR("The listen address '" << cfg.address() << "' can not be resolved");
+
     int listen_socket = socket(PF_INET, SOCK_STREAM, 0);
     if (listen_socket < 0)
         return CERR("The server listen socket can not be created: " << strerror(errno));

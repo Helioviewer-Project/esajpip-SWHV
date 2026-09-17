@@ -49,6 +49,7 @@ namespace net {
          */
         InetAddress(const char *path, uint16_t port) {
             memset(&sock_addr, 0, sizeof sock_addr);
+            sock_addr.sin_family = AF_UNSPEC;
 
             struct in_addr addr;
             bool found = inet_aton(path, &addr);
@@ -76,6 +77,10 @@ namespace net {
 
         sockaddr *GetSockAddr() const {
             return (sockaddr *) &sock_addr;
+        }
+
+        bool IsValid() const {
+            return sock_addr.sin_family == AF_INET;
         }
 
         socklen_t GetSize() const {
