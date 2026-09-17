@@ -76,6 +76,8 @@ void SendUnknownChannel(int fd) {
             "Connection: close\r\n"
             "\r\n"
             "Unknown JPIP channel";
+    // No response data has been queued on this newly accepted socket, so the
+    // small fixed reply fits in its empty kernel send buffer.
     size_t offset = 0;
     while (offset < sizeof response - 1) {
         ssize_t sent = send(fd, response + offset,
