@@ -53,8 +53,10 @@ InitialRequest InspectInitialRequest(int fd) {
     const char *protocol = uri_end;
     while (protocol < newline && *protocol == ' ')
         ++protocol;
-    if (newline - protocol < 8 ||
-        (memcmp(protocol, "HTTP/1.0", 8) != 0 && memcmp(protocol, "HTTP/1.1", 8) != 0))
+    size_t protocol_length = newline - protocol;
+    if (protocol_length > 0 && protocol[protocol_length - 1] == '\r')
+        --protocol_length;
+    if (protocol_length != 8 || memcmp(protocol, "HTTP/1.1", 8) != 0)
         return {REQUEST_REJECTED, false, 0};
 
     const char *parsed_uri_end = min(uri_end, uri + jpip::MAX_URI_LENGTH);

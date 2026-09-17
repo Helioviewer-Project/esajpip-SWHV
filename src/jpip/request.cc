@@ -253,7 +253,7 @@ namespace jpip {
 
         istringstream in(line);
         if (!(in >> method >> uri >> protocol) || method != "GET" ||
-            (protocol.compare(0, 8, "HTTP/1.0") && protocol.compare(0, 8, "HTTP/1.1")))
+            (protocol != "HTTP/1.1" && protocol != "HTTP/1.1\\r"))
             return false;
 
         ParseURI(uri.substr(0, MAX_URI_LENGTH));
@@ -298,22 +298,27 @@ namespace jpip {
                         round_direction = ROUNDUP;
                     else if (round == "round-down")
                         round_direction = ROUNDDOWN;
-                    else
+                    else if (round.empty() || round == "closest")
                         round_direction = CLOSEST;
+                    else
+                        valid = false;
                     TRACE("JPIP parameter: fsiz=" << x << "," << y << "," << round);
-                }
+                } else
+                    valid = false;
             } else if (name == "roff") {
                 if (ParsePair(value, &x, &y)) {
                     woi_position = jpeg2000::Point(x, y);
                     has.roff = true;
                     TRACE("JPIP parameter: roff=" << x << "," << y);
-                }
+                } else
+                    valid = false;
             } else if (name == "rsiz") {
                 if (ParsePair(value, &x, &y)) {
                     woi_size = jpeg2000::Size(x, y);
                     has.rsiz = true;
                     TRACE("JPIP parameter: rsiz=" << x << "," << y);
-                }
+                } else
+                    valid = false;
             } else if (name == "len") {
                 const char *position = value.c_str();
                 if (ParseInteger(&position, &x) && *position == '\0' && x >= 0) {
@@ -333,7 +338,8 @@ namespace jpip {
                     } else {
                         valid = false;
                     }
-                }
+                } else
+                    valid = false;
             } else if (name == "model") {
                 if (ParseModel(value, &model))
                     has.model = true;
@@ -347,7 +353,8 @@ namespace jpip {
                     } else {
                         valid = false;
                     }
-                }
+                } else
+                    valid = false;
             }
 
             if (!value.empty())

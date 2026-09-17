@@ -139,6 +139,18 @@ static int SendOK(int fd, const string &headers) {
     return SendAll(fd, buffers, 3);
 }
 
+static int SendError(int fd, int code, const char *reason,
+                     const string &message) {
+    ostringstream response;
+    response << http::Response(code, reason)
+             << COMMON_HEADERS
+             << "Content-Type: text/plain" << CRLF
+             << "Content-Length: " << message.size() << CRLF
+             << "Connection: close" << CRLF << CRLF
+             << message;
+    return SendStream(fd, response);
+}
+
 static int SendChunk(int fd, const void *buf, size_t len) {
     if (len > 0) {
         char header[2 * sizeof(size_t) + 3];
@@ -348,6 +360,7 @@ private:
 
             if (!req.Parse(req_line)) {
                 LOG("Bad request: " << req_line);
+                SendError(fd, 400, "Bad Request", "Invalid HTTP or JPIP request");
                 return FAIL_CHANNEL;
             }
 
@@ -384,6 +397,8 @@ private:
                 return FAIL_CHANNEL;
 
             const char *err_msg = "";
+            int error_code = 500;
+            const char *error_reason = "Internal Server Error";
             bool send_data = false;
 
             if (req.has.metareq && accept_gzip)
@@ -414,9 +429,13 @@ private:
                 } else {
                     string file_name = req.has.target ? req.target : req.object;
 
-                    if (file_manager.OpenImage(file_name)) {
+                    FileManager::OpenResult open_result =
+                            file_manager.OpenImage(file_name);
+                    if (open_result == FileManager::OpenResult::OPENED) {
                         if (!data_server.SetRequest(file_manager, req)) {
                             err_msg = "Invalid JPIP request for the selected image";
+                            error_code = 400;
+                            error_reason = "Bad Request";
                             LOG(err_msg);
                         } else {
                             opened = true;
@@ -432,6 +451,14 @@ private:
                             if (SendStream(fd, msg) == 0)
                                 send_data = true;
                         }
+                    } else if (open_result == FileManager::OpenResult::NOT_FOUND) {
+                        err_msg = "The requested image was not found";
+                        error_code = 404;
+                        error_reason = "Not Found";
+                        LOG(err_msg);
+                    } else {
+                        err_msg = "The requested image could not be opened";
+                        LOG(err_msg);
                     }
                 }
             } else if (req.has.cid) {
@@ -445,6 +472,8 @@ private:
                     } else {
                         if (!data_server.SetRequest(file_manager, req)) {
                             err_msg = "Invalid JPIP request for the selected image";
+                            error_code = 400;
+                            error_reason = "Bad Request";
                             LOG(err_msg);
                         } else {
                             if (SendOK(fd, send_gzip ? head_data_gzip : head_data) == 0)
@@ -458,14 +487,7 @@ private:
             }
 
             if (!send_data) {
-                size_t err_msg_len = strlen(err_msg);
-                ostringstream msg;
-                msg << http::Response(500, "Internal Server Error")
-                        << COMMON_HEADERS
-                        << "Content-Length: " << err_msg_len << CRLF << CRLF;
-                if (err_msg_len)
-                    msg << err_msg;
-                SendStream(fd, msg);
+                SendError(fd, error_code, error_reason, err_msg);
                 return FAIL_CHANNEL;
             } else {
                 if (!SendData(fd, data_server, file_manager, buf, send_gzip) ||

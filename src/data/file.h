@@ -35,7 +35,9 @@ namespace data {
 
             int fd;
             if ((fd = open(file_name, O_RDONLY)) == -1) {
+                int open_error = errno;
                 ERROR("Unable to open file: '" << file_name << "': " << strerror(errno));
+                errno = open_error;
                 return false;
             } else {
                 struct stat file_stat;

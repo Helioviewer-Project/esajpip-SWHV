@@ -13,7 +13,7 @@ accepted request does not by itself prove that every field was honored.
 
 | Area | Support | Behavior and reason |
 | --- | --- | --- |
-| HTTP | Reduced | HTTP/1.0 and HTTP/1.1 `GET` requests are accepted. Responses use HTTP/1.1 chunked transfer encoding. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
+| HTTP | Reduced | HTTP/1.1 `GET` requests are accepted. Successful responses use chunked transfer encoding. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
 | Return type | JPP-stream only | Successful image responses use `image/jpp-stream`. JPT-stream, complete-file return types, and return-type negotiation are not implemented because JHelioviewer consumes precinct-based JPP-streams. |
 | Transport | HTTP only | `JPIP-cnew` advertises `transport=http`. Auxiliary TCP, UDP, and upload transports are not implemented. |
 | Sessions and channels | Stateful, reduced | `cnew`, `cid`, and `cclose` are supported. One channel owns one target and processes one request and response at a time. This matches JHelioviewer's access pattern and keeps cache and JPEG 2000 ownership explicit. |
@@ -21,7 +21,7 @@ accepted request does not by itself prove that every field was honored.
 | Stateless requests | Not supported | Initial inspection requires `cnew`, `cid`, or a usable `cclose`. All cache and image state belongs to one channel thread. |
 | Concurrent requests | Not supported | Responses are not preempted by a newer request and requests are not served concurrently within a channel. `qid`, `wait`, and window-change cancellation are not implemented. Serial service avoids shared JPEG 2000 state and is compatible with JHelioviewer. |
 | Compression | Reduced | If a request contains `metareq` and `Accept-Encoding` contains `gzip`, the JPP response is gzip encoded. Other content codings and general HTTP content negotiation are not implemented. |
-| Errors | Reduced | Valid requests receive `200`. Request and serving failures generally receive `500` and terminate the channel. The server does not implement the complete JPIP status and correction-header model. Termination is safer than retaining a cache model after an incomplete response. |
+| Errors | Reduced | Valid requests receive `200`. Malformed supported fields receive `400`, missing targets receive `404`, and unknown channels receive `503`. Other request or serving failures receive `500`. Errors terminate the connection and, after channel creation, the channel. The complete JPIP correction-header model is not implemented. |
 
 Initial inspection examines at most a 2 KiB request line. The JPIP parser uses
 at most the first 1,023 characters of the URI. Request paths and `target` values

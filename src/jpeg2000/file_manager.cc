@@ -1,5 +1,6 @@
 #include "file_manager.h"
 
+#include <cerrno>
 #include <climits>
 #include <cstring>
 #include <utility>
@@ -28,15 +29,15 @@ namespace jpeg2000 {
         return false;
     }
 
-    bool FileManager::OpenImage(const string &path_image_file) {
+    FileManager::OpenResult FileManager::OpenImage(const string &path_image_file) {
         if (path_image_file.empty()) {
             ERROR("The image file name is empty");
-            return false;
+            return OpenResult::INVALID;
         }
         if (path_image_file.find('\0') != string::npos ||
             HasParentSegment(path_image_file)) {
             ERROR("Invalid image file path: '" << path_image_file << "'");
-            return false;
+            return OpenResult::INVALID;
         }
         string path = path_image_file;
         if (path[0] == '/')
@@ -44,12 +45,12 @@ namespace jpeg2000 {
         path.insert(0, root_dir_);
 
         unique_ptr<ImageIndex> image_index(new ImageIndex(path));
-        bool loaded = ReadImage(path, image_index.get());
+        OpenResult result = ReadImage(path, image_index.get());
         ClearFiles();
-        if (!loaded)
-            return false;
+        if (result != OpenResult::OPENED)
+            return result;
         image = std::move(image_index);
-        return true;
+        return OpenResult::OPENED;
     }
 
 #define EOC_MARKER 0xFFD9
@@ -105,7 +106,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool FileManager::ReadImage(const string &name_image_file, ImageIndex *image_index) {
+    FileManager::OpenResult FileManager::ReadImage(
+            const string &name_image_file, ImageIndex *image_index) {
         // Get file extension
         string extension;
         size_t pos = name_image_file.find_last_of(".");
@@ -113,13 +115,15 @@ namespace jpeg2000 {
 
         if (extension != ".jp2" && extension != ".jpx") {
             ERROR("Unsupported image file type: '" << name_image_file << "'");
-            return false;
+            return OpenResult::INVALID;
         }
 
         File file;
         if (!file.Open(name_image_file)) {
-            ERROR("Could not open image file '" << name_image_file << "'");
-            return false;
+            int error = errno;
+            return error == ENOENT || error == ENOTDIR
+                       ? OpenResult::NOT_FOUND
+                       : OpenResult::INVALID;
         }
 
         unsigned char signature_box[sizeof JP2_SIGNATURE_BOX];
@@ -133,7 +137,7 @@ namespace jpeg2000 {
                    second_type == FILE_TYPE_BOX_ID;
         if (!res) {
             ERROR("Invalid JPEG 2000 file preamble in '" << name_image_file << "'");
-            return false;
+            return OpenResult::INVALID;
         }
         file.Seek(0);
 
@@ -143,7 +147,7 @@ namespace jpeg2000 {
             res = ReadJPX(&file, image_index);
         if (!res)
             ERROR("Could not parse image file '" << name_image_file << "'");
-        return res;
+        return res ? OpenResult::OPENED : OpenResult::INVALID;
     }
 
     bool FileManager::ReadCodestream(File *file, uint64_t length,
@@ -678,7 +682,7 @@ namespace jpeg2000 {
                 return false;
             }
             ImageIndex linked_image(paths[i]);
-            if (!ReadImage(paths[i], &linked_image))
+            if (ReadImage(paths[i], &linked_image) != OpenResult::OPENED)
                 return false;
 
             if (linked_image.codestreams.empty() ||

@@ -174,12 +174,14 @@ static void CheckInitialRequest() {
     Check(Inspect("POST").state == REQUEST_REJECTED, "Accepted a non-GET method");
     Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1\r\n").state == REQUEST_ACCEPTED,
           "Rejected a JHV channel request");
-    Check(Inspect("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").state == REQUEST_ACCEPTED,
-          "Rejected a target-form JPIP channel request");
+    Check(Inspect("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").state == REQUEST_REJECTED,
+          "Accepted an HTTP/1.0 channel request");
     Check(Inspect("GET /movie.jpx?xcnew=http HTTP/1.1\r\n").state == REQUEST_REJECTED,
           "Accepted a request without a cnew parameter");
     Check(Inspect("GET /movie.jpx?cnew=http HTTP/2\r\n").state == REQUEST_REJECTED,
           "Accepted an unsupported HTTP version");
+    Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1junk\r\n").state == REQUEST_REJECTED,
+          "Accepted an invalid HTTP version token");
 
     InitialRequest request = Inspect("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
     Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == 47,
@@ -263,6 +265,23 @@ static void CheckJHVRequests() {
     Check(req.woi_position == jpeg2000::Point(0, 0), "Wrong frame region offset");
     Check(req.round_direction == jpip::Request::CLOSEST, "Wrong frame rounding mode");
     Check(req.length_response == 2097152, "Wrong frame response limit");
+
+    Check(!req.Parse("GET /jpip?fsiz=abc&cid=7 HTTP/1.1"),
+          "Accepted a malformed frame size");
+    Check(!req.Parse("GET /jpip?fsiz=1,1,sideways&cid=7 HTTP/1.1"),
+          "Accepted an unknown frame-size rounding mode");
+    Check(!req.Parse("GET /jpip?roff=abc&cid=7 HTTP/1.1"),
+          "Accepted a malformed region offset");
+    Check(!req.Parse("GET /jpip?rsiz=abc&cid=7 HTTP/1.1"),
+          "Accepted a malformed region size");
+    Check(!req.Parse("GET /jpip?stream=abc&cid=7 HTTP/1.1"),
+          "Accepted a malformed codestream selector");
+    Check(!req.Parse("GET /jpip?context=abc&cid=7 HTTP/1.1"),
+          "Accepted a malformed context selector");
+    Check(!req.Parse("GET /movie.jpx?cnew=http HTTP/1.0"),
+          "Accepted an HTTP/1.0 request");
+    Check(!req.Parse("GET /movie.jpx?cnew=http HTTP/1.1junk"),
+          "Accepted an invalid HTTP version token");
 
     Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
           "Could not parse terminal cache model");

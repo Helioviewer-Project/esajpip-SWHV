@@ -299,7 +299,8 @@ static void WriteFile(const string &path, const vector<unsigned char> &data) {
 static bool OpenImage(const string &directory, const string &name,
                       jpeg2000::FileManager *manager) {
     Check(manager->Init(directory), "Could not initialize the file manager");
-    return manager->OpenImage(name);
+    return manager->OpenImage(name) ==
+           jpeg2000::FileManager::OpenResult::OPENED;
 }
 
 int main() {
@@ -682,19 +683,26 @@ int main() {
     jpeg2000::FileManager traversal_manager;
     Check(traversal_manager.Init(directory), "Could not initialize traversal test manager");
     string target_traversal = "../" + outside_name;
-    Check(!traversal_manager.OpenImage(target_traversal),
+    Check(traversal_manager.OpenImage(target_traversal) ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted parent traversal in a target path");
     string uri_traversal = "/../" + outside_name;
-    Check(!traversal_manager.OpenImage(uri_traversal),
+    Check(traversal_manager.OpenImage(uri_traversal) ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted parent traversal in a URI path");
     string embedded_traversal = "unused/../image.jp2";
-    Check(!traversal_manager.OpenImage(embedded_traversal),
+    Check(traversal_manager.OpenImage(embedded_traversal) ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted an embedded parent path segment");
     string nul_path = "image.jp2";
     nul_path.push_back('\0');
     nul_path += ".jp2";
-    Check(!traversal_manager.OpenImage(nul_path),
+    Check(traversal_manager.OpenImage(nul_path) ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted a file path containing NUL");
+    Check(traversal_manager.OpenImage("missing.jp2") ==
+                  jpeg2000::FileManager::OpenResult::NOT_FOUND,
+          "Did not distinguish a missing image");
 
     vector<unsigned char> malformed_plt = jp2;
     size_t plt = 8 + codestream.size() - 11;

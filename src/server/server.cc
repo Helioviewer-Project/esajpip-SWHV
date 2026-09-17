@@ -67,6 +67,30 @@ struct Completion {
 
 int completion_socket = -1;
 
+void SendUnknownChannel(int fd) {
+    static const char response[] =
+            "HTTP/1.1 503 Service Unavailable\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 20\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "Unknown JPIP channel";
+    size_t offset = 0;
+    while (offset < sizeof response - 1) {
+        ssize_t sent = send(fd, response + offset,
+                            sizeof response - 1 - offset, 0);
+        if (sent > 0) {
+            offset += sent;
+        } else if (sent < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+}
+
 void Notify(CompletionType type, uint64_t id) {
     Completion completion{};
     completion.type = type;
@@ -174,6 +198,7 @@ bool DispatchConnection(const AppConfig &cfg, vector<ChannelInfo> &channels,
     if (channel == channels.end()) {
         LOG("The connection [" << connection.id << "] references unknown channel "
                                << request.channel);
+        SendUnknownChannel(connection.fd);
         return false;
     }
     if (channel->queue->Push(connection.fd))

@@ -27,6 +27,8 @@
 - Add verified PCRL and CPRL packet traversal and allow one multi-codestream
   request to cover frames with different dimensions, decomposition levels,
   quality layers, or precinct layouts.
+- Require HTTP/1.1, matching the chunked responses used by the server and the
+  requests sent by JHelioviewer.
 
 ### Fixed
 
@@ -48,6 +50,9 @@
 - Bound and validate client-controlled request values before allocation. This
   includes cache models, response limits, codestream selectors, and the 4 KiB
   HTTP request-head limit on established channels.
+- Report malformed requests, missing targets, and unknown channels with the
+  corresponding `400`, `404`, and `503` status instead of a generic error or a
+  silent disconnect.
 - Reject client paths containing a parent-directory segment and stop exposing
   resolved filesystem paths through `JPIP-tid`. Trusted links stored inside JPX
   files may still refer to sources outside the image directory.

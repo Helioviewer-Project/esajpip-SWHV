@@ -56,7 +56,7 @@ direct transfer to the selected channel queue
 ```
 
 Initial request inspection peeks at no more than 2 KiB and does not consume the
-request. It requires HTTP/1.0 or HTTP/1.1 `GET` traffic containing `cnew`, `cid`,
+request. It requires HTTP/1.1 `GET` traffic containing `cnew`, `cid`,
 or `cclose`. The fixed `connections.initial_timeout` deadline is not extended
 by a client sending request bytes slowly. Rejected and expired connections
 never create a channel thread or allocate JPEG 2000 state.
@@ -69,7 +69,8 @@ response selects `transport=http`, returns the channel ID, and serves the first
 JPIP request on that connection.
 
 For `cid` or `cclose`, the serving loop finds the existing channel and places the
-new connection in its queue. Unknown channels are closed immediately. If one
+new connection in its queue. Unknown channels receive `503 Service Unavailable`
+and are closed immediately. If one
 replacement connection is already waiting, another is also closed. A channel
 has one active response and at most one waiting connection.
 

@@ -14,6 +14,13 @@ namespace jpeg2000 {
      * indexing information, with a caching mechanism for efficiency.
      */
     class FileManager {
+    public:
+        enum class OpenResult {
+            OPENED,
+            NOT_FOUND,
+            INVALID
+        };
+
     private:
         std::string root_dir_;    ///< Root directory of the repository
 
@@ -55,7 +62,8 @@ namespace jpeg2000 {
          * @param image_index Receives the information of the image.
          * @return <code>true</code> if successful.
          */
-        bool ReadImage(const std::string &name_image_file, ImageIndex *image_index);
+        OpenResult ReadImage(const std::string &name_image_file,
+                             ImageIndex *image_index);
 
     public:
         /**
@@ -76,7 +84,7 @@ namespace jpeg2000 {
             return image.get();
         }
 
-        bool OpenImage(const std::string &path_image_file);
+        OpenResult OpenImage(const std::string &path_image_file);
 
         data::File *GetFile(const std::string &path_file) {
             std::map<std::string, std::unique_ptr<data::File>>::const_iterator found =
