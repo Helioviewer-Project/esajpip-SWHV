@@ -370,8 +370,12 @@ static void CheckJHVRequests() {
 
 static void CheckInetAddress() {
     net::InetAddress address("127.0.0.1", 8099);
+    Check(address.IsValid(), "A numeric Internet address was not resolved");
     Check(address.GetPath() == "127.0.0.1", "Wrong numeric Internet address");
     Check(address.GetPort() == 8099, "Wrong Internet port");
+
+    net::InetAddress invalid("", 8099);
+    Check(!invalid.IsValid(), "An empty Internet address was resolved");
 }
 
 static void CheckHTTPResponse() {
@@ -499,6 +503,33 @@ static void CheckWOIPackets() {
                   composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(1, 0) &&
                   !composer.GetNextPacket(&boundary_parameters),
           "Omitted the final precinct intersecting a window");
+
+    jpeg2000::CodingParameters scaled_parameters;
+    scaled_parameters.num_levels = 2;
+    scaled_parameters.num_layers = 1;
+    scaled_parameters.num_components = 1;
+    for (int i = 0; i <= scaled_parameters.num_levels; ++i)
+        scaled_parameters.resolutions.emplace_back(1, 1);
+
+    composer.Reset(&scaled_parameters,
+                   jpip::WOI(jpeg2000::Point(1, 0),
+                             jpeg2000::Size(1, 1), 1));
+    Check(composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(0, 0) &&
+                  composer.GetNextPacket(&scaled_parameters) &&
+                  composer.GetCurrentPacket().resolution == 1 &&
+                  composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(1, 0),
+          "Mapped a reduced-resolution window to the wrong precinct");
+
+    jpeg2000::CodingParameters limit_parameters;
+    limit_parameters.num_levels = 32;
+    limit_parameters.num_layers = 1;
+    limit_parameters.num_components = 1;
+    limit_parameters.resolutions.emplace_back(1, 1);
+    composer.Reset(&limit_parameters,
+                   jpip::WOI(jpeg2000::Point(0, 0),
+                             jpeg2000::Size(1, 1), 0));
+    Check(composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(0, 0),
+          "Mapped the decomposition-limit window to the wrong precinct");
 }
 
 static void CheckProgressionIndexes() {

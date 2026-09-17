@@ -38,14 +38,6 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns the multiplication of a point with an integer value.
-         * The value is multiplied to the two values of the point.
-         */
-        friend Point operator*(const Point &a, int value) {
-            return Point(a.x * value, a.y * value);
-        }
-
-        /**
          * Returns the sum of two points. The operation is
          * applied each value of each point.
          */

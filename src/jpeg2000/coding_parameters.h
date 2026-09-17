@@ -163,8 +163,9 @@ namespace jpeg2000 {
                         DivideRoundUp(point.y, height));
         }
 
-        Size GetPrecinctIndex(int r, const Point &point) const {
-            uint64_t scale = uint64_t(1) << (num_levels - r);
+        Size GetPrecinctIndex(int r, int point_resolution,
+                              const Point &point) const {
+            uint64_t scale = uint64_t(1) << (point_resolution - r);
             uint64_t width = scale * resolutions[r].precinct_size.x;
             uint64_t height = scale * resolutions[r].precinct_size.y;
             return Size(static_cast<int>(static_cast<uint64_t>(point.x) / width),

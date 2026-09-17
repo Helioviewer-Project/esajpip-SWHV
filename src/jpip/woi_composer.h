@@ -29,9 +29,9 @@ namespace jpip {
 
         void SetResolution(const jpeg2000::CodingParameters *coding_parameters) {
             min_precinct_xy = coding_parameters->GetPrecinctIndex(
-                    current_packet.resolution, pxy1);
+                    current_packet.resolution, max_resolution, pxy1);
             max_precinct_xy = coding_parameters->GetPrecinctIndex(
-                    current_packet.resolution, pxy2);
+                    current_packet.resolution, max_resolution, pxy2);
             current_packet.precinct_xy = min_precinct_xy;
         }
 
@@ -56,8 +56,8 @@ namespace jpip {
             current_packet = jpeg2000::Packet();
             max_resolution = woi.resolution;
 
-            pxy1 = woi.position * (1L << (coding_parameters->num_levels - woi.resolution));
-            pxy2 = (woi.position + woi.size - 1) * (1L << (coding_parameters->num_levels - woi.resolution));
+            pxy1 = woi.position;
+            pxy2 = woi.position + woi.size - 1;
 
             SetResolution(coding_parameters);
         }
