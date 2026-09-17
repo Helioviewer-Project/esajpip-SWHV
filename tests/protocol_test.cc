@@ -219,11 +219,11 @@ static void CheckInitialRequest() {
 static void CheckConnectionQueue() {
     ConnectionQueue queue;
     Check(queue.IsValid(), "Could not create a connection queue");
-    Check(queue.Push(7), "Could not queue a channel connection");
+    Check(queue.Push(0), "Could not queue a channel connection");
     Check(!queue.Push(8), "Queued concurrent channel connections");
     int connection;
     Check(queue.Pop(&connection), "Could not retrieve a channel connection");
-    Check(connection == 7, "Retrieved the wrong channel connection");
+    Check(connection == 0, "Retrieved the wrong channel connection");
     Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
 
     Check(queue.Push(9), "Could not queue a channel connection before closing");

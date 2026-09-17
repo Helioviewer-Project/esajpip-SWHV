@@ -7,8 +7,7 @@ class ConnectionQueue {
 private:
     int wake_socket[2];
     std::mutex mutex;
-    int connection;
-    bool pending;
+    int queued_fd;
     bool closed;
 
     void Drain();
@@ -20,9 +19,9 @@ public:
     bool IsValid() const;
     bool IsClosed();
     int GetDescriptor() const;
-    bool Push(int connection);
-    bool Pop(int *connection);
-    bool Close(int &connection);
+    bool Push(int fd);
+    bool Pop(int *fd);
+    bool Close(int &fd);
 
     ConnectionQueue(const ConnectionQueue &) = delete;
     ConnectionQueue &operator=(const ConnectionQueue &) = delete;

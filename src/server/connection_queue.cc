@@ -6,7 +6,7 @@
 using namespace std;
 
 ConnectionQueue::ConnectionQueue()
-    : wake_socket{-1, -1}, connection(-1), pending(false), closed(false) {
+    : wake_socket{-1, -1}, queued_fd(-1), closed(false) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sockets) == 0) {
         wake_socket[0] = sockets[0];
@@ -34,12 +34,11 @@ int ConnectionQueue::GetDescriptor() const {
     return wake_socket[0];
 }
 
-bool ConnectionQueue::Push(int connection) {
+bool ConnectionQueue::Push(int fd) {
     lock_guard<std::mutex> lock(mutex);
-    if (closed || pending || wake_socket[1] < 0)
+    if (closed || queued_fd >= 0 || wake_socket[1] < 0)
         return false;
-    this->connection = connection;
-    pending = true;
+    queued_fd = fd;
 
     char byte = 0;
     ssize_t sent;
@@ -48,19 +47,19 @@ bool ConnectionQueue::Push(int connection) {
     } while (sent < 0 && errno == EINTR);
     if (sent == 1)
         return true;
-    pending = false;
+    queued_fd = -1;
     return false;
 }
 
-bool ConnectionQueue::Pop(int *connection) {
+bool ConnectionQueue::Pop(int *fd) {
     lock_guard<std::mutex> lock(mutex);
     // Drain under the lock so Push cannot leave a
     // pending connection without a corresponding wake-up.
     Drain();
-    if (!pending)
+    if (queued_fd < 0)
         return false;
-    *connection = this->connection;
-    pending = false;
+    *fd = queued_fd;
+    queued_fd = -1;
     return true;
 }
 
@@ -72,13 +71,13 @@ void ConnectionQueue::Drain() {
     } while (received < 0 && errno == EINTR);
 }
 
-bool ConnectionQueue::Close(int &connection) {
+bool ConnectionQueue::Close(int &fd) {
     lock_guard<std::mutex> lock(mutex);
     closed = true;
-    if (!pending)
+    if (queued_fd < 0)
         return false;
 
-    connection = this->connection;
-    pending = false;
+    fd = queued_fd;
+    queued_fd = -1;
     return true;
 }
