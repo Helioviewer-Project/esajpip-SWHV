@@ -75,8 +75,12 @@ namespace net {
             }
         }
 
-        sockaddr *GetSockAddr() const {
-            return (sockaddr *) &sock_addr;
+        sockaddr *GetSockAddr() {
+            return reinterpret_cast<sockaddr *>(&sock_addr);
+        }
+
+        const sockaddr *GetSockAddr() const {
+            return reinterpret_cast<const sockaddr *>(&sock_addr);
         }
 
         bool IsValid() const {

@@ -77,21 +77,30 @@ Connection::Connection(int _fd, int _interrupt_fd, int timeout_seconds)
 }
 
 bool Connection::Configure() {
-    int result = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &SEND_BUFFER_SIZE,
-                            sizeof SEND_BUFFER_SIZE) |
-                 setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &ENABLED,
-                            sizeof ENABLED);
-    if (result == 0 && timeout_seconds > 0) {
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &SEND_BUFFER_SIZE,
+                   sizeof SEND_BUFFER_SIZE) != 0) {
+        LOG("SO_SNDBUF could not be configured: " << strerror(errno));
+        return false;
+    }
+    if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &ENABLED,
+                   sizeof ENABLED) != 0) {
+        LOG("TCP_NODELAY could not be configured: " << strerror(errno));
+        return false;
+    }
+    if (timeout_seconds > 0) {
         timeval value;
         value.tv_sec = timeout_seconds;
         value.tv_usec = 0;
-        result |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof value) |
-                  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &value, sizeof value);
+        if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof value) != 0) {
+            LOG("SO_RCVTIMEO could not be configured: " << strerror(errno));
+            return false;
+        }
+        if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &value, sizeof value) != 0) {
+            LOG("SO_SNDTIMEO could not be configured: " << strerror(errno));
+            return false;
+        }
     }
-    if (result == 0)
-        return true;
-    LOG("setsockopt failed: " << strerror(errno));
-    return false;
+    return true;
 }
 
 Connection::LineResult Connection::ReadLine(string &line, size_t &remaining) {

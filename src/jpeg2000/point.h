@@ -30,22 +30,6 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns the subtraction of a point with an integer value.
-         * The value is subtracted from the two values of the point.
-         */
-        friend Point operator-(const Point &a, int value) {
-            return Point(a.x - value, a.y - value);
-        }
-
-        /**
-         * Returns the sum of two points. The operation is
-         * applied each value of each point.
-         */
-        friend Point operator+(const Point &a, const Point &b) {
-            return Point(a.x + b.x, a.y + b.y);
-        }
-
-        /**
          * Returns <code>true</code> if the two points are equal.
          */
         friend bool operator==(const Point &a, const Point &b) {

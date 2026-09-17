@@ -147,16 +147,16 @@ namespace jpeg2000 {
         }
 
         /**
-         * Returns a precinct coordinate adjusted to a given resolution level.
+         * Returns the number of precincts covering an image at a resolution level.
          * @param r Resolution level.
-         * @param point Precinct coordinate.
+         * @param image_size Full-resolution image size.
          */
-        Size GetPrecincts(int r, const Size &point) const {
+        Size GetPrecinctCount(int r, const Size &image_size) const {
             uint64_t scale = uint64_t(1) << (num_levels - r);
             uint64_t width = scale * resolutions[r].precinct_size.x;
             uint64_t height = scale * resolutions[r].precinct_size.y;
-            return Size(DivideRoundUp(point.x, width),
-                        DivideRoundUp(point.y, height));
+            return Size(DivideRoundUp(image_size.x, width),
+                        DivideRoundUp(image_size.y, height));
         }
 
         Size GetPrecinctIndex(int r, int point_resolution,

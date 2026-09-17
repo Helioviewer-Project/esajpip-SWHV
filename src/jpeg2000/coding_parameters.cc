@@ -44,7 +44,7 @@ namespace jpeg2000 {
         int64_t total = 0;
         for (int i = 0; i <= num_levels; ++i) {
             Resolution &resolution = resolutions[i];
-            resolution.num_precincts = GetPrecincts(i, size);
+            resolution.num_precincts = GetPrecinctCount(i, size);
             int64_t count = static_cast<int64_t>(resolution.num_precincts.x) *
                             resolution.num_precincts.y;
             if (count > INT_MAX - total)

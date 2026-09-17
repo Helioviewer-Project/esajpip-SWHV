@@ -57,7 +57,8 @@ namespace jpip {
             max_resolution = woi.resolution;
 
             pxy1 = woi.position;
-            pxy2 = woi.position + woi.size - 1;
+            pxy2 = jpeg2000::Point(woi.position.x + woi.size.x - 1,
+                                   woi.position.y + woi.size.y - 1);
 
             SetResolution(coding_parameters);
         }
