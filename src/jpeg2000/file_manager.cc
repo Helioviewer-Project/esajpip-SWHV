@@ -657,6 +657,11 @@ namespace jpeg2000 {
         vector<ImageIndex::Codestream>().swap(codestreams);
         image_index->codestreams.reserve(paths.size());
         for (size_t i = 0; i < paths.size(); ++i) {
+            if (paths[i].size() < 4 ||
+                paths[i].compare(paths[i].size() - 4, 4, ".jp2") != 0) {
+                ERROR("Unsupported linked codestream file '" << paths[i] << "'");
+                return false;
+            }
             ImageIndex linked_image(paths[i]);
             if (!ReadImage(paths[i], &linked_image))
                 return false;

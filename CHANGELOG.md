@@ -38,9 +38,9 @@
   resolution. An empty intersection now returns `EOR WINDOW_DONE` instead of
   failing the channel.
 - Validate JPEG 2000 boxes, markers, tile parts, packet locations, codestream
-  bounds, and linked-JPX references before serving data. Unsupported geometry,
-  files of 2 GiB or more, and codestreams with more than 64 packet segments are
-  rejected during parsing instead of failing later.
+  bounds, and linked-JPX references before serving data. JPX-to-JPX links,
+  unsupported geometry, files of 2 GiB or more, and codestreams with more than
+  64 packet segments are rejected during parsing instead of failing later.
 - Keep each embedded JPX codestream's coding parameters separate, use the
   standard default precinct size, and reject image origins the packet index
   cannot represent.

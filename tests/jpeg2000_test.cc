@@ -304,6 +304,9 @@ int main() {
                               MakeCodestream(0, 1, 2, 2, 0, 2, 1, 2)));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
+    string self_linked_file = directory + "self-linked.jpx";
+    WriteFile(self_linked_file,
+              MakeLinkedJPX(self_linked_file, codestream.size()));
     string outside_file = string(directory_name) + ".jp2";
     WriteFile(outside_file, jp2);
     WriteFile(directory + "outside-linked.jpx",
@@ -530,6 +533,10 @@ int main() {
           "Could not parse valid linked JPX");
     Check(linked_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong linked JPX codestream count");
+
+    jpeg2000::FileManager self_linked_manager;
+    Check(!OpenImage(directory, "self-linked.jpx", &self_linked_manager),
+          "Accepted a JPX linked to itself");
 
     jpeg2000::FileManager outside_linked_manager;
     Check(OpenImage(directory, "outside-linked.jpx", &outside_linked_manager),

@@ -135,8 +135,8 @@ transcoding step required for such inputs.
 - Data references use version-zero `file://` URL boxes. Remote HTTP URLs,
   multiple-fragment codestreams, and serving a mixture of embedded and linked
   codestreams are not supported.
-- Each link must resolve to a file with an embedded codestream. Recursion through
-  another linked JPX is not supported.
+- Each link must resolve to a lowercase `.jp2` file with one embedded
+  codestream. JPX-to-JPX links are not supported.
 - Top-level association boxes are exposed as separate metadata bins. Other box
   contents are preserved in metadata, but esajpip does not interpret the full
   JPX composition model.
