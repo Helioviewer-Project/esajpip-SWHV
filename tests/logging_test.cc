@@ -41,7 +41,7 @@ int main() {
     worker.join();
     Check(trace::DrainOne(), "Could not write worker log message");
 
-    LOG(string(1100, 'x'));
+    LOG(string(2000, 'x'));
     Check(trace::DrainOne(), "Could not rotate log");
     LOG("message after rollover");
     Check(trace::DrainOne(), "Could not write after log rollover");
@@ -71,6 +71,8 @@ int main() {
           "Second message missing from rolled log");
     Check(old_messages.find("worker message") != string::npos,
           "Worker message missing from rolled log");
+    Check(old_messages.find(string(1900, 'x') + "...\n") != string::npos,
+          "Oversized log message was not marked as truncated");
     Check(new_messages.find("message after rollover") != string::npos,
           "Message missing after rollover");
 
@@ -96,6 +98,10 @@ int main() {
     Check(reused_fd >= 0, "Could not reuse a descriptor after failed rollover");
     LOG("message after failed rollover");
     Check(trace::DrainOne(), "Could not discard a log after rollover failure");
+    LOG("first discarded message");
+    LOG("second discarded message");
+    trace::Drain();
+    Check(!trace::DrainOne(), "Drain left a message after logging was disabled");
     close(reused_fd);
     Check(rmdir(backup.c_str()) == 0, "Could not remove rollover obstruction");
 

@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <poll.h>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <unistd.h>
 
@@ -183,6 +185,14 @@ static void CheckInitialRequest() {
     Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1junk\r\n").state == REQUEST_REJECTED,
           "Accepted an invalid HTTP version token");
 
+    string incomplete_limit = "GET /jpip?cid=7 HTTP/1.1";
+    incomplete_limit.resize(2047, 'x');
+    Check(Inspect(incomplete_limit.c_str()).state == REQUEST_PENDING,
+          "Rejected a bounded incomplete initial request");
+    incomplete_limit.push_back('x');
+    Check(Inspect(incomplete_limit.c_str()).state == REQUEST_REJECTED,
+          "Accepted an unterminated 2 KiB initial request");
+
     InitialRequest request = Inspect("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
     Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == 47,
           "Could not route an existing channel request");
@@ -220,11 +230,29 @@ static void CheckConnectionQueue() {
     ConnectionQueue queue;
     Check(queue.IsValid(), "Could not create a connection queue");
     Check(queue.Push(0), "Could not queue a channel connection");
+    pollfd wake = {queue.GetDescriptor(), POLLIN, 0};
+    Check(poll(&wake, 1, 0) == 1 && (wake.revents & POLLIN),
+          "Queued connection did not wake the channel");
     Check(!queue.Push(8), "Queued concurrent channel connections");
     int connection;
     Check(queue.Pop(&connection), "Could not retrieve a channel connection");
     Check(connection == 0, "Retrieved the wrong channel connection");
     Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
+    wake.revents = 0;
+    Check(poll(&wake, 1, 0) == 0,
+          "Retrieving a connection did not drain its wake byte");
+
+    ConnectionQueue concurrent;
+    bool first = false;
+    bool second = false;
+    thread first_push([&] { first = concurrent.Push(11); });
+    thread second_push([&] { second = concurrent.Push(12); });
+    first_push.join();
+    second_push.join();
+    Check(first != second, "Concurrent pushes did not admit exactly one connection");
+    Check(concurrent.Pop(&connection), "Could not retrieve the concurrent connection");
+    Check(connection == (first ? 11 : 12),
+          "Retrieved the wrong concurrent connection");
 
     Check(queue.Push(9), "Could not queue a channel connection before closing");
     int pending;
@@ -443,6 +471,11 @@ static void CheckInetAddress() {
     Check(address.IsValid(), "A numeric Internet address was not resolved");
     Check(address.GetPath() == "127.0.0.1", "Wrong numeric Internet address");
     Check(address.GetPort() == 8099, "Wrong Internet port");
+
+    net::InetAddress hostname("localhost", 8900);
+    Check(hostname.IsValid(), "A local hostname was not resolved");
+    Check(!hostname.GetPath().empty(), "Resolved hostname has no numeric address");
+    Check(hostname.GetPort() == 8900, "Resolved hostname has the wrong port");
 
     net::InetAddress invalid("", 8099);
     Check(!invalid.IsValid(), "An empty Internet address was resolved");

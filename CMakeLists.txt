@@ -45,6 +45,7 @@ set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/config.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
+    ${ESAJPIP_TOP}/http/connection.cc
     ${ESAJPIP_TOP}/http/header.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
     ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
@@ -99,6 +100,17 @@ if(BUILD_TESTING)
     esajpip_configure_target(protocol_test)
     target_link_libraries(protocol_test PRIVATE esajpip_core)
     add_test(NAME protocol COMMAND protocol_test)
+
+    add_executable(http_connection_test tests/http_connection_test.cc)
+    esajpip_configure_target(http_connection_test)
+    target_link_libraries(http_connection_test PRIVATE esajpip_core)
+    add_test(NAME http_connection COMMAND http_connection_test)
+
+    add_executable(server_test tests/server_test.cc)
+    esajpip_configure_target(server_test)
+    target_link_libraries(server_test PRIVATE esajpip_core)
+    add_test(NAME server COMMAND server_test)
+    set_tests_properties(server PROPERTIES TIMEOUT 20)
 
     add_executable(jpeg2000_test tests/jpeg2000_test.cc)
     esajpip_configure_target(jpeg2000_test)

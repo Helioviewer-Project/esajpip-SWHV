@@ -1,5 +1,6 @@
 #include "trace.h"
 #include "channel.h"
+#include "http/connection.h"
 #include "http/header.h"
 #include "http/protocol.h"
 #include "jpeg2000/file_manager.h"
@@ -7,21 +8,14 @@
 #include "jpip/databin_server.h"
 #include "http/response.h"
 
-#include <glib.h>
 #include <zlib.h>
 
 #include <cerrno>
-#include <chrono>
 #include <climits>
-#include <cstdio>
 #include <cstring>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <poll.h>
 #include <vector>
 #include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/uio.h>
 #include <unistd.h>
 
 using namespace std;
@@ -31,7 +25,6 @@ using jpeg2000::FileManager;
 using jpip::DataBinServer;
 
 static const char ZERO[] = "0\r\n\r\n";
-static const size_t MAX_REQUEST_HEAD = 4096;
 static const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
@@ -43,116 +36,15 @@ static const string JPIP_HEADERS =
 static const string JPIP_GZIP_HEADERS =
         JPIP_HEADERS + "Content-Encoding: gzip\r\n";
 
-static string EscapeForLog(const string &text) {
-    char *escaped = g_strescape(text.c_str(), NULL);
-    string result(escaped);
-    g_free(escaped);
-    return result;
+static int TimeoutMilliseconds(int seconds) {
+    if (seconds <= 0)
+        return -1;
+    if (seconds > INT_MAX / 1000)
+        return INT_MAX;
+    return seconds * 1000;
 }
 
-class SocketReader {
-private:
-    int fd;
-    char buf[1024];
-    size_t pos = 0;
-    size_t len = 0;
-
-public:
-    enum Result {
-        LINE,
-        CLOSED,
-        INCOMPLETE,
-        ERROR
-    };
-
-    explicit SocketReader(int _fd) : fd(_fd) {
-    }
-
-    Result ReadLine(string &line, size_t &remaining) {
-        line.clear();
-        for (;;) {
-            const char *newline = static_cast<const char *>(memchr(buf + pos, '\n', len - pos));
-            size_t part_length = newline != NULL
-                    ? newline - (buf + pos)
-                    : len - pos;
-            size_t consumed = part_length + (newline != NULL);
-            if (consumed > remaining) {
-                errno = EMSGSIZE;
-                return ERROR;
-            }
-            line.append(buf + pos, part_length);
-            remaining -= consumed;
-            if (newline != NULL) {
-                pos = newline - buf + 1;
-                return LINE;
-            }
-
-            ssize_t received = recv(fd, buf, sizeof buf, 0);
-            if (received <= 0) {
-                if (received < 0)
-                    return ERROR;
-                return line.empty() ? CLOSED : INCOMPLETE;
-            }
-            pos = 0;
-            len = received;
-        }
-    }
-
-    bool HasBufferedData() const {
-        return pos < len;
-    }
-};
-
-static int SendAll(int fd, iovec *buffers, int count) {
-    while (count > 0) {
-        ssize_t sent = writev(fd, buffers, count);
-        if (sent < 0) {
-            if (errno == EINTR)
-                continue;
-
-            ERROR("Could not send: " << strerror(errno));
-            return -1;
-        }
-        if (sent == 0) {
-            ERROR("Could not send: connection closed");
-            return -1;
-        }
-
-        while (count > 0 && sent >= static_cast<ssize_t>(buffers->iov_len)) {
-            sent -= buffers->iov_len;
-            buffers++;
-            count--;
-        }
-        if (sent > 0) {
-            buffers->iov_base = static_cast<char *>(buffers->iov_base) + sent;
-            buffers->iov_len -= sent;
-        }
-    }
-
-    return 0;
-}
-
-static int SendAll(int fd, const void *buf, size_t len) {
-    iovec buffer = {const_cast<void *>(buf), len};
-    return SendAll(fd, &buffer, 1);
-}
-
-static int SendStream(int fd, const ostringstream &stream) {
-    string str = stream.str();
-    return SendAll(fd, str.data(), str.size());
-}
-
-static int SendOK(int fd, const string &headers) {
-    static const char status[] = "HTTP/1.1 200 OK\r\n";
-    iovec buffers[] = {
-        {const_cast<char *>(status), sizeof status - 1},
-        {const_cast<char *>(headers.data()), headers.size()},
-        {const_cast<char *>(CRLF), sizeof CRLF - 1}
-    };
-    return SendAll(fd, buffers, 3);
-}
-
-static int SendError(int fd, int code, const char *reason,
+static bool SendError(http::Connection &connection, int code, const char *reason,
                      const string &message) {
     ostringstream response;
     response << http::Response(code, reason)
@@ -161,26 +53,10 @@ static int SendError(int fd, int code, const char *reason,
              << "Content-Length: " << message.size() << CRLF
              << "Connection: close" << CRLF << CRLF
              << message;
-    return SendStream(fd, response);
+    return connection.Send(response.str());
 }
 
-static int SendChunk(int fd, const void *buf, size_t len) {
-    if (len > 0) {
-        char header[2 * sizeof(size_t) + 3];
-        int header_len = snprintf(header, sizeof header, "%zx\r\n", len);
-        iovec buffers[] = {
-            {header, static_cast<size_t>(header_len)},
-            {const_cast<void *>(buf), len},
-            {const_cast<char *>(CRLF), sizeof CRLF - 1}
-        };
-
-        if (SendAll(fd, buffers, 3))
-            return -1;
-    }
-    return 0;
-}
-
-static bool SendData(int fd, DataBinServer &data_server,
+static bool SendData(http::Connection &connection, DataBinServer &data_server,
                      FileManager &file_manager, vector<char> &buf, bool gzip) {
     z_stream zstream = {};
     vector<unsigned char> zbuf;
@@ -210,7 +86,7 @@ static bool SendData(int fd, DataBinServer &data_server,
         }
 
         if (!gzip) {
-            success = SendChunk(fd, buf.data(), chunk_len) == 0;
+            success = connection.SendChunk(buf.data(), chunk_len);
             continue;
         }
 
@@ -228,7 +104,7 @@ static bool SendData(int fd, DataBinServer &data_server,
 
             if (zstream.avail_out == 0 || result == Z_STREAM_END) {
                 size_t length = zbuf.size() - zstream.avail_out;
-                if (length > 0 && SendChunk(fd, zbuf.data(), length)) {
+                if (length > 0 && !connection.SendChunk(zbuf.data(), length)) {
                     success = false;
                     break;
                 }
@@ -243,30 +119,11 @@ static bool SendData(int fd, DataBinServer &data_server,
     return success;
 }
 
-static const int true_val = 1;
-// static const int false_val = 0;
-static const int sndbuf_val = 524288;
-
 enum ServeResult {
     KEEP_CHANNEL,
     CLOSE_CHANNEL,
     FAIL_CHANNEL
 };
-
-enum WaitResult {
-    REQUEST_READY,
-    REPLACEMENT_READY,
-    WAIT_TIMED_OUT,
-    WAIT_FAILED
-};
-
-static int TimeoutMilliseconds(int seconds) {
-    if (seconds <= 0)
-        return -1;
-    if (seconds > INT_MAX / 1000)
-        return INT_MAX;
-    return seconds * 1000;
-}
 
 class Channel {
 private:
@@ -278,136 +135,43 @@ private:
     FileManager file_manager;
     vector<char> buf;
 
-    bool Configure(int fd) {
-        int sockopt_ret = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf_val,
-                                     sizeof sndbuf_val) |
-                          // setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &false_val, sizeof false_val) |
-                          setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &true_val,
-                                     sizeof true_val);
-        int timeout;
-        if (sockopt_ret == 0 && (timeout = cfg.connection_timeout()) > 0) {
-            timeval tv;
-            tv.tv_sec = timeout;
-            tv.tv_usec = 0;
-            sockopt_ret |= setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv,
-                                      sizeof tv) |
-                    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
-        }
-        if (sockopt_ret == 0)
-            return true;
-        LOG("setsockopt failed: " << strerror(errno));
-        return false;
-    }
-
-    WaitResult WaitForRequest(int fd, const SocketReader &reader) {
-        if (reader.HasBufferedData())
-            return REQUEST_READY;
-
-        pollfd fds[] = {
-            {fd, POLLIN, 0},
-            {queue->GetDescriptor(), POLLIN, 0}
-        };
-        int result;
-        do {
-            result = poll(fds, 2, TimeoutMilliseconds(cfg.connection_timeout()));
-        } while (result < 0 && errno == EINTR);
-
-        if (result < 0) {
-            LOG("Channel poll failed: " << strerror(errno));
-            return WAIT_FAILED;
-        }
-        if (result == 0)
-            return WAIT_TIMED_OUT;
-        if (fds[0].revents)
-            return REQUEST_READY;
-        if (fds[1].revents & POLLIN)
-            return REPLACEMENT_READY;
-        return WAIT_FAILED;
-    }
-
-    ServeResult Serve(int fd) {
-        string req_line;
-        SocketReader reader(fd);
-
+    ServeResult Serve(http::Connection &connection) {
         for (;;) {
-            WaitResult wait_result = WaitForRequest(fd, reader);
-            if (wait_result == REPLACEMENT_READY)
-                return KEEP_CHANNEL;
-            if (wait_result == WAIT_TIMED_OUT) {
-                LOG("The channel " << id << " timed out");
-                return FAIL_CHANNEL;
-            }
-            if (wait_result == WAIT_FAILED)
-                return FAIL_CHANNEL;
-
+            http::RequestHead request;
             jpip::Request req;
-            bool accept_gzip = false;
-            bool send_gzip = false;
 
             if (cfg.log_requests())
                 LOG("Waiting for a request ...");
 
-            size_t request_bytes = MAX_REQUEST_HEAD;
-            SocketReader::Result read_result = reader.ReadLine(req_line, request_bytes);
-            if (read_result != SocketReader::LINE) {
-                if (read_result == SocketReader::CLOSED)
+            http::Connection::ReadResult read_result =
+                    connection.ReadRequestHead(&request);
+            if (read_result != http::Connection::REQUEST_READY) {
+                if (read_result == http::Connection::INTERRUPTED)
+                    return KEEP_CHANNEL;
+                if (read_result == http::Connection::TIMED_OUT) {
+                    LOG("The channel " << id << " timed out");
+                    return FAIL_CHANNEL;
+                }
+                if (read_result == http::Connection::CONNECTION_CLOSED)
                     return file_manager.GetImage() ? KEEP_CHANNEL : FAIL_CHANNEL;
-
-                if (read_result == SocketReader::ERROR)
-                    LOG("Request read error: " << strerror(errno));
-                else
-                    LOG("Incomplete request line: " << EscapeForLog(req_line));
                 return FAIL_CHANNEL;
             }
 
-            if (!req_line.empty() && req_line.back() == '\r')
-                req_line.pop_back();
-
-            if (!req.Parse(req_line)) {
-                LOG("Bad request: " << EscapeForLog(req_line));
-                SendError(fd, 400, "Bad Request", "Invalid HTTP or JPIP request");
+            if (!req.Parse(request.line)) {
+                LOG("Bad request: " << http::EscapeForLog(request.line));
+                SendError(connection, 400, "Bad Request",
+                          "Invalid HTTP or JPIP request");
                 return FAIL_CHANNEL;
             }
 
             if (cfg.log_requests())
-                LOG("Request: " << EscapeForLog(req_line));
-
-            http::Header header;
-            string header_line;
-            bool headers_complete = false;
-            for (;;) {
-                SocketReader::Result header_result = reader.ReadLine(header_line, request_bytes);
-                if (header_result != SocketReader::LINE) {
-                    if (header_result == SocketReader::ERROR)
-                        LOG("Header read error: " << strerror(errno));
-                    else if (header_result == SocketReader::INCOMPLETE)
-                        LOG("Incomplete HTTP header");
-                    break;
-                }
-                if (!header_line.empty() && header_line.back() == '\r')
-                    header_line.pop_back();
-                if (header_line.empty()) {
-                    headers_complete = true;
-                    break;
-                }
-                if (!header.Parse(header_line)) {
-                    LOG("Invalid HTTP header");
-                    break;
-                }
-                if (header.Is("Accept-Encoding") &&
-                    header.value.find("gzip") != string::npos)
-                    accept_gzip = true;
-            }
-            if (!headers_complete)
-                return FAIL_CHANNEL;
+                LOG("Request: " << http::EscapeForLog(request.line));
 
             const char *err_msg = nullptr;
             int error_code = 500;
             const char *error_reason = "Internal Server Error";
             string file_name;
-
-            if (req.has.metareq && accept_gzip)
-                send_gzip = true;
+            bool send_gzip = req.has.metareq && request.accepts_gzip;
 
             if (req.has.cclose) {
                 if (!file_manager.GetImage()) {
@@ -422,7 +186,7 @@ private:
                     msg << http::Response(200, "OK")
                             << COMMON_HEADERS
                             << "Content-Length: 0" << CRLF << CRLF;
-                    SendStream(fd, msg);
+                    (void) connection.Send(msg.str());
                     return CLOSE_CHANNEL;
                 }
             } else if (req.has.cnew) {
@@ -452,18 +216,18 @@ private:
 
             if (err_msg) {
                 LOG(err_msg);
-                SendError(fd, error_code, error_reason, err_msg);
+                SendError(connection, error_code, error_reason, err_msg);
                 return FAIL_CHANNEL;
             }
 
             if (!data_server.SetRequest(*file_manager.GetImage(), req)) {
                 err_msg = "Invalid JPIP request for the selected image";
                 LOG(err_msg);
-                SendError(fd, 400, "Bad Request", err_msg);
+                SendError(connection, 400, "Bad Request", err_msg);
                 return FAIL_CHANNEL;
             }
 
-            int send_result;
+            bool sent;
             if (req.has.cnew) {
                 LOG("The channel " << id << " has been opened for the image '"
                                     << file_name << "'");
@@ -475,14 +239,14 @@ private:
                         << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
                         << (send_gzip ? JPIP_GZIP_HEADERS : JPIP_HEADERS)
                         << CRLF;
-                send_result = SendStream(fd, msg);
+                sent = connection.Send(msg.str());
             } else {
-                send_result = SendOK(fd, send_gzip ? JPIP_GZIP_HEADERS
+                sent = connection.SendOK(send_gzip ? JPIP_GZIP_HEADERS
                                                    : JPIP_HEADERS);
             }
-            if (send_result != 0 ||
-                !SendData(fd, data_server, file_manager, buf, send_gzip) ||
-                SendAll(fd, ZERO, sizeof ZERO - 1))
+            if (!sent ||
+                !SendData(connection, data_server, file_manager, buf, send_gzip) ||
+                !connection.Send(ZERO, sizeof ZERO - 1))
                 return FAIL_CHANNEL;
             file_manager.ClearFiles();
         }
@@ -527,11 +291,13 @@ public:
         if (!file_manager.Init(cfg.image_directory())) {
             ERROR("The file manager can not be initialized");
         } else {
-            int connection;
-            while (WaitForConnection(&connection)) {
-                ServeResult result = Configure(connection) ? Serve(connection)
-                                                           : FAIL_CHANNEL;
-                CloseConnection(connection);
+            int fd;
+            while (WaitForConnection(&fd)) {
+                http::Connection connection(fd, queue->GetDescriptor(),
+                                            cfg.connection_timeout());
+                ServeResult result = connection.Configure() ? Serve(connection)
+                                                            : FAIL_CHANNEL;
+                CloseConnection(fd);
                 if (result != KEEP_CHANNEL)
                     break;
             }

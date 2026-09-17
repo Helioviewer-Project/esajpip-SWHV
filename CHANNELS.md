@@ -20,7 +20,8 @@ The responsibilities are separated as follows:
 | `server/server.cc` | Connection admission, channel routing, and log output |
 | `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |
 | `server/connection_queue.cc` | Capacity-one queue shared with one channel thread |
-| `server/channel.cc` | HTTP request handling and all state retained for one JPIP channel |
+| `http/connection.cc` | Socket setup, bounded HTTP request-head I/O, and chunk framing |
+| `server/channel.cc` | JPIP request handling and all state retained for one channel |
 
 ## Ownership
 
@@ -75,10 +76,11 @@ has a replacement connection waiting, then closes the new connection. A
 channel has one active response and at most one waiting connection.
 
 The channel thread handles one request at a time. Buffered requests on its
-current persistent connection come first. Otherwise, a queued replacement wakes
-the thread, which closes the old descriptor and adopts the new one. This works
-for JHelioviewer's persistent socket and for clients whose HTTP library opens a
-new connection for a later request.
+current persistent connection come first. Whenever the reader needs more bytes,
+it waits on both the connection and the channel queue. A queued replacement
+therefore abandons an incomplete request, closes the old descriptor, and wakes
+the thread on the new one. This works for JHelioviewer's persistent socket and
+for clients whose HTTP library opens a new connection for a later request.
 
 [JPEG 2000 Part 9](https://www.itu.int/rec/T-REC-T.808/en) explicitly separates
 an HTTP connection from a JPIP session. Persistent HTTP is useful, but it

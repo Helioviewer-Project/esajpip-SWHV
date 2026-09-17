@@ -10,8 +10,9 @@
 - Stream gzip output one configured chunk at a time instead of buffering the
   complete compressed response. This removes libgsf and its dependencies.
 - Keep channels alive when a later request arrives on a replacement HTTP
-  connection. This lets browser-managed clients retain their JPIP cache and
-  JPEG 2000 state without controlling the underlying socket.
+  connection, even when the previous connection stopped partway through a
+  request. This lets browser-managed clients retain their JPIP cache and JPEG
+  2000 state without controlling the underlying socket.
 - Identify JPIP traffic before starting a channel thread or allocating JPEG
   2000 state. Silent and unrelated connections now expire at the short initial
   timeout with only their sockets retained.
