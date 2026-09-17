@@ -51,13 +51,10 @@ namespace jpip {
             pxy1 = woi.position * (1L << (coding_parameters->num_levels - woi.resolution));
             pxy2 = (woi.position + woi.size - 1) * (1L << (coding_parameters->num_levels - woi.resolution));
 
-            min_precinct_xy = coding_parameters->GetPrecincts(current_packet.resolution, pxy1);
-            if (min_precinct_xy.x != 0) min_precinct_xy.x--;
-            if (min_precinct_xy.y != 0) min_precinct_xy.y--;
-
-            max_precinct_xy = coding_parameters->GetPrecincts(current_packet.resolution, pxy2);
-            if (max_precinct_xy.x != 0) max_precinct_xy.x--;
-            if (max_precinct_xy.y != 0) max_precinct_xy.y--;
+            min_precinct_xy = coding_parameters->GetPrecinctIndex(
+                    current_packet.resolution, pxy1);
+            max_precinct_xy = coding_parameters->GetPrecinctIndex(
+                    current_packet.resolution, pxy2);
 
             current_packet.precinct_xy = min_precinct_xy;
         }
@@ -104,13 +101,10 @@ namespace jpip {
                                 }
                             }
 
-                            min_precinct_xy = coding_parameters->GetPrecincts(current_packet.resolution, pxy1);
-                            if (min_precinct_xy.x != 0) min_precinct_xy.x--;
-                            if (min_precinct_xy.y != 0) min_precinct_xy.y--;
-
-                            max_precinct_xy = coding_parameters->GetPrecincts(current_packet.resolution, pxy2);
-                            if (max_precinct_xy.x != 0) max_precinct_xy.x--;
-                            if (max_precinct_xy.y != 0) max_precinct_xy.y--;
+                            min_precinct_xy = coding_parameters->GetPrecinctIndex(
+                                    current_packet.resolution, pxy1);
+                            max_precinct_xy = coding_parameters->GetPrecinctIndex(
+                                    current_packet.resolution, pxy2);
 
                             current_packet.precinct_xy = min_precinct_xy;
                         }

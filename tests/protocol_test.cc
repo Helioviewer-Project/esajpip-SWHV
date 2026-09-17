@@ -462,6 +462,31 @@ static void CheckWOIPackets() {
     while (composer.GetNextPacket(&coding_parameters))
         packets++;
     Check(packets == 4, "WOI navigation repeated the final packet");
+
+    jpeg2000::CodingParameters boundary_parameters;
+    boundary_parameters.size = jpeg2000::Size(512, 1);
+    boundary_parameters.num_levels = 0;
+    boundary_parameters.num_layers = 1;
+    boundary_parameters.num_components = 1;
+    boundary_parameters.resolutions.emplace_back(256, 1);
+    Check(boundary_parameters.FillPrecinctCounts(),
+          "Rejected valid precinct-boundary parameters");
+
+    composer.Reset(&boundary_parameters,
+                   jpip::WOI(jpeg2000::Point(256, 0),
+                             jpeg2000::Size(1, 1), 0));
+    Check(composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(1, 0) &&
+                  !composer.GetNextPacket(&boundary_parameters),
+          "Selected the preceding precinct for an aligned window");
+
+    composer.Reset(&boundary_parameters,
+                   jpip::WOI(jpeg2000::Point(0, 0),
+                             jpeg2000::Size(257, 1), 0));
+    Check(composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(0, 0) &&
+                  composer.GetNextPacket(&boundary_parameters) &&
+                  composer.GetCurrentPacket().precinct_xy == jpeg2000::Point(1, 0) &&
+                  !composer.GetNextPacket(&boundary_parameters),
+          "Omitted the final precinct intersecting a window");
 }
 
 static void CheckProgressionIndexes() {
