@@ -152,6 +152,12 @@ private:
                     LOG("The channel " << id << " timed out");
                     return FAIL_CHANNEL;
                 }
+                if (read_result == http::Connection::REQUEST_TOO_LARGE) {
+                    LOG("HTTP request head is too large");
+                    SendError(connection, 431, "Request Header Fields Too Large",
+                              "HTTP request head is too large");
+                    return FAIL_CHANNEL;
+                }
                 if (read_result == http::Connection::CONNECTION_CLOSED)
                     return file_manager.GetImage() ? KEEP_CHANNEL : FAIL_CHANNEL;
                 return FAIL_CHANNEL;

@@ -20,6 +20,7 @@ public:
         CONNECTION_CLOSED,
         INTERRUPTED,
         TIMED_OUT,
+        REQUEST_TOO_LARGE,
         READ_FAILED
     };
 
@@ -39,6 +40,7 @@ private:
         LINE_INCOMPLETE,
         LINE_INTERRUPTED,
         LINE_TIMED_OUT,
+        LINE_TOO_LARGE,
         LINE_FAILED
     };
 

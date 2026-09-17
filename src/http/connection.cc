@@ -101,10 +101,8 @@ Connection::LineResult Connection::ReadLine(string &line, size_t &remaining) {
                 memchr(buf + pos, '\n', len - pos));
         size_t part_length = newline != NULL ? newline - (buf + pos) : len - pos;
         size_t consumed = part_length + (newline != NULL);
-        if (consumed > remaining) {
-            errno = EMSGSIZE;
-            return LINE_FAILED;
-        }
+        if (consumed > remaining)
+            return LINE_TOO_LARGE;
         line.append(buf + pos, part_length);
         remaining -= consumed;
         if (newline != NULL) {
@@ -158,6 +156,8 @@ Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
         return TIMED_OUT;
     if (result == LINE_CLOSED)
         return CONNECTION_CLOSED;
+    if (result == LINE_TOO_LARGE)
+        return REQUEST_TOO_LARGE;
     if (result != LINE_READY) {
         if (result == LINE_FAILED)
             LOG("Request read error: " << strerror(errno));
@@ -176,6 +176,8 @@ Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
             return INTERRUPTED;
         if (result == LINE_TIMED_OUT)
             return TIMED_OUT;
+        if (result == LINE_TOO_LARGE)
+            return REQUEST_TOO_LARGE;
         if (result != LINE_READY) {
             if (result == LINE_FAILED)
                 LOG("Header read error: " << strerror(errno));

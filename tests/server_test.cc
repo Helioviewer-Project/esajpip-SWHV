@@ -365,6 +365,23 @@ int main() {
     CheckClosed(replacement, 1000, "Closed channel retained its connection");
     close(replacement);
 
+    int oversized = Connect(port);
+    Check(oversized >= 0, "Could not connect for the request-limit test");
+    SendRequest(oversized,
+                "/image.jp2?cnew=http&type=jpp-stream&stream=0&"
+                "fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+    Response oversized_created = ReadResponse(oversized);
+    Check(oversized_created.headers.find("HTTP/1.1 200 OK") == 0,
+          "Request-limit channel creation failed");
+    uint64_t oversized_channel = ChannelId(oversized_created.headers);
+    SendRequest(oversized, "/jpip?cid=" + to_string(oversized_channel),
+                "X-Large: " + string(4096, 'x') + "\r\n");
+    Check(ReadResponse(oversized).headers.find(
+                  "431 Request Header Fields Too Large") != string::npos,
+          "Oversized request head did not return 431");
+    CheckClosed(oversized, 1000, "Oversized request retained its channel");
+    close(oversized);
+
     int idle = Connect(port);
     Check(idle >= 0, "Could not connect for the timeout test");
     SendRequest(idle,

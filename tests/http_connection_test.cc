@@ -80,8 +80,9 @@ static void CheckRequestLimit() {
           "Could not write an oversized request head");
 
     http::RequestHead head;
-    Check(connection.ReadRequestHead(&head) == http::Connection::READ_FAILED,
-          "Accepted an oversized HTTP request head");
+    Check(connection.ReadRequestHead(&head) ==
+                  http::Connection::REQUEST_TOO_LARGE,
+          "Oversized HTTP request head was not identified");
 
     close(sockets[0]);
     close(sockets[1]);
