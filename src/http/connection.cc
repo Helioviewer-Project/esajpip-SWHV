@@ -114,10 +114,9 @@ Connection::LineResult Connection::ReadLine(string &line, size_t &remaining) {
             return LINE_TOO_LARGE;
         line.append(buf + pos, part_length);
         remaining -= consumed;
-        if (newline != NULL) {
-            pos = newline - buf + 1;
+        pos += consumed;
+        if (newline != NULL)
             return LINE_READY;
-        }
 
         pollfd fds[] = {
             {fd, POLLIN, 0},
