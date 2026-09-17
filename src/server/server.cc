@@ -9,6 +9,8 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <vector>
 #include <unistd.h>
 
@@ -81,29 +83,19 @@ void NotifyConnection() {
     Notify(CONNECTION_COMPLETED, 0);
 }
 
-void *ChannelThread(void *argument) {
-    ChannelInfo *info = static_cast<ChannelInfo *>(argument);
-    const AppConfig *cfg = info->cfg;
-    uint64_t id = info->id;
-    shared_ptr<ConnectionQueue> queue = info->queue;
-    delete info;
-
-    RunChannel(*cfg, to_string(id), queue, NotifyConnection);
-    Notify(CHANNEL_COMPLETED, id);
-    return NULL;
-}
-
-bool StartChannel(const pthread_attr_t *attributes, const ChannelInfo &channel) {
-    ChannelInfo *info = new ChannelInfo(channel);
-    pthread_t thread;
-    int error = pthread_create(&thread, attributes, ChannelThread, info);
-    if (error == 0)
+bool StartChannel(const ChannelInfo &channel) {
+    try {
+        thread([channel]() {
+            RunChannel(*channel.cfg, to_string(channel.id), channel.queue,
+                       NotifyConnection);
+            Notify(CHANNEL_COMPLETED, channel.id);
+        }).detach();
         return true;
-
-    ERROR("A thread for channel " << channel.id << " can not be created: "
-          << strerror(error));
-    delete info;
-    return false;
+    } catch (const system_error &error) {
+        ERROR("A thread for channel " << channel.id << " can not be created: "
+              << error.what());
+        return false;
+    }
 }
 
 void ClosePendingConnection(PollTable &poll_table,
@@ -146,8 +138,7 @@ void ExpirePendingConnections(PollTable &poll_table,
                                num_connections, "identification time-out");
 }
 
-bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
-                        vector<ChannelInfo> &channels,
+bool DispatchConnection(const AppConfig &cfg, vector<ChannelInfo> &channels,
                         const PendingConnection &connection,
                         const InitialRequest &request) {
     if (request.new_channel) {
@@ -166,7 +157,7 @@ bool DispatchConnection(const AppConfig &cfg, const pthread_attr_t *attributes,
             ERROR("The connection queue can not be created");
         } else if (!queue->Push(connection.fd)) {
             ERROR("The initial channel connection can not be queued");
-        } else if (StartChannel(attributes, channel)) {
+        } else if (StartChannel(channel)) {
             channels.push_back(channel);
             LOG("Creating channel " << channel.id << " for connection ["
                                     << connection.id << "]");
@@ -216,23 +207,6 @@ int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
     }
     int completion_reader = completion_fds[0];
     completion_socket = completion_fds[1];
-
-    pthread_attr_t attributes;
-    int thread_error = pthread_attr_init(&attributes);
-    if (thread_error != 0) {
-        ERROR("The channel thread attributes can not be initialized: "
-              << strerror(thread_error));
-        trace::Drain();
-        return SERVER_STARTUP_FAILURE;
-    }
-    thread_error = pthread_attr_setdetachstate(&attributes, PTHREAD_CREATE_DETACHED);
-    if (thread_error != 0) {
-        ERROR("Detached channel threads can not be configured: "
-              << strerror(thread_error));
-        pthread_attr_destroy(&attributes);
-        trace::Drain();
-        return SERVER_STARTUP_FAILURE;
-    }
 
     PollTable poll_table;
     poll_table.Add(listen_socket, POLLIN);
@@ -341,8 +315,8 @@ int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
                         continue;
                     }
                     if (request.state == REQUEST_ACCEPTED) {
-                        if (!DispatchConnection(cfg, &attributes, channels,
-                                                connection, request)) {
+                        if (!DispatchConnection(cfg, channels, connection,
+                                                request)) {
                             ClosePendingConnection(poll_table,
                                                    pending_connections,
                                                    pending_index,
@@ -373,7 +347,6 @@ int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
             trace::DrainOne();
     }
 
-    pthread_attr_destroy(&attributes);
     if (result == 0)
         LOG("Serving process stopping");
     trace::Drain();
