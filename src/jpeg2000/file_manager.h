@@ -76,7 +76,7 @@ namespace jpeg2000 {
             return image.get();
         }
 
-        bool OpenImage(std::string &path_image_file);
+        bool OpenImage(const std::string &path_image_file);
 
         data::File *GetFile(const std::string &path_file) {
             std::map<std::string, std::unique_ptr<data::File>>::const_iterator found =

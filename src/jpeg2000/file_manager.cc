@@ -28,7 +28,7 @@ namespace jpeg2000 {
         return false;
     }
 
-    bool FileManager::OpenImage(string &path_image_file) {
+    bool FileManager::OpenImage(const string &path_image_file) {
         if (path_image_file.empty()) {
             ERROR("The image file name is empty");
             return false;
@@ -38,11 +38,13 @@ namespace jpeg2000 {
             ERROR("Invalid image file path: '" << path_image_file << "'");
             return false;
         }
-        if (path_image_file[0] == '/') path_image_file = path_image_file.substr(1, path_image_file.size() - 1);
-        path_image_file = root_dir_ + path_image_file;
+        string path = path_image_file;
+        if (path[0] == '/')
+            path.erase(0, 1);
+        path.insert(0, root_dir_);
 
-        unique_ptr<ImageIndex> image_index(new ImageIndex(path_image_file));
-        bool loaded = ReadImage(path_image_file, image_index.get());
+        unique_ptr<ImageIndex> image_index(new ImageIndex(path));
+        bool loaded = ReadImage(path, image_index.get());
         ClearFiles();
         if (!loaded)
             return false;

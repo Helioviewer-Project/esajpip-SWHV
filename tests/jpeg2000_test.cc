@@ -231,8 +231,7 @@ static void WriteFile(const string &path, const vector<unsigned char> &data) {
 static bool OpenImage(const string &directory, const string &name,
                       jpeg2000::FileManager *manager) {
     Check(manager->Init(directory), "Could not initialize the file manager");
-    string request_name = name;
-    return manager->OpenImage(request_name);
+    return manager->OpenImage(name);
 }
 
 int main() {
