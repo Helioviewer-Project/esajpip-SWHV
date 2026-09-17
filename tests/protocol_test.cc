@@ -430,6 +430,19 @@ static void CheckCacheModel() {
     Check(augmented.AugmentDataBin(jpip::DataBinClass::META_DATA, 0, 0, INT_MAX) ==
               INT_MAX,
           "Did not complete an augmented cache-model entry");
+
+    jpip::CacheModel packed;
+    packed.AddToDataBin(jpip::DataBinClass::PRECINCT, 0, 0, 0, true);
+    packed.Pack();
+    Check(packed.GetDataBin(jpip::DataBinClass::PRECINCT, 0, 0) == INT_MAX,
+          "Forgot a packed complete precinct");
+    packed.SetFullMetadata();
+    Check(packed.GetDataBin(jpip::DataBinClass::META_DATA, 0, 7) == INT_MAX,
+          "Did not retain the complete metadata state");
+    packed.Clear();
+    Check(packed.GetDataBin(jpip::DataBinClass::META_DATA, 0, 7) == 0 &&
+              packed.GetDataBin(jpip::DataBinClass::PRECINCT, 0, 0) == 0,
+          "Did not clear the cache model");
 }
 
 static void CheckWOIPackets() {
