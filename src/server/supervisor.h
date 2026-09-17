@@ -3,9 +3,9 @@
 
 #include <string>
 
-class AppConfig;
+class Config;
 
-int RunSupervisor(const AppConfig &cfg, int listen_socket,
+int RunSupervisor(const Config &cfg, int listen_socket,
                   const std::string &log_name,
                   const std::string &description);
 

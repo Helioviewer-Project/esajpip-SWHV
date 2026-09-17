@@ -42,7 +42,7 @@ bool ReadString(GKeyFile *file, const char *group, const char *key, string *valu
 
 }
 
-bool AppConfig::Load(const char *file_name, string &error_message) {
+bool Config::Load(const char *file_name, string &error_message) {
     error_message.clear();
     GKeyFile *file = g_key_file_new();
     GError *error = NULL;

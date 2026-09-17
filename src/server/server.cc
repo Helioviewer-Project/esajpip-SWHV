@@ -42,7 +42,6 @@ struct PendingConnection {
 };
 
 struct ChannelInfo {
-    const AppConfig *cfg;
     uint64_t id;
     shared_ptr<ConnectionQueue> queue;
 };
@@ -107,10 +106,10 @@ void NotifyConnection() {
     Notify(CONNECTION_COMPLETED, 0);
 }
 
-bool StartChannel(const ChannelInfo &channel) {
+bool StartChannel(const Config &cfg, const ChannelInfo &channel) {
     try {
-        thread([channel]() {
-            RunChannel(*channel.cfg, to_string(channel.id), channel.queue,
+        thread([&cfg, channel]() {
+            RunChannel(cfg, to_string(channel.id), channel.queue,
                        NotifyConnection);
             Notify(CHANNEL_COMPLETED, channel.id);
         }).detach();
@@ -162,7 +161,7 @@ void ExpirePendingConnections(PollTable &poll_table,
                                num_connections, "identification time-out");
 }
 
-bool DispatchConnection(const AppConfig &cfg, vector<ChannelInfo> &channels,
+bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
                         const PendingConnection &connection,
                         const InitialRequest &request) {
     if (request.new_channel) {
@@ -176,12 +175,12 @@ bool DispatchConnection(const AppConfig &cfg, vector<ChannelInfo> &channels,
         }
 
         shared_ptr<ConnectionQueue> queue = make_shared<ConnectionQueue>();
-        ChannelInfo channel = {&cfg, connection.id, queue};
+        ChannelInfo channel = {connection.id, queue};
         if (!queue->IsValid()) {
             ERROR("The connection queue can not be created");
         } else if (!queue->Push(connection.fd)) {
             ERROR("The initial channel connection can not be queued");
-        } else if (StartChannel(channel)) {
+        } else if (StartChannel(cfg, channel)) {
             channels.push_back(channel);
             LOG("Creating channel " << channel.id << " for connection ["
                                     << connection.id << "]");
@@ -210,7 +209,7 @@ bool DispatchConnection(const AppConfig &cfg, vector<ChannelInfo> &channels,
 
 }
 
-int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
+int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
               const string &log_name, const string &description,
               const string &restart_message) {
     if (!trace::Initialize(log_name)) {

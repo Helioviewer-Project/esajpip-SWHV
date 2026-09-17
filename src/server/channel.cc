@@ -36,6 +36,12 @@ static const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
         "Cache-Control: no-cache\r\n";
+static const string JPIP_HEADERS =
+        string(COMMON_HEADERS) +
+        "Transfer-Encoding: chunked\r\n"
+        "Content-Type: image/jpp-stream\r\n";
+static const string JPIP_GZIP_HEADERS =
+        JPIP_HEADERS + "Content-Encoding: gzip\r\n";
 
 class SocketReader {
 private:
@@ -257,14 +263,12 @@ static int TimeoutMilliseconds(int seconds) {
 
 class Channel {
 private:
-    const AppConfig &cfg;
+    const Config &cfg;
     const string id;
     const shared_ptr<ConnectionQueue> queue;
     const ConnectionClosed connection_closed;
     DataBinServer data_server;
     FileManager file_manager;
-    string head_data;
-    string head_data_gzip;
     vector<char> buf;
 
     bool Configure(int fd) {
@@ -467,11 +471,12 @@ private:
                         << http::Header("JPIP-cnew", "cid=" + id + ",path=jpip,transport=http")
                         << http::Header("JPIP-tid", "0")
                         << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
-                        << (send_gzip ? head_data_gzip : head_data)
+                        << (send_gzip ? JPIP_GZIP_HEADERS : JPIP_HEADERS)
                         << CRLF;
                 send_result = SendStream(fd, msg);
             } else {
-                send_result = SendOK(fd, send_gzip ? head_data_gzip : head_data);
+                send_result = SendOK(fd, send_gzip ? JPIP_GZIP_HEADERS
+                                                   : JPIP_HEADERS);
             }
             if (send_result != 0 ||
                 !SendData(fd, data_server, file_manager, buf, send_gzip) ||
@@ -510,18 +515,11 @@ private:
     }
 
 public:
-    Channel(const AppConfig &_cfg, const string &_id,
+    Channel(const Config &_cfg, const string &_id,
             const shared_ptr<ConnectionQueue> &_queue,
             ConnectionClosed _connection_closed)
         : cfg(_cfg), id(_id), queue(_queue), connection_closed(_connection_closed),
-          buf(_cfg.max_chunk_size()) {
-        ostringstream header_stream;
-        header_stream << COMMON_HEADERS
-                      << "Transfer-Encoding: chunked" << CRLF
-                      << "Content-Type: image/jpp-stream" << CRLF;
-        head_data = header_stream.str();
-        head_data_gzip = head_data + "Content-Encoding: gzip" + CRLF;
-    }
+          buf(_cfg.max_chunk_size()) {}
 
     void Run() {
         if (!file_manager.Init(cfg.image_directory())) {
@@ -543,7 +541,7 @@ public:
     }
 };
 
-void RunChannel(const AppConfig &cfg, const string &channel,
+void RunChannel(const Config &cfg, const string &channel,
                 const shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed) {
     Channel(cfg, channel, queue, connection_closed).Run();

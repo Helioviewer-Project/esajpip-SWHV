@@ -3,11 +3,11 @@
 
 #include <string>
 
-class AppConfig;
+class Config;
 
 const int SERVER_STARTUP_FAILURE = 2;
 
-int RunServer(const AppConfig &cfg, int listen_socket, int supervisor_fd,
+int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
               const std::string &log_name, const std::string &description,
               const std::string &restart_message);
 

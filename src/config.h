@@ -11,7 +11,7 @@
  * parameters from a configuration file. This
  * class can be printed.
  */
-class AppConfig {
+class Config {
 private:
     int port_;                ///< Listening port
     int file_logging_;                ///< <code>true</code> if file logging is enabled
@@ -28,7 +28,7 @@ public:
     /**
      * Initializes the object with zero and empty values.
      */
-    AppConfig() {
+    Config() {
         port_ = 0;
         file_logging_ = 0;
         address_ = "";
@@ -49,7 +49,7 @@ public:
      */
     bool Load(const char *file_name, std::string &error_message);
 
-    friend std::ostream &operator<<(std::ostream &out, const AppConfig &cfg) {
+    friend std::ostream &operator<<(std::ostream &out, const Config &cfg) {
         out << "Configuration:" << std::endl;
         out << "\tListen at: " << cfg.address_ << ":" << cfg.port_ << std::endl;
         out << "\tDirectories:" << std::endl;

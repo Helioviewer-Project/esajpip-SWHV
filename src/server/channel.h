@@ -8,7 +8,7 @@
 
 typedef void (*ConnectionClosed)();
 
-void RunChannel(const AppConfig &cfg, const std::string &channel,
+void RunChannel(const Config &cfg, const std::string &channel,
                 const std::shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed);
 

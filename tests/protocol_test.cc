@@ -36,7 +36,7 @@ static void Check(bool condition, const char *message) {
     }
 }
 
-static bool LoadConfig(const char *contents, AppConfig *config,
+static bool LoadConfig(const char *contents, Config *config,
                        string *error_message = NULL) {
     char path[] = "/tmp/esajpip-config-XXXXXX";
     int fd = mkstemp(path);
@@ -76,7 +76,7 @@ static void CheckAppConfig() {
         "timeout = 60\n"
         "initial_timeout = 4\n";
 
-    AppConfig config;
+    Config config;
     Check(LoadConfig(contents, &config), "Could not parse INI configuration");
     Check(config.port() == 8090, "Wrong configured port");
     Check(config.address() == "127.0.0.1", "Wrong configured address");
@@ -97,16 +97,16 @@ static void CheckAppConfig() {
         "[connections]\n"
         "limit = 10\n"
         "[logging]\n";
-    AppConfig defaults;
+    Config defaults;
     Check(LoadConfig(minimal, &defaults), "Could not apply configuration defaults");
     Check(defaults.initial_timeout() == 3 && defaults.connection_timeout() == -1,
           "Wrong configuration defaults");
 
-    AppConfig missing_group;
+    Config missing_group;
     Check(!LoadConfig("[listen]\nport = 8090\n", &missing_group),
           "Accepted configuration with missing groups");
 
-    AppConfig invalid;
+    Config invalid;
     Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
 
     const char *invalid_port =
@@ -119,7 +119,7 @@ static void CheckAppConfig() {
         "limit = 10\n"
         "[logging]\n";
     string error;
-    AppConfig invalid_port_config;
+    Config invalid_port_config;
     Check(!LoadConfig(invalid_port, &invalid_port_config, &error) &&
               error.find("port") != string::npos,
           "Did not report an invalid port value");
@@ -133,7 +133,7 @@ static void CheckAppConfig() {
         "[connections]\n"
         "limit = 10\n"
         "[logging]\n";
-    AppConfig invalid_chunk;
+    Config invalid_chunk;
     Check(!LoadConfig(invalid_value, &invalid_chunk, &error) &&
               error == "jpip.chunk_size must be at least 128",
           "Did not report an invalid configuration value");
@@ -148,7 +148,7 @@ static void CheckAppConfig() {
         "limit = 10\n"
         "[logging]\n"
         "file_enabled = 1\n";
-    AppConfig invalid_logging;
+    Config invalid_logging;
     Check(!LoadConfig(missing_log_directory, &invalid_logging, &error) &&
               error == "logging.directory must not be empty when file logging is enabled",
           "Accepted file logging without a directory");

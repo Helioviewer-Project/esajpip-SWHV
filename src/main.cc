@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     if (argc > 1)
         return CERR("Invalid command");
 
-    AppConfig cfg;
+    Config cfg;
     string config_error;
     if (!cfg.Load(CONFIG_FILE, config_error))
         return CERR("Configuration error in '" << CONFIG_FILE << "': " << config_error);

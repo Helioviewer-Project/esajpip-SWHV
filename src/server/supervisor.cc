@@ -23,7 +23,7 @@ void ChildExited(int) {
 
 }
 
-int RunSupervisor(const AppConfig &cfg, int listen_socket,
+int RunSupervisor(const Config &cfg, int listen_socket,
                   const string &log_name,
                   const string &description) {
     if (signal(SIGCHLD, ChildExited) == SIG_ERR) {
