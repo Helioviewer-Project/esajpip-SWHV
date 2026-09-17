@@ -270,6 +270,11 @@ int main() {
     WriteFile(directory + "missing-file-type.jp2", missing_file_type);
     WriteFile(directory + "pcrl.jp2", MakeJP2(MakeCodestream(3)));
     WriteFile(directory + "cprl.jp2", MakeJP2(MakeCodestream(4)));
+    for (int progression = 0; progression <= 4; ++progression) {
+        WriteFile(directory + "progression-" + to_string(progression) + ".jp2",
+                  MakeJP2(MakeCodestream(progression, 1, 4, 4, 0, 2, 1, 8, 0,
+                                         vector<unsigned char>{0x00, 0x11})));
+    }
     WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
     WriteFile(directory + "multi-tile.jp2", MakeJP2(MakeCodestream(0, 1, 2, 1)));
     WriteFile(directory + "bad-tile-index.jp2", MakeJP2(MakeCodestream(0, 1, 1, 1, 1)));
@@ -355,6 +360,46 @@ int main() {
                       jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
               "Could not index spatially progressive JP2 packet");
         Check(packet.length == 1, "Wrong spatially progressive packet length");
+    }
+
+    for (int progression = 0; progression <= 4; ++progression) {
+        string name = "progression-" + to_string(progression) + ".jp2";
+        jpeg2000::FileManager progression_manager;
+        Check(OpenImage(directory, name, &progression_manager),
+              "Could not parse progression-order indexing fixture");
+        data::File *progression_file = progression_manager.GetFile(directory + name);
+        Check(progression_file != NULL,
+              "Could not reopen progression-order indexing fixture");
+        jpeg2000::ImageIndex *image = progression_manager.GetImage();
+        const jpeg2000::CodingParameters *parameters =
+                image->GetCodingParameters(0);
+
+        jpeg2000::Packet first_packet(0, 0, 0, jpeg2000::Point());
+        data::FileSegment first_segment;
+        Check(image->GetPacket(progression_file, 0, first_packet, &first_segment),
+              "Could not index the first packet");
+        uint64_t first_plt_offset = progression_file->GetOffset();
+
+        jpeg2000::Packet later_packet(0, 1, 0, jpeg2000::Point(1, 0));
+        int later_index = parameters->GetProgressionIndex(later_packet);
+        Check(later_index > 0 &&
+                      image->GetPacket(progression_file, 0, later_packet, &packet),
+              "Could not index a later packet");
+        Check(progression_file->GetOffset() == first_plt_offset + later_index,
+              "Indexed packets beyond the requested packet");
+        Check(packet.offset == first_segment.offset + later_index &&
+                      packet.length == 1,
+              "Returned the wrong progression-order packet");
+
+        jpeg2000::Packet earlier_packet(0, 0, 0, jpeg2000::Point(1, 0));
+        int earlier_index = parameters->GetProgressionIndex(earlier_packet);
+        uint64_t plt_offset = progression_file->GetOffset();
+        Check(earlier_index < later_index &&
+                      image->GetPacket(progression_file, 0, earlier_packet, &packet),
+              "Could not retrieve an earlier packet after a later packet");
+        Check(progression_file->GetOffset() == plt_offset &&
+                      packet.offset == first_segment.offset + earlier_index,
+              "Rebuilt or returned the wrong earlier packet");
     }
     jpeg2000::FileManager unsupported_progression_manager;
     Check(!OpenImage(directory, "unsupported-pcrl.jp2", &unsupported_progression_manager),

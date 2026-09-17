@@ -18,35 +18,20 @@ namespace jpeg2000 {
               last_packet(0),
               last_offset_PLT(0),
               last_offset_packet(0),
-              max_resolution(-1),
               index(std::move(_index)) {
     }
 
     ImageIndex::ImageIndex(const string &_path) : path_name(_path) {
     }
 
-    bool ImageIndex::BuildIndex(File *file, Codestream &codestream,
-                                const CodingParameters &coding_parameters, int r) {
-        // Check the upper top of the index (to build)
-        int max_index;
-        if (r < coding_parameters.num_levels && coding_parameters.IsResolutionProgression()) {
-            // The max_index is the last packet index of the resolution r
-            Packet packet(0, r + 1, 0, Size(0, 0));
-            max_index = coding_parameters.GetProgressionIndex(packet) - 1;
-        } else {
-            max_index = coding_parameters.GetNumPackets() - 1;
-        }
-
+    bool ImageIndex::BuildIndex(File *file, Codestream &codestream, int max_index) {
         uint64_t length_packet = 0;
-        bool res = true;
-        while (res && codestream.packet_index.Size() <= max_index) {
-            res = GetPLTLength(file, codestream, &length_packet);
-            if (!res)
-                break;
-            res = GetOffsetPacket(codestream, length_packet);
+        while (codestream.packet_index.Size() <= max_index) {
+            if (!GetPLTLength(file, codestream, &length_packet) ||
+                !GetOffsetPacket(codestream, length_packet))
+                return false;
         }
-
-        return res;
+        return true;
     }
 
     bool ImageIndex::GetPLTLength(File *file, Codestream &codestream,
@@ -107,17 +92,16 @@ namespace jpeg2000 {
     bool ImageIndex::GetPacket(File *file, int num_codestream, const Packet &packet, FileSegment *segment, int *offset) {
         Codestream &codestream = codestreams[num_codestream];
         const CodingParameters &coding_parameters = codestream.parameters;
+        int idx = coding_parameters.GetProgressionIndex(packet);
 
-        if (packet.resolution > codestream.max_resolution) {
-            if (!BuildIndex(file, codestream, coding_parameters, packet.resolution)) {
+        PacketIndex &packet_index = codestream.packet_index;
+        if (idx >= packet_index.Size()) {
+            if (!BuildIndex(file, codestream, idx)) {
                 ERROR("The packet index could not be created");
                 return false;
             }
-            codestream.max_resolution = packet.resolution;
         }
 
-        int idx = coding_parameters.GetProgressionIndex(packet);
-        PacketIndex &packet_index = codestream.packet_index;
         if (!packet_index.Get(idx, segment)) {
             ERROR("Invalid packet index: codestream=" << num_codestream << ", index=" << idx << ", size=" << packet_index.Size() << ", packet=" << packet);
             return false;

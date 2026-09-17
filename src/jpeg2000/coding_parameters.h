@@ -137,13 +137,6 @@ namespace jpeg2000 {
 
         void FillPrecinctCounts();
 
-        /**
-         * Returns <code>true</code> if the progression starts with resolution.
-         */
-        bool IsResolutionProgression() const {
-            return progression == RLCP_PROGRESSION || progression == RPCL_PROGRESSION;
-        }
-
         bool IsLayerLastProgression() const {
             return progression == RPCL_PROGRESSION || progression == PCRL_PROGRESSION ||
                    progression == CPRL_PROGRESSION;

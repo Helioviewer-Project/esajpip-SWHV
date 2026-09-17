@@ -28,7 +28,6 @@ namespace jpeg2000 {
             int last_packet;
             uint64_t last_offset_PLT;
             uint64_t last_offset_packet;
-            int max_resolution;
             PacketIndex packet_index;
             CodestreamIndex index;
 
@@ -52,7 +51,6 @@ namespace jpeg2000 {
 
         /**
          * Gets the packet offsets.
-         * @param file File where to read the data from.
          * @param codestream Codestream state.
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
@@ -60,13 +58,14 @@ namespace jpeg2000 {
         static bool GetOffsetPacket(Codestream &codestream, uint64_t length_packet);
 
         /**
-         * Builds the required index for the required resolution levels.
+         * Builds the packet index through a given progression index.
+         * @param file File where to read the PLT marker data from.
          * @param codestream Codestream state.
-         * @param r Maximum resolution level.
+         * @param max_index Last packet index to build.
          * @return <code>true</code> if successful
          */
         static bool BuildIndex(data::File *file, Codestream &codestream,
-                               const CodingParameters &coding_parameters, int r);
+                               int max_index);
 
         explicit ImageIndex(const std::string &_path);
 
