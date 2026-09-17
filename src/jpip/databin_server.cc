@@ -151,11 +151,135 @@ namespace jpip {
         return true;
     }
 
-    bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf, int *len, bool *last) {
-        SegmentResult res;
-        bool chunk_full = false;
-        ImageIndex *image_index = file_manager.GetImage();
+    DataBinServer::SegmentResult DataBinServer::WriteMetadata(
+            FileManager &file_manager, ImageIndex *image_index) {
+        if (cache_model.IsFullMetadata())
+            return SegmentResult::COMPLETE;
 
+        File *file = file_manager.GetFile(image_index->GetPathName());
+        if (file == NULL)
+            return SegmentResult::FAILED;
+        const Metadata &metadata = image_index->GetMetadata();
+
+        if (!meta_bin0_done) {
+            while (meta_idx < metadata.bin0.size()) {
+                const Metadata::Part &part = metadata.bin0[meta_idx];
+                SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
+                        file, 0, 0, part.data, meta_offset, false);
+                if (result != SegmentResult::COMPLETE)
+                    return result;
+
+                int placeholder_offset = meta_offset + part.data.length;
+                result = WritePlaceHolder(file, 0, 0, part.placeholder,
+                                          placeholder_offset);
+                if (result != SegmentResult::COMPLETE)
+                    return result;
+                meta_offset = placeholder_offset + part.placeholder.length();
+                meta_idx++;
+            }
+
+            SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
+                    file, 0, 0, metadata.tail, meta_offset);
+            if (result != SegmentResult::COMPLETE)
+                return result;
+            meta_bin0_done = true;
+        }
+
+        while (meta_bin_idx < metadata.bins.size()) {
+            SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
+                    file, 0, meta_bin_idx + 1, metadata.bins[meta_bin_idx]);
+            if (result != SegmentResult::COMPLETE)
+                return result;
+            meta_bin_idx++;
+        }
+
+        cache_model.SetFullMetadata();
+        return SegmentResult::COMPLETE;
+    }
+
+    DataBinServer::SegmentResult DataBinServer::WriteHeaders(
+            FileManager &file_manager, ImageIndex *image_index) {
+        for (Stream &stream : streams) {
+            if (has_woi && stream.empty)
+                continue;
+            if (stream.file == NULL) {
+                stream.file = file_manager.GetFile(
+                        image_index->GetPathName(stream.id));
+                if (stream.file == NULL)
+                    return SegmentResult::FAILED;
+            }
+        }
+
+        for (Stream &stream : streams) {
+            if (has_woi && stream.empty)
+                continue;
+            SegmentResult result = WriteSegment<DataBinClass::MAIN_HEADER>(
+                    stream.file, stream.id, 0,
+                    image_index->GetMainHeader(stream.id));
+            if (result != SegmentResult::COMPLETE)
+                return result;
+
+            result = WriteSegment<DataBinClass::TILE_HEADER>(
+                    stream.file, stream.id, 0, FileSegment::Null);
+            if (result != SegmentResult::COMPLETE)
+                return result;
+        }
+        return SegmentResult::COMPLETE;
+    }
+
+    DataBinServer::SegmentResult DataBinServer::WritePackets(
+            ImageIndex *image_index) {
+        while (true) {
+            size_t checked = 0;
+            while (checked < streams.size() &&
+                   (streams[current_idx].empty ||
+                    !streams[current_idx].composer.HasPacket())) {
+                current_idx = (current_idx + 1) % streams.size();
+                checked++;
+            }
+            if (checked == streams.size())
+                return SegmentResult::COMPLETE;
+
+            Stream &stream = streams[current_idx];
+            const Packet &packet = stream.composer.GetCurrentPacket();
+            const CodingParameters *coding_parameters =
+                    image_index->GetCodingParameters(stream.id);
+            FileSegment segment;
+            int bin_offset;
+            if (!image_index->GetPacket(stream.file, stream.id, packet,
+                                        &segment, &bin_offset))
+                return SegmentResult::FAILED;
+            int bin_id = coding_parameters->GetPrecinctDataBinId(packet);
+            bool last_packet =
+                    packet.layer >= coding_parameters->num_layers - 1;
+
+            if (segment.offset > stream.file->GetSize() ||
+                segment.length > stream.file->GetSize() - segment.offset) {
+                ERROR("Invalid packet segment: codestream=" << stream.id
+                      << ", packet=" << packet << ", segment=" << segment
+                      << ", file_size=" << stream.file->GetSize());
+                return SegmentResult::FAILED;
+            }
+            SegmentResult result = WriteSegment<DataBinClass::PRECINCT>(
+                    stream.file, stream.id, bin_id, segment,
+                    bin_offset, last_packet);
+            if (result == SegmentResult::FAILED) {
+                ERROR("Could not write packet segment: codestream=" << stream.id
+                      << ", bin=" << bin_id << ", packet=" << packet
+                      << ", segment=" << segment);
+                return result;
+            }
+            if (result == SegmentResult::FULL)
+                return result;
+
+            stream.composer.GetNextPacket(coding_parameters);
+            current_idx = (current_idx + 1) % streams.size();
+        }
+    }
+
+    bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf,
+                                      int *len, bool *last) {
+        ImageIndex *image_index = file_manager.GetImage();
         data_writer.SetBuffer(buf, min(pending, *len));
 
         if (pending > 0 && has_woi) {
@@ -170,152 +294,15 @@ namespace jpip {
         }
 
         if (pending > 0) {
-            if (!cache_model.IsFullMetadata()) {
-                File *file = file_manager.GetFile(image_index->GetPathName());
-                if (file == NULL)
-                    return false;
-                const Metadata &metadata = image_index->GetMetadata();
-                if (!meta_bin0_done) {
-                    while (meta_idx < metadata.bin0.size()) {
-                        const Metadata::Part &part = metadata.bin0[meta_idx];
-                        res = WriteSegment<DataBinClass::META_DATA>(file, 0, 0,
-                                                                    part.data, meta_offset, false);
-                        if (res == SegmentResult::FAILED)
-                            return false;
-                        if (res == SegmentResult::FULL) {
-                            chunk_full = true;
-                            break;
-                        }
+            SegmentResult result = WriteMetadata(file_manager, image_index);
+            if (result == SegmentResult::COMPLETE)
+                result = WriteHeaders(file_manager, image_index);
+            if (result == SegmentResult::COMPLETE && has_woi)
+                result = WritePackets(image_index);
+            if (result == SegmentResult::FAILED)
+                return false;
 
-                        int placeholder_offset = meta_offset + part.data.length;
-                        res = WritePlaceHolder(file, 0, 0, part.placeholder,
-                                               placeholder_offset);
-                        if (res == SegmentResult::FAILED)
-                            return false;
-                        if (res == SegmentResult::FULL) {
-                            chunk_full = true;
-                            break;
-                        }
-                        meta_offset = placeholder_offset + part.placeholder.length();
-                        meta_idx++;
-                    }
-
-                    if (!chunk_full && meta_idx == metadata.bin0.size()) {
-                        res = WriteSegment<DataBinClass::META_DATA>(
-                                file, 0, 0, metadata.tail, meta_offset);
-                        if (res == SegmentResult::FAILED)
-                            return false;
-                        if (res == SegmentResult::FULL)
-                            chunk_full = true;
-                        else
-                            meta_bin0_done = true;
-                    }
-                }
-
-                while (meta_bin0_done && !chunk_full &&
-                       meta_bin_idx < metadata.bins.size()) {
-                    res = WriteSegment<DataBinClass::META_DATA>(file, 0, meta_bin_idx + 1,
-                                                                metadata.bins[meta_bin_idx]);
-                    if (res == SegmentResult::FAILED)
-                        return false;
-                    if (res == SegmentResult::FULL) {
-                        chunk_full = true;
-                        break;
-                    }
-                    meta_bin_idx++;
-                }
-
-                if (meta_bin0_done && meta_bin_idx == metadata.bins.size())
-                    cache_model.SetFullMetadata();
-            }
-
-            if (!chunk_full) {
-                for (Stream &stream : streams) {
-                    if (has_woi && stream.empty)
-                        continue;
-                    if (stream.file == NULL) {
-                        stream.file = file_manager.GetFile(
-                                image_index->GetPathName(stream.id));
-                        if (stream.file == NULL)
-                            return false;
-                    }
-                }
-                for (Stream &stream : streams) {
-                    if (has_woi && stream.empty)
-                        continue;
-                    res = WriteSegment<DataBinClass::MAIN_HEADER>(
-                            stream.file, stream.id, 0,
-                            image_index->GetMainHeader(stream.id));
-                    if (res == SegmentResult::FAILED)
-                        return false;
-                    if (res == SegmentResult::FULL) {
-                        chunk_full = true;
-                        break;
-                    }
-
-                    res = WriteSegment<DataBinClass::TILE_HEADER>(
-                            stream.file, stream.id, 0, FileSegment::Null);
-                    if (res == SegmentResult::FAILED)
-                        return false;
-                    if (res == SegmentResult::FULL) {
-                        chunk_full = true;
-                        break;
-                    }
-                }
-
-                if (!chunk_full && has_woi) {
-                    FileSegment segment;
-                    int bin_id, bin_offset;
-                    bool last_packet;
-
-                    while (!chunk_full) {
-                        size_t checked = 0;
-                        while (checked < streams.size() &&
-                               (streams[current_idx].empty ||
-                                !streams[current_idx].composer.HasPacket())) {
-                            current_idx = (current_idx + 1) % streams.size();
-                            checked++;
-                        }
-                        if (checked == streams.size())
-                            break;
-
-                        Stream &stream = streams[current_idx];
-                        const Packet &packet = stream.composer.GetCurrentPacket();
-                        const CodingParameters *coding_parameters =
-                                image_index->GetCodingParameters(stream.id);
-
-                        if (!image_index->GetPacket(stream.file, stream.id, packet,
-                                                    &segment, &bin_offset))
-                            return false;
-                        bin_id = coding_parameters->GetPrecinctDataBinId(packet);
-                        last_packet = packet.layer >= coding_parameters->num_layers - 1;
-
-                        if (segment.offset > stream.file->GetSize() ||
-                            segment.length > stream.file->GetSize() - segment.offset) {
-                            ERROR("Invalid packet segment: codestream=" << stream.id
-                                  << ", packet=" << packet << ", segment=" << segment
-                                  << ", file_size=" << stream.file->GetSize());
-                            return false;
-                        }
-                        res = WriteSegment<DataBinClass::PRECINCT>(
-                                stream.file, stream.id, bin_id, segment,
-                                bin_offset, last_packet);
-
-                        if (res == SegmentResult::FAILED) {
-                            ERROR("Could not write packet segment: codestream=" << stream.id
-                                  << ", bin=" << bin_id << ", packet=" << packet << ", segment=" << segment);
-                            return false;
-                        }
-                        if (res == SegmentResult::FULL) {
-                            chunk_full = true;
-                        } else {
-                            stream.composer.GetNextPacket(coding_parameters);
-                            current_idx = (current_idx + 1) % streams.size();
-                        }
-                    }
-                }
-            }
-
+            bool chunk_full = result == SegmentResult::FULL;
             if (!chunk_full) {
                 if (data_writer.WriteEOR(EOR::WINDOW_DONE))
                     pending = 0;
@@ -335,14 +322,12 @@ namespace jpip {
         }
 
         *len = data_writer.GetCount();
-        *last = (pending <= 0);
-
+        *last = pending <= 0;
         if (*last) {
             cache_model.Pack();
             for (Stream &stream : streams)
                 stream.file = NULL;
         }
-
         return true;
     }
 

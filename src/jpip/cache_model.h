@@ -54,23 +54,24 @@ namespace jpip {
             return AddAmount(meta_data[id], amount, complete);
         }
 
-        static int GetPrecinct(Codestream &codestream, int id) {
+        static int *Slot(Codestream &codestream, int id) {
             if (id < codestream.min_precinct)
-                return INT_MAX;
+                return NULL;
             int index = id - codestream.min_precinct;
             if (index >= static_cast<int>(codestream.precincts.size()))
                 codestream.precincts.resize(index + 1, 0);
-            return codestream.precincts[index];
+            return &codestream.precincts[index];
+        }
+
+        static int GetPrecinct(Codestream &codestream, int id) {
+            int *slot = Slot(codestream, id);
+            return slot == NULL ? INT_MAX : *slot;
         }
 
         static int AddToPrecinct(Codestream &codestream, int id, int amount,
                                  bool complete) {
-            if (id < codestream.min_precinct)
-                return INT_MAX;
-            int index = id - codestream.min_precinct;
-            if (index >= static_cast<int>(codestream.precincts.size()))
-                codestream.precincts.resize(index + 1, 0);
-            return AddAmount(codestream.precincts[index], amount, complete);
+            int *slot = Slot(codestream, id);
+            return slot == NULL ? INT_MAX : AddAmount(*slot, amount, complete);
         }
 
         static void Pack(Codestream &codestream) {

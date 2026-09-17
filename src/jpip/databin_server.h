@@ -139,6 +139,12 @@ namespace jpip {
             return SegmentResult::COMPLETE;
         }
 
+        SegmentResult WriteMetadata(jpeg2000::FileManager &file_manager,
+                                    jpeg2000::ImageIndex *image_index);
+        SegmentResult WriteHeaders(jpeg2000::FileManager &file_manager,
+                                   jpeg2000::ImageIndex *image_index);
+        SegmentResult WritePackets(jpeg2000::ImageIndex *image_index);
+
     public:
         /**
          * Initializes the object.
