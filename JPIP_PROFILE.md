@@ -125,11 +125,11 @@ JPX specifications allow.
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
   marker and must contain all information needed to decode every tile-part.
-  Tile-part header overrides are not delivered to the client. Features that
-  change the packet layout elsewhere, including `POC`, component-specific
-  coding or quantization parameters, and tile-part header overrides, are
-  outside the supported source profile even if the parser accepts their marker
-  segments.
+  `COD` and `QCD` markers in tile-part headers are rejected because tile-part
+  header overrides are not delivered to the client. Features that change the
+  packet layout elsewhere, including `POC` and component-specific coding or
+  quantization parameters, are outside the supported source profile even if
+  the parser accepts their marker segments.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the

@@ -166,8 +166,6 @@ namespace jpeg2000 {
         bool siz = false;
         bool cod = false;
         bool qcd = false;
-        bool tile_cod = false;
-        bool tile_qcd = false;
         bool first_marker = true;
         Phase phase = MAIN_HEADER;
         uint8_t declared_tile_parts = 0;
@@ -200,18 +198,13 @@ namespace jpeg2000 {
                     siz = true;
                     break;
 
-                case COD_MARKER: {
-                    TRACE("COD marker...");
-                    bool &seen = phase == MAIN_HEADER ? cod : tile_cod;
-                    if (seen ||
-                        (phase == TILE_HEADER &&
-                         codestream.tile_parts.size() != 1) ||
+                case COD_MARKER: TRACE("COD marker...");
+                    if (phase != MAIN_HEADER || cod ||
                         !ReadCODMarker(file, marker_limit,
                                        &codestream.parameters))
                         return false;
-                    seen = true;
+                    cod = true;
                     break;
-                }
 
                 case SOT_MARKER: {
                     TRACE("SOT marker...");
@@ -226,16 +219,12 @@ namespace jpeg2000 {
                     break;
                 }
 
-                case QCD_MARKER: {
-                    bool &seen = phase == MAIN_HEADER ? qcd : tile_qcd;
-                    if (seen ||
-                        (phase == TILE_HEADER &&
-                         codestream.tile_parts.size() != 1) ||
+                case QCD_MARKER:
+                    if (phase != MAIN_HEADER || qcd ||
                         !SkipMarker(file, marker_limit))
                         return false;
-                    seen = true;
+                    qcd = true;
                     break;
-                }
 
                 case PLT_MARKER: TRACE("PLT marker...");
                     if (phase != TILE_HEADER ||

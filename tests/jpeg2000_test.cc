@@ -444,15 +444,11 @@ int main() {
               "Accepted inconsistent JPEG 2000 tile-part numbering");
     }
 
-    for (const char *name : {"late-cod.jp2", "late-qcd.jp2"}) {
-        jpeg2000::FileManager late_marker_manager;
-        Check(!OpenImage(directory, name, &late_marker_manager),
-              "Accepted COD or QCD in a later tile-part header");
-    }
-    for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2"}) {
+    for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2",
+                             "late-cod.jp2", "late-qcd.jp2"}) {
         jpeg2000::FileManager tile_marker_manager;
-        Check(OpenImage(directory, name, &tile_marker_manager),
-              "Rejected COD or QCD in the first tile-part header");
+        Check(!OpenImage(directory, name, &tile_marker_manager),
+              "Accepted COD or QCD in a tile-part header");
     }
 
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
