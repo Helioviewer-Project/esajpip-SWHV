@@ -156,6 +156,8 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                     return "plt.coverage";
                 if (tp_cod > 1 || (tp_cod && tp->tpsot != 0)) return "tile.cod-once";
                 if (tp_qcd > 1 || (tp_qcd && tp->tpsot != 0)) return "tile.qcd-once";
+                if (layer >= CF_PROFILE && (tp_cod != 0 || tp_qcd != 0))
+                    return "tile.header-coding-default";
                 if (layer >= CF_PROFILE && tp_plts == 0) return "codestream.no-plt";
             }
 #ifdef CF_HAS_OTHER

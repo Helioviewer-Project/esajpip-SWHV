@@ -488,6 +488,16 @@ typedef struct {
     const char *std_reason, *prof_reason;
 } Label;
 
+/* What a mutant is meant to produce. The decoders decide the label; the
+ * expectation only checks that the mutant did what its note says, so a
+ * setter that misses its target or a rule that stopped firing is caught at
+ * generation time instead of surfacing as a puzzling server-test result. */
+typedef enum {
+    X_VALID,   /* valid at both layers */
+    X_STD,     /* invalid at layer 1 (and therefore at layer 2) */
+    X_PROF     /* valid at layer 1, invalid at layer 2 */
+} Expect;
+
 static Jp2Family *dec_family;            /* reused decode targets */
 static Jp2File_Profile *dec_jp2;
 static JpxFile_Profile *dec_jpx;
@@ -524,24 +534,40 @@ static Label label(Bytes b, cf_kind kind) {
 
 static FILE *manifest;
 static const char *out_dir;
-static int emitted, emitted_valid;
+static int emitted, emitted_valid, mismatches;
 
-/* Emit one vector: write the file, label it, append a manifest row. */
+static const char *expect_name(Expect x) {
+    return x == X_VALID ? "valid/valid" : x == X_STD ? "invalid/-" : "valid/invalid";
+}
+
+/* Emit one vector: write the file, label it, append a manifest row, and
+ * check the label against the mutant's expectation. */
 static void emit(Bytes b, cf_kind kind, const char *name, const char *field,
-                 const char *note, const char *companions) {
+                 const char *note, const char *companions, Expect expect) {
     char file[256];
     Label l = label(b, kind);
+    const char *reason = !l.std_ok ? l.std_reason : !l.prof_ok ? l.prof_reason : "-";
+    int as_expected = expect == X_VALID ? (l.std_ok && l.prof_ok)
+                    : expect == X_STD   ? !l.std_ok
+                    :                     (l.std_ok && !l.prof_ok);
     snprintf(file, sizeof file, "%s.%s", name, kind == CF_JP2 ? "jp2" : "jpx");
     write_file(out_dir, file, b);
-    fprintf(manifest, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", file,
+    fprintf(manifest, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", file,
             kind == CF_JP2 ? "jp2" : "jpx",
             l.std_ok ? "valid" : "invalid",
             l.prof_ok ? "valid" : "invalid",
+            reason,
             field ? field : "-",
-            note ? note : (l.std_ok ? "-" : l.std_reason),
+            note ? note : "-",
             companions ? companions : "-");
     emitted++;
     if (l.std_ok && l.prof_ok) emitted_valid++;
+    if (!as_expected) {
+        mismatches++;
+        fprintf(stderr, "vectors: %s: expected %s, labelled %s/%s (%s)\n", file,
+                expect_name(expect), l.std_ok ? "valid" : "invalid",
+                l.prof_ok ? "valid" : "invalid", reason);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -599,55 +625,56 @@ typedef struct {
     asn1SccSint value;
     const char *note;
     int needs_precincts;
+    Expect expect;
 } FieldMutant;
 
 static const FieldMutant field_mutants[] = {
-    { "siz.rsiz",   set_siz_rsiz,   2,          "table A.10 value 2 (profile 1)", 0 },
-    { "siz.rsiz",   set_siz_rsiz,   32768,      "amendment bit 15", 0 },
-    { "siz.xsiz",   set_siz_xsiz,   0,          "min-1", 0 },
-    { "siz.xsiz",   set_siz_xsiz,   2147483648, "profile max+1", 0 },
-    { "siz.xsiz",   set_siz_xsiz,   4294967295u, "standard max (tile smaller: single-tile rule)", 0 },
-    { "siz.ysiz",   set_siz_ysiz,   0,          "min-1", 0 },
-    { "siz.ysiz",   set_siz_ysiz,   2147483648, "profile max+1", 0 },
-    { "siz.xosiz",  set_siz_xosiz,  1,          "profile max+1; standard valid", 0 },
-    { "siz.xosiz",  set_siz_xosiz,  4,          "== xsiz: empty image", 0 },
-    { "siz.yosiz",  set_siz_yosiz,  1,          "profile max+1; standard valid", 0 },
-    { "siz.xtsiz",  set_siz_xtsiz,  0,          "min-1", 0 },
-    { "siz.xtsiz",  set_siz_xtsiz,  3,          "below xsiz: two tiles", 0 },
-    { "siz.ytsiz",  set_siz_ytsiz,  3,          "below ysiz: two tiles", 0 },
-    { "siz.xtosiz", set_siz_xtosiz, 1,          "tile origin past image origin", 0 },
-    { "siz.ytosiz", set_siz_ytosiz, 1,          "tile origin past image origin", 0 },
-    { "siz.csiz",   set_siz_csiz,   0,          "min-1", 0 },
-    { "siz.csiz",   set_siz_csiz,   2,          "count mismatch", 0 },
-    { "siz.csiz",   set_siz_csiz,   16385,      "max+1 (and count mismatch)", 0 },
-    { "siz.component.depthMinus1", set_siz_depth, 38, "max+1 (39-bit depth)", 0 },
-    { "siz.component.xrsiz", set_siz_xrsiz, 0, "min-1", 0 },
-    { "siz.component.yrsiz", set_siz_yrsiz, 0, "min-1", 0 },
-    { "cod.scod.reserved",   set_cod_reserved, 1, "reserved bit set", 0 },
-    { "cod.sgcod.progression", set_cod_progression, 5, "max+1", 0 },
-    { "cod.sgcod.progression", set_cod_progression, 3, "PCRL with unit sampling: valid", 0 },
-    { "cod.sgcod.layers",    set_cod_layers, 0, "min-1", 0 },
-    { "cod.sgcod.mct",       set_cod_mct, 2, "max+1", 0 },
-    { "cod.spcod.levels",    set_cod_levels, 33, "max+1", 0 },
-    { "cod.spcod.cbWidthExp", set_cod_cbw, 9, "max+1", 0 },
-    { "cod.spcod.cbWidthExp", set_cod_cbw, 5, "5+4 = 9 > 8: code-block area", 0 },
-    { "cod.spcod.cbHeightExp", set_cod_cbh, 9, "max+1", 0 },
-    { "cod.spcod.cbStyle",   set_cod_cbstyle, 63, "all Part 1 bits: valid", 0 },
-    { "cod.spcod.cbStyle",   set_cod_cbstyle, 64, "reserved bit 6 (HTJ2K flag)", 0 },
-    { "cod.spcod.cbStyle",   set_cod_cbstyle, 255, "all bits", 0 },
-    { "cod.spcod.transform", set_cod_transform, 2, "max+1", 0 },
-    { "cod.spcod.precincts.lowest.ppx", set_cod_ppx_lowest, 0, "zero at r=0: valid", 1 },
-    { "cod.spcod.precincts.higher[0].ppx", set_cod_ppx_higher, 0, "zero above r=0 (Table A.21)", 1 },
-    { "cod.spcod.precincts.higher[0].ppy", set_cod_ppy_higher, 0, "zero above r=0 (Table A.21)", 1 },
-    { "sot.lsot",   set_sot_lsot,  11,  "Lsot != 10", 0 },
-    { "sot.isot",   set_sot_isot,  1,   "profile max+1 (tile 1): standard valid", 0 },
-    { "sot.isot",   set_sot_isot,  65535, "standard max+1", 0 },
-    { "sot.tpsot",  set_sot_tpsot, 1,   "first tile-part index 1: sequence", 0 },
-    { "sot.tpsot",  set_sot_tpsot, 255, "reserved", 0 },
-    { "sot.tnsot",  set_sot_tnsot, 0,   "unspecified count: valid", 0 },
-    { "sot.tnsot",  set_sot_tnsot, 2,   "count 2 with one tile-part", 0 },
-    { "plt.zplt",   set_plt_zplt,  1,   "index 1: valid", 0 },
-    { "plt.iplt.b0.bits", set_iplt_bits, 0, "packet length 0: valid encoding", 0 },
+    { "siz.rsiz", set_siz_rsiz, 2, "table A.10 value 2 (profile 1)", 0, X_VALID },
+    { "siz.rsiz", set_siz_rsiz, 32768, "amendment bit 15", 0, X_VALID },
+    { "siz.xsiz", set_siz_xsiz, 0, "min-1", 0, X_STD },
+    { "siz.xsiz", set_siz_xsiz, 2147483648, "profile max+1", 0, X_PROF },
+    { "siz.xsiz", set_siz_xsiz, 4294967295u, "standard max (tile smaller: single-tile rule)", 0, X_PROF },
+    { "siz.ysiz", set_siz_ysiz, 0, "min-1", 0, X_STD },
+    { "siz.ysiz", set_siz_ysiz, 2147483648, "profile max+1", 0, X_PROF },
+    { "siz.xosiz", set_siz_xosiz, 1, "profile max+1; standard valid", 0, X_PROF },
+    { "siz.xosiz", set_siz_xosiz, 4, "== xsiz: empty image", 0, X_STD },
+    { "siz.yosiz", set_siz_yosiz, 1, "profile max+1; standard valid", 0, X_PROF },
+    { "siz.xtsiz", set_siz_xtsiz, 0, "min-1", 0, X_STD },
+    { "siz.xtsiz", set_siz_xtsiz, 3, "below xsiz: two tiles", 0, X_PROF },
+    { "siz.ytsiz", set_siz_ytsiz, 3, "below ysiz: two tiles", 0, X_PROF },
+    { "siz.xtosiz", set_siz_xtosiz, 1, "tile origin past image origin", 0, X_STD },
+    { "siz.ytosiz", set_siz_ytosiz, 1, "tile origin past image origin", 0, X_STD },
+    { "siz.csiz", set_siz_csiz, 0, "min-1", 0, X_STD },
+    { "siz.csiz", set_siz_csiz, 2, "count mismatch", 0, X_STD },
+    { "siz.csiz", set_siz_csiz, 16385, "max+1 (and count mismatch)", 0, X_STD },
+    { "siz.component.depthMinus1", set_siz_depth, 38, "max+1 (39-bit depth)", 0, X_STD },
+    { "siz.component.xrsiz", set_siz_xrsiz, 0, "min-1", 0, X_STD },
+    { "siz.component.yrsiz", set_siz_yrsiz, 0, "min-1", 0, X_STD },
+    { "cod.scod.reserved", set_cod_reserved, 1, "reserved bit set", 0, X_STD },
+    { "cod.sgcod.progression", set_cod_progression, 5, "max+1", 0, X_STD },
+    { "cod.sgcod.progression", set_cod_progression, 3, "PCRL with unit sampling: valid", 0, X_VALID },
+    { "cod.sgcod.layers", set_cod_layers, 0, "min-1", 0, X_STD },
+    { "cod.sgcod.mct", set_cod_mct, 2, "max+1", 0, X_STD },
+    { "cod.spcod.levels", set_cod_levels, 33, "max+1", 0, X_STD },
+    { "cod.spcod.cbWidthExp", set_cod_cbw, 9, "max+1", 0, X_STD },
+    { "cod.spcod.cbWidthExp", set_cod_cbw, 5, "5+4 = 9 > 8: code-block area", 0, X_STD },
+    { "cod.spcod.cbHeightExp", set_cod_cbh, 9, "max+1", 0, X_STD },
+    { "cod.spcod.cbStyle", set_cod_cbstyle, 63, "all Part 1 bits: valid", 0, X_VALID },
+    { "cod.spcod.cbStyle", set_cod_cbstyle, 64, "reserved bit 6 (HTJ2K flag)", 0, X_STD },
+    { "cod.spcod.cbStyle", set_cod_cbstyle, 255, "all bits", 0, X_STD },
+    { "cod.spcod.transform", set_cod_transform, 2, "max+1", 0, X_STD },
+    { "cod.spcod.precincts.lowest.ppx", set_cod_ppx_lowest, 0, "zero at r=0: valid", 1, X_VALID },
+    { "cod.spcod.precincts.higher[0].ppx", set_cod_ppx_higher, 0, "zero above r=0 (Table A.21)", 1, X_STD },
+    { "cod.spcod.precincts.higher[0].ppy", set_cod_ppy_higher, 0, "zero above r=0 (Table A.21)", 1, X_STD },
+    { "sot.lsot", set_sot_lsot, 11, "Lsot != 10", 0, X_STD },
+    { "sot.isot", set_sot_isot, 1, "profile max+1 (tile 1): standard valid", 0, X_PROF },
+    { "sot.isot", set_sot_isot, 65535, "standard max+1", 0, X_STD },
+    { "sot.tpsot", set_sot_tpsot, 1, "first tile-part index 1: sequence", 0, X_STD },
+    { "sot.tpsot", set_sot_tpsot, 255, "reserved", 0, X_STD },
+    { "sot.tnsot", set_sot_tnsot, 0, "unspecified count: valid", 0, X_VALID },
+    { "sot.tnsot", set_sot_tnsot, 2, "count 2 with one tile-part", 0, X_STD },
+    { "plt.zplt", set_plt_zplt, 1, "index 1: valid", 0, X_VALID },
+    { "plt.iplt.b0.bits", set_iplt_bits, 0, "packet length 0: PLT coverage short", 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -700,6 +727,58 @@ static void rule_tnsot_inconsistent(Jp2Family *f, int box) {
     rule_two_tile_parts(f, box);
     cs_of(f, box)->segments.arr[3].body.u.tilePart.tnsot = 3;   /* first said 2 */
 }
+static void rule_two_plt_markers(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);                          /* precinct base: two packets */
+    TileSegment *first = &tp->rest.headers.arr[0];
+    TileSegment *second = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    *second = *first;                                      /* same code/kind, one entry each */
+    first->body.u.plt.body.entries.nCount = 1;
+    second->body.u.plt.body.zplt = 1;
+    second->body.u.plt.body.entries.nCount = 1;
+    second->body.u.plt.body.entries.arr[0] = first->body.u.plt.body.entries.arr[1];
+}
+static void rule_com_in_tile_header(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    ts->code = MC_COM;
+    ts->body.kind = TileBody_com_PRESENT;
+    ts->body.u.com.body.rcom = 1;
+    ts->body.u.com.body.ccom.nCount = 2;
+    ts->body.u.com.body.ccom.arr[0] = 'o';
+    ts->body.u.com.body.ccom.arr[1] = 'k';
+}
+static void rule_tnsot_declared_late(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    rule_two_tile_parts(f, box);
+    cs->segments.arr[2].body.u.tilePart.tnsot = 0;         /* first says "unspecified" */
+    cs->segments.arr[3].body.u.tilePart.tnsot = 2;         /* second gives the count */
+}
+static void rule_tile_parts_n(Jp2Family *f, int box, int n) {
+    Codestream *cs = cs_of(f, box);
+    int i;
+    for (i = 1; i < n; ++i) cs->segments.arr[2 + i] = cs->segments.arr[2];
+    for (i = 0; i < n; ++i) {
+        cs->segments.arr[2 + i].body.u.tilePart.tpsot = i;
+        cs->segments.arr[2 + i].body.u.tilePart.tnsot = n;
+    }
+    cs->segments.nCount = 2 + n;
+}
+static void rule_tile_parts_64(Jp2Family *f, int box) { rule_tile_parts_n(f, box, 64); }
+static void rule_jpx_jp2c_before_jpch(Jp2Family *f, int box) {
+    TopBox *arr = f->boxes.arr;                            /* jP ftyp jpch jpch jp2c jp2c */
+    TopBox jp2c = arr[4];
+    (void) box;
+    arr[4] = arr[3];
+    arr[3] = arr[2];
+    arr[2] = jp2c;                                         /* jP ftyp jp2c jpch jpch jp2c */
+}
+static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 5; }
+static void rule_jpx_no_jpch(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[2] = f->boxes.arr[4];
+    f->boxes.arr[3] = f->boxes.arr[5];
+    f->boxes.nCount = 4;
+}
 static void rule_tile_parts_65(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     int i;
@@ -739,6 +818,21 @@ static void rule_iplt_too_short(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     tp->rest.data.nCount += 1;                              /* one byte no PLT entry covers */
     tp->rest.data.arr[tp->rest.data.nCount - 1] = 0x00;
+}
+static void rule_tile_cod(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    ts->code = MC_COD;
+    ts->body.kind = TileBody_cod_PRESENT;
+    ts->body.u.cod.body = *cod_of(f, box);
+}
+static void rule_tile_qcd(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    TilePart *tp = tp_of(f, box);
+    TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    ts->code = MC_QCD;
+    ts->body.kind = TileBody_qcd_PRESENT;
+    ts->body.u.qcd.body = cs->segments.arr[1].body.u.qcd.body;
 }
 static void rule_tile_cod_twice(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
@@ -791,30 +885,41 @@ typedef struct {
     RuleMutator apply;
     const char *note;
     int only_kind;         /* 0 = any base with a codestream, CF_JP2 / CF_JPX otherwise */
+    int needs_precincts;   /* 1 = apply to the explicit-precinct base (two packets) */
+    Expect expect;
 } RuleMutant;
 
 static const RuleMutant rule_mutants[] = {
-    { "codestream.one-cod-before-sot",  rule_second_cod,        "two COD in main header", 0 },
-    { "codestream.one-qcd-before-sot",  rule_second_qcd,        "two QCD in main header", 0 },
-    { "codestream.one-qcd-before-sot",  rule_no_qcd,            "no QCD", 0 },
-    { "codestream.segment-after-sot",   rule_qcd_after_sot,     "QCD after the tile-part data", 0 },
-    { "codestream.no-plt",              rule_no_plt,            "no PLT: standard valid, profile invalid", 0 },
-    { "cod.precincts-count",            rule_precinct_count,    "levels+2 precinct bytes", 0 },
-    { "codestream.no-tile-part",        rule_no_tile_part,      "main header only", 0 },
-    { "sot.two-tile-parts",             rule_two_tile_parts,    "two tile-parts: valid", 0 },
-    { "sot.tnsot-inconsistent",         rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0 },
-    { "codestream.tile-part-limit",     rule_tile_parts_65,     "65 tile-parts: profile invalid", 0 },
-    { "main.com",                       rule_com_segment,       "COM segment: valid", 0 },
-    { "plt.iplt-five-bytes",            rule_iplt_five_bytes,   "5-byte Iplt encoding value 1: valid", 0 },
-    { "plt.sum-exceeds-data",           rule_iplt_too_long,     "packet length beyond tile-part data", 0 },
-    { "plt.sum-short",                  rule_iplt_too_short,    "tile-part byte no PLT entry covers", 0 },
-    { "tile.cod-once",                  rule_tile_cod_twice,    "two COD in the tile-part header", 0 },
-    { "tile.cod-first-part",            rule_tile_cod_second_part, "COD in the second tile-part", 0 },
-    { "codestream.packet-count",        rule_packet_count_overflow, "2^32 packets: profile invalid", 0 },
-    { "plt.iplt-six-bytes",            rule_iplt_six_bytes,    "6-byte Iplt encoding value 1: valid", 0 },
-    { "siz.position-order-sampling",    rule_pcrl_subsampled,   "PCRL with 2:1 sampling: profile invalid", 0 },
-    { "file.signature",                 rule_missing_signature, "no jP box (T.800 I.4)", CF_JP2 },
-    { "jp2.one-codestream",             rule_two_jp2c,          "two jp2c in .jp2", CF_JP2 },
+    { "codestream.one-cod-before-sot", rule_second_cod, "two COD in main header", 0, 0, X_STD },
+    { "codestream.one-qcd-before-sot", rule_second_qcd, "two QCD in main header", 0, 0, X_STD },
+    { "codestream.one-qcd-before-sot", rule_no_qcd, "no QCD", 0, 0, X_STD },
+    { "codestream.segment-after-sot", rule_qcd_after_sot, "QCD after the tile-part data", 0, 0, X_STD },
+    { "codestream.no-plt", rule_no_plt, "no PLT: standard valid, profile invalid", 0, 0, X_PROF },
+    { "cod.precincts-count", rule_precinct_count, "levels+2 precinct bytes", 0, 0, X_STD },
+    { "codestream.no-tile-part", rule_no_tile_part, "main header only", 0, 0, X_STD },
+    { "sot.two-tile-parts", rule_two_tile_parts, "two tile-parts: valid", 0, 0, X_VALID },
+    { "sot.tnsot-late", rule_tnsot_declared_late, "TNsot 0 then 2: valid", 0, 0, X_VALID },
+    { "codestream.tile-part-limit", rule_tile_parts_64, "64 tile-parts: profile maximum, valid", 0, 0, X_VALID },
+    { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
+    { "tile.com", rule_com_in_tile_header, "COM in the tile-part header: valid", 0, 0, X_VALID },
+    { "jpx.pairing", rule_jpx_jp2c_before_jpch, "jp2c before any jpch: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpx.embedded-count", rule_jpx_missing_jp2c, "two jpch, one jp2c: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
+    { "sot.tnsot-inconsistent", rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0, 0, X_STD },
+    { "codestream.tile-part-limit", rule_tile_parts_65, "65 tile-parts: profile invalid", 0, 0, X_PROF },
+    { "main.com", rule_com_segment, "COM segment: valid", 0, 0, X_VALID },
+    { "plt.iplt-five-bytes", rule_iplt_five_bytes, "5-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
+    { "plt.sum-exceeds-data", rule_iplt_too_long, "packet length beyond tile-part data", 0, 0, X_STD },
+    { "plt.sum-short", rule_iplt_too_short, "tile-part byte no PLT entry covers", 0, 0, X_STD },
+    { "tile.header-coding-default", rule_tile_cod, "COD in the first tile-part: profile invalid", 0, 0, X_PROF },
+    { "tile.header-coding-default", rule_tile_qcd, "QCD in the first tile-part: profile invalid", 0, 0, X_PROF },
+    { "tile.cod-once", rule_tile_cod_twice, "two COD in the tile-part header", 0, 0, X_STD },
+    { "tile.cod-first-part", rule_tile_cod_second_part, "COD in the second tile-part", 0, 0, X_STD },
+    { "codestream.packet-count", rule_packet_count_overflow, "2^32 packets: profile invalid", 0, 0, X_PROF },
+    { "plt.iplt-six-bytes", rule_iplt_six_bytes, "6-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
+    { "siz.position-order-sampling", rule_pcrl_subsampled, "PCRL with 2:1 sampling: profile invalid", 0, 0, X_PROF },
+    { "file.signature", rule_missing_signature, "no jP box (T.800 I.4)", CF_JP2, 0, X_STD },
+    { "jp2.one-codestream", rule_two_jp2c, "two jp2c in .jp2", CF_JP2, 0, X_PROF },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -840,15 +945,15 @@ static void rule_mixed_linked_embedded(Jp2Family *f, int box) { (void) box; add_
 static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
 
 static const RuleMutant linked_rule_mutants[] = {
-    { "flst.dr-external",           rule_dr_zero,          "DR = 0 (this file): profile invalid", CF_JPX },
-    { "flst.dr-range",              rule_dr_out_of_range,  "DR = ndr+1", CF_JPX },
-    { "ftbl.one-flst",              rule_two_flst,         "two flst in one ftbl", CF_JPX },
-    { "dtbl.ndr-count",             rule_ndr_mismatch,     "NDR = 3 with 2 url boxes", CF_JPX },
-    { "url.file-scheme",            rule_url_scheme,       "http URL: profile invalid", CF_JPX },
-    { "url.version",                rule_url_version,      "VERS = 1: profile invalid", CF_JPX },
-    { "url.jp2-target",             rule_url_jpx_target,   "link to a .jpx: profile invalid", CF_JPX },
-    { "jpx.linked-precedence",      rule_mixed_linked_embedded, "jp2c next to ftbl: links win, valid", CF_JPX },
-    { "jpx.linked-shape",           rule_no_dtbl,          "no dtbl", CF_JPX },
+    { "flst.dr-external", rule_dr_zero, "DR = 0 (this file): profile invalid", CF_JPX, 0, X_PROF },
+    { "flst.dr-range", rule_dr_out_of_range, "DR = ndr+1", CF_JPX, 0, X_STD },
+    { "ftbl.one-flst", rule_two_flst, "two flst in one ftbl", CF_JPX, 0, X_STD },
+    { "dtbl.ndr-count", rule_ndr_mismatch, "NDR = 3 with 2 url boxes", CF_JPX, 0, X_STD },
+    { "url.file-scheme", rule_url_scheme, "http URL: profile invalid", CF_JPX, 0, X_PROF },
+    { "url.version", rule_url_version, "VERS = 1: profile invalid", CF_JPX, 0, X_PROF },
+    { "url.jp2-target", rule_url_jpx_target, "link to a .jpx: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpx.linked-precedence", rule_mixed_linked_embedded, "jp2c next to ftbl: links win, valid", CF_JPX, 0, X_VALID },
+    { "jpx.linked-shape", rule_no_dtbl, "no dtbl", CF_JPX, 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -863,7 +968,7 @@ static void emit_signature_mutant(Bytes valid, cf_kind kind, const char *base_na
     if (valid.len < 12) return;
     put32(m.data + 8, 0);
     snprintf(name, sizeof name, "%s-sig-bad", base_name);
-    emit(m, kind, name, "jP.contents", "signature contents zeroed (T.800 I.5.1)", NULL);
+    emit(m, kind, name, "jP.contents", "signature contents zeroed (T.800 I.5.1)", NULL, X_STD);
     free(m.data);
 }
 
@@ -887,7 +992,7 @@ static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name
             else put32(m.data + r->len_off, cand[k]);
             snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->len_off);
             snprintf(name, sizeof name, "%s-len-%zx-%u", base_name, r->len_off, cand[k]);
-            emit(m, kind, name, field, "length patched", NULL);
+            emit(m, kind, name, field, "length patched", NULL, X_STD);
             free(m.data);
         }
     }
@@ -920,7 +1025,7 @@ static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) 
             else put32(m.data + r->start + 4, patches[k].value);
             snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->start);
             snprintf(name, sizeof name, "%s-code-%zx-%u", base_name, r->start, patches[k].value);
-            emit(m, kind, name, field, patches[k].note, NULL);
+            emit(m, kind, name, field, patches[k].note, NULL, X_STD);
             free(m.data);
         }
     }
@@ -938,7 +1043,7 @@ static void emit_region_mutants(Bytes valid, cf_kind kind, const char *base_name
         char name[256];
         m.len--;
         snprintf(name, sizeof name, "%s-short", base_name);
-        emit(m, kind, name, "file", "last byte removed", NULL);
+        emit(m, kind, name, "file", "last byte removed", NULL, X_STD);
         free(m.data);
     }
     {
@@ -946,7 +1051,7 @@ static void emit_region_mutants(Bytes valid, cf_kind kind, const char *base_name
         char name[256];
         memcpy(m.data, valid.data, valid.len);
         snprintf(name, sizeof name, "%s-long", base_name);
-        emit(m, kind, name, "file", "byte appended", NULL);
+        emit(m, kind, name, "file", "byte appended", NULL, X_STD);
         free(m.data);
     }
     for (i = 0; i < rs.n; ++i) {
@@ -967,7 +1072,7 @@ static void emit_region_mutants(Bytes valid, cf_kind kind, const char *base_name
         }
         snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->start);
         snprintf(name, sizeof name, "%s-region-%zx", base_name, r->start);
-        emit(m, kind, name, field, "region one byte short, lengths consistent", NULL);
+        emit(m, kind, name, field, "region one byte short, lengths consistent", NULL, X_STD);
         free(m.data);
     }
     free(rs.r);
@@ -983,7 +1088,7 @@ static void run_base(Base base, const char *companions) {
     size_t i;
     Jp2Family *work = xcalloc(sizeof *work);
 
-    emit(valid, base.kind, base.name, NULL, "base", companions);
+    emit(valid, base.kind, base.name, NULL, "base", companions, X_VALID);
     emit_signature_mutant(valid, base.kind, base.name);
     emit_length_mutants(valid, base.kind, base.name);
     emit_code_mutants(valid, base.kind, base.name);
@@ -999,19 +1104,19 @@ static void run_base(Base base, const char *companions) {
             fm->set(work, base.jp2c_box, fm->value);
             m = encode_family(work, 0);
             snprintf(name, sizeof name, "%s-%s-%lld", base.name, fm->field, (long long) fm->value);
-            emit(m, base.kind, name, fm->field, fm->note, companions);
+            emit(m, base.kind, name, fm->field, fm->note, companions, fm->expect);
             free(m.data);
         }
         for (i = 0; i < sizeof rule_mutants / sizeof *rule_mutants; ++i) {
             const RuleMutant *rm = &rule_mutants[i];
             Bytes m;
             if (rm->only_kind && rm->only_kind != (int) base.kind) continue;
-            if (has_precincts) continue;                   /* run structural mutants once */
+            if (rm->needs_precincts != has_precincts) continue;
             *work = *base.file;
             rm->apply(work, base.jp2c_box);
             m = encode_family(work, 0);
             snprintf(name, sizeof name, "%s-rule-%s-%zu", base.name, rm->name, i);
-            emit(m, base.kind, name, rm->name, rm->note, companions);
+            emit(m, base.kind, name, rm->name, rm->note, companions, rm->expect);
             free(m.data);
         }
     } else {
@@ -1022,7 +1127,7 @@ static void run_base(Base base, const char *companions) {
             rm->apply(work, -1);
             m = encode_family(work, 0);
             snprintf(name, sizeof name, "%s-rule-%s-%zu", base.name, rm->name, i);
-            emit(m, base.kind, name, rm->name, rm->note, companions);
+            emit(m, base.kind, name, rm->name, rm->note, companions, rm->expect);
             free(m.data);
         }
     }
@@ -1041,7 +1146,7 @@ int main(int argc, char **argv) {
     snprintf(path, sizeof path, "%s/manifest.tsv", out_dir);
     manifest = fopen(path, "w");
     if (!manifest) { perror(path); return EXIT_FAILURE; }
-    fprintf(manifest, "file\tkind\tstandard\tprofile\tfield\tnote\tcompanions\n");
+    fprintf(manifest, "file\tkind\tstandard\tprofile\treason\tfield\tnote\tcompanions\n");
 
     encode_buffer = xcalloc(FILE_BUFFER_BYTES);
     dec_family = xcalloc(sizeof *dec_family);
@@ -1085,5 +1190,10 @@ int main(int argc, char **argv) {
     fclose(manifest);
     fprintf(stderr, "vectors: %d vectors written to %s (%d valid at both layers)\n",
             emitted, out_dir, emitted_valid);
+    if (mismatches) {
+        fprintf(stderr, "vectors: %d mutant(s) did not produce the expected label; "
+                        "fix the mutant, its expectation, or the model\n", mismatches);
+        return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }

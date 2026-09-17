@@ -232,6 +232,8 @@ END
 --   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51); tile-header
 --     `other` codes are never SOC, SIZ, SOT (FF90) or EOC (FFD9) — the server
 --     rejects those (ReadCodestream), everything else it skips.
+--   Tile-part headers contain no COD or QCD marker. Their coding and
+--     quantization defaults come entirely from the main header.
 --   1..64 tile-parts in total (single tile, so per tile == total).
 --   Every tile-part header holds at least one PLT segment (ReadSODMarker).
 --   Whole codestream <= INT_MAX bytes.

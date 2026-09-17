@@ -216,9 +216,15 @@ Only needed when a model file changes. Everything runs offline.
    mkdir -p ../../tests/vectors/j2k && ./vectors ../../tests/vectors/j2k
    ```
 
-   It prints `vectors: N vectors written … (M valid at both layers)`.
-   Estimate from the mutant tables: N in the low thousands, M a few dozen.
-   Record the first real numbers here.
+   It prints `vectors: N vectors written … (M valid at both layers)` and
+   exits non-zero if any mutant did not produce the label its table entry
+   expects (see "What the harness generates"); each such line names the
+   vector, the expected and actual labels, and the rule that fired. On the
+   first run, expect a few of these — each is either a mutant that missed
+   its target, a wrong expectation, or a model rule firing in an order the
+   table did not anticipate; settle it before trusting the corpus.
+   Estimate from the mutant tables: N in the low thousands, M around a
+   hundred. Record the first real numbers here.
 5. Run the server tests and read "When a vector fails" for anything red:
 
    ```sh
@@ -279,10 +285,13 @@ The corpus tests *acceptance* (open plus first-packet indexing), not
 serving. Packet data in generated files is arbitrary bytes; nothing here
 claims a file decodes to an image.
 
-Manifest columns: `file kind standard profile field note companions`.
-`field` names the mutated field or rule (or `-` for a base); `note` is the
-mutant's intent in words; `companions` lists files that must sit next to
-the vector (the `.jp2` frames a linked JPX points at).
+Manifest columns: `file kind standard profile reason field note
+companions`. `reason` is the first check that failed at the stricter
+failing layer — `decode`, `constraint`, or a cross-field rule name such as
+`plt.coverage` — or `-` for a valid vector; `field` names the mutated field
+or rule (or `-` for a base); `note` is the mutant's intent in words;
+`companions` lists files that must sit next to the vector (the `.jp2`
+frames a linked JPX points at).
 
 ## When a vector fails
 
@@ -379,11 +388,15 @@ From each base:
    structural change per cross-field rule — a second COD or QCD, no QCD, a
    QCD after the tile-part, no PLT, contradictory TNsot, 65 tile-parts, a
    packet length beyond or short of the data, COD twice in a tile header or
-   in a second tile-part, a packet count above 2^31, no `jP` box, two
-   `jp2c`, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a link to a
-   `.jpx`. Names look like
-   `jp2-rule-codestream.no-plt-4` (the number is the mutant's index in its
-   table, so it shifts when a mutant is inserted before it).
+   in a second tile-part, COD or QCD defaults in a tile header, a packet
+   count above 2^31, no `jP` box, two `jp2c`, a `jp2c` before any `jpch`,
+   fewer `jp2c` than `jpch`, no `jpch`, `DR = 0`, `NDR` mismatch, two
+   `flst`, an `http` URL, a link to a `.jpx` — plus the valid shapes the
+   rules must *not* reject: two tile-parts, TNsot given only in the second,
+   64 tile-parts, packet lengths split over two PLT segments, a COM in the
+   tile header. Names look like `jp2-rule-codestream.no-plt-4` (the number
+   is the mutant's index in its table, so it shifts when a mutant is
+   inserted before it).
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
    `n + 1`, and below its minimum. Names: `jp2-len-<offset>-<value>`.
 5. **Code mutants**: each marker code patched to `FF70` (undefined), `FF51`
@@ -397,7 +410,19 @@ From each base:
 
 Labels are never written by hand: `label()` decodes each vector with the
 layer-1 decoder and the layer-2 decoder for its kind, runs the constraint
-checkers and `crossfield.c`, and records the first failing reason.
+checkers and `crossfield.c`, and records the first failing reason in the
+manifest's `reason` column.
+
+Every mutant table entry does carry an *expectation* (`X_VALID`, `X_STD`
+for standard-invalid, `X_PROF` for standard-valid but profile-invalid), and
+`emit()` compares it with the label. This is not a second source of truth
+for the corpus — the manifest always holds what the decoders said — it is a
+self-check that the mutant did what its note claims. A setter that writes
+the wrong field, a structural mutant that leaves the file valid, or a model
+rule that quietly stopped firing shows up as a mismatch at generation time
+rather than as an inexplicable server-test result later. Byte-level mutants
+(length, code, region, signature) always expect standard-invalid; bases
+always expect valid at both layers.
 
 ### Generated-API adaptation
 
