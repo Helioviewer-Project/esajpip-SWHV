@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <cstdlib>
 #include <iostream>
@@ -18,6 +19,19 @@ static void Check(bool condition, const char *message) {
     }
 }
 
+static void CreateSocketPair(int sockets[2], const char *message) {
+    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0, message);
+    timeval timeout = {5, 0};
+    for (int i = 0; i < 2; ++i) {
+        int fd = sockets[i];
+        Check(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                         sizeof timeout) == 0 &&
+                      setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                                 sizeof timeout) == 0,
+              "Could not bound HTTP test socket operations");
+    }
+}
+
 static string ReadBytes(int fd, size_t length) {
     string result;
     result.resize(length);
@@ -32,10 +46,9 @@ static string ReadBytes(int fd, size_t length) {
 
 static void CheckRequestHead() {
     int sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create HTTP test sockets");
+    CreateSocketPair(sockets, "Could not create HTTP test sockets");
     ConnectionQueue queue;
-    http::Connection connection(sockets[1], queue.GetDescriptor(), 0);
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
 
     const char request[] =
             "GET /jpip?cid=7 HTTP/1.1\r\n"
@@ -58,10 +71,9 @@ static void CheckRequestHead() {
 
 static void CheckRequestLimit() {
     int sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create request-limit sockets");
+    CreateSocketPair(sockets, "Could not create request-limit sockets");
     ConnectionQueue queue;
-    http::Connection connection(sockets[1], queue.GetDescriptor(), 0);
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
     string request(4097, 'x');
     Check(write(sockets[0], request.data(), request.size()) ==
                   static_cast<ssize_t>(request.size()),
@@ -77,10 +89,9 @@ static void CheckRequestLimit() {
 
 static void CheckInterrupt() {
     int sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create interrupted-request sockets");
+    CreateSocketPair(sockets, "Could not create interrupted-request sockets");
     ConnectionQueue queue;
-    http::Connection connection(sockets[1], queue.GetDescriptor(), 0);
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
     const char partial[] = "GET /jpip?cid=7";
     Check(write(sockets[0], partial, sizeof partial - 1) == sizeof partial - 1,
           "Could not write a partial request");
@@ -99,10 +110,9 @@ static void CheckInterrupt() {
 
 static void CheckResponseFraming() {
     int sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create HTTP response sockets");
+    CreateSocketPair(sockets, "Could not create HTTP response sockets");
     ConnectionQueue queue;
-    http::Connection connection(sockets[1], queue.GetDescriptor(), 0);
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
 
     const string headers = "Content-Length: 0\r\n";
     const string response = "HTTP/1.1 200 OK\r\n" + headers + "\r\n";

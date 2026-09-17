@@ -375,21 +375,27 @@ int main() {
     CheckClosed(idle, 2000, "Idle channel did not time out");
     close(idle);
 
-    int silent1 = Connect(port);
-    int silent2 = Connect(port);
-    Check(silent1 >= 0 && silent2 >= 0, "Could not fill the connection limit");
-    this_thread::sleep_for(chrono::milliseconds(50));
-    int refused = Connect(port);
-    Check(refused >= 0, "Could not connect for the connection-limit test");
-    CheckClosed(refused, 1000, "Connection limit did not reject a client");
-    close(refused);
-    close(silent1);
-    close(silent2);
-
     int expiring = Connect(port);
     Check(expiring >= 0, "Could not connect for the admission-timeout test");
     CheckClosed(expiring, 2000, "Unidentified connection did not expire");
     close(expiring);
+
+    int limited[2];
+    for (int &connection : limited) {
+        connection = Connect(port);
+        Check(connection >= 0, "Could not fill the connection limit");
+        SendRequest(connection,
+                    "/image.jp2?cnew=http&type=jpp-stream&stream=0&"
+                    "fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+        Check(ReadResponse(connection).headers.find("HTTP/1.1 200 OK") == 0,
+              "Connection-limit channel creation failed");
+    }
+    int refused = Connect(port);
+    Check(refused >= 0, "Could not connect for the connection-limit test");
+    CheckClosed(refused, 1000, "Connection limit did not reject a client");
+    close(refused);
+    close(limited[0]);
+    close(limited[1]);
 
     Check(kill(first_server, SIGKILL) == 0, "Could not kill the serving process");
     pid_t replacement_server = WaitForServingPid(directory, first_server);

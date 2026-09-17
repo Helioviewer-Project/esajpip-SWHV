@@ -55,7 +55,8 @@ routing field, both stages use its last value. Client-supplied URI paths and
 established channel accepts at most 4 KiB for the complete HTTP request head,
 including the request line and all headers.
 
-The detailed connection ownership, timeout and cleanup rules are documented in
+Client request examples, HTTP responses, connection replacement, timeout, and
+recovery rules are documented in
 [Connections and JPIP channels](CHANNELS.md).
 
 ## Request fields

@@ -1,17 +1,263 @@
 # Connections and JPIP channels
 
-This document explains how esajpip accepts HTTP connections, attaches them to
-JPIP channels, and releases their resources. It describes the server as it
-exists today, not every transport and session model allowed by JPEG 2000 Part 9.
+This document explains how a client creates, uses, replaces, and closes an
+esajpip channel over HTTP. It also describes how the server admits connections,
+owns channel state, and releases resources. For the complete list of supported
+JPIP fields and JPEG 2000 source restrictions, see
+[JPIP_PROFILE.md](JPIP_PROFILE.md).
 
-## Terms and source layout
+## Connection model
 
-A **connection** is one accepted TCP socket. A **channel** is the JPIP state
-identified by the `cid` returned in `JPIP-cnew`. For the profile supported here,
-the channel is the session. It may move between HTTP connections during its
-lifetime.
+A TCP connection carries HTTP requests and responses. A JPIP channel holds the
+state for one target: its image index, cache model, response progress, and the
+`cid` returned by the server. The channel can outlive a particular TCP
+connection.
 
-The responsibilities are separated as follows:
+esajpip supports one target and one request/response at a time per channel. A
+client may keep using the original HTTP connection or send a later request for
+the same `cid` on a new connection. Requests must use HTTP/1.1 `GET`.
+
+[JPEG 2000 Part 9](https://www.itu.int/rec/T-REC-T.808/en) separates HTTP
+connections from JPIP sessions. A persistent HTTP connection neither establishes
+nor identifies the session, and a later request may arrive on another
+connection. esajpip implements the smaller model it needs: the channel is the
+session, and it owns the state for one target and one serial request stream.
+
+The examples below omit optional JPIP fields for clarity. Target paths are
+relative to the configured image directory. They are not generally URI-decoded,
+so clients should send the literal file name known to the server.
+
+## Create a channel
+
+The first request names a target and includes `cnew`. The target may be the URI
+path:
+
+```http
+GET /movie.jpx?cnew=http&type=jpp-stream&stream=0&len=2097152 HTTP/1.1
+Host: server.example:8900
+
+```
+
+It may instead be supplied through `target`:
+
+```http
+GET /jpip?target=movie.jpx&cnew=http&type=jpp-stream&stream=0&len=2097152 HTTP/1.1
+Host: server.example:8900
+
+```
+
+A successful response creates the channel and returns its decimal identifier:
+
+```http
+HTTP/1.1 200 OK
+JPIP-cnew: cid=42,path=jpip,transport=http
+JPIP-tid: 0
+Transfer-Encoding: chunked
+Content-Type: image/jpp-stream
+
+```
+
+`JPIP-tid: 0` means that the server does not assign a stable target identifier.
+The client must not use it to recover cache state in another channel.
+
+Image responses contain a chunked JPP stream. Each completed response ends with
+a JPIP end-of-response message, followed by the terminating HTTP chunk. If the
+request contains `metareq` and `Accept-Encoding` contains `gzip`, the chunked
+body is gzip encoded and the response includes `Content-Encoding: gzip`.
+
+## Continue a channel
+
+Every later image request includes the returned `cid`:
+
+```http
+GET /jpip?cid=42&stream=7&fsiz=4096,4096,closest&rsiz=1024,1024&roff=0,0&len=2097152 HTTP/1.1
+Host: server.example:8900
+
+```
+
+The request may use the existing persistent connection. It may also use a new
+connection. This is useful for browser and HTTP-library clients that do not
+control socket reuse.
+
+The client should send requests serially and consume each complete response
+before sending the next one. The server does not run concurrent requests or
+cancel an active response. It permits at most one replacement connection to
+wait for a channel.
+
+If a replacement arrives while the old connection is stalled in an incomplete
+request head, the server abandons that partial request, closes the old
+connection, and reads the request from the replacement. If a response is
+already being sent, it is allowed to finish before the replacement is used.
+An additional replacement receives `503 Service Unavailable`.
+
+Closing a persistent connection between complete responses does not close the
+channel immediately. The server waits for another connection carrying its
+`cid`, up to `connections.timeout`.
+
+## Close a channel
+
+Send `cclose` with the channel identifier:
+
+```http
+GET /jpip?cclose=42 HTTP/1.1
+Host: server.example:8900
+
+```
+
+The server replies with `200 OK` and an empty body, then closes the connection
+and releases the channel state. `cclose=*` is also accepted when `cid` identifies
+the channel. Channel lists and session-wide closure are not supported.
+
+## HTTP responses
+
+These are all HTTP status codes emitted by the server:
+
+| Status | When it is returned | Effect on the channel |
+| --- | --- | --- |
+| `200 OK` | A channel is created, a channel request is served, or `cclose` succeeds. Image responses use `Transfer-Encoding: chunked` and `Content-Type: image/jpp-stream`; `cclose` has `Content-Length: 0`. | The channel remains available after an image response. A successful `cclose` ends it. |
+| `400 Bad Request` | A request reaches a channel but its HTTP request line, supported JPIP fields, cache model, codestream selection, or window is invalid. | The connection and channel are closed. Create a new channel after correcting the request. |
+| `404 Not Found` | A `cnew` request names a target that does not exist below the configured image directory. | No usable channel is created; the connection is closed. |
+| `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation; or the request conflicts with channel state, such as another `cnew` on an open channel. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
+| `503 Service Unavailable` | A request names an unknown or ended `cid`, or the channel already has a replacement connection waiting. The body is `JPIP channel unavailable`. | The referenced channel is not changed. Retry only if the client knows the channel is still alive; otherwise create a new channel. |
+
+Channel-level error responses contain a short plain-text body and
+`Connection: close`. Successful responses and channel-level errors also include
+CORS, HSTS, and no-cache headers. The dispatcher-level `503` includes the CORS
+and no-cache headers but not HSTS. `cnew` exposes `JPIP-cnew` and `JPIP-tid` to
+browser clients.
+
+Some failures close the socket without an HTTP response:
+
+- The initial bytes are not a recognizable HTTP/1.1 JPIP `GET` request.
+- The initial request does not arrive before `connections.initial_timeout`.
+- The physical-connection or active-channel limit has been reached.
+- A request head is incomplete or contains a malformed HTTP header.
+- The socket fails while a request or response is in progress.
+- The serving process exits or restarts.
+
+A response that ends before its HTTP chunk terminator or JPIP end-of-response
+message is incomplete. The client must discard that response. Since all channel
+state is lost on a serving-process restart, the safe recovery is to create a
+new channel and rebuild the client cache from its responses.
+
+## Request and connection limits
+
+Initial inspection examines at most 2 KiB and accepts only request lines
+containing `cnew`, `cid`, or a usable `cclose`. The deadline is absolute:
+sending a few bytes does not extend `connections.initial_timeout`. Rejected
+connections do not allocate a channel or JPEG 2000 state.
+
+After identification, the complete HTTP request head is limited to 4 KiB.
+`connections.timeout` limits each wait for request data, response writes, and
+the wait for a replacement connection. Successful I/O starts the next wait; the
+setting is not an absolute channel lifetime. Values of `0` and `-1` disable this
+timeout.
+
+`connections.limit` applies independently to physical connections and active
+channels. A channel can have one active connection and at most one queued
+replacement. Clients should close connections they no longer use.
+
+## Channel lifetime
+
+A channel ends after a successful `cclose`, a malformed request, an invalid
+image request, a response failure, or an inactivity timeout. It also disappears
+when the serving process restarts. Channels are not restored after a restart.
+
+The server deliberately ends a channel after an incomplete response. Its cache
+model may already include bytes that did not reach the client, so reusing that
+state could make a later response incomplete from the client's point of view.
+
+## Ownership
+
+The supervisor keeps the listening socket open but does not accept clients. The
+serving process accepts each connection and keeps a small `PendingConnection`
+record until it can identify the request. That record contains the connection's
+stable identifier, descriptor, and absolute deadline. Once identified, the
+descriptor goes directly to the selected `ConnectionQueue` and the pending
+record is removed. The serving loop retains the total connection count but no
+record for the active socket.
+
+Each channel thread owns its `FileManager`, `ImageIndex`, linked-JPX graph,
+`DataBinServer`, cache model, traversal state, and response buffer. No JPEG 2000
+state is shared between channels. The serving loop and channel thread share only
+one mutable per-channel object, the connection queue. Configuration is shared
+read-only, and channel threads report connection and channel completion through
+an unnamed datagram socket pair.
+
+## Admission and dispatch
+
+```text
+TCP accept
+    |
+    v
+serving process: pending connection + absolute identification deadline
+    |
+    +-- no complete request line before deadline -----> close
+    +-- unsupported or unrelated traffic -------------> close
+    |
+    v
+bounded cnew/cid/cclose recognition
+    |
+    v
+direct transfer to the selected channel queue
+```
+
+Initial inspection peeks at no more than 2 KiB and does not consume the request.
+The serving loop retains a pending connection only until it recognizes `cnew`,
+`cid`, or `cclose`. Rejected and expired connections never create a channel
+thread or allocate JPEG 2000 state.
+
+For `cnew`, the serving loop creates a channel ID and a capacity-one connection
+queue, places the first connection in that queue, and starts a detached channel
+thread. For `cid` or `cclose`, it finds the existing channel and places the new
+connection in the same queue. The pending record is removed as soon as ownership
+passes to the channel.
+
+The channel thread processes one request at a time. Buffered requests on its
+current persistent connection take precedence. When it needs more bytes, it
+waits on both the TCP connection and the connection queue. A queued replacement
+therefore interrupts an incomplete request, closes the old descriptor, and
+wakes the thread on the new one.
+
+## Termination and restart
+
+When a channel terminates, its thread closes the active descriptor and any
+queued descriptor, reports each physical connection as complete, closes its
+connection queue, and reports that the channel has ended. The serving loop keeps
+socket table entries only while identifying new connections. Completion
+notifications update its total connection count without retaining records for
+active channel sockets.
+
+If the serving process restarts, accepted sockets and all channel state are
+lost. The supervisor retains the listening socket, so new connections can wait
+in the listen backlog during the one-second restart delay. Clients must create
+new channels after the restart. If the serving process was killed, the
+replacement records that fact in its log; other unexpected exits are recorded
+separately.
+
+The serving process ignores `SIGINT` and `SIGTERM` and polls one end of a private
+Unix socket pair. The supervisor handles those signals and closes the other
+endpoint. This wakes the serving loop, which records the shutdown, drains the
+log, and exits the process without waiting for channel threads. Each replacement
+serving process receives a fresh socket pair.
+
+## Deliberate limits
+
+- `connections.limit` independently limits physical connections and active
+  channels in the serving process.
+- A channel has one active request/response and at most one queued replacement
+  connection.
+- A connection cannot carry simultaneous work for multiple channels, although
+  the general JPIP model permits it.
+- Channel state is never reconstructed or shared between channel threads.
+
+These limits keep ownership clear and work bounded while preserving the current
+JHelioviewer wire behavior. They still allow an HTTP library or browser to
+replace its underlying connection without losing the JPIP channel.
+
+## Source layout
+
+The source responsibilities are:
 
 | Source | Responsibility |
 | --- | --- |
@@ -22,119 +268,3 @@ The responsibilities are separated as follows:
 | `server/connection_queue.cc` | Capacity-one queue shared with one channel thread |
 | `http/connection.cc` | Socket setup, bounded HTTP request-head I/O, and chunk framing |
 | `server/channel.cc` | JPIP request handling and all state retained for one channel |
-
-## Ownership
-
-The supervisor keeps the listening socket open but does not accept clients. The
-serving process accepts each connection and keeps a small `PendingConnection`
-record until it can identify the request. That record contains the connection's
-stable identifier, descriptor, and absolute deadline. Once identified, the
-descriptor goes directly to the selected `ConnectionQueue` and the pending
-record is removed. The serving loop keeps only the total connection count.
-
-Each channel thread owns its `FileManager`, `ImageIndex`, linked JPX graph,
-`DataBinServer`, cache model, traversal state, and response buffer. No JPEG 2000
-state is shared between channels. The serving loop and channel thread share only
-the connection queue and its small synchronization state. Channel threads report
-connection and channel completion through an unnamed datagram socket pair.
-
-## Initial request
-
-```text
-TCP accept
-    |
-    v
-serving process: pending Connection + absolute identification deadline
-    |
-    +-- no complete request before deadline ----------> close
-    +-- unsupported or unrelated traffic -------------> close
-    |
-    v
-bounded cnew/cid/cclose recognition
-    |
-    v
-direct transfer to the selected channel queue
-```
-
-Initial request inspection peeks at no more than 2 KiB and does not consume the
-request. It requires HTTP/1.1 `GET` traffic containing `cnew`, `cid`,
-or `cclose`. The fixed `connections.initial_timeout` deadline is not extended
-by a client sending request bytes slowly. Rejected and expired connections
-never create a channel thread or allocate JPEG 2000 state.
-
-## Channel creation and reuse
-
-For `cnew`, the serving loop creates a channel ID and a one-entry connection
-queue, queues the first connection, and starts a detached channel thread. The
-response selects `transport=http`, returns the channel ID, and serves the first
-JPIP request on that connection.
-
-For `cid` or `cclose`, the serving loop finds the existing channel and places the
-new connection in its queue. The server returns `503 Service Unavailable` with
-`JPIP channel unavailable` when the channel is unknown, has ended, or already
-has a replacement connection waiting, then closes the new connection. A
-channel has one active response and at most one waiting connection.
-
-The channel thread handles one request at a time. Buffered requests on its
-current persistent connection come first. Whenever the reader needs more bytes,
-it waits on both the connection and the channel queue. A queued replacement
-therefore abandons an incomplete request, closes the old descriptor, and wakes
-the thread on the new one. This works for JHelioviewer's persistent socket and
-for clients whose HTTP library opens a new connection for a later request.
-
-[JPEG 2000 Part 9](https://www.itu.int/rec/T-REC-T.808/en) explicitly separates
-an HTTP connection from a JPIP session. Persistent HTTP is useful, but it
-neither establishes nor identifies the session. A later session request may
-arrive on another HTTP connection. Keeping state with the channel follows that
-protocol model. esajpip implements the smaller profile it needs: HTTP `GET`,
-one target, one channel thread, and one request and response at a time.
-
-## Timeouts and termination
-
-`connections.initial_timeout` applies only before the initial request is
-identified. `connections.timeout` is then the inactivity limit for the channel:
-
-- With a connection attached, the channel waits on both the TCP socket and its
-  connection queue for at most `connections.timeout` seconds.
-- Without a connection, it waits on the queue for the same interval.
-- Socket receive and send operations use the same configured timeout.
-- Values of `0` and `-1` disable the communication timeout.
-
-Receiving request data or transferring response data is activity. The timeout
-is not an absolute maximum channel lifetime.
-
-A valid `cclose` ends the channel. A malformed request, socket setup failure,
-incomplete response, or timeout ends it as well. After a response failure, the
-cache model may already include bytes that never reached the client, so the
-channel cannot be reused safely.
-
-On termination, the channel thread closes its current descriptor and any queued
-descriptor, reports each physical connection as complete, closes the queue, and
-reports that the channel has ended. The serving loop keeps table entries only
-for sockets awaiting identification. Connection-completion notifications update
-the total open connection count without retaining an active-socket record.
-
-If the serving process restarts, accepted sockets and all per-channel state are
-lost. The supervisor retains the listening socket, so new connections remain in
-the listen backlog during the one-second restart delay. Clients establish new
-channels after the restart. If the serving process is killed, the replacement
-records that fact in its log. Other unexpected exits are recorded separately.
-
-The serving process ignores `SIGINT` and `SIGTERM` and polls one end of a
-private Unix socket pair. The supervisor handles those signals, closes the
-other endpoint, and gives the serving process one orderly shutdown path on
-every supported platform. Each replacement process receives a fresh pair.
-
-## Deliberate limits
-
-- `connections.limit` independently limits physical connections and active
-  channels in the serving process.
-- A channel has one active request/response and at most one queued replacement
-  connection.
-- A connection cannot carry simultaneous work for multiple channels in this
-  implementation, although the general JPIP model permits broader use.
-- Channel state is never reconstructed or shared between channel threads.
-
-These limits keep ownership clear and work bounded while preserving the current
-JHelioviewer wire behavior. They also allow an HTTP library or browser to replace
-the underlying connection without losing the JPIP channel.

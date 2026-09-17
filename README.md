@@ -121,8 +121,8 @@ source-file mappings needed by the current response. Set `connections.limit`
 according to the largest movies and the memory available on the deployment
 host, not only the expected socket count.
 
-See [Connections and JPIP channels](CHANNELS.md) for the detailed ownership,
-routing, timeout, and cleanup model.
+See [Connections and JPIP channels](CHANNELS.md) for request examples, HTTP
+responses, connection replacement, timeouts, recovery, and server ownership.
 
 ## Logging
 
