@@ -452,7 +452,8 @@ static void CheckWOIPackets() {
     coding_parameters.num_layers = 2;
     coding_parameters.num_components = 2;
     coding_parameters.resolutions.emplace_back(1, 1);
-    coding_parameters.FillPrecinctCounts();
+    Check(coding_parameters.FillPrecinctCounts(),
+          "Rejected valid WOI coding parameters");
 
     jpip::WOIComposer composer;
     composer.Reset(&coding_parameters, jpip::WOI(jpeg2000::Point(0, 0), jpeg2000::Size(1, 1), 0));
@@ -472,7 +473,8 @@ static void CheckProgressionIndexes() {
     params.resolutions.emplace_back(1, 1);
     params.resolutions.emplace_back(2, 2);
     params.resolutions.emplace_back(4, 4);
-    params.FillPrecinctCounts();
+    Check(params.FillPrecinctCounts(),
+          "Rejected valid progression coding parameters");
     for (const jpeg2000::CodingParameters::Resolution &resolution : params.resolutions)
         Check(resolution.num_precincts == jpeg2000::Size(2, 2),
               "Wrong precomputed precinct count");
@@ -498,7 +500,8 @@ static void CheckProgressionIndexes() {
     spatial.resolutions.emplace_back(1, 2);
     spatial.resolutions.emplace_back(2, 1);
     spatial.resolutions.emplace_back(1, 4);
-    spatial.FillPrecinctCounts();
+    Check(spatial.FillPrecinctCounts(),
+          "Rejected valid spatial progression parameters");
 
     int expected = 0;
     spatial.progression = jpeg2000::CodingParameters::PCRL_PROGRESSION;

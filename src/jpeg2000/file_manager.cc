@@ -497,8 +497,7 @@ namespace jpeg2000 {
         if (!found_codestream)
             return false;
 
-        image_index->codestreams.back().parameters.FillPrecinctCounts();
-        return true;
+        return image_index->codestreams.back().parameters.FillPrecinctCounts();
     }
 
     bool FileManager::ReadJPX(File *file, ImageIndex *image_index) {
@@ -556,7 +555,8 @@ namespace jpeg2000 {
                     ImageIndex::Codestream &codestream = codestreams.back();
                     if (!ReadCodestream(file, length_box, codestream))
                         return false;
-                    codestream.parameters.FillPrecinctCounts();
+                    if (!codestream.parameters.FillPrecinctCounts())
+                        return false;
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(meta_start, prefix_length),
                             PlaceHolder(num_codestreams - 1, true,

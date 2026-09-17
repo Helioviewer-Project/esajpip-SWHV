@@ -1,5 +1,6 @@
 #include "coding_parameters.h"
 
+#include <climits>
 #include <cstdint>
 #include <cstdlib>
 
@@ -38,14 +39,24 @@ namespace jpeg2000 {
         return position_index;
     }
 
-    void CodingParameters::FillPrecinctCounts() {
+    bool CodingParameters::FillPrecinctCounts() {
         total_precincts = 0;
+        int64_t total = 0;
         for (int i = 0; i <= num_levels; ++i) {
             Resolution &resolution = resolutions[i];
-            resolution.first_precinct = total_precincts;
             resolution.num_precincts = GetPrecincts(i, size);
-            total_precincts += resolution.num_precincts.x * resolution.num_precincts.y;
+            int64_t count = static_cast<int64_t>(resolution.num_precincts.x) *
+                            resolution.num_precincts.y;
+            if (count > INT_MAX - total)
+                return false;
+            resolution.first_precinct = static_cast<int>(total);
+            total += count;
         }
+        if (num_components <= 0 || num_layers <= 0 ||
+            total > INT_MAX / num_components / num_layers)
+            return false;
+        total_precincts = static_cast<int>(total);
+        return true;
     }
 
     int CodingParameters::GetClosestResolution(const Size &res_size, Size *res_image_size) const {

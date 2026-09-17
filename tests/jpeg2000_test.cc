@@ -283,6 +283,16 @@ int main() {
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 65, 65)));
     WriteFile(directory + "default-precincts.jp2",
               MakeJP2(MakeCodestream(0, 1, 65537, 65537, 0, 1, 1, 3)));
+    vector<unsigned char> excessive_precincts =
+            MakeCodestream(0, 1, INT_MAX, INT_MAX, 0, 1, 1, 1, 0,
+                           vector<unsigned char>{0x00});
+    Set32(excessive_precincts, 12, INT_MAX); // Ysiz
+    Set32(excessive_precincts, 28, INT_MAX); // YTsiz
+    WriteFile(directory + "excessive-precincts.jp2",
+              MakeJP2(excessive_precincts));
+    WriteFile(directory + "excessive-packets.jp2",
+              MakeJP2(MakeCodestream(0, 1, INT_MAX, INT_MAX, 0, 2, 1, 1, 0,
+                                      vector<unsigned char>{0x00})));
     WriteFile(directory + "code-block-style-63.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 63)));
     WriteFile(directory + "code-block-style-64.jp2",
@@ -445,6 +455,12 @@ int main() {
                       default_precinct_file, 0,
                       jpeg2000::Packet(0, 0, 0, jpeg2000::Point(2, 0)), &packet),
           "Did not apply the default precinct size");
+    for (const char *name : {"excessive-precincts.jp2",
+                             "excessive-packets.jp2"}) {
+        jpeg2000::FileManager excessive_packets_manager;
+        Check(!OpenImage(directory, name, &excessive_packets_manager),
+              "Accepted a packet count exceeding the index range");
+    }
     jpeg2000::FileManager nonzero_origin_manager;
     Check(!OpenImage(directory, "nonzero-origin.jp2", &nonzero_origin_manager),
           "Accepted an unsupported nonzero image origin");

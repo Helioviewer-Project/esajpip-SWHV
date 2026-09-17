@@ -112,8 +112,9 @@ JPX specifications allow.
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
   marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
   the codestream.
-- Packet locations and file-backed data-bin offsets must fit the signed 32-bit
-  JPIP state. Source files of 2 GiB or more are outside the supported profile.
+- Packet counts, packet locations, and file-backed data-bin offsets must fit
+  the signed 32-bit JPIP state. Source files of 2 GiB or more are outside the
+  supported profile.
 
 Files without `PLT` packet-length information are rejected. esajpip does not
 decode packets to rediscover their boundaries and does not replace the separate
