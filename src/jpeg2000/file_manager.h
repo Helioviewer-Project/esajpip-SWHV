@@ -20,6 +20,9 @@ namespace jpeg2000 {
         std::unique_ptr<ImageIndex> image;
         std::map<std::string, std::unique_ptr<data::File>> file_map;
 
+        static bool ReadCodestream(data::File *file, uint64_t length,
+                                   ImageIndex::Codestream &codestream);
+
         /**
          * Reads the information of a URL box.
          * @param file Image file.

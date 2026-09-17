@@ -80,12 +80,14 @@ namespace jpeg2000 {
     static bool ReadCODMarker(File *file, uint64_t limit,
                               CodingParameters *params);
     static bool ReadSOTMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index,
+                              FileSegment &header,
+                              vector<FileSegment> &packet_data,
                               uint8_t *declared_tile_parts);
     static bool ReadPLTMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index);
+                              const vector<FileSegment> &packet_data,
+                              vector<FileSegment> &plt);
     static bool ReadSODMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index);
+                              vector<FileSegment> &packet_data);
     static bool ReadFlstBox(File *file, uint64_t length_box,
                             FileSegment *fragment,
                             uint16_t *data_reference);
@@ -140,9 +142,8 @@ namespace jpeg2000 {
         return res;
     }
 
-    static bool ReadCodestream(File *file, uint64_t length,
-                               CodingParameters *params,
-                               CodestreamIndex *index) {
+    bool FileManager::ReadCodestream(File *file, uint64_t length,
+                                     ImageIndex::Codestream &codestream) {
         enum Phase {
             MAIN_HEADER,
             TILE_HEADER,
@@ -164,7 +165,7 @@ namespace jpeg2000 {
 
         if (!file->ReadReverse(&value) || value != SOC_MARKER)
             return false;
-        index->header.offset = file->GetOffset() - 2;
+        codestream.header.offset = file->GetOffset() - 2;
 
         while (file->GetOffset() < limit) {
             if (!file->ReadReverse(&value))
@@ -177,20 +178,22 @@ namespace jpeg2000 {
                 return false;
             first_marker = false;
             uint64_t marker_limit = limit;
-            if (phase == TILE_HEADER && !index->packets.empty() &&
-                index->packets.back().length != 0)
-                marker_limit = index->packets.back().offset + index->packets.back().length;
+            if (phase == TILE_HEADER && !codestream.packet_data.empty() &&
+                codestream.packet_data.back().length != 0)
+                marker_limit = codestream.packet_data.back().offset +
+                               codestream.packet_data.back().length;
             switch (value) {
                 case SIZ_MARKER: TRACE("SIZ marker...");
                     if (phase != MAIN_HEADER || siz ||
-                        !ReadSIZMarker(file, limit, params))
+                        !ReadSIZMarker(file, limit, &codestream.parameters))
                         return false;
                     siz = true;
                     break;
 
                 case COD_MARKER: TRACE("COD marker...");
                     if ((phase == MAIN_HEADER && cod) ||
-                        !ReadCODMarker(file, marker_limit, params))
+                        !ReadCODMarker(file, marker_limit,
+                                       &codestream.parameters))
                         return false;
                     if (phase == MAIN_HEADER)
                         cod = true;
@@ -198,7 +201,9 @@ namespace jpeg2000 {
 
                 case SOT_MARKER: TRACE("SOT marker...");
                     if (phase == TILE_HEADER || !siz || !cod || !qcd ||
-                        !ReadSOTMarker(file, limit, index, &declared_tile_parts))
+                        !ReadSOTMarker(file, limit, codestream.header,
+                                       codestream.packet_data,
+                                       &declared_tile_parts))
                         return false;
                     phase = TILE_HEADER;
                     break;
@@ -212,23 +217,26 @@ namespace jpeg2000 {
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");
-                    if (phase != TILE_HEADER || !ReadPLTMarker(file, limit, index))
+                    if (phase != TILE_HEADER ||
+                        !ReadPLTMarker(file, limit, codestream.packet_data,
+                                       codestream.plt))
                         return false;
                     break;
 
                 case SOD_MARKER: TRACE("SOD marker...");
-                    if (phase != TILE_HEADER || !ReadSODMarker(file, limit, index))
+                    if (phase != TILE_HEADER ||
+                        !ReadSODMarker(file, limit, codestream.packet_data))
                         return false;
                     phase = BETWEEN_TILE_PARTS;
                     break;
 
                 case EOC_MARKER:
-                    if (phase == TILE_HEADER || index->packets.empty() ||
+                    if (phase == TILE_HEADER || codestream.packet_data.empty() ||
                         file->GetOffset() != limit ||
                         (declared_tile_parts != 0 &&
-                         index->packets.size() != declared_tile_parts))
+                         codestream.packet_data.size() != declared_tile_parts))
                         return false;
-                    if (!index->PLT_markers.empty())
+                    if (!codestream.plt.empty())
                         return true;
                     ERROR("The code-stream does not include any PLT marker");
                     return false;
@@ -346,7 +354,8 @@ namespace jpeg2000 {
     }
 
     static bool ReadSOTMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index,
+                              FileSegment &header,
+                              vector<FileSegment> &packet_data,
                               uint8_t *declared_tile_parts) {
         uint64_t marker_offset = file->GetOffset() - 2;
         uint16_t lsot = 0;
@@ -356,27 +365,28 @@ namespace jpeg2000 {
         uint8_t tnsot = 0;
         if (!file->ReadReverse(&lsot) || !file->ReadReverse(&isot) || !file->ReadReverse(&psot) ||
             !file->ReadReverse(&tpsot) || !file->ReadReverse(&tnsot) || lsot != 10 || isot != 0 ||
-            tpsot != index->packets.size() || (tnsot != 0 && tpsot >= tnsot) ||
+            tpsot != packet_data.size() || (tnsot != 0 && tpsot >= tnsot) ||
             (tnsot != 0 && *declared_tile_parts != 0 &&
              tnsot != *declared_tile_parts) ||
             (psot != 0 && psot < 14) ||
             (psot != 0 && psot > limit - marker_offset) ||
-            index->packets.size() >= PacketIndex::MAX_SEGMENTS)
+            packet_data.size() >= PacketIndex::MAX_SEGMENTS)
             return false;
 
         if (tnsot != 0 && *declared_tile_parts == 0)
             *declared_tile_parts = tnsot;
 
-        if (index->header.length == 0)
-            index->header.length = marker_offset - index->header.offset;
-        index->packets.emplace_back(file->GetOffset(), psot == 0 ? 0 : psot - 12);
+        if (header.length == 0)
+            header.length = marker_offset - header.offset;
+        packet_data.emplace_back(file->GetOffset(), psot == 0 ? 0 : psot - 12);
         return true;
     }
 
     static bool ReadPLTMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index) {
-        if (!index->packets.empty() && index->packets.back().length != 0)
-            limit = index->packets.back().offset + index->packets.back().length;
+                              const vector<FileSegment> &packet_data,
+                              vector<FileSegment> &plt) {
+        if (!packet_data.empty() && packet_data.back().length != 0)
+            limit = packet_data.back().offset + packet_data.back().length;
 
         // Get Lplt
         uint16_t lplt = 0;
@@ -385,17 +395,17 @@ namespace jpeg2000 {
             return false;
 
         // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
-        index->PLT_markers.emplace_back(file->GetOffset() + 1, lplt - 3);
+        plt.emplace_back(file->GetOffset() + 1, lplt - 3);
         file->Seek(lplt - 2, SEEK_CUR);
         return true;
     }
 
     static bool ReadSODMarker(File *file, uint64_t limit,
-                              CodestreamIndex *index) {
-        if (index->packets.empty())
+                              vector<FileSegment> &packet_data) {
+        if (packet_data.empty())
             return false;
 
-        FileSegment &fs = index->packets.back();
+        FileSegment &fs = packet_data.back();
         if (fs.length == 0) {
             fs.offset = file->GetOffset();
             bool marker_prefix = false;
@@ -452,8 +462,6 @@ namespace jpeg2000 {
     bool FileManager::ReadJP2(File *file, ImageIndex *image_index) {
         bool found_codestream = false;
         uint64_t meta_start = 0;
-        CodingParameters coding_parameters;
-        CodestreamIndex codestream_index;
         while (file->GetOffset() != file->GetSize()) {
             uint64_t box_start = file->GetOffset();
             uint64_t prefix_length = box_start - meta_start;
@@ -464,9 +472,11 @@ namespace jpeg2000 {
             uint64_t header_length = file->GetOffset() - box_start;
             switch (type_box) {
                 case JP2C_BOX_ID: TRACE("JP2C box...");
-                    if (found_codestream ||
-                        !ReadCodestream(file, length_box, &coding_parameters,
-                                       &codestream_index))
+                    if (found_codestream)
+                        return false;
+                    image_index->codestreams.emplace_back(image_index->path_name);
+                    if (!ReadCodestream(file, length_box,
+                                        image_index->codestreams.back()))
                         return false;
                     found_codestream = true;
                     image_index->meta_data.bin0.emplace_back(
@@ -485,10 +495,7 @@ namespace jpeg2000 {
         if (!found_codestream)
             return false;
 
-        coding_parameters.FillPrecinctCounts();
-        image_index->codestreams.emplace_back(image_index->path_name,
-                                              std::move(coding_parameters),
-                                              std::move(codestream_index));
+        image_index->codestreams.back().parameters.FillPrecinctCounts();
         return true;
     }
 
@@ -543,15 +550,11 @@ namespace jpeg2000 {
                     TRACE("JP2C box...");
                     if (num_codestreams == 0 || codestreams.size() >= num_codestreams)
                         return false;
-                    CodingParameters coding_parameters;
-                    CodestreamIndex codestream_index;
-                    if (!ReadCodestream(file, length_box, &coding_parameters,
-                                        &codestream_index))
+                    codestreams.emplace_back(image_index->path_name);
+                    ImageIndex::Codestream &codestream = codestreams.back();
+                    if (!ReadCodestream(file, length_box, codestream))
                         return false;
-                    coding_parameters.FillPrecinctCounts();
-                    codestreams.emplace_back(image_index->path_name,
-                                             std::move(coding_parameters),
-                                             std::move(codestream_index));
+                    codestream.parameters.FillPrecinctCounts();
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(meta_start, prefix_length),
                             PlaceHolder(num_codestreams - 1, true,
@@ -657,20 +660,19 @@ namespace jpeg2000 {
                 return false;
 
             if (linked_image.codestreams.empty() ||
-                linked_image.codestreams.back().index.packets.empty())
+                linked_image.codestreams.back().packet_data.empty())
                 return false;
-            const CodestreamIndex &codestream =
-                    linked_image.codestreams.back().index;
-            const FileSegment &last_packet_data = codestream.packets.back();
+            ImageIndex::Codestream &codestream = linked_image.codestreams.back();
+            const FileSegment &last_packet_data = codestream.packet_data.back();
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
             if (links[i].fragment != FileSegment(codestream.header.offset,
                                                   codestream_length))
                 return false;
 
-            linked_image.codestreams.back().path = std::move(paths[i]);
+            codestream.path = std::move(paths[i]);
             image_index->codestreams.push_back(
-                    std::move(linked_image.codestreams.back()));
+                    std::move(codestream));
         }
         return true;
     }

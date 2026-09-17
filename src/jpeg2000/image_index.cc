@@ -1,8 +1,6 @@
 #include "trace.h"
 #include "image_index.h"
 
-#include <utility>
-
 using namespace std;
 
 namespace jpeg2000 {
@@ -10,15 +8,12 @@ namespace jpeg2000 {
     using data::File;
     using data::FileSegment;
 
-    ImageIndex::Codestream::Codestream(const string &_path, CodingParameters &&_params,
-                                      CodestreamIndex &&_index)
+    ImageIndex::Codestream::Codestream(const string &_path)
             : path(_path),
-              parameters(std::move(_params)),
               last_plt(0),
               last_packet(0),
               last_offset_PLT(0),
-              last_offset_packet(0),
-              index(std::move(_index)) {
+              last_offset_packet(0) {
     }
 
     ImageIndex::ImageIndex(const string &_path) : path_name(_path) {
@@ -36,7 +31,7 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetPLTLength(File *file, Codestream &codestream,
                                   uint64_t *length_packet) {
-        vector<FileSegment> &plt = codestream.index.PLT_markers;
+        vector<FileSegment> &plt = codestream.plt;
         if (codestream.last_plt >= (int) plt.size())
             return false;
         const FileSegment &marker = plt[codestream.last_plt];
@@ -67,22 +62,22 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::GetOffsetPacket(Codestream &codestream, uint64_t length_packet) {
-        vector<FileSegment> &packets = codestream.index.packets;
-        if (codestream.last_packet >= (int) packets.size())
+        vector<FileSegment> &packet_data = codestream.packet_data;
+        if (codestream.last_packet >= (int) packet_data.size())
             return false;
-        const FileSegment &packet_data = packets[codestream.last_packet];
+        const FileSegment &segment = packet_data[codestream.last_packet];
 
         uint64_t offset = codestream.last_offset_packet;
         if (offset == 0)
-            offset = packet_data.offset;
-        uint64_t used = offset - packet_data.offset;
-        if (used > packet_data.length || length_packet > packet_data.length - used)
+            offset = segment.offset;
+        uint64_t used = offset - segment.offset;
+        if (used > segment.length || length_packet > segment.length - used)
             return false;
 
         codestream.packet_index.Add(FileSegment(offset, length_packet));
         codestream.last_offset_packet = offset + length_packet;
 
-        if (codestream.last_offset_packet == packet_data.offset + packet_data.length) {
+        if (codestream.last_offset_packet == segment.offset + segment.length) {
             codestream.last_packet++;
             codestream.last_offset_packet = 0;
         }

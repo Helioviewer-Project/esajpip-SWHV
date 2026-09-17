@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "coding_parameters.h"
-#include "codestream_index.h"
 #include "data/file.h"
 #include "meta_data.h"
 #include "packet_index.h"
@@ -24,15 +23,16 @@ namespace jpeg2000 {
         struct Codestream {
             std::string path;
             CodingParameters parameters;
+            data::FileSegment header;
+            std::vector<data::FileSegment> packet_data;
+            std::vector<data::FileSegment> plt;
             int last_plt;
             int last_packet;
             uint64_t last_offset_PLT;
             uint64_t last_offset_packet;
             PacketIndex packet_index;
-            CodestreamIndex index;
 
-            Codestream(const std::string &_path, CodingParameters &&_params,
-                       CodestreamIndex &&_index);
+            explicit Codestream(const std::string &_path);
         };
 
         std::string path_name;           ///< Image file name
@@ -106,7 +106,7 @@ namespace jpeg2000 {
          * @param num_codestream Codestream number
          */
         const data::FileSegment &GetMainHeader(int num_codestream) const {
-            return codestreams[num_codestream].index.header;
+            return codestreams[num_codestream].header;
         }
 
         const CodingParameters *GetCodingParameters(int num_codestream) const {
