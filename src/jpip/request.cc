@@ -247,7 +247,6 @@ namespace jpip {
     bool Request::Parse(const string &line) {
         string method, uri, protocol;
 
-        valid = true;
         if (line.empty())
             return false;
 
@@ -256,22 +255,17 @@ namespace jpip {
             (protocol != "HTTP/1.1" && protocol != "HTTP/1.1\\r"))
             return false;
 
-        ParseURI(uri.substr(0, MAX_URI_LENGTH));
-        return valid;
+        return ParseURI(uri.substr(0, MAX_URI_LENGTH));
     }
 
-    void Request::ParseURI(const string &uri) {
+    bool Request::ParseURI(const string &uri) {
         size_t question = uri.find('?');
         object = uri.substr(0, question);
 
-        has = Parameters();
-        codestreams.clear();
-        model.clear();
-        target.clear();
-        channel.clear();
         if (question == string::npos)
-            return;
+            return true;
 
+        bool valid = true;
         Query query = ParseQuery(uri.data() + question + 1, uri.data() + uri.size());
         for (const QueryParameter &parameter : query) {
             const string &name = parameter.name;
@@ -364,6 +358,9 @@ namespace jpip {
         const string *route = FindParameter(query, has.cclose ? "cclose" : "cid");
         if (route)
             channel = *route;
+        if ((has.roff || has.rsiz) && !has.fsiz)
+            valid = false;
+        return valid;
     }
 
 }

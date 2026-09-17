@@ -235,28 +235,33 @@ static void CheckConnectionQueue() {
     Check(!queue.Push(10), "Connection queue accepted a connection after closing");
 }
 
+static bool ParseRequest(jpip::Request &request, const string &line) {
+    request = jpip::Request();
+    return request.Parse(line);
+}
+
 static void CheckJHVRequests() {
     jpip::Request req;
 
-    Check(req.Parse("GET /movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512 HTTP/1.1"),
           "Could not parse JHV channel request");
     Check(req.object == "/movie.jpx", "Wrong channel target");
     Check(req.has.cnew, "Missing cnew field");
     Check(req.has.len && req.length_response == 512, "Wrong channel response limit");
 
-    Check(req.Parse("GET /jpip?target=movie.jpx&cnew=http&len=512 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?target=movie.jpx&cnew=http&len=512 HTTP/1.1"),
           "Could not parse target-form channel request");
     Check(req.has.target && req.target == "movie.jpx", "Missing target field");
 
-    Check(req.Parse("GET /jpip?stream=0&metareq=[*]!!&len=2000000&cid=7 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?stream=0&metareq=[*]!!&len=2000000&cid=7 HTTP/1.1"),
           "Could not parse JHV metadata request");
     Check(req.has.cid && req.channel == "7", "Missing channel ID");
-    Check(req.target.empty(), "Previous target was retained");
+    Check(req.target.empty(), "Unexpected target in metadata request");
     Check(req.has.metareq, "Missing metadata request");
     Check(req.codestreams == vector<int>(1, 0), "Wrong metadata codestream");
     Check(req.length_response == 2000000, "Wrong metadata response limit");
 
-    Check(req.Parse("GET /jpip?stream=4013&fsiz=4096,4096,closest&rsiz=4096,4096&roff=0,0&len=2097152&cid=7 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?stream=4013&fsiz=4096,4096,closest&rsiz=4096,4096&roff=0,0&len=2097152&cid=7 HTTP/1.1"),
           "Could not parse JHV frame request");
     Check(req.HasWOI(), "Missing frame window");
     Check(req.codestreams == vector<int>(1, 4013), "Wrong frame codestream");
@@ -266,24 +271,28 @@ static void CheckJHVRequests() {
     Check(req.round_direction == jpip::Request::CLOSEST, "Wrong frame rounding mode");
     Check(req.length_response == 2097152, "Wrong frame response limit");
 
-    Check(!req.Parse("GET /jpip?fsiz=abc&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?rsiz=1,1&cid=7 HTTP/1.1") &&
+              req.resolution_size == jpeg2000::Size(),
+          "Accepted a region size without a frame size");
+
+    Check(!ParseRequest(req, "GET /jpip?fsiz=abc&cid=7 HTTP/1.1"),
           "Accepted a malformed frame size");
-    Check(!req.Parse("GET /jpip?fsiz=1,1,sideways&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?fsiz=1,1,sideways&cid=7 HTTP/1.1"),
           "Accepted an unknown frame-size rounding mode");
-    Check(!req.Parse("GET /jpip?roff=abc&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?roff=abc&cid=7 HTTP/1.1"),
           "Accepted a malformed region offset");
-    Check(!req.Parse("GET /jpip?rsiz=abc&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?rsiz=abc&cid=7 HTTP/1.1"),
           "Accepted a malformed region size");
-    Check(!req.Parse("GET /jpip?stream=abc&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?stream=abc&cid=7 HTTP/1.1"),
           "Accepted a malformed codestream selector");
-    Check(!req.Parse("GET /jpip?context=abc&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?context=abc&cid=7 HTTP/1.1"),
           "Accepted a malformed context selector");
-    Check(!req.Parse("GET /movie.jpx?cnew=http HTTP/1.0"),
+    Check(!ParseRequest(req, "GET /movie.jpx?cnew=http HTTP/1.0"),
           "Accepted an HTTP/1.0 request");
-    Check(!req.Parse("GET /movie.jpx?cnew=http HTTP/1.1junk"),
+    Check(!ParseRequest(req, "GET /movie.jpx?cnew=http HTTP/1.1junk"),
           "Accepted an invalid HTTP version token");
 
-    Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
           "Could not parse terminal cache model");
     Check(req.has.model, "Missing terminal cache model");
     Check(req.model.size() == 1 &&
@@ -291,13 +300,13 @@ static void CheckJHVRequests() {
               req.model[0].id == 0 && req.model[0].amount == INT_MAX,
           "Wrong terminal metadata model");
 
-    Check(req.Parse("GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
           "Could not parse terminal partial cache model");
     Check(req.has.model, "Missing terminal partial cache model");
     Check(req.model.size() == 1 && req.model[0].amount == 446,
           "Wrong terminal partial metadata model");
 
-    Check(req.Parse("GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
           "Could not parse request with an empty frame size");
     jpeg2000::CodingParameters coding_parameters;
     coding_parameters.size = jpeg2000::Size(4096, 4096);
@@ -309,45 +318,45 @@ static void CheckJHVRequests() {
     Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
     Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
 
-    Check(!req.Parse("GET /jpip?model=M-1 HTTP/1.1"), "Accepted negative metadata ID");
-    Check(!req.Parse("GET /jpip?model=P-1 HTTP/1.1"), "Accepted negative precinct ID");
-    Check(!req.Parse("GET /jpip?model=M0:-1 HTTP/1.1"), "Accepted negative model length");
-    Check(!req.Parse("GET /jpip?model= HTTP/1.1"), "Accepted empty cache model");
-    Check(!req.Parse("GET /jpip?model=M0% HTTP/1.1"), "Accepted truncated cache-model escape");
-    Check(!req.Parse("GET /jpip?model=M0%00M1 HTTP/1.1"), "Accepted a cache model containing NUL");
-    Check(!req.Parse("GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
-    Check(!req.Parse("GET /jpip?len=+1&cid=7 HTTP/1.1"), "Accepted a signed response length");
-    Check(!req.Parse("GET /jpip?len=2147483648&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?model=M-1 HTTP/1.1"), "Accepted negative metadata ID");
+    Check(!ParseRequest(req, "GET /jpip?model=P-1 HTTP/1.1"), "Accepted negative precinct ID");
+    Check(!ParseRequest(req, "GET /jpip?model=M0:-1 HTTP/1.1"), "Accepted negative model length");
+    Check(!ParseRequest(req, "GET /jpip?model= HTTP/1.1"), "Accepted empty cache model");
+    Check(!ParseRequest(req, "GET /jpip?model=M0% HTTP/1.1"), "Accepted truncated cache-model escape");
+    Check(!ParseRequest(req, "GET /jpip?model=M0%00M1 HTTP/1.1"), "Accepted a cache model containing NUL");
+    Check(!ParseRequest(req, "GET /jpip?len=-1&cid=7 HTTP/1.1"), "Accepted negative response length");
+    Check(!ParseRequest(req, "GET /jpip?len=+1&cid=7 HTTP/1.1"), "Accepted a signed response length");
+    Check(!ParseRequest(req, "GET /jpip?len=2147483648&cid=7 HTTP/1.1"),
           "Accepted an overflowing response length");
-    Check(req.Parse("GET /jpip?roff=-2147483648,0&cid=7 HTTP/1.1") &&
+    Check(ParseRequest(req, "GET /jpip?fsiz=1,1&roff=-2147483648,0&cid=7 HTTP/1.1") &&
               req.woi_position.x == INT_MIN,
           "Could not parse the minimum signed window offset");
 
-    Check(req.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
+    Check(ParseRequest(req, "GET /jpip?cclose=7&len=0 HTTP/1.1"), "Could not parse JHV close request");
     Check(req.has.cclose && req.channel == "7", "Missing close field");
-    Check(req.codestreams.empty(), "A reused request retained its codestreams");
+    Check(req.codestreams.empty(), "Unexpected codestream in close request");
 
-    Check(req.Parse("GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
-          "Could not reuse request for a new channel");
-    Check(req.channel.empty(), "Previous channel ID was retained");
+    Check(ParseRequest(req, "GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
+          "Could not parse a new channel request");
+    Check(req.channel.empty(), "Unexpected channel ID in new channel request");
 
-    Check(req.Parse("GET /jpip?cid=46&cid=47 HTTP/1.1") && req.channel == "47",
+    Check(ParseRequest(req, "GET /jpip?cid=46&cid=47 HTTP/1.1") && req.channel == "47",
           "Full parsing did not use the last channel ID");
-    Check(req.Parse("GET /jpip?cid=47&cclose=* HTTP/1.1") &&
+    Check(ParseRequest(req, "GET /jpip?cid=47&cclose=* HTTP/1.1") &&
               req.has.cclose && req.channel == "*",
           "Could not parse the all-channel close form");
-    Check(req.Parse("GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
+    Check(ParseRequest(req, "GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
               req.has.cclose && req.channel == "47",
           "Full parsing did not give cclose routing priority");
 
-    Check(req.Parse("GET /jpip?stream=3:1&context=jpxl%3C4-6%3E&cid=7 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?stream=3:1&context=jpxl%3C4-6%3E&cid=7 HTTP/1.1"),
           "Could not parse reduced codestream selectors");
     Check(req.codestreams == vector<int>({3, 2, 1, 4, 5, 6}),
           "Wrong codestream selector ranges");
-    Check(!req.Parse("GET /jpip?stream=0:100000&stream=0:100000&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?stream=0:100000&stream=0:100000&cid=7 HTTP/1.1"),
           "Accepted an oversized expanded codestream selection");
 
-    Check(req.Parse("GET /jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7 HTTP/1.1"),
+    Check(ParseRequest(req, "GET /jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7 HTTP/1.1"),
           "Could not parse encoded cache-model descriptors");
     Check(req.model.size() == 4 &&
               req.model[0].bin_class == jpip::DataBinClass::MAIN_HEADER &&
@@ -361,10 +370,10 @@ static void CheckJHVRequests() {
               req.model[3].id == 8 && req.model[3].amount == 9,
           "Wrong encoded cache model");
 
-    Check(req.Parse("GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&
+    Check(ParseRequest(req, "GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&
               req.target == "movie%20name.jpx",
           "Unexpectedly decoded a target value");
-    Check(!req.Parse("GET /jpip?len=12junk&cid=7 HTTP/1.1"),
+    Check(!ParseRequest(req, "GET /jpip?len=12junk&cid=7 HTTP/1.1"),
           "Accepted a response length with trailing data");
 }
 

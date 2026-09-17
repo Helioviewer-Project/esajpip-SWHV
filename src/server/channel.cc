@@ -317,7 +317,6 @@ private:
 
     ServeResult Serve(int fd) {
         string req_line, req_line_raw;
-        jpip::Request req;
         SocketReader reader(fd);
 
         for (;;) {
@@ -331,6 +330,7 @@ private:
             if (wait_result == WAIT_FAILED)
                 return FAIL_CHANNEL;
 
+            jpip::Request req;
             bool accept_gzip = false;
             bool send_gzip = false;
 

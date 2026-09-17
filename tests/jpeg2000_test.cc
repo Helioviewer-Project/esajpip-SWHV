@@ -21,6 +21,11 @@ static void Check(bool condition, const char *message) {
     }
 }
 
+static bool ParseRequest(jpip::Request &request, const string &line) {
+    request = jpip::Request();
+    return request.Parse(line);
+}
+
 static void Append16(vector<unsigned char> &data, uint16_t value) {
     data.push_back(value >> 8);
     data.push_back(value);
@@ -630,7 +635,7 @@ int main() {
           "Could not index the second embedded codestream");
 
     jpip::Request multi_stream_request;
-    Check(multi_stream_request.Parse(
+    Check(ParseRequest(multi_stream_request,
               "GET /jpip?stream=0:1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a multi-codestream window request");
     jpip::DataBinServer multi_stream_server;
@@ -648,7 +653,7 @@ int main() {
           "Could not generate a heterogeneous multi-codestream response");
 
     jpip::Request second_stream_request;
-    Check(second_stream_request.Parse(
+    Check(ParseRequest(second_stream_request,
               "GET /jpip?stream=1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1") &&
               multi_stream_server.SetRequest(embedded_two_manager,
                                               second_stream_request),
@@ -739,7 +744,7 @@ int main() {
           "Accepted invalid JPX fragment range");
 
     jpip::Request request;
-    Check(request.Parse("GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
+    Check(ParseRequest(request, "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse default-codestream request");
     jpip::DataBinServer server;
     Check(server.SetRequest(manager, request), "Rejected default codestream");
@@ -756,7 +761,7 @@ int main() {
           "Unlimited response has no window-done EOR");
 
     jpip::Request default_window_request;
-    Check(default_window_request.Parse("GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
+    Check(ParseRequest(default_window_request, "GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
           "Could not parse a window with default region and offset");
     jpip::DataBinServer default_window_server;
     Check(default_window_server.SetRequest(manager, default_window_request),
@@ -771,7 +776,7 @@ int main() {
          response_limit++) {
         jpip::DataBinServer short_server;
         jpip::Request short_request;
-        Check(short_request.Parse("GET /jpip?len=" + to_string(response_limit) +
+        Check(ParseRequest(short_request, "GET /jpip?len=" + to_string(response_limit) +
                                   "&cid=0 HTTP/1.1"),
               "Could not parse a response limit shorter than an EOR message");
         Check(short_server.SetRequest(manager, short_request),
@@ -788,7 +793,7 @@ int main() {
 
     jpip::DataBinServer limited_server;
     jpip::Request limited_request;
-    Check(limited_request.Parse(
+    Check(ParseRequest(limited_request,
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0 HTTP/1.1"),
           "Could not parse a limited request");
     Check(limited_server.SetRequest(manager, limited_request),
@@ -804,25 +809,25 @@ int main() {
 
     jpip::DataBinServer model_server;
     jpip::Request model_request;
-    Check(model_request.Parse("GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
+    Check(ParseRequest(model_request, "GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
               model_server.SetRequest(manager, model_request),
           "Rejected a valid cache model");
-    Check(model_request.Parse("GET /jpip?model=M2147483647&cid=0 HTTP/1.1") &&
+    Check(ParseRequest(model_request, "GET /jpip?model=M2147483647&cid=0 HTTP/1.1") &&
               !model_server.SetRequest(manager, model_request),
           "Accepted an unavailable metadata bin");
-    Check(model_request.Parse("GET /jpip?model=[0-100000]Hm&cid=0 HTTP/1.1") &&
+    Check(ParseRequest(model_request, "GET /jpip?model=[0-100000]Hm&cid=0 HTTP/1.1") &&
               model_request.model.size() == 1 &&
               !model_server.SetRequest(manager, model_request),
           "Accepted an unavailable cache-model codestream range");
-    Check(model_request.Parse("GET /jpip?model=P2147483647&cid=0 HTTP/1.1") &&
+    Check(ParseRequest(model_request, "GET /jpip?model=P2147483647&cid=0 HTTP/1.1") &&
               !model_server.SetRequest(manager, model_request),
           "Accepted an unavailable precinct bin");
-    Check(model_request.Parse("GET /jpip?model=H1&cid=0 HTTP/1.1") &&
+    Check(ParseRequest(model_request, "GET /jpip?model=H1&cid=0 HTTP/1.1") &&
               !model_server.SetRequest(manager, model_request),
           "Accepted an unavailable tile-header bin");
 
     jpip::Request headers_only_request;
-    Check(headers_only_request.Parse(
+    Check(ParseRequest(headers_only_request,
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0 HTTP/1.1"),
           "Could not parse a headers-only request");
     Check(server.SetRequest(manager, headers_only_request), "Rejected a headers-only request");
@@ -835,7 +840,7 @@ int main() {
           "Headers-only response has no window-done EOR");
 
     jpip::Request unlimited_request;
-    Check(unlimited_request.Parse(
+    Check(ParseRequest(unlimited_request,
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a second unlimited request");
     Check(server.SetRequest(manager, unlimited_request), "Rejected a second unlimited request");
@@ -847,7 +852,7 @@ int main() {
           "A previous response limit affected an unlimited response");
 
     jpip::Request cropped_request;
-    Check(cropped_request.Parse(
+    Check(ParseRequest(cropped_request,
               "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
               "roff=-5,-5&len=512&cid=0 HTTP/1.1"),
           "Could not parse a partially overlapping window");
@@ -859,7 +864,7 @@ int main() {
           "Could not generate a cropped-window response");
 
     jpip::Request outside_request;
-    Check(outside_request.Parse(
+    Check(ParseRequest(outside_request,
               "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
               "roff=2000000000,2000000000&len=512&cid=0 HTTP/1.1"),
           "Could not parse an out-of-range window");
@@ -874,7 +879,7 @@ int main() {
           "An outside window did not produce only a window-done EOR");
 
     jpip::Request empty_request;
-    Check(empty_request.Parse(
+    Check(ParseRequest(empty_request,
               "GET /jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
           "Could not parse an empty window");
     jpip::DataBinServer empty_server;
@@ -886,7 +891,7 @@ int main() {
               response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
           "A zero-sized window did not produce only a window-done EOR");
 
-    Check(request.Parse("GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
+    Check(ParseRequest(request, "GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
           "Could not parse unavailable-codestream request");
     Check(!server.SetRequest(manager, request), "Accepted unavailable codestream");
 
@@ -908,7 +913,7 @@ int main() {
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());
     manager.ClearFiles();
-    Check(request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
+    Check(ParseRequest(request, "GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
           "Could not parse missing-file request");
     Check(server.SetRequest(manager, request), "Rejected valid missing-file request state");
     response_length = sizeof response;

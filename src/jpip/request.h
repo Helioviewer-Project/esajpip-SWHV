@@ -12,8 +12,7 @@ namespace jpip {
 
     class Request {
     private:
-        bool valid;
-        void ParseURI(const std::string &uri);
+        bool ParseURI(const std::string &uri);
 
     public:
         std::string object;
@@ -73,7 +72,6 @@ namespace jpip {
          */
         Request() {
             object = "/";
-            valid = true;
             length_response = 0;
             round_direction = CLOSEST;
         }
