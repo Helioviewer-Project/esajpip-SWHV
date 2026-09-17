@@ -142,10 +142,6 @@ namespace jpeg2000 {
                    progression == CPRL_PROGRESSION;
         }
 
-        int GetNumPackets() const {
-            return total_precincts * num_components * num_layers;
-        }
-
         int GetNumPrecinctDataBins() const {
             return total_precincts * num_components;
         }

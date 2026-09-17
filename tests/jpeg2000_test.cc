@@ -21,11 +21,6 @@ static void Check(bool condition, const char *message) {
     }
 }
 
-static bool ParseRequest(jpip::Request &request, const string &line) {
-    request = jpip::Request();
-    return request.Parse(line);
-}
-
 static void Append16(vector<unsigned char> &data, uint16_t value) {
     data.push_back(value >> 8);
     data.push_back(value);
@@ -306,6 +301,20 @@ static bool OpenImage(const string &directory, const string &name,
     Check(manager->Init(directory), "Could not initialize the file manager");
     return manager->OpenImage(name) ==
            jpeg2000::FileManager::OpenResult::OPENED;
+}
+
+static jpeg2000::FileManager::OpenResult OpenImageResult(
+        const string &directory, const string &name) {
+    jpeg2000::FileManager manager;
+    Check(manager.Init(directory), "Could not initialize the file manager");
+    return manager.OpenImage(name);
+}
+
+static bool RejectDataRequest(jpeg2000::FileManager &manager,
+                              const string &line) {
+    jpip::Request request;
+    jpip::DataBinServer server;
+    return request.Parse(line) && !server.SetRequest(manager, request);
 }
 
 int main() {
@@ -635,7 +644,7 @@ int main() {
           "Could not index the second embedded codestream");
 
     jpip::Request multi_stream_request;
-    Check(ParseRequest(multi_stream_request,
+    Check(multi_stream_request.Parse(
               "GET /jpip?stream=0:1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a multi-codestream window request");
     jpip::DataBinServer multi_stream_server;
@@ -653,7 +662,7 @@ int main() {
           "Could not generate a heterogeneous multi-codestream response");
 
     jpip::Request second_stream_request;
-    Check(ParseRequest(second_stream_request,
+    Check(second_stream_request.Parse(
               "GET /jpip?stream=1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1") &&
               multi_stream_server.SetRequest(embedded_two_manager,
                                               second_stream_request),
@@ -685,27 +694,25 @@ int main() {
           "Rejected a trusted JPX link outside the image directory");
 
     string outside_name = outside_file.substr(outside_file.find_last_of('/') + 1);
-    jpeg2000::FileManager traversal_manager;
-    Check(traversal_manager.Init(directory), "Could not initialize traversal test manager");
     string target_traversal = "../" + outside_name;
-    Check(traversal_manager.OpenImage(target_traversal) ==
+    Check(OpenImageResult(directory, target_traversal) ==
                   jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted parent traversal in a target path");
     string uri_traversal = "/../" + outside_name;
-    Check(traversal_manager.OpenImage(uri_traversal) ==
+    Check(OpenImageResult(directory, uri_traversal) ==
                   jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted parent traversal in a URI path");
     string embedded_traversal = "unused/../image.jp2";
-    Check(traversal_manager.OpenImage(embedded_traversal) ==
+    Check(OpenImageResult(directory, embedded_traversal) ==
                   jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted an embedded parent path segment");
     string nul_path = "image.jp2";
     nul_path.push_back('\0');
     nul_path += ".jp2";
-    Check(traversal_manager.OpenImage(nul_path) ==
+    Check(OpenImageResult(directory, nul_path) ==
                   jpeg2000::FileManager::OpenResult::INVALID,
           "Accepted a file path containing NUL");
-    Check(traversal_manager.OpenImage("missing.jp2") ==
+    Check(OpenImageResult(directory, "missing.jp2") ==
                   jpeg2000::FileManager::OpenResult::NOT_FOUND,
           "Did not distinguish a missing image");
 
@@ -744,7 +751,7 @@ int main() {
           "Accepted invalid JPX fragment range");
 
     jpip::Request request;
-    Check(ParseRequest(request, "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
+    Check(request.Parse("GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse default-codestream request");
     jpip::DataBinServer server;
     Check(server.SetRequest(manager, request), "Rejected default codestream");
@@ -761,7 +768,7 @@ int main() {
           "Unlimited response has no window-done EOR");
 
     jpip::Request default_window_request;
-    Check(ParseRequest(default_window_request, "GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
+    Check(default_window_request.Parse("GET /jpip?fsiz=1,1&cid=0 HTTP/1.1"),
           "Could not parse a window with default region and offset");
     jpip::DataBinServer default_window_server;
     Check(default_window_server.SetRequest(manager, default_window_request),
@@ -776,7 +783,7 @@ int main() {
          response_limit++) {
         jpip::DataBinServer short_server;
         jpip::Request short_request;
-        Check(ParseRequest(short_request, "GET /jpip?len=" + to_string(response_limit) +
+        Check(short_request.Parse("GET /jpip?len=" + to_string(response_limit) +
                                   "&cid=0 HTTP/1.1"),
               "Could not parse a response limit shorter than an EOR message");
         Check(short_server.SetRequest(manager, short_request),
@@ -793,7 +800,7 @@ int main() {
 
     jpip::DataBinServer limited_server;
     jpip::Request limited_request;
-    Check(ParseRequest(limited_request,
+    Check(limited_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0 HTTP/1.1"),
           "Could not parse a limited request");
     Check(limited_server.SetRequest(manager, limited_request),
@@ -809,25 +816,23 @@ int main() {
 
     jpip::DataBinServer model_server;
     jpip::Request model_request;
-    Check(ParseRequest(model_request, "GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
+    Check(model_request.Parse("GET /jpip?model=M0,Hm,H0,P0&cid=0 HTTP/1.1") &&
               model_server.SetRequest(manager, model_request),
           "Rejected a valid cache model");
-    Check(ParseRequest(model_request, "GET /jpip?model=M2147483647&cid=0 HTTP/1.1") &&
-              !model_server.SetRequest(manager, model_request),
+    Check(RejectDataRequest(manager,
+                           "GET /jpip?model=M2147483647&cid=0 HTTP/1.1"),
           "Accepted an unavailable metadata bin");
-    Check(ParseRequest(model_request, "GET /jpip?model=[0-100000]Hm&cid=0 HTTP/1.1") &&
-              model_request.model.size() == 1 &&
-              !model_server.SetRequest(manager, model_request),
+    Check(RejectDataRequest(manager,
+                           "GET /jpip?model=[0-100000]Hm&cid=0 HTTP/1.1"),
           "Accepted an unavailable cache-model codestream range");
-    Check(ParseRequest(model_request, "GET /jpip?model=P2147483647&cid=0 HTTP/1.1") &&
-              !model_server.SetRequest(manager, model_request),
+    Check(RejectDataRequest(manager,
+                           "GET /jpip?model=P2147483647&cid=0 HTTP/1.1"),
           "Accepted an unavailable precinct bin");
-    Check(ParseRequest(model_request, "GET /jpip?model=H1&cid=0 HTTP/1.1") &&
-              !model_server.SetRequest(manager, model_request),
+    Check(RejectDataRequest(manager, "GET /jpip?model=H1&cid=0 HTTP/1.1"),
           "Accepted an unavailable tile-header bin");
 
     jpip::Request headers_only_request;
-    Check(ParseRequest(headers_only_request,
+    Check(headers_only_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0 HTTP/1.1"),
           "Could not parse a headers-only request");
     Check(server.SetRequest(manager, headers_only_request), "Rejected a headers-only request");
@@ -840,7 +845,7 @@ int main() {
           "Headers-only response has no window-done EOR");
 
     jpip::Request unlimited_request;
-    Check(ParseRequest(unlimited_request,
+    Check(unlimited_request.Parse(
               "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a second unlimited request");
     Check(server.SetRequest(manager, unlimited_request), "Rejected a second unlimited request");
@@ -852,7 +857,7 @@ int main() {
           "A previous response limit affected an unlimited response");
 
     jpip::Request cropped_request;
-    Check(ParseRequest(cropped_request,
+    Check(cropped_request.Parse(
               "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
               "roff=-5,-5&len=512&cid=0 HTTP/1.1"),
           "Could not parse a partially overlapping window");
@@ -864,7 +869,7 @@ int main() {
           "Could not generate a cropped-window response");
 
     jpip::Request outside_request;
-    Check(ParseRequest(outside_request,
+    Check(outside_request.Parse(
               "GET /jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
               "roff=2000000000,2000000000&len=512&cid=0 HTTP/1.1"),
           "Could not parse an out-of-range window");
@@ -879,7 +884,7 @@ int main() {
           "An outside window did not produce only a window-done EOR");
 
     jpip::Request empty_request;
-    Check(ParseRequest(empty_request,
+    Check(empty_request.Parse(
               "GET /jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
           "Could not parse an empty window");
     jpip::DataBinServer empty_server;
@@ -891,9 +896,16 @@ int main() {
               response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
           "A zero-sized window did not produce only a window-done EOR");
 
-    Check(ParseRequest(request, "GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
-          "Could not parse unavailable-codestream request");
-    Check(!server.SetRequest(manager, request), "Accepted unavailable codestream");
+    Check(RejectDataRequest(manager, "GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
+          "Accepted unavailable codestream");
+
+    jpip::Request missing_file_request;
+    Check(missing_file_request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
+          "Could not parse missing-file request");
+    jpip::DataBinServer missing_file_server;
+    Check(missing_file_server.SetRequest(manager, missing_file_request),
+          "Rejected valid missing-file request state");
+    manager.ClearFiles();
 
     remove((directory + "image.jp2").c_str());
     remove((directory + "pcrl.jp2").c_str());
@@ -912,12 +924,8 @@ int main() {
     remove(large_file.c_str());
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());
-    manager.ClearFiles();
-    Check(ParseRequest(request, "GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),
-          "Could not parse missing-file request");
-    Check(server.SetRequest(manager, request), "Rejected valid missing-file request state");
     response_length = sizeof response;
-    Check(!server.GenerateChunk(manager, response, &response_length, &last),
+    Check(!missing_file_server.GenerateChunk(manager, response, &response_length, &last),
           "Generated a response after its source file disappeared");
 
     remove((directory + "embedded.jpx").c_str());

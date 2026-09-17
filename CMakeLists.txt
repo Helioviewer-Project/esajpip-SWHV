@@ -60,24 +60,29 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/server/supervisor.cc
     ${ESAJPIP_TOP}/trace.cc)
 
-add_executable(esajpip ${ESAJPIP_TOP}/main.cc ${ESAJPIP_SRCS})
-esajpip_configure_target(esajpip)
-target_compile_options(esajpip PRIVATE -UNDEBUG)
-target_include_directories(esajpip BEFORE PRIVATE
+add_library(esajpip_core STATIC ${ESAJPIP_SRCS})
+esajpip_configure_target(esajpip_core)
+target_compile_options(esajpip_core PRIVATE -UNDEBUG)
+target_include_directories(esajpip_core BEFORE PUBLIC
     ${ESAJPIP_TOP})
-target_link_libraries(esajpip PRIVATE
+target_link_libraries(esajpip_core PUBLIC
     PkgConfig::PKG
     ZLIB::ZLIB
     Threads::Threads)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_definitions(esajpip PRIVATE
+    target_compile_definitions(esajpip_core PRIVATE
         _PLATFORM_LINUX
         _POSIX_C_SOURCE=200112L
         _XOPEN_SOURCE=600)
 elseif(APPLE)
-    target_link_libraries(esajpip PRIVATE c++abi)
+    target_link_libraries(esajpip_core PUBLIC c++abi)
 endif()
+
+add_executable(esajpip ${ESAJPIP_TOP}/main.cc)
+esajpip_configure_target(esajpip)
+target_compile_options(esajpip PRIVATE -UNDEBUG)
+target_link_libraries(esajpip PRIVATE esajpip_core)
 
 install(TARGETS esajpip RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION bin)
@@ -90,38 +95,13 @@ if(BUILD_TESTING)
     target_link_libraries(logging_test PRIVATE Threads::Threads)
     add_test(NAME logging COMMAND logging_test)
 
-    add_executable(protocol_test
-        tests/protocol_test.cc
-        ${ESAJPIP_TOP}/config.cc
-        ${ESAJPIP_TOP}/data/file_segment.cc
-        ${ESAJPIP_TOP}/http/header.cc
-        ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
-        ${ESAJPIP_TOP}/jpip/databin_writer.cc
-        ${ESAJPIP_TOP}/jpip/query.cc
-        ${ESAJPIP_TOP}/jpip/request.cc
-        ${ESAJPIP_TOP}/server/connection_queue.cc
-        ${ESAJPIP_TOP}/server/initial_request.cc
-        ${ESAJPIP_TOP}/trace.cc)
+    add_executable(protocol_test tests/protocol_test.cc)
     esajpip_configure_target(protocol_test)
-    target_include_directories(protocol_test PRIVATE
-        ${ESAJPIP_TOP})
-    target_link_libraries(protocol_test PRIVATE PkgConfig::PKG Threads::Threads)
+    target_link_libraries(protocol_test PRIVATE esajpip_core)
     add_test(NAME protocol COMMAND protocol_test)
 
-    add_executable(jpeg2000_test
-        tests/jpeg2000_test.cc
-        ${ESAJPIP_TOP}/data/file_segment.cc
-        ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
-        ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
-        ${ESAJPIP_TOP}/jpeg2000/image_index.cc
-        ${ESAJPIP_TOP}/jpip/databin_server.cc
-        ${ESAJPIP_TOP}/jpip/databin_writer.cc
-        ${ESAJPIP_TOP}/jpip/query.cc
-        ${ESAJPIP_TOP}/jpip/request.cc
-        ${ESAJPIP_TOP}/trace.cc)
+    add_executable(jpeg2000_test tests/jpeg2000_test.cc)
     esajpip_configure_target(jpeg2000_test)
-    target_include_directories(jpeg2000_test PRIVATE
-        ${ESAJPIP_TOP})
-    target_link_libraries(jpeg2000_test PRIVATE PkgConfig::PKG Threads::Threads)
+    target_link_libraries(jpeg2000_test PRIVATE esajpip_core)
     add_test(NAME jpeg2000 COMMAND jpeg2000_test)
 endif()

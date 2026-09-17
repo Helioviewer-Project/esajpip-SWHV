@@ -147,12 +147,6 @@ namespace jpip {
                 Pack(codestream);
         }
 
-        void Clear() {
-            full_meta = false;
-            meta_data.clear();
-            codestreams.clear();
-        }
-
     };
 }
 
