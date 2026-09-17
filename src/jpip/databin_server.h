@@ -44,7 +44,6 @@ namespace jpip {
         size_t meta_idx;
         int meta_offset;
         size_t meta_bin_idx;
-        bool meta_bin0_done;
 
         CacheModel cache_model;     ///< Cache model of the client
         DataBinWriter data_writer;  ///< Data-bin writer for generating the chunks
@@ -160,7 +159,6 @@ namespace jpip {
             meta_idx = 0;
             meta_offset = 0;
             meta_bin_idx = 0;
-            meta_bin0_done = false;
         }
 
         /**

@@ -159,32 +159,29 @@ namespace jpip {
             return SegmentResult::FAILED;
         const Metadata &metadata = image_index->GetMetadata();
 
-        if (!meta_bin0_done) {
-            while (meta_idx < metadata.bin0.size()) {
-                const Metadata::Part &part = metadata.bin0[meta_idx];
-                SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
-                        file, 0, 0, part.data, meta_offset, false);
-                if (result != SegmentResult::COMPLETE)
-                    return result;
-
-                int placeholder_offset = meta_offset + part.data.length;
-                result = WritePlaceHolder(file, 0, 0, part.placeholder,
-                                          placeholder_offset);
-                if (result != SegmentResult::COMPLETE)
-                    return result;
-                meta_offset = placeholder_offset + part.placeholder.length();
-                meta_idx++;
-            }
-
+        while (meta_idx < metadata.bin0.size()) {
+            const Metadata::Part &part = metadata.bin0[meta_idx];
             SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
-                    file, 0, 0, metadata.tail, meta_offset);
+                    file, 0, 0, part.data, meta_offset, false);
             if (result != SegmentResult::COMPLETE)
                 return result;
-            meta_bin0_done = true;
+
+            int placeholder_offset = meta_offset + part.data.length;
+            result = WritePlaceHolder(file, 0, 0, part.placeholder,
+                                      placeholder_offset);
+            if (result != SegmentResult::COMPLETE)
+                return result;
+            meta_offset = placeholder_offset + part.placeholder.length();
+            meta_idx++;
         }
 
+        SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
+                file, 0, 0, metadata.tail, meta_offset);
+        if (result != SegmentResult::COMPLETE)
+            return result;
+
         while (meta_bin_idx < metadata.bins.size()) {
-            SegmentResult result = WriteSegment<DataBinClass::META_DATA>(
+            result = WriteSegment<DataBinClass::META_DATA>(
                     file, 0, meta_bin_idx + 1, metadata.bins[meta_bin_idx]);
             if (result != SegmentResult::COMPLETE)
                 return result;
