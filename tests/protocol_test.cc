@@ -1,5 +1,3 @@
-#include <sys/socket.h>
-
 #include <climits>
 #include <cstdlib>
 #include <cstdio>
@@ -157,17 +155,7 @@ static void CheckAppConfig() {
 }
 
 static InitialRequest Inspect(const char *request) {
-    int sockets[2];
-    Check(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
-          "Could not create initial-request test sockets");
-    if (request)
-        Check(write(sockets[0], request, strlen(request)) == static_cast<ssize_t>(strlen(request)),
-              "Could not write initial test request");
-
-    InitialRequest result = InspectInitialRequest(sockets[1]);
-    close(sockets[0]);
-    close(sockets[1]);
-    return result;
+    return ClassifyInitialRequest(request ? request : "", request ? strlen(request) : 0);
 }
 
 static void CheckInitialRequest() {

@@ -32,16 +32,25 @@ InitialRequest InspectInitialRequest(int fd) {
     if (length <= 0)
         return {REQUEST_REJECTED, false, 0};
 
+    return ClassifyInitialRequest(line, length);
+}
+
+InitialRequest ClassifyInitialRequest(const char *line, size_t length) {
+    if (length == 0)
+        return {REQUEST_PENDING, false, 0};
+
+    length = min(length, static_cast<size_t>(http::MAX_INITIAL_REQUEST_LINE));
+
     static const char method[] = "GET ";
-    size_t prefix_length = min(static_cast<size_t>(length), sizeof method - 1);
+    size_t prefix_length = min(length, sizeof method - 1);
     if (memcmp(line, method, prefix_length) != 0)
         return {REQUEST_REJECTED, false, 0};
-    if (static_cast<size_t>(length) < sizeof method - 1)
+    if (length < sizeof method - 1)
         return {REQUEST_PENDING, false, 0};
 
     const char *newline = static_cast<const char *>(memchr(line, '\n', length));
     if (newline == NULL)
-        return {static_cast<size_t>(length) == sizeof line ? REQUEST_REJECTED : REQUEST_PENDING,
+        return {length == http::MAX_INITIAL_REQUEST_LINE ? REQUEST_REJECTED : REQUEST_PENDING,
                 false, 0};
 
     const char *uri = line + sizeof method - 1;

@@ -1,6 +1,7 @@
 #ifndef _INITIAL_REQUEST_H_
 #define _INITIAL_REQUEST_H_
 
+#include <cstddef>
 #include <cstdint>
 
 enum RequestState {
@@ -15,6 +16,7 @@ struct InitialRequest {
     uint64_t channel;
 };
 
+InitialRequest ClassifyInitialRequest(const char *data, std::size_t length);
 InitialRequest InspectInitialRequest(int fd);
 
 #endif /* _INITIAL_REQUEST_H_ */
