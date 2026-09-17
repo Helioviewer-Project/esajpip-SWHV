@@ -6,12 +6,11 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include "http/protocol.h"
 #include "initial_request.h"
 #include "jpip/query.h"
 
 using namespace std;
-
-static const size_t MAX_REQUEST_LINE = 2048;
 
 static bool ParseChannel(const string &text, uint64_t *channel) {
     if (text.empty() || (text.size() > 1 && text[0] == '0'))
@@ -22,7 +21,7 @@ static bool ParseChannel(const string &text, uint64_t *channel) {
 }
 
 InitialRequest InspectInitialRequest(int fd) {
-    char line[MAX_REQUEST_LINE];
+    char line[http::MAX_INITIAL_REQUEST_LINE];
     ssize_t length;
     do {
         length = recv(fd, line, sizeof line, MSG_PEEK | MSG_DONTWAIT);

@@ -20,7 +20,6 @@ using namespace std;
 
 namespace {
 
-const size_t MAX_REQUEST_HEAD = 4096;
 const int SEND_BUFFER_SIZE = 524288;
 const int ENABLED = 1;
 
