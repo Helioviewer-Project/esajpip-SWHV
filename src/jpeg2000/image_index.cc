@@ -11,7 +11,7 @@ namespace jpeg2000 {
     ImageIndex::Codestream::Codestream(const string &_path)
             : path(_path),
               last_plt(0),
-              last_packet(0),
+              last_tile_part(0),
               last_offset_PLT(0),
               last_offset_packet(0) {
     }
@@ -31,9 +31,11 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetPLTLength(File *file, Codestream &codestream,
                                   uint64_t *length_packet) {
-        vector<FileSegment> &plt = codestream.plt;
-        if (codestream.last_packet >= (int) codestream.plt_ends.size() ||
-            codestream.last_plt >= (int) codestream.plt_ends[codestream.last_packet])
+        if (codestream.last_tile_part >= (int) codestream.tile_parts.size())
+            return false;
+        vector<FileSegment> &plt =
+                codestream.tile_parts[codestream.last_tile_part].plt;
+        if (codestream.last_plt >= (int) plt.size())
             return false;
         const FileSegment &marker = plt[codestream.last_plt];
 
@@ -63,10 +65,10 @@ namespace jpeg2000 {
     }
 
     bool ImageIndex::GetOffsetPacket(Codestream &codestream, uint64_t length_packet) {
-        vector<FileSegment> &packet_data = codestream.packet_data;
-        if (codestream.last_packet >= (int) packet_data.size())
+        if (codestream.last_tile_part >= (int) codestream.tile_parts.size())
             return false;
-        const FileSegment &segment = packet_data[codestream.last_packet];
+        TilePart &tile_part = codestream.tile_parts[codestream.last_tile_part];
+        const FileSegment &segment = tile_part.data;
 
         uint64_t offset = codestream.last_offset_packet;
         if (offset == 0)
@@ -77,8 +79,7 @@ namespace jpeg2000 {
 
         uint64_t next_offset = offset + length_packet;
         bool packet_data_done = next_offset == segment.offset + segment.length;
-        bool plt_done = codestream.last_plt ==
-                            (int) codestream.plt_ends[codestream.last_packet] &&
+        bool plt_done = codestream.last_plt == (int) tile_part.plt.size() &&
                         codestream.last_offset_PLT == 0;
         if (packet_data_done != plt_done)
             return false;
@@ -86,7 +87,8 @@ namespace jpeg2000 {
         codestream.packet_index.Add(FileSegment(offset, length_packet));
         codestream.last_offset_packet = next_offset;
         if (packet_data_done) {
-            codestream.last_packet++;
+            codestream.last_tile_part++;
+            codestream.last_plt = 0;
             codestream.last_offset_packet = 0;
         }
         return true;

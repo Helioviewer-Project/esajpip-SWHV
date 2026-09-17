@@ -20,15 +20,21 @@ namespace jpeg2000 {
     private:
         friend class FileManager;
 
+        struct TilePart {
+            data::FileSegment data;
+            std::vector<data::FileSegment> plt;
+
+            explicit TilePart(const data::FileSegment &_data) : data(_data) {
+            }
+        };
+
         struct Codestream {
             std::string path;
             CodingParameters parameters;
             data::FileSegment header;
-            std::vector<data::FileSegment> packet_data;
-            std::vector<data::FileSegment> plt;
-            std::vector<size_t> plt_ends;
+            std::vector<TilePart> tile_parts;
             int last_plt;
-            int last_packet;
+            int last_tile_part;
             uint64_t last_offset_PLT;
             uint64_t last_offset_packet;
             PacketIndex packet_index;
