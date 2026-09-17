@@ -115,11 +115,11 @@ These are all HTTP status codes emitted by the server:
 | Status | When it is returned | Effect on the channel |
 | --- | --- | --- |
 | `200 OK` | A channel is created, a channel request is served, or `cclose` succeeds. Image responses use `Transfer-Encoding: chunked` and `Content-Type: image/jpp-stream`; `cclose` has `Content-Length: 0`. | The channel remains available after an image response. A successful `cclose` ends it. |
-| `400 Bad Request` | A request reaches a channel but its HTTP request line, supported JPIP fields, cache model, codestream selection, or window is invalid. | The connection and channel are closed. Create a new channel after correcting the request. |
+| `400 Bad Request` | A request reaches a channel but its HTTP request line, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and channel are closed. Create a new channel after correcting the request. |
 | `404 Not Found` | A `cnew` request names a target that does not exist below the configured image directory. | No usable channel is created; the connection is closed. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and channel are closed. Create a new channel with a smaller request. |
-| `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation; or the request conflicts with channel state, such as another `cnew` on an open channel. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
-| `503 Service Unavailable` | A request names an unknown or ended `cid`, or the channel already has a replacement connection waiting. The body is `JPIP channel unavailable`. | The referenced channel is not changed. Retry only if the client knows the channel is still alive; otherwise create a new channel. |
+| `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation; or the request conflicts with channel state, such as another `cnew` on an open channel. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
+| `503 Service Unavailable` | A request names an unknown or ended `cid`, or the channel already has a replacement connection waiting. The response body distinguishes these cases. | The referenced channel is not changed. Retry only if the client knows the channel is still alive; otherwise create a new channel. |
 
 Channel-level error responses contain a short plain-text body and
 `Connection: close`. Successful responses and channel-level errors also include

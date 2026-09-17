@@ -693,22 +693,25 @@ int main() {
     string outside_name = outside_file.substr(outside_file.find_last_of('/') + 1);
     string target_traversal = "../" + outside_name;
     Check(OpenImageResult(directory, target_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
           "Accepted parent traversal in a target path");
     string uri_traversal = "/../" + outside_name;
     Check(OpenImageResult(directory, uri_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
           "Accepted parent traversal in a URI path");
     string embedded_traversal = "unused/../image.jp2";
     Check(OpenImageResult(directory, embedded_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
           "Accepted an embedded parent path segment");
     string nul_path = "image.jp2";
     nul_path.push_back('\0');
     nul_path += ".jp2";
     Check(OpenImageResult(directory, nul_path) ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
           "Accepted a file path containing NUL");
+    Check(OpenImageResult(directory, "image.jpeg") ==
+                  jpeg2000::FileManager::OpenResult::UNSUPPORTED,
+          "Did not distinguish an unsupported image type");
     Check(OpenImageResult(directory, "missing.jp2") ==
                   jpeg2000::FileManager::OpenResult::NOT_FOUND,
           "Did not distinguish a missing image");

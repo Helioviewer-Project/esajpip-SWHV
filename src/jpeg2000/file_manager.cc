@@ -32,12 +32,12 @@ namespace jpeg2000 {
     FileManager::OpenResult FileManager::OpenImage(const string &path_image_file) {
         if (path_image_file.empty()) {
             ERROR("The image file name is empty");
-            return OpenResult::INVALID;
+            return OpenResult::INVALID_PATH;
         }
         if (path_image_file.find('\0') != string::npos ||
             HasParentSegment(path_image_file)) {
             ERROR("Invalid image file path: '" << path_image_file << "'");
-            return OpenResult::INVALID;
+            return OpenResult::INVALID_PATH;
         }
         string path = path_image_file;
         if (path[0] == '/')
@@ -115,7 +115,7 @@ namespace jpeg2000 {
 
         if (extension != ".jp2" && extension != ".jpx") {
             ERROR("Unsupported image file type: '" << name_image_file << "'");
-            return OpenResult::INVALID;
+            return OpenResult::UNSUPPORTED;
         }
 
         File file;
@@ -123,7 +123,7 @@ namespace jpeg2000 {
             int error = errno;
             return error == ENOENT || error == ENOTDIR
                        ? OpenResult::NOT_FOUND
-                       : OpenResult::INVALID;
+                       : OpenResult::UNREADABLE;
         }
 
         unsigned char signature_box[sizeof JP2_SIGNATURE_BOX];

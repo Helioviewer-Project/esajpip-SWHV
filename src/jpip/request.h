@@ -12,14 +12,15 @@ namespace jpip {
 
     class Request {
     private:
-        bool ParseURI(const std::string &uri);
+        bool ParseURI(const std::string &uri, std::string *error_message);
 
     public:
         std::string object;
         std::string target;
         std::string channel;
 
-        bool Parse(const std::string &line);
+        bool Parse(const std::string &line,
+                   std::string *error_message = NULL);
 
         struct Parameters {
             bool fsiz = false;

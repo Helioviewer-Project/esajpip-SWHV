@@ -18,6 +18,9 @@ namespace jpeg2000 {
         enum class OpenResult {
             OPENED,
             NOT_FOUND,
+            INVALID_PATH,
+            UNSUPPORTED,
+            UNREADABLE,
             INVALID
         };
 
@@ -56,11 +59,10 @@ namespace jpeg2000 {
         bool ReadJPX(data::File *file, ImageIndex *image_index);
 
         /**
-         * Reads an image file and creates the associated cache file if
-         * it does not exist yet.
+         * Reads and validates an image file.
          * @param name_image_file File name of the image.
          * @param image_index Receives the information of the image.
-         * @return <code>true</code> if successful.
+         * @return File-open and validation result.
          */
         OpenResult ReadImage(const std::string &name_image_file,
                              ImageIndex *image_index);

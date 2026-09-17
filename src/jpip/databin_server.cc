@@ -32,6 +32,12 @@ namespace jpip {
             return true;
         }
 
+        bool Reject(string *error_message, const char *message) {
+            if (error_message != NULL)
+                *error_message = message;
+            return false;
+        }
+
         bool ApplyModel(const ImageIndex &image_index, CacheModel &cache_model,
                         const vector<Request::ModelUpdate> &model) {
             for (const Request::ModelUpdate &update : model) {
@@ -68,7 +74,10 @@ namespace jpip {
 
     }
 
-    bool DataBinServer::SetRequest(const ImageIndex &image_index, const Request &req) {
+    bool DataBinServer::SetRequest(const ImageIndex &image_index, const Request &req,
+                                   string *error_message) {
+        if (error_message != NULL)
+            error_message->clear();
         data_writer.StartResponse();
 
         if (req.has.stream || req.has.context) {
@@ -77,7 +86,8 @@ namespace jpip {
                 int codestream = req.codestreams[i];
                 if (codestream < 0 ||
                     static_cast<size_t>(codestream) >= image_index.GetNumCodestreams())
-                    return false;
+                    return Reject(error_message,
+                                  "Requested JPIP codestream does not exist");
                 if (!changed && streams[i].id != codestream)
                     changed = true;
             }
@@ -100,7 +110,7 @@ namespace jpip {
                     req.has.rsiz ? req.woi_size : req.resolution_size;
             if (req.resolution_size.x <= 0 || req.resolution_size.y <= 0 ||
                 requested_size.x < 0 || requested_size.y < 0)
-                return false;
+                return Reject(error_message, "Invalid JPIP window dimensions");
 
             for (Stream &stream : streams) {
                 WOI new_woi;
@@ -129,7 +139,8 @@ namespace jpip {
         }
 
         if (req.has.model && !ApplyModel(image_index, cache_model, req.model))
-            return false;
+            return Reject(error_message,
+                          "JPIP cache model does not match the selected image");
 
         pending = req.has.len ? req.length_response : INT_MAX;
         if (pending < DataBinWriter::EOR_LENGTH)

@@ -4,6 +4,7 @@
 //#define SHOW_TRACES
 
 #include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 #include "trace.h"
@@ -169,7 +170,8 @@ namespace jpip {
          * @param req Request.
          */
         bool SetRequest(const jpeg2000::ImageIndex &image_index,
-                        const Request &req);
+                        const Request &req,
+                        std::string *error_message = NULL);
 
         /**
          * Generates a new chunk of data for the current image and

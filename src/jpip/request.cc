@@ -23,6 +23,11 @@ namespace jpip {
             return static_cast<int>((scaled + denominator - 1) / denominator);
         }
 
+        void SetError(string *error_message, const char *message) {
+            if (error_message != NULL && error_message->empty())
+                *error_message = message;
+        }
+
         bool ParseInteger(const char **position, int *value) {
             const char *current = *position;
             bool negative = *current == '-';
@@ -244,21 +249,28 @@ namespace jpip {
         return res_image_size;
     }
 
-    bool Request::Parse(const string &line) {
+    bool Request::Parse(const string &line, string *error_message) {
         string method, uri, protocol;
 
-        if (line.empty())
+        if (error_message != NULL)
+            error_message->clear();
+
+        if (line.empty()) {
+            SetError(error_message, "The HTTP request line is empty");
             return false;
+        }
 
         istringstream in(line);
         if (!(in >> method >> uri >> protocol) || method != "GET" ||
-            protocol != "HTTP/1.1")
+            protocol != "HTTP/1.1") {
+            SetError(error_message, "The request must use HTTP/1.1 GET");
             return false;
+        }
 
-        return ParseURI(uri.substr(0, MAX_URI_LENGTH));
+        return ParseURI(uri.substr(0, MAX_URI_LENGTH), error_message);
     }
 
-    bool Request::ParseURI(const string &uri) {
+    bool Request::ParseURI(const string &uri, string *error_message) {
         size_t question = uri.find('?');
         object = uri.substr(0, question);
 
@@ -294,25 +306,33 @@ namespace jpip {
                         round_direction = ROUNDDOWN;
                     else if (round.empty() || round == "closest")
                         round_direction = CLOSEST;
-                    else
+                    else {
                         valid = false;
+                        SetError(error_message, "Invalid JPIP fsiz parameter");
+                    }
                     TRACE("JPIP parameter: fsiz=" << x << "," << y << "," << round);
-                } else
+                } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP fsiz parameter");
+                }
             } else if (name == "roff") {
                 if (ParsePair(value, &x, &y)) {
                     woi_position = jpeg2000::Point(x, y);
                     has.roff = true;
                     TRACE("JPIP parameter: roff=" << x << "," << y);
-                } else
+                } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP roff parameter");
+                }
             } else if (name == "rsiz") {
                 if (ParsePair(value, &x, &y)) {
                     woi_size = jpeg2000::Size(x, y);
                     has.rsiz = true;
                     TRACE("JPIP parameter: rsiz=" << x << "," << y);
-                } else
+                } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP rsiz parameter");
+                }
             } else if (name == "len") {
                 const char *position = value.c_str();
                 if (ParseInteger(&position, &x) && *position == '\0' && x >= 0) {
@@ -321,6 +341,7 @@ namespace jpip {
                     TRACE("JPIP parameter: len=" << x);
                 } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP len parameter");
                 }
             } else if (name == "stream") {
                 if (ParseRange(value, ':', &x, &y)) {
@@ -331,14 +352,21 @@ namespace jpip {
                         TRACE("JPIP parameter: stream=" << x << ":" << y);
                     } else {
                         valid = false;
+                        SetError(error_message,
+                                 "Too many JPIP codestreams were selected");
                     }
-                } else
+                } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP stream parameter");
+                }
             } else if (name == "model") {
                 if (ParseModel(value, &model))
                     has.model = true;
-                else
+                else {
                     valid = false;
+                    SetError(error_message,
+                             "Invalid or unsupported JPIP model parameter");
+                }
             } else if (name == "context") {
                 if (ParseContext(value, &x, &y)) {
                     if (AppendRange(x, y, &codestreams)) {
@@ -346,9 +374,13 @@ namespace jpip {
                         TRACE("JPIP parameter: context=" << value);
                     } else {
                         valid = false;
+                        SetError(error_message,
+                                 "Too many JPIP codestreams were selected");
                     }
-                } else
+                } else {
                     valid = false;
+                    SetError(error_message, "Invalid JPIP context parameter");
+                }
             }
 
             if (!value.empty())
@@ -358,8 +390,11 @@ namespace jpip {
         const string *route = FindParameter(query, has.cclose ? "cclose" : "cid");
         if (route)
             channel = *route;
-        if ((has.roff || has.rsiz) && !has.fsiz)
+        if ((has.roff || has.rsiz) && !has.fsiz) {
             valid = false;
+            SetError(error_message,
+                     "JPIP fsiz is required with roff or rsiz");
+        }
         return valid;
     }
 

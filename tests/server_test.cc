@@ -326,10 +326,32 @@ int main() {
     Response unavailable_response = ReadResponse(unavailable);
     Check(unavailable_response.headers.find("503 Service Unavailable") != string::npos,
           "Unknown channel did not return 503");
+    Check(unavailable_response.body == "JPIP channel does not exist",
+          "Unknown channel response did not explain the failure");
     close(unavailable);
 
     pid_t first_server = WaitForServingPid(directory);
     Check(first_server > 0, "Serving process was not recorded in the log");
+
+    int bad_request = Connect(port);
+    Check(bad_request >= 0, "Could not connect for the bad-request test");
+    SendRequest(bad_request, "/image.jp2?cnew=http&fsiz=abc");
+    Response bad_request_response = ReadResponse(bad_request);
+    Check(bad_request_response.headers.find("400 Bad Request") != string::npos &&
+                  bad_request_response.body == "Invalid JPIP fsiz parameter",
+          "Bad JPIP request did not explain the invalid field");
+    close(bad_request);
+
+    int bad_image = Connect(port);
+    Check(bad_image >= 0, "Could not connect for the bad-image test");
+    SendRequest(bad_image, "/image.jpeg?cnew=http");
+    Response bad_image_response = ReadResponse(bad_image);
+    Check(bad_image_response.headers.find("500 Internal Server Error") !=
+                      string::npos &&
+                  bad_image_response.body ==
+                      "The requested image type is not supported",
+          "Image failure did not explain the unsupported type");
+    close(bad_image);
 
     int channel = Connect(port);
     Check(channel >= 0, "Could not connect for channel creation");
@@ -376,8 +398,10 @@ int main() {
     uint64_t oversized_channel = ChannelId(oversized_created.headers);
     SendRequest(oversized, "/jpip?cid=" + to_string(oversized_channel),
                 "X-Large: " + string(4096, 'x') + "\r\n");
-    Check(ReadResponse(oversized).headers.find(
-                  "431 Request Header Fields Too Large") != string::npos,
+    Response oversized_response = ReadResponse(oversized);
+    Check(oversized_response.headers.find(
+                  "431 Request Header Fields Too Large") != string::npos &&
+                  oversized_response.body == "HTTP request head is too large",
           "Oversized request head did not return 431");
     CheckClosed(oversized, 1000, "Oversized request retained its channel");
     close(oversized);

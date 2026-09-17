@@ -163,10 +163,10 @@ private:
                 return FAIL_CHANNEL;
             }
 
-            if (!req.Parse(request.line)) {
+            string request_error;
+            if (!req.Parse(request.line, &request_error)) {
                 LOG("Bad request: " << http::EscapeForLog(request.line));
-                SendError(connection, 400, "Bad Request",
-                          "Invalid HTTP or JPIP request");
+                SendError(connection, 400, "Bad Request", request_error);
                 return FAIL_CHANNEL;
             }
 
@@ -181,10 +181,10 @@ private:
 
             if (req.has.cclose) {
                 if (!file_manager.GetImage()) {
-                    err_msg = "Close request received but there is not any channel opened";
+                    err_msg = "No JPIP channel is open";
                     /* Only one channel per client supported */
                 } else if (req.channel != "*" && req.channel != id) {
-                    err_msg = "Close request received related to another channel";
+                    err_msg = "The close request identifies a different JPIP channel";
                 } else {
                     LOG("The channel " << id << " has been closed");
 
@@ -197,7 +197,7 @@ private:
                 }
             } else if (req.has.cnew) {
                 if (file_manager.GetImage()) {
-                    err_msg = "There already is a channel opened. Only one channel per client is supported";
+                    err_msg = "A JPIP channel is already open on this connection";
                 } else {
                     file_name = req.has.target ? req.target : req.object;
 
@@ -207,17 +207,23 @@ private:
                         err_msg = "The requested image was not found";
                         error_code = 404;
                         error_reason = "Not Found";
-                    } else if (open_result != FileManager::OpenResult::OPENED) {
-                        err_msg = "The requested image could not be opened";
+                    } else if (open_result == FileManager::OpenResult::INVALID_PATH) {
+                        err_msg = "The requested image path is invalid";
+                    } else if (open_result == FileManager::OpenResult::UNSUPPORTED) {
+                        err_msg = "The requested image type is not supported";
+                    } else if (open_result == FileManager::OpenResult::UNREADABLE) {
+                        err_msg = "The requested image could not be read";
+                    } else if (open_result == FileManager::OpenResult::INVALID) {
+                        err_msg = "The requested image is not a valid supported JPEG 2000 source";
                     }
                 }
             } else if (req.has.cid) {
                 if (!file_manager.GetImage()) {
-                    err_msg = "Request received but no channel is opened";
+                    err_msg = "No JPIP channel is open";
                 } else if (req.channel != id)
-                    err_msg = "Request related to another channel";
+                    err_msg = "The request identifies a different JPIP channel";
             } else {
-                err_msg = "Invalid request (channel parameter not found)";
+                err_msg = "The request has no JPIP channel parameter";
             }
 
             if (err_msg) {
@@ -226,10 +232,10 @@ private:
                 return FAIL_CHANNEL;
             }
 
-            if (!data_server.SetRequest(*file_manager.GetImage(), req)) {
-                err_msg = "Invalid JPIP request for the selected image";
-                LOG(err_msg);
-                SendError(connection, 400, "Bad Request", err_msg);
+            if (!data_server.SetRequest(*file_manager.GetImage(), req,
+                                        &request_error)) {
+                LOG(request_error);
+                SendError(connection, 400, "Bad Request", request_error);
                 return FAIL_CHANNEL;
             }
 
