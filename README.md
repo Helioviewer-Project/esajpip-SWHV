@@ -95,7 +95,9 @@ has no command-line options.
 Stop the server by sending `SIGINT` or `SIGTERM` to the supervisor process, or
 through the host process supervisor. Do not signal only the serving child: an
 unexpected child exit causes the supervisor to start a replacement. A restart
-is recorded in the log, but active JPIP channels are not recovered.
+is recorded in the log and delayed by one second to prevent a persistent
+failure from causing a tight restart loop. Active JPIP channels are not
+recovered.
 
 Once running, a JHelioviewer target has this form:
 

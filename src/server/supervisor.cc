@@ -16,6 +16,8 @@ using namespace std;
 
 namespace {
 
+const unsigned int RESTART_DELAY = 1;
+
 // macOS discards SIGCHLD under its default disposition even while it is
 // blocked. A no-op disposition keeps it available to sigwait().
 void ChildExited(int) {
@@ -121,9 +123,20 @@ int RunSupervisor(const Config &cfg, int listen_socket,
             return -1;
 
         if (WIFSIGNALED(status))
-            restart_message = "The serving process was killed; restarting";
+            restart_message = "The serving process was killed; restarting after a short delay";
         else
-            restart_message = "The serving process exited unexpectedly; restarting";
+            restart_message =
+                    "The serving process exited unexpectedly; restarting after a short delay";
         cerr << restart_message << endl;
+
+        sleep(RESTART_DELAY);
+        sigset_t pending;
+        if (sigpending(&pending) != 0) {
+            cerr << "The supervisor signals can not be inspected: "
+                 << strerror(errno) << endl;
+            return -1;
+        }
+        if (sigismember(&pending, SIGINT) || sigismember(&pending, SIGTERM))
+            return 0;
     }
 }

@@ -22,8 +22,9 @@
   lines, roll at 1 GiB, and retain one backup.
 - Simplify operation around a supervisor and one serving process. The
   supervisor keeps the listening socket open and restarts the server after an
-  unexpected exit. The unused `status` command and its shared-memory registry
-  are gone, and log names now include the listening address and port.
+  unexpected exit, with a short delay to prevent a persistent failure from
+  causing a tight restart loop. The unused `status` command and its shared-memory
+  registry are gone, and log names now include the listening address and port.
 - Add verified PCRL and CPRL packet traversal and allow one multi-codestream
   request to cover frames with different dimensions, decomposition levels,
   quality layers, or precinct layouts.

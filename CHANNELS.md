@@ -114,10 +114,9 @@ the total open connection count without retaining an active-socket record.
 
 If the serving process restarts, accepted sockets and all per-channel state are
 lost. The supervisor retains the listening socket, so new connections remain in
-the listen backlog while it creates the replacement process. Clients establish
-new channels after the restart. If the serving process is killed, the
-replacement records that fact in its log. Other unexpected exits are recorded
-separately.
+the listen backlog during the one-second restart delay. Clients establish new
+channels after the restart. If the serving process is killed, the replacement
+records that fact in its log. Other unexpected exits are recorded separately.
 
 The serving process ignores `SIGINT` and `SIGTERM` and polls one end of a
 private Unix socket pair. The supervisor handles those signals, closes the
