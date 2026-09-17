@@ -99,7 +99,7 @@ static void CheckAppConfig() {
         "[logging]\n";
     Config defaults;
     Check(LoadConfig(minimal, &defaults), "Could not apply configuration defaults");
-    Check(defaults.initial_timeout() == 3 && defaults.connection_timeout() == -1,
+    Check(defaults.initial_timeout() == 3 && defaults.connection_timeout() == 60,
           "Wrong configuration defaults");
 
     Config missing_group;
@@ -256,6 +256,14 @@ static void CheckJHVRequests() {
           "Could not parse target-form channel request");
     Check(target_request.has.target && target_request.target == "movie.jpx",
           "Missing target field");
+
+    jpip::Request quoted_target_request;
+    Check(quoted_target_request.Parse(
+              "GET /jpip?target=a\"b.jp2&cnew=http HTTP/1.1\r") &&
+              quoted_target_request.target == "a\"b.jp2",
+          "Changed the request while preparing it for logging");
+    Check(RejectRequest("GET /jpip?cid=7 HTTP/1.1\\r"),
+          "Accepted an escaped request-line terminator");
 
     jpip::Request metadata_request;
     Check(metadata_request.Parse(

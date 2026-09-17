@@ -69,10 +69,10 @@ response selects `transport=http`, returns the channel ID, and serves the first
 JPIP request on that connection.
 
 For `cid` or `cclose`, the serving loop finds the existing channel and places the
-new connection in its queue. Unknown channels receive `503 Service Unavailable`
-and are closed immediately. If one
-replacement connection is already waiting, another is also closed. A channel
-has one active response and at most one waiting connection.
+new connection in its queue. The server returns `503 Service Unavailable` with
+`JPIP channel unavailable` when the channel is unknown, has ended, or already
+has a replacement connection waiting, then closes the new connection. A
+channel has one active response and at most one waiting connection.
 
 The channel thread handles one request at a time. Buffered requests on its
 current persistent connection come first. Otherwise, a queued replacement wakes

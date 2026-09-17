@@ -66,16 +66,16 @@ struct Completion {
 
 int completion_socket = -1;
 
-void SendUnknownChannel(int fd) {
+void SendUnavailableChannel(int fd) {
     static const char response[] =
             "HTTP/1.1 503 Service Unavailable\r\n"
             "Access-Control-Allow-Origin: *\r\n"
             "Cache-Control: no-cache\r\n"
             "Content-Type: text/plain\r\n"
-            "Content-Length: 20\r\n"
+            "Content-Length: 24\r\n"
             "Connection: close\r\n"
             "\r\n"
-            "Unknown JPIP channel";
+            "JPIP channel unavailable";
     // No response data has been queued on this newly accepted socket, so the
     // small fixed reply fits in its empty kernel send buffer.
     size_t offset = 0;
@@ -199,13 +199,14 @@ bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
     if (channel == channels.end()) {
         LOG("The connection [" << connection.id << "] references unknown channel "
                                << request.channel);
-        SendUnknownChannel(connection.fd);
+        SendUnavailableChannel(connection.fd);
         return false;
     }
     if (channel->queue->Push(connection.fd))
         return true;
     if (channel->queue->IsClosed())
         channels.erase(channel);
+    SendUnavailableChannel(connection.fd);
     return false;
 }
 

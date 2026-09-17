@@ -252,7 +252,7 @@ namespace jpip {
 
         istringstream in(line);
         if (!(in >> method >> uri >> protocol) || method != "GET" ||
-            (protocol != "HTTP/1.1" && protocol != "HTTP/1.1\\r"))
+            protocol != "HTTP/1.1")
             return false;
 
         return ParseURI(uri.substr(0, MAX_URI_LENGTH));

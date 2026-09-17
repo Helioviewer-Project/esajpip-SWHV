@@ -3,6 +3,7 @@
 
 //#define SHOW_TRACES
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 #include "trace.h"
@@ -73,7 +74,9 @@ namespace jpip {
             int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
             int seg_cached = cached - offset;
 
-            if (cached != INT_MAX && seg_cached <= (int) segment.length) {
+            if (cached != INT_MAX &&
+                (seg_cached < 0 ||
+                 static_cast<uint64_t>(seg_cached) <= segment.length)) {
                 if (seg_cached < 0)
                     seg_cached = 0;
 

@@ -43,6 +43,13 @@ static const string JPIP_HEADERS =
 static const string JPIP_GZIP_HEADERS =
         JPIP_HEADERS + "Content-Encoding: gzip\r\n";
 
+static string EscapeForLog(const string &text) {
+    char *escaped = g_strescape(text.c_str(), NULL);
+    string result(escaped);
+    g_free(escaped);
+    return result;
+}
+
 class SocketReader {
 private:
     int fd;
@@ -319,7 +326,7 @@ private:
     }
 
     ServeResult Serve(int fd) {
-        string req_line, req_line_raw;
+        string req_line;
         SocketReader reader(fd);
 
         for (;;) {
@@ -341,34 +348,29 @@ private:
                 LOG("Waiting for a request ...");
 
             size_t request_bytes = MAX_REQUEST_HEAD;
-            req_line_raw.clear();
-            SocketReader::Result read_result = reader.ReadLine(req_line_raw, request_bytes);
+            SocketReader::Result read_result = reader.ReadLine(req_line, request_bytes);
             if (read_result != SocketReader::LINE) {
                 if (read_result == SocketReader::CLOSED)
                     return file_manager.GetImage() ? KEEP_CHANNEL : FAIL_CHANNEL;
 
                 if (read_result == SocketReader::ERROR)
                     LOG("Request read error: " << strerror(errno));
-                else {
-                    char *escaped = g_strescape(req_line_raw.c_str(), NULL);
-                    LOG("Incomplete request line: " << escaped);
-                    g_free(escaped);
-                }
+                else
+                    LOG("Incomplete request line: " << EscapeForLog(req_line));
                 return FAIL_CHANNEL;
             }
 
-            char *escaped = g_strescape(req_line_raw.c_str(), NULL);
-            req_line.assign(escaped);
-            g_free(escaped);
+            if (!req_line.empty() && req_line.back() == '\r')
+                req_line.pop_back();
 
             if (!req.Parse(req_line)) {
-                LOG("Bad request: " << req_line);
+                LOG("Bad request: " << EscapeForLog(req_line));
                 SendError(fd, 400, "Bad Request", "Invalid HTTP or JPIP request");
                 return FAIL_CHANNEL;
             }
 
             if (cfg.log_requests())
-                LOG("Request: " << req_line);
+                LOG("Request: " << EscapeForLog(req_line));
 
             http::Header header;
             string header_line;

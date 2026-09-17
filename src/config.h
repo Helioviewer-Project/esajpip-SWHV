@@ -26,7 +26,7 @@ private:
 
 public:
     /**
-     * Initializes the object with zero and empty values.
+     * Initializes the object with configuration defaults.
      */
     Config() {
         port_ = 0;
@@ -38,7 +38,7 @@ public:
         max_chunk_size_ = 0;
         max_connections_ = 0;
         initial_timeout_ = 3;
-        connection_timeout_ = -1;
+        connection_timeout_ = 60;
     }
 
     /**
