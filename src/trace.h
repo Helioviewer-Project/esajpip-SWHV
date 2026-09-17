@@ -38,8 +38,8 @@ void Write(const std::string &message);
     } while (false)
 #else
 #define TRACE(a) do { } while (false)
-#endif /* _ESAJPIP_TRACE_H_ */
+#endif /* SHOW_TRACES && !NDEBUG */
 
 #define CERR(a) (std::cerr << a << std::endl, -1)
 
-#endif
+#endif /* _ESAJPIP_TRACE_H_ */
