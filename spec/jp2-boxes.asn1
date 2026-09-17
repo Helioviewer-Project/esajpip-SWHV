@@ -268,7 +268,9 @@ END
 --     (ReadJPX rejects a jp2c that has no jpch to pair with).
 --   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
 --     jp2c boxes.
---   Every url loc begins with "file://"; the harness does not resolve it.
+--   Every url loc begins with "file://" and ends with ".jp2" (ReadJPX: links
+--     resolve to .jp2 files only, never to another JPX); the harness does not
+--     resolve it.
 --   Fragment (off, len) equal to the referenced file's codestream extent is
 --     checked by the server against the linked file and is outside the
 --     corpus (it needs the second file).

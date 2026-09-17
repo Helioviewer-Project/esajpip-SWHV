@@ -206,10 +206,14 @@ END
 --   Cod:  spcod.precincts present  <=>  scod.customPrecincts
 --         spcod.precincts.higher has exactly spcod.levels entries
 --         spcod.cbWidthExp + spcod.cbHeightExp <= 8
---   Plt:  the sum of the Iplt values in a tile-part's PLT segments does not
---         exceed that tile-part's data length (A.7.3; ImageIndex::GetOffsetPacket)
+--   Plt:  where a tile-part has PLT segments, the sum of their Iplt values
+--         equals that tile-part's data length (A.7.3: every packet is listed;
+--         ImageIndex::GetOffsetPacket rejects both excess and shortfall)
 --
 -- Profile only:
 --   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)
+--         the packet count, sum over resolutions of the precinct count
+--         (B.6) times csiz times sgcod.layers, is <= 2^31 - 1
+--                                                     (CodingParameters::FillPrecinctCounts)
 --         sgcod.progression >= 3 (PCRL, CPRL)  =>  every Component has
 --         xrsiz == yrsiz == 1                            (position_order_supported)

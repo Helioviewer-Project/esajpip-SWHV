@@ -78,6 +78,33 @@ static uint64_t CF_CAT3(cf_iplt_value, CF_S, )(const CF_T(Iplt) *e) {
     return v;
 }
 
+/* Total packets = sum over resolutions of precinct counts, times csiz and
+ * layers (T.800 B.6, B.7). Returns 0 when the total exceeds INT32_MAX
+ * (CodingParameters::FillPrecinctCounts rejects such a codestream). */
+static uint64_t CF_CAT3(cf_packet_count, CF_S, )(const CF_T(Siz) *s, const CF_T(Cod) *c) {
+    uint64_t total = 0;
+    int levels = (int) c->spcod.levels, r;
+    for (r = 0; r <= levels; ++r) {
+        uint64_t scale = (uint64_t) 1 << (levels - r);
+        uint64_t w = ((uint64_t) s->xsiz + scale - 1) / scale;       /* size at r */
+        uint64_t h = ((uint64_t) s->ysiz + scale - 1) / scale;
+        int ppx = 15, ppy = 15;
+        if (c->spcod.exist.precincts) {
+            const CF_T(PrecinctSize) *ps = r == 0 ? &c->spcod.precincts.lowest
+                                                 : (const CF_T(PrecinctSize) *) &c->spcod.precincts.higher.arr[r - 1];
+            ppx = (int) ps->ppx; ppy = (int) ps->ppy;
+        }
+        w = (w + ((uint64_t) 1 << ppx) - 1) >> ppx;
+        h = (h + ((uint64_t) 1 << ppy) - 1) >> ppy;
+        total += w * h;
+        if (total > 2147483647u) return 0;
+    }
+    total *= (uint64_t) s->csiz;
+    if (total > 2147483647u) return 0;
+    total *= (uint64_t) c->sgcod.layers;
+    return total > 2147483647u ? 0 : total;
+}
+
 static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf_layer layer) {
     int i, j;
     int cod_before = 0, qcd_before = 0, tile_parts = 0, plts = 0;
@@ -105,20 +132,31 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 if ((int) tp->tnsot != tnsot) return "sot.tnsot-inconsistent";
             }
             {
-                /* T.800 A.7.3: PLT lengths describe packets of this tile-part;
-                 * their sum cannot exceed the tile-part data. */
+                /* T.800 A.7.3: the PLT segments of a tile-part list the
+                 * length of every packet in it, so where any is present
+                 * their sum is exactly the tile-part data length.
+                 * A.6.1 / A.6.4: COD and QCD appear in a tile-part header at
+                 * most once, and only in the first tile-part of the tile. */
                 uint64_t plt_sum = 0;
+                int tp_plts = 0, tp_cod = 0, tp_qcd = 0;
                 for (j = 0; j < tp->rest.headers.nCount; ++j) {
                     const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
                     if (ts->body.kind == CF_K(TileBody, plt)) {
                         const CF_T(Plt) *plt = &ts->body.u.plt.body;
                         int e;
-                        plts++;
+                        tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e)
                             plt_sum += CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
                     }
+                    if (ts->body.kind == CF_K(TileBody, cod)) tp_cod++;
+                    if (ts->body.kind == CF_K(TileBody, qcd)) tp_qcd++;
                 }
-                if (plt_sum > (uint64_t) tp->rest.data.nCount) return "plt.sum-exceeds-data";
+                plts += tp_plts;
+                if (tp_plts > 0 && plt_sum != (uint64_t) tp->rest.data.nCount)
+                    return "plt.coverage";
+                if (tp_cod > 1 || (tp_cod && tp->tpsot != 0)) return "tile.cod-once";
+                if (tp_qcd > 1 || (tp_qcd && tp->tpsot != 0)) return "tile.qcd-once";
+                if (layer >= CF_PROFILE && tp_plts == 0) return "codestream.no-plt";
             }
 #ifdef CF_HAS_OTHER
             for (j = 0; j < tp->rest.headers.nCount; ++j) {
@@ -164,6 +202,10 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     if (layer >= CF_PROFILE) {
         if (tile_parts > 64) return "codestream.tile-part-limit";
         if (plts == 0) return "codestream.no-plt";
+        /* FillPrecinctCounts: the packet count must fit the int JPIP state. */
+        if (main_cod != NULL &&
+            CF_CAT3(cf_packet_count, CF_S, )(&cs->siz.body, main_cod) == 0)
+            return "codestream.packet-count";
     }
     return NULL;
 }
@@ -193,9 +235,14 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
             for (j = 0; j < d->references.nCount; ++j) {
                 const CF_T(InnerBox) *u = &d->references.arr[j];
                 if (u->payload.kind != CF_K(InnerPayload, url)) return "dtbl.non-url";
-                if (layer >= CF_PROFILE && kind == CF_JPX &&
-                    strncmp((const char *) u->payload.u.url.loc, "file://", 7) != 0)
-                    return "url.file-scheme";   /* ReadUrlBox; ReadJP2 never reads dtbl */
+                if (layer >= CF_PROFILE && kind == CF_JPX) {
+                    const char *loc = (const char *) u->payload.u.url.loc;
+                    size_t n = strlen(loc);
+                    if (strncmp(loc, "file://", 7) != 0)
+                        return "url.file-scheme";   /* ReadUrlBox; ReadJP2 never reads dtbl */
+                    if (n < 4 || strcmp(loc + n - 4, ".jp2") != 0)
+                        return "url.jp2-target";    /* ReadJPX: links resolve to .jp2 only */
+                }
             }
         }
     }

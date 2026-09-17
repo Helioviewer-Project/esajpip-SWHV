@@ -735,6 +735,38 @@ static void rule_iplt_six_bytes(Jp2Family *f, int box) {
     e->b4.more = 1; e->exist.b5 = 1;
     e->b5.more = 0; e->b5.bits = 1;                        /* 6 bytes: standard valid, profile invalid */
 }
+static void rule_iplt_too_short(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    tp->rest.data.nCount += 1;                              /* one byte no PLT entry covers */
+    tp->rest.data.arr[tp->rest.data.nCount - 1] = 0x00;
+}
+static void rule_tile_cod_twice(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    int n = tp->rest.headers.nCount, i;
+    for (i = 0; i < 2; ++i) {                               /* two COD in the tile header */
+        TileSegment *ts = &tp->rest.headers.arr[n + i];
+        ts->code = MC_COD;
+        ts->body.kind = TileBody_cod_PRESENT;
+        ts->body.u.cod.body = *cod_of(f, box);
+    }
+    tp->rest.headers.nCount = n + 2;
+}
+static void rule_tile_cod_second_part(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    TilePart *tp;
+    TileSegment *ts;
+    rule_two_tile_parts(f, box);
+    tp = &cs->segments.arr[3].body.u.tilePart;             /* COD in tile-part 1 */
+    ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    ts->code = MC_COD;
+    ts->body.kind = TileBody_cod_PRESENT;
+    ts->body.u.cod.body = *cod_of(f, box);
+}
+static void rule_packet_count_overflow(Jp2Family *f, int box) {
+    Siz *s = &cs_of(f, box)->siz.body;                     /* 2^16 x 2^16 default precincts */
+    s->xsiz = s->xtsiz = 2147483647;
+    s->ysiz = s->ytsiz = 2147483647;
+}
 static void rule_iplt_too_long(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
     e->b0.more = 0; e->b0.bits = 2;                        /* data holds 1 byte */
@@ -775,6 +807,10 @@ static const RuleMutant rule_mutants[] = {
     { "main.com",                       rule_com_segment,       "COM segment: valid", 0 },
     { "plt.iplt-five-bytes",            rule_iplt_five_bytes,   "5-byte Iplt encoding value 1: valid", 0 },
     { "plt.sum-exceeds-data",           rule_iplt_too_long,     "packet length beyond tile-part data", 0 },
+    { "plt.sum-short",                  rule_iplt_too_short,    "tile-part byte no PLT entry covers", 0 },
+    { "tile.cod-once",                  rule_tile_cod_twice,    "two COD in the tile-part header", 0 },
+    { "tile.cod-first-part",            rule_tile_cod_second_part, "COD in the second tile-part", 0 },
+    { "codestream.packet-count",        rule_packet_count_overflow, "2^32 packets: profile invalid", 0 },
     { "plt.iplt-six-bytes",            rule_iplt_six_bytes,    "6-byte Iplt encoding value 1: valid", 0 },
     { "siz.position-order-sampling",    rule_pcrl_subsampled,   "PCRL with 2:1 sampling: profile invalid", 0 },
     { "file.signature",                 rule_missing_signature, "no jP box (T.800 I.4)", CF_JP2 },
@@ -795,6 +831,10 @@ static void rule_url_scheme(Jp2Family *f, int box) {
     (void) box;
     strcpy((char *) f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.loc, "http://x/frame1.jp2");
 }
+static void rule_url_jpx_target(Jp2Family *f, int box) {
+    (void) box;
+    strcpy((char *) f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
+}
 static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
 static void rule_mixed_linked_embedded(Jp2Family *f, int box) { (void) box; add_jp2c(f, BASE_W, BASE_H, 0, 0, 1); }
 static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
@@ -806,6 +846,7 @@ static const RuleMutant linked_rule_mutants[] = {
     { "dtbl.ndr-count",             rule_ndr_mismatch,     "NDR = 3 with 2 url boxes", CF_JPX },
     { "url.file-scheme",            rule_url_scheme,       "http URL: profile invalid", CF_JPX },
     { "url.version",                rule_url_version,      "VERS = 1: profile invalid", CF_JPX },
+    { "url.jp2-target",             rule_url_jpx_target,   "link to a .jpx: profile invalid", CF_JPX },
     { "jpx.linked-precedence",      rule_mixed_linked_embedded, "jp2c next to ftbl: links win, valid", CF_JPX },
     { "jpx.linked-shape",           rule_no_dtbl,          "no dtbl", CF_JPX },
 };

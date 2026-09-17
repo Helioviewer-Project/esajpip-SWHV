@@ -223,6 +223,8 @@ END
 --   For each tile: tile-part indices tpsot are 0, 1, 2, ... in stream order;
 --     every non-zero tnsot of that tile is the same value, tpsot < tnsot for
 --     every tile-part of that tile, and the tile's tile-part count == tnsot.
+--   COD and QCD appear in a tile-part header at most once each, and only in
+--     the first tile-part of the tile (A.6.1, A.6.4).
 --   The chosen CHOICE alternative matches `code` (automatic: present-when).
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
 --
@@ -231,6 +233,5 @@ END
 --     `other` codes are never SOC, SIZ, SOT (FF90) or EOC (FFD9) — the server
 --     rejects those (ReadCodestream), everything else it skips.
 --   1..64 tile-parts in total (single tile, so per tile == total).
---   At least one PLT segment across all tile-part headers
---     ("The code-stream does not include any PLT marker").
+--   Every tile-part header holds at least one PLT segment (ReadSODMarker).
 --   Whole codestream <= INT_MAX bytes.

@@ -378,8 +378,10 @@ From each base:
 3. **Rule mutants** (`rule_mutants[]`, `linked_rule_mutants[]`): one
    structural change per cross-field rule — a second COD or QCD, no QCD, a
    QCD after the tile-part, no PLT, contradictory TNsot, 65 tile-parts, a
-   packet length beyond the data, no `jP` box, two `jp2c`, `DR = 0`, `NDR`
-   mismatch, two `flst`, an `http` URL. Names look like
+   packet length beyond or short of the data, COD twice in a tile header or
+   in a second tile-part, a packet count above 2^31, no `jP` box, two
+   `jp2c`, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a link to a
+   `.jpx`. Names look like
    `jp2-rule-codestream.no-plt-4` (the number is the mutant's index in its
    table, so it shifts when a mutant is inserted before it).
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
