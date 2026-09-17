@@ -144,6 +144,11 @@ written to the server log and close the affected channel. Enable
 `logging.requests` temporarily when the request associated with a failure is
 needed for diagnosis.
 
+For reproducible integration, performance, sanitizer, and Debian procedures,
+see [Testing esajpip](TESTING.md). The [development notes](DEVELOPMENT.md) record
+the measurements and compatibility decisions behind the current design.
+User-visible release changes are summarized in the [changelog](CHANGELOG.md).
+
 ## License
 
 The ESA JPIP server is licensed under the Common Development and Distribution

@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0-rc1 - future
+## 2.0-rc1 - Unreleased
 
 ### Changed
 
@@ -32,6 +32,9 @@
 
 ### Fixed
 
+- Keep parsed request values local to one HTTP request. A later request can no
+  longer inherit a window size, offset, response limit, or rounding direction
+  omitted by that request.
 - Make response limits, cache-model updates, and metadata continuation reliable
   across requests. An omitted `len` is unlimited, small limits still produce a
   complete end-of-response message, and metadata resumes correctly even when a
