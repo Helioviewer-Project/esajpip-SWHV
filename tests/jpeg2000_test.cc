@@ -77,6 +77,13 @@ static void Append32(vector<unsigned char> &data, uint32_t value) {
     data.push_back(value);
 }
 
+static uint32_t Read32(const vector<unsigned char> &data, size_t offset) {
+    return (static_cast<uint32_t>(data[offset]) << 24) |
+           (static_cast<uint32_t>(data[offset + 1]) << 16) |
+           (static_cast<uint32_t>(data[offset + 2]) << 8) |
+           data[offset + 3];
+}
+
 static void Set32(vector<unsigned char> &data, size_t offset, uint32_t value) {
     data[offset] = value >> 24;
     data[offset + 1] = value >> 16;
@@ -313,6 +320,25 @@ static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream) {
     return codestream;
 }
 
+static vector<unsigned char> ShortenFirstTilePartData(
+        vector<unsigned char> codestream) {
+    for (size_t i = 0; i + 12 <= codestream.size(); ++i) {
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x90)
+            continue;
+        uint32_t length = Read32(codestream, i + 6);
+        size_t end = i + length;
+        Check(length > 0 && end + 1 < codestream.size() &&
+                  codestream[end - 1] == 0 &&
+                  codestream[end] == 0xFF && codestream[end + 1] == 0x90,
+              "Unexpected first tile-part layout");
+        codestream.erase(codestream.begin() + end - 1);
+        Set32(codestream, i + 6, length - 1);
+        return codestream;
+    }
+    Check(false, "Tile-part not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> SplitFirstPLT(vector<unsigned char> codestream) {
     size_t sot = 0;
     for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
@@ -541,6 +567,9 @@ int main() {
                   MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
     WriteFile(directory + "extra-tile-part-packet.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 2)));
+    WriteFile(directory + "extra-plt-entry.jp2",
+              MakeJP2(ShortenFirstTilePartData(
+                      MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
     WriteFile(directory + "multiple-plt.jp2",
               MakeJP2(SplitFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 2, 1, 2))));
@@ -740,6 +769,17 @@ int main() {
                       extra_packet_file, 0,
                       jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
           "Accepted packet data beyond the COD-derived packet set");
+
+    jpeg2000::FileManager extra_plt_manager;
+    Check(OpenImage(directory, "extra-plt-entry.jp2", &extra_plt_manager),
+          "Rejected a lazy-indexed extra-PLT fixture during parsing");
+    data::File *extra_plt_file =
+            extra_plt_manager.GetFile(directory + "extra-plt-entry.jp2");
+    Check(extra_plt_file != NULL &&
+              !extra_plt_manager.GetImage()->GetPacket(
+                      extra_plt_file, 0,
+                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Accepted a PLT entry beyond the tile-part data");
 
     jpeg2000::FileManager multiple_plt_manager;
     Check(OpenImage(directory, "multiple-plt.jp2", &multiple_plt_manager),
@@ -1309,6 +1349,7 @@ int main() {
     remove((directory + "main-poc.jp2").c_str());
     remove((directory + "short-plt.jp2").c_str());
     remove((directory + "extra-tile-part-packet.jp2").c_str());
+    remove((directory + "extra-plt-entry.jp2").c_str());
     remove((directory + "multiple-plt.jp2").c_str());
     remove((directory + "repeated-plt-index.jp2").c_str());
     remove((directory + "zero-padded-plt.jp2").c_str());

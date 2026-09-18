@@ -75,9 +75,12 @@ namespace jpeg2000 {
         if (plt_done && !packet_data_done)
             return false;
 
-        codestream.data_cursor.offset = next_offset;
         bool final_packet = codestream.packet_index.Size() + 1 ==
                             codestream.parameters.GetNumPackets();
+        if (!final_packet && packet_data_done && !plt_done)
+            return false;
+
+        codestream.data_cursor.offset = next_offset;
         if (final_packet) {
             if (!packet_data_done)
                 return false;
