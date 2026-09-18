@@ -996,6 +996,22 @@ int main() {
               multi_stream_length == 3 && multi_stream_last,
           "Applied an unqualified cache model to codestream 0");
 
+    jpip::Request context_model_request;
+    Check(context_model_request.Parse(
+              "GET /jpip?context=jpxl%3C1%3E&model=M0,Hm,H0,P0&cid=0 HTTP/1.1"),
+          "Could not parse an unqualified context cache model");
+    jpip::DataBinServer context_model_server;
+    Check(context_model_server.SetRequest(*embedded_two_manager.GetImage(),
+                                           context_model_request),
+          "Rejected an unqualified context cache model");
+    multi_stream_length = sizeof multi_stream_response;
+    Check(context_model_server.GenerateChunk(embedded_two_manager,
+                                               multi_stream_response,
+                                               &multi_stream_length,
+                                               &multi_stream_last) &&
+              multi_stream_length > 3 && multi_stream_last,
+          "Applied an unqualified context cache model outside codestream 0");
+
     jpip::DataBinServer default_stream_server;
     Check(default_stream_server.SetRequest(*embedded_two_manager.GetImage(),
                                            second_stream_request),
