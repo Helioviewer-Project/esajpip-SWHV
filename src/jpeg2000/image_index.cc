@@ -18,7 +18,7 @@ namespace jpeg2000 {
         uint64_t length_packet = 0;
         while (codestream.packet_index.Size() <= max_index) {
             if (!GetPLTLength(file, codestream, &length_packet) ||
-                !GetOffsetPacket(codestream, length_packet))
+                !GetOffsetPacket(file, codestream, length_packet))
                 return false;
         }
         return true;
@@ -57,7 +57,8 @@ namespace jpeg2000 {
         return true;
     }
 
-    bool ImageIndex::GetOffsetPacket(Codestream &codestream, uint64_t length_packet) {
+    bool ImageIndex::GetOffsetPacket(File *file, Codestream &codestream,
+                                     uint64_t length_packet) {
         if (codestream.data_cursor.index >= codestream.tile_parts.size())
             return false;
         TilePart &tile_part = codestream.tile_parts[codestream.data_cursor.index];
@@ -71,12 +72,30 @@ namespace jpeg2000 {
         uint64_t next_offset = offset + length_packet;
         bool packet_data_done = next_offset == segment.offset + segment.length;
         bool plt_done = codestream.plt_cursor.index == tile_part.plt.size();
-        if (packet_data_done != plt_done)
+        if (plt_done && !packet_data_done)
             return false;
 
-        codestream.packet_index.Add(FileSegment(offset, length_packet));
         codestream.data_cursor.offset = next_offset;
-        if (packet_data_done) {
+        bool final_packet = codestream.packet_index.Size() + 1 ==
+                            codestream.parameters.GetNumPackets();
+        if (final_packet) {
+            if (!packet_data_done)
+                return false;
+
+            // The deployed OpenJPEG transcoder pads PLT with zero entries
+            // after the logical packet list. T.800 defines one Iplt value per
+            // packet, so accept only zero padding and never expose it as
+            // additional packets.
+            while (!plt_done) {
+                uint64_t padding = 0;
+                if (!GetPLTLength(file, codestream, &padding) || padding != 0)
+                    return false;
+                plt_done = codestream.plt_cursor.index == tile_part.plt.size();
+            }
+        }
+
+        codestream.packet_index.Add(FileSegment(offset, length_packet));
+        if (packet_data_done && plt_done) {
             codestream.data_cursor.index++;
             if (codestream.data_cursor.index < codestream.tile_parts.size()) {
                 TilePart &next =

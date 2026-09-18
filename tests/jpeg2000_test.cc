@@ -21,6 +21,50 @@ static void Check(bool condition, const char *message) {
     }
 }
 
+static void CheckProgressionMappings() {
+    for (int progression = 0; progression <= 4; ++progression) {
+        jpeg2000::CodingParameters parameters;
+        parameters.size = jpeg2000::Size(19, 13);
+        parameters.num_levels = 3;
+        parameters.num_layers = 4;
+        parameters.num_components = 3;
+        parameters.progression = progression;
+        parameters.resolutions.emplace_back(1, 2);
+        parameters.resolutions.emplace_back(2, 1);
+        parameters.resolutions.emplace_back(3, 2);
+        parameters.resolutions.emplace_back(2, 3);
+        Check(parameters.FillPrecinctCounts(),
+              "Could not build progression-order test geometry");
+
+        vector<bool> seen(parameters.GetNumPackets());
+        int count = 0;
+        for (int layer = 0; layer < parameters.num_layers; ++layer)
+            for (int resolution = 0; resolution <= parameters.num_levels;
+                 ++resolution)
+                for (int component = 0;
+                     component < parameters.num_components; ++component)
+                    for (int y = 0;
+                         y < parameters.resolutions[resolution].num_precincts.y;
+                         ++y)
+                        for (int x = 0;
+                             x < parameters.resolutions[resolution].num_precincts.x;
+                             ++x) {
+                            int index = parameters.GetProgressionIndex(
+                                    jpeg2000::Packet(
+                                            layer, resolution, component,
+                                            jpeg2000::Point(x, y)));
+                            Check(index >= 0 &&
+                                          index < parameters.GetNumPackets() &&
+                                          !seen[index],
+                                  "Progression order does not map packets uniquely");
+                            seen[index] = true;
+                            ++count;
+                        }
+        Check(count == parameters.GetNumPackets(),
+              "Progression order does not cover every packet");
+    }
+}
+
 static void Append16(vector<unsigned char> &data, uint16_t value) {
     data.push_back(value >> 8);
     data.push_back(value);
@@ -139,6 +183,39 @@ static vector<unsigned char> MakePrecinctCodestream(uint8_t lowest,
                           vector<unsigned char>{lowest, higher});
 }
 
+static vector<unsigned char> SetMCTComponents(
+        vector<unsigned char> codestream,
+        const vector<unsigned char> &depths) {
+    Check(!depths.empty(), "No components in MCT test fixture");
+    size_t siz = 2;
+    Check(codestream[siz] == 0xFF && codestream[siz + 1] == 0x51,
+          "SIZ marker not found in MCT test fixture");
+    codestream[siz + 2] = (38 + 3 * depths.size()) >> 8;
+    codestream[siz + 3] = (38 + 3 * depths.size()) & 0xFF;
+    codestream[siz + 38] = depths.size() >> 8;
+    codestream[siz + 39] = depths.size() & 0xFF;
+    codestream.erase(codestream.begin() + siz + 40,
+                     codestream.begin() + siz + 43);
+    vector<unsigned char> components;
+    for (unsigned char depth : depths) {
+        components.push_back(depth);
+        components.push_back(1);
+        components.push_back(1);
+    }
+    codestream.insert(codestream.begin() + siz + 40,
+                      components.begin(), components.end());
+
+    for (size_t i = siz + 40 + components.size();
+         i + 9 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x52) {
+            codestream[i + 8] = 1;
+            return codestream;
+        }
+    }
+    Check(false, "COD marker not found in MCT test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> DuplicateMarker(vector<unsigned char> codestream,
                                               uint16_t marker) {
     for (size_t i = 0; i + 4 <= codestream.size(); ++i) {
@@ -211,6 +288,20 @@ static vector<unsigned char> InsertMarkerInTilePart(
     return codestream;
 }
 
+static vector<unsigned char> InsertBeforeFirstSOT(
+        vector<unsigned char> codestream,
+        const vector<unsigned char> &segment) {
+    for (size_t i = 0; i + 1 < codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x90) {
+            codestream.insert(codestream.begin() + i,
+                              segment.begin(), segment.end());
+            return codestream;
+        }
+    }
+    Check(false, "SOT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream) {
     for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
         if (codestream[i] == 0xFF && codestream[i + 1] == 0x58) {
@@ -241,6 +332,43 @@ static vector<unsigned char> SplitFirstPLT(vector<unsigned char> codestream) {
         return codestream;
     }
     Check(false, "PLT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
+static vector<unsigned char> RepeatFirstPLTIndex(vector<unsigned char> codestream) {
+    codestream = SplitFirstPLT(codestream);
+    for (size_t i = 0, found = 0; i + 4 < codestream.size(); ++i) {
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x58)
+            continue;
+        if (++found == 2) {
+            codestream[i + 4] = 0;
+            return codestream;
+        }
+    }
+    Check(false, "Second PLT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
+static vector<unsigned char> PadFirstPLT(vector<unsigned char> codestream,
+                                         unsigned char padding) {
+    size_t sot = 0;
+    for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x90)
+            sot = i;
+        if (codestream[i] != 0xFF || codestream[i + 1] != 0x58)
+            continue;
+        uint16_t lplt = (codestream[i + 2] << 8) | codestream[i + 3];
+        codestream.insert(codestream.begin() + i + 2 + lplt,
+                          {padding, padding});
+        codestream[i + 2] = (lplt + 2) >> 8;
+        codestream[i + 3] = (lplt + 2) & 0xFF;
+        uint32_t psot = (codestream[sot + 6] << 24) |
+                        (codestream[sot + 7] << 16) |
+                        (codestream[sot + 8] << 8) | codestream[sot + 9];
+        Set32(codestream, sot + 6, psot + 2);
+        return codestream;
+    }
+    Check(false, "PLT marker not found in padded PLT fixture");
     return codestream;
 }
 
@@ -319,6 +447,8 @@ static bool RejectDataRequest(jpeg2000::FileManager &manager,
 }
 
 int main() {
+    CheckProgressionMappings();
+
     char directory_template[] = "/tmp/esajpip-jpeg2000-XXXXXX";
     char *directory_name = mkdtemp(directory_template);
     Check(directory_name != NULL, "Could not create JPEG 2000 test directory");
@@ -327,6 +457,19 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    WriteFile(directory + "wrong-brand.jp2",
+              MakeEmbeddedJPX(codestream));
+    vector<unsigned char> nested_codestream = MakePreamble(0x6A707820);
+    vector<unsigned char> codestream_box;
+    AppendBox(codestream_box, 0x6A703263, codestream);
+    AppendBox(nested_codestream, 0x6A706368, codestream_box);
+    WriteFile(directory + "nested-codestream.jpx", nested_codestream);
+    Check(mkdir((directory + "nested").c_str(), 0700) == 0,
+          "Could not create nested JPEG 2000 test directory");
+    WriteFile(directory + "nested/relative.jpx",
+              MakeLinkedJPX("../image.jp2", codestream.size()));
+    WriteFile(directory + "empty-reference.jpx",
+              MakeLinkedJPX("", codestream.size()));
     vector<unsigned char> marker_after_tile_part = codestream;
     marker_after_tile_part.insert(marker_after_tile_part.end() - 2,
                                   {0xFF, 0x5C, 0x00, 0x03, 0x00});
@@ -336,6 +479,14 @@ int main() {
               MakeJP2(DuplicateMarker(codestream, 0xFF52)));
     WriteFile(directory + "duplicate-qcd.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF5C)));
+    WriteFile(directory + "main-coc.jp2",
+              MakeJP2(InsertBeforeFirstSOT(
+                  codestream,
+                  {0xFF, 0x53, 0, 9, 0, 0, 0, 0, 0, 0, 1})));
+    WriteFile(directory + "main-poc.jp2",
+              MakeJP2(InsertBeforeFirstSOT(
+                  codestream,
+                  {0xFF, 0x5F, 0, 9, 0, 0, 0, 1, 1, 0, 0})));
     WriteFile(directory + "wrong-tile-part-count.jp2",
               MakeJP2(SetTilePartNumbers(codestream, 0, 0, 2)));
     WriteFile(directory + "wrong-first-tile-part.jp2",
@@ -352,12 +503,34 @@ int main() {
         WriteFile(directory + name,
                   MakeJP2(InsertMarkerInTilePart(MakeCodestream(), marker, 0)));
     }
+    WriteFile(directory + "tile-com.jp2",
+              MakeJP2(InsertMarkerInTilePart(
+                  InsertBeforeFirstSOT(codestream,
+                                       {0xFF, 0x64, 0, 4, 0, 1}),
+                  0xFF64, 0)));
     WriteFile(directory + "short-plt.jp2",
               MakeJP2(ShortenFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
     WriteFile(directory + "multiple-plt.jp2",
               MakeJP2(SplitFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 2, 1, 2))));
+    WriteFile(directory + "repeated-plt-index.jp2",
+              MakeJP2(RepeatFirstPLTIndex(
+                  MakeCodestream(0, 1, 1, 1, 0, 2, 1, 2))));
+    WriteFile(directory + "zero-padded-plt.jp2",
+              MakeJP2(PadFirstPLT(MakeCodestream(), 0)));
+    WriteFile(directory + "nonzero-padded-plt.jp2",
+              MakeJP2(PadFirstPLT(MakeCodestream(), 1)));
+    WriteFile(directory + "valid-mct.jp2",
+              MakeJP2(SetMCTComponents(
+                  MakeCodestream(0, 1, 1, 1, 0, 1, 1, 3),
+                  {7, 7, 7})));
+    WriteFile(directory + "short-mct.jp2",
+              MakeJP2(SetMCTComponents(MakeCodestream(), {7})));
+    WriteFile(directory + "mismatched-mct.jp2",
+              MakeJP2(SetMCTComponents(
+                  MakeCodestream(0, 1, 1, 1, 0, 1, 1, 3),
+                  {7, 8, 7})));
     WriteFile(directory + "missing-signature.jp2",
               vector<unsigned char>(jp2.begin() + 12, jp2.end()));
     vector<unsigned char> bad_signature = jp2;
@@ -373,7 +546,10 @@ int main() {
                   MakeJP2(MakeCodestream(progression, 1, 4, 4, 0, 2, 1, 8, 0,
                                          vector<unsigned char>{0x00, 0x11})));
     }
-    WriteFile(directory + "unsupported-pcrl.jp2", MakeJP2(MakeCodestream(3, 2)));
+    for (int progression = 0; progression <= 4; ++progression) {
+        WriteFile(directory + "subsampled-" + to_string(progression) + ".jp2",
+                  MakeJP2(MakeCodestream(progression, 2)));
+    }
     WriteFile(directory + "multi-tile.jp2", MakeJP2(MakeCodestream(0, 1, 2, 1)));
     WriteFile(directory + "bad-tile-index.jp2", MakeJP2(MakeCodestream(0, 1, 1, 1, 1)));
     WriteFile(directory + "64-tile-parts.jp2",
@@ -425,6 +601,12 @@ int main() {
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
     Check(manager.GetImage()->GetNumCodestreams() == 1, "Wrong JP2 codestream count");
 
+    jpeg2000::FileManager relative_link_manager;
+    Check(OpenImage(directory, "nested/relative.jpx", &relative_link_manager),
+          "Could not resolve a linked JPX URL relative to its containing file");
+    Check(relative_link_manager.GetImage()->GetNumCodestreams() == 1,
+          "Wrong relative linked-JPX codestream count");
+
     jpeg2000::FileManager marker_after_tile_part_manager;
     Check(!OpenImage(directory, "marker-after-tile-part.jp2",
                      &marker_after_tile_part_manager),
@@ -436,6 +618,21 @@ int main() {
               "Accepted a repeated main-header COD or QCD marker");
     }
 
+    for (const char *name : {"main-coc.jp2", "main-poc.jp2"}) {
+        jpeg2000::FileManager main_override_manager;
+        Check(!OpenImage(directory, name, &main_override_manager),
+              "Accepted unsupported main-header coding instructions");
+    }
+
+    jpeg2000::FileManager valid_mct_manager;
+    Check(OpenImage(directory, "valid-mct.jp2", &valid_mct_manager),
+          "Rejected a valid Part 1 multiple component transform");
+    for (const char *name : {"short-mct.jp2", "mismatched-mct.jp2"}) {
+        jpeg2000::FileManager invalid_mct_manager;
+        Check(!OpenImage(directory, name, &invalid_mct_manager),
+              "Accepted invalid multiple component transform inputs");
+    }
+
     for (const char *name : {"wrong-tile-part-count.jp2",
                              "wrong-first-tile-part.jp2",
                              "inconsistent-tile-part-count.jp2"}) {
@@ -444,7 +641,7 @@ int main() {
               "Accepted inconsistent JPEG 2000 tile-part numbering");
     }
 
-    for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2",
+    for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2", "tile-com.jp2",
                              "late-cod.jp2", "late-qcd.jp2"}) {
         jpeg2000::FileManager tile_marker_manager;
         Check(!OpenImage(directory, name, &tile_marker_manager),
@@ -452,11 +649,20 @@ int main() {
     }
 
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
-                             "missing-file-type.jp2"}) {
+                             "missing-file-type.jp2", "wrong-brand.jp2"}) {
         jpeg2000::FileManager preamble_manager;
         Check(!OpenImage(directory, name, &preamble_manager),
               "Accepted an invalid JPEG 2000 file preamble");
     }
+
+    jpeg2000::FileManager nested_codestream_manager;
+    Check(!OpenImage(directory, "nested-codestream.jpx",
+                     &nested_codestream_manager),
+          "Accepted a JPX codestream box outside the top level");
+    jpeg2000::FileManager empty_reference_manager;
+    Check(!OpenImage(directory, "empty-reference.jpx",
+                     &empty_reference_manager),
+          "Accepted an empty JPX data-reference URL");
 
     data::File *file = manager.GetFile(directory + "image.jp2");
     Check(file != NULL, "Could not reopen valid JP2");
@@ -466,6 +672,11 @@ int main() {
                                         &packet),
           "Could not index valid JP2 packet");
     Check(packet.length == 1, "Wrong JP2 packet length");
+
+    jpeg2000::FileManager repeated_plt_index_manager;
+    Check(!OpenImage(directory, "repeated-plt-index.jp2",
+                     &repeated_plt_index_manager),
+          "Accepted duplicate PLT marker indices");
 
     jpeg2000::FileManager short_plt_manager;
     Check(OpenImage(directory, "short-plt.jp2", &short_plt_manager),
@@ -492,6 +703,32 @@ int main() {
                       multiple_plt_file, 0,
                       jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
           "Could not index packets across PLT markers");
+
+    jpeg2000::FileManager zero_padding_manager;
+    Check(OpenImage(directory, "zero-padded-plt.jp2", &zero_padding_manager),
+          "Rejected zero-padded PLT fixture during parsing");
+    data::File *zero_padding_file =
+            zero_padding_manager.GetFile(directory + "zero-padded-plt.jp2");
+    Check(zero_padding_file != NULL, "Could not open zero-padded PLT fixture");
+    Check(zero_padding_manager.GetImage()->GetPacket(
+                  zero_padding_file, 0,
+                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Rejected deployed zero PLT padding");
+    Check(packet.length == 1, "Wrong packet before zero PLT padding");
+
+
+    jpeg2000::FileManager nonzero_padding_manager;
+    Check(OpenImage(directory, "nonzero-padded-plt.jp2",
+                    &nonzero_padding_manager),
+          "Rejected lazy-indexed nonzero PLT padding fixture during parsing");
+    data::File *nonzero_padding_file = nonzero_padding_manager.GetFile(
+            directory + "nonzero-padded-plt.jp2");
+    Check(nonzero_padding_file != NULL,
+          "Could not open nonzero PLT padding fixture");
+    Check(!nonzero_padding_manager.GetImage()->GetPacket(
+                  nonzero_padding_file, 0,
+                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Accepted nonzero data after the logical PLT packet list");
 
     for (const char *name : {"pcrl.jp2", "cprl.jp2"}) {
         jpeg2000::FileManager progression_manager;
@@ -545,9 +782,13 @@ int main() {
                       packet.offset == first_segment.offset + earlier_index,
               "Rebuilt or returned the wrong earlier packet");
     }
-    jpeg2000::FileManager unsupported_progression_manager;
-    Check(!OpenImage(directory, "unsupported-pcrl.jp2", &unsupported_progression_manager),
-          "Accepted spatial progression with unsupported component geometry");
+    for (int progression = 0; progression <= 4; ++progression) {
+        jpeg2000::FileManager subsampled_manager;
+        Check(!OpenImage(directory,
+                         "subsampled-" + to_string(progression) + ".jp2",
+                         &subsampled_manager),
+              "Accepted component sampling unsupported by the packet index");
+    }
 
     jpeg2000::FileManager multi_tile_manager;
     Check(!OpenImage(directory, "multi-tile.jp2", &multi_tile_manager),
@@ -914,9 +1155,15 @@ int main() {
     manager.ClearFiles();
 
     remove((directory + "image.jp2").c_str());
+    remove((directory + "wrong-brand.jp2").c_str());
+    remove((directory + "nested-codestream.jpx").c_str());
+    remove((directory + "empty-reference.jpx").c_str());
+    remove((directory + "nested/relative.jpx").c_str());
+    rmdir((directory + "nested").c_str());
     remove((directory + "pcrl.jp2").c_str());
     remove((directory + "cprl.jp2").c_str());
-    remove((directory + "unsupported-pcrl.jp2").c_str());
+    for (int progression = 0; progression <= 4; ++progression)
+        remove((directory + "subsampled-" + to_string(progression) + ".jp2").c_str());
     remove((directory + "multi-tile.jp2").c_str());
     remove((directory + "bad-tile-index.jp2").c_str());
     remove((directory + "64-tile-parts.jp2").c_str());
@@ -925,8 +1172,17 @@ int main() {
     remove((directory + "late-qcd.jp2").c_str());
     remove((directory + "tile-cod.jp2").c_str());
     remove((directory + "tile-qcd.jp2").c_str());
+    remove((directory + "tile-com.jp2").c_str());
+    remove((directory + "main-coc.jp2").c_str());
+    remove((directory + "main-poc.jp2").c_str());
     remove((directory + "short-plt.jp2").c_str());
     remove((directory + "multiple-plt.jp2").c_str());
+    remove((directory + "repeated-plt-index.jp2").c_str());
+    remove((directory + "zero-padded-plt.jp2").c_str());
+    remove((directory + "nonzero-padded-plt.jp2").c_str());
+    remove((directory + "valid-mct.jp2").c_str());
+    remove((directory + "short-mct.jp2").c_str());
+    remove((directory + "mismatched-mct.jp2").c_str());
     remove(large_file.c_str());
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());

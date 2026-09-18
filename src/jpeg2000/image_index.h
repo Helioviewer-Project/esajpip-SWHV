@@ -65,7 +65,8 @@ namespace jpeg2000 {
          * @param length_packet Packet length.
          * @return <code>true</code> if successful.
          */
-        static bool GetOffsetPacket(Codestream &codestream, uint64_t length_packet);
+        static bool GetOffsetPacket(data::File *file, Codestream &codestream,
+                                    uint64_t length_packet);
 
         /**
          * Builds the packet index through a given progression index.

@@ -46,10 +46,12 @@
   now returns `EOR WINDOW_DONE` instead of failing the channel.
 - Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet counts
   and locations, codestream bounds, and linked-JPX references before serving
-  data. Tile-part coding overrides, JPX-to-JPX links, unsupported geometry,
-  files of 2 GiB or more, and codestreams with more than 64 packet segments are
-  rejected during parsing instead of failing later or producing an inconsistent
-  stream.
+  data. Trailing zero `PLT` entries produced by the deployed OpenJPEG
+  transcoder are tolerated without treating them as packets; nonzero trailing
+  entries remain invalid. Tile-part coding overrides, JPX-to-JPX links,
+  unsupported geometry, files of 2 GiB or more, and codestreams with more than
+  64 packet segments are rejected during parsing instead of failing later or
+  producing an inconsistent stream.
 - Keep each embedded JPX codestream's coding parameters separate, use the
   standard default precinct size, and reject image origins the packet index
   cannot represent.

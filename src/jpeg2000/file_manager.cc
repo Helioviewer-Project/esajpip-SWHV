@@ -57,7 +57,9 @@ namespace jpeg2000 {
 #define SOC_MARKER 0xFF4F
 #define SIZ_MARKER 0xFF51
 #define COD_MARKER 0xFF52
+#define COC_MARKER 0xFF53
 #define QCD_MARKER 0xFF5C
+#define POC_MARKER 0xFF5F
 #define SOT_MARKER 0xFF90
 #define PLT_MARKER 0xFF58
 #define SOD_MARKER 0xFF93
@@ -79,9 +81,9 @@ namespace jpeg2000 {
     static bool ReadBoxHeader(File *file, uint64_t limit, uint32_t *type_box,
                               uint64_t *length_box);
     static bool ReadSIZMarker(File *file, uint64_t limit,
-                              CodingParameters *params);
+                              CodingParameters *params, bool *mct_compatible);
     static bool ReadCODMarker(File *file, uint64_t limit,
-                              CodingParameters *params);
+                              CodingParameters *params, bool mct_compatible);
     static bool ReadSOTMarker(File *file, uint64_t limit,
                               FileSegment &header,
                               size_t num_tile_parts,
@@ -96,6 +98,27 @@ namespace jpeg2000 {
     static bool ReadFlstBox(File *file, uint64_t length_box,
                             FileSegment *fragment,
                             uint16_t *data_reference);
+
+    static bool ReadFileType(File *file, uint64_t length,
+                             uint32_t expected_brand) {
+        if (length < 12 || (length & 3) != 0)
+            return false;
+
+        uint32_t brand = 0;
+        uint32_t minor_version = 0;
+        if (!file->ReadReverse(&brand) || !file->ReadReverse(&minor_version) ||
+            brand != expected_brand)
+            return false;
+
+        bool compatible = false;
+        for (uint64_t offset = 8; offset < length; offset += 4) {
+            uint32_t entry = 0;
+            if (!file->ReadReverse(&entry))
+                return false;
+            compatible |= entry == expected_brand;
+        }
+        return compatible;
+    }
 
     static bool SkipMarker(File *file, uint64_t limit) {
         uint16_t length = 0;
@@ -129,12 +152,15 @@ namespace jpeg2000 {
         unsigned char signature_box[sizeof JP2_SIGNATURE_BOX];
         uint32_t second_type = 0;
         uint64_t second_length = 0;
+        uint32_t expected_brand = extension == ".jp2"
+                                  ? 0x6A703220 : 0x6A707820;
         bool res = file.Read(signature_box, sizeof signature_box) &&
                    memcmp(signature_box, JP2_SIGNATURE_BOX,
                           sizeof signature_box) == 0 &&
                    ReadBoxHeader(&file, file.GetSize(), &second_type,
                                  &second_length) &&
-                   second_type == FILE_TYPE_BOX_ID;
+                   second_type == FILE_TYPE_BOX_ID &&
+                   ReadFileType(&file, second_length, expected_brand);
         if (!res) {
             ERROR("Invalid JPEG 2000 file preamble in '" << name_image_file << "'");
             return OpenResult::INVALID;
@@ -167,6 +193,7 @@ namespace jpeg2000 {
         bool cod = false;
         bool qcd = false;
         bool first_marker = true;
+        bool mct_compatible = false;
         Phase phase = MAIN_HEADER;
         uint8_t declared_tile_parts = 0;
         uint16_t value = 0;
@@ -193,7 +220,8 @@ namespace jpeg2000 {
             switch (value) {
                 case SIZ_MARKER: TRACE("SIZ marker...");
                     if (phase != MAIN_HEADER || siz ||
-                        !ReadSIZMarker(file, limit, &codestream.parameters))
+                        !ReadSIZMarker(file, limit, &codestream.parameters,
+                                       &mct_compatible))
                         return false;
                     siz = true;
                     break;
@@ -201,10 +229,18 @@ namespace jpeg2000 {
                 case COD_MARKER: TRACE("COD marker...");
                     if (phase != MAIN_HEADER || cod ||
                         !ReadCODMarker(file, marker_limit,
-                                       &codestream.parameters))
+                                       &codestream.parameters,
+                                       mct_compatible))
                         return false;
                     cod = true;
                     break;
+
+                case COC_MARKER:
+                case POC_MARKER:
+                    // Packet indexing is derived from the main COD marker.
+                    // Component-specific coding and progression changes need
+                    // their own indexing model and cannot be skipped safely.
+                    return false;
 
                 case SOT_MARKER: {
                     TRACE("SOT marker...");
@@ -259,7 +295,10 @@ namespace jpeg2000 {
                     return false;
 
                 default:
-                    if (!SkipMarker(file, marker_limit))
+                    // Tile-header contents are not sent: the JPIP tile-header
+                    // data-bin is empty. PLT is the only supported tile-header
+                    // segment because it is used only to locate packets.
+                    if (phase == TILE_HEADER || !SkipMarker(file, marker_limit))
                         return false;
             }
         }
@@ -269,7 +308,7 @@ namespace jpeg2000 {
     }
 
     static bool ReadSIZMarker(File *file, uint64_t limit,
-                              CodingParameters *params) {
+                              CodingParameters *params, bool *mct_compatible) {
         uint16_t lsiz = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < 41 ||
             static_cast<uint64_t>(lsiz) - 2 > limit - file->GetOffset())
@@ -299,22 +338,26 @@ namespace jpeg2000 {
 
         params->size = Size(image[0] - image[2], image[1] - image[3]);
         params->num_components = num_components;
-        params->position_order_supported = true;
+        int first_depth = -1;
+        *mct_compatible = num_components >= 3;
         for (uint16_t i = 0; i < num_components; ++i) {
             uint8_t precision = 0;
             uint8_t xrsiz = 0;
             uint8_t yrsiz = 0;
             if (!file->ReadReverse(&precision) || !file->ReadReverse(&xrsiz) || !file->ReadReverse(&yrsiz) ||
-                (precision & 0x7F) > 37 || xrsiz == 0 || yrsiz == 0)
+                (precision & 0x7F) > 37 || xrsiz != 1 || yrsiz != 1)
                 return false;
-            if (xrsiz != 1 || yrsiz != 1)
-                params->position_order_supported = false;
+            int depth = precision & 0x7F;
+            if (i == 0)
+                first_depth = depth;
+            else if (i < 3 && depth != first_depth)
+                *mct_compatible = false;
         }
         return true;
     }
 
     static bool ReadCODMarker(File *file, uint64_t limit,
-                              CodingParameters *params) {
+                              CodingParameters *params, bool mct_compatible) {
         uint16_t lcod = 0;
         uint8_t cs_buf = 0;
         uint8_t progression = 0;
@@ -336,9 +379,9 @@ namespace jpeg2000 {
 
         uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
         if (lcod != expected_length || (cs_buf & 0xF8) != 0 || progression > 4 || quality_layers == 0 ||
-            mct > 1 || transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
-            cb_width + cb_height > 8 || cb_style > 63 || transform > 1 ||
-            (progression >= CodingParameters::PCRL_PROGRESSION && !params->position_order_supported))
+            mct > 1 || (mct != 0 && !mct_compatible) ||
+            transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
+            cb_width + cb_height > 8 || cb_style > 63 || transform > 1)
             return false;
 
         params->progression = progression;
@@ -398,15 +441,15 @@ namespace jpeg2000 {
         if (data.length != 0)
             limit = data.offset + data.length;
 
-        // Get Lplt
         uint16_t lplt = 0;
+        uint8_t zplt = 0;
         if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < 4 ||
-            static_cast<uint64_t>(lplt) - 2 > limit - file->GetOffset())
+            static_cast<uint64_t>(lplt) - 2 > limit - file->GetOffset() ||
+            !file->ReadReverse(&zplt) || zplt != plt.size())
             return false;
 
-        // PLT marker length = Lplt - 3 (2 bytes Lplt and 1 byte iplt)
-        plt.emplace_back(file->GetOffset() + 1, lplt - 3);
-        file->Seek(lplt - 2, SEEK_CUR);
+        plt.emplace_back(file->GetOffset(), lplt - 3);
+        file->Seek(lplt - 3, SEEK_CUR);
         return true;
     }
 
@@ -551,13 +594,16 @@ namespace jpeg2000 {
             uint64_t box_end = file->GetOffset() + length_box;
             switch (type_box) {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
+                    if (containers.size() != 1)
+                        return false;
                     num_codestreams++;
                     if (length_box != 0)
                         containers.push_back({type_box, box_end});
                     break;
                 case JP2C_BOX_ID: {
                     TRACE("JP2C box...");
-                    if (num_codestreams == 0 || codestreams.size() >= num_codestreams)
+                    if (containers.size() != 1 || num_codestreams == 0 ||
+                        codestreams.size() >= num_codestreams)
                         return false;
                     codestreams.emplace_back(image_index->path_name);
                     ImageIndex::Codestream &codestream = codestreams.back();
@@ -584,6 +630,8 @@ namespace jpeg2000 {
                     break;
                     // 'ftbl' superbox contains a 'flst'
                 case FTBL_BOX_ID: TRACE("FTBL box...");
+                    if (containers.size() != 1)
+                        return false;
                     num_flst = 0;
                     ftbl_prefix = FileSegment(meta_start, prefix_length);
                     ftbl_header = FileSegment(box_start, header_length);
@@ -622,6 +670,12 @@ namespace jpeg2000 {
                     if (containers.back().type != DBTL_BOX_ID ||
                         !ReadUrlBox(file, length_box, &path_file))
                         return false;
+                    if (path_file[0] != '/') {
+                        size_t separator = image_index->path_name.find_last_of('/');
+                        if (separator != string::npos)
+                            path_file.insert(0, image_index->path_name, 0,
+                                             separator + 1);
+                    }
                     references.push_back(std::move(path_file));
                     break;
                 }
@@ -726,17 +780,13 @@ namespace jpeg2000 {
         local_path.resize(local_path.size() - 1);
         local_path.erase(0, 7);
 
-        // Replace "./" with the root_dir_
-        if (local_path.compare(0, 2, "./") == 0)
-            local_path = root_dir_ + local_path.substr(2);
-
         // undo possible URI character substitutions
         char *unescaped = g_uri_unescape_string(local_path.c_str(), NULL);
         if (!unescaped)
             return false;
         *path_file = unescaped;
         g_free(unescaped);
-        return true;
+        return !path_file->empty();
     }
 
 }

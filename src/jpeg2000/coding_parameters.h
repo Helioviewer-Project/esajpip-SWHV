@@ -104,7 +104,6 @@ namespace jpeg2000 {
         int num_layers;            ///< Number of quality layers
         int progression;        ///< Progression order
         int num_components;        ///< Number of components
-        bool position_order_supported;
 
         /**
          * Precinct sizes of each resolution level.
@@ -131,7 +130,6 @@ namespace jpeg2000 {
             num_layers = 0;
             progression = 0;
             num_components = 0;
-            position_order_supported = false;
             total_precincts = 0;
         }
 
@@ -144,6 +142,10 @@ namespace jpeg2000 {
 
         int GetNumPrecinctDataBins() const {
             return total_precincts * num_components;
+        }
+
+        int GetNumPackets() const {
+            return GetNumPrecinctDataBins() * num_layers;
         }
 
         /**
