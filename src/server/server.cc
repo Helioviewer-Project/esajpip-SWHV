@@ -74,16 +74,24 @@ bool SetBlocking(int fd) {
            fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == 0;
 }
 
-void SendUnavailableChannel(int fd, const char *message) {
-    char response[256];
+void SendUnavailableChannel(int fd, const char *message, bool handled) {
+    const char *handled_headers = handled
+            ? JPIP_HANDLED_HEADER
+            : "";
+    char response[512];
     int length = snprintf(response, sizeof response,
                           "HTTP/1.1 503 Service Unavailable\r\n"
+                          "%s"
+                          "%s"
                           "Access-Control-Allow-Origin: *\r\n"
                           "Cache-Control: no-cache\r\n"
                           "Content-Type: text/plain\r\n"
                           "Content-Length: %zu\r\n"
                           "Connection: close\r\n"
                           "\r\n%s",
+                          handled_headers,
+                          handled ? "Access-Control-Expose-Headers: "
+                                    "JPIP-handled\r\n" : "",
                           strlen(message), message);
     if (length <= 0 || static_cast<size_t>(length) >= sizeof response)
         return;
@@ -184,6 +192,9 @@ bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
                                  }), channels.end());
         if (channels.size() >= static_cast<size_t>(cfg.max_connections())) {
             LOG("A new channel was refused because the limit has been reached");
+            SendUnavailableChannel(connection.fd,
+                                   "JPIP channel limit has been reached",
+                                   request.handled);
             return false;
         }
 
@@ -210,17 +221,20 @@ bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
     if (channel == channels.end()) {
         LOG("The connection [" << connection.id << "] references unknown channel "
                                << request.channel);
-        SendUnavailableChannel(connection.fd, "JPIP channel does not exist");
+        SendUnavailableChannel(connection.fd, "JPIP channel does not exist",
+                               request.handled);
         return false;
     }
     if (channel->queue->Push(connection.fd))
         return true;
     if (channel->queue->IsClosed()) {
         channels.erase(channel);
-        SendUnavailableChannel(connection.fd, "JPIP channel has ended");
+        SendUnavailableChannel(connection.fd, "JPIP channel has ended",
+                               request.handled);
     } else {
         SendUnavailableChannel(connection.fd,
-                               "JPIP channel already has a waiting connection");
+                               "JPIP channel already has a waiting connection",
+                               request.handled);
     }
     return false;
 }

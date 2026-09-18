@@ -193,6 +193,11 @@ static void CheckInitialRequest() {
     Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == 47,
           "Could not route an existing channel request");
 
+    InitialRequest handled =
+            Inspect("GET /jpip?stream=2&cid=47&handled HTTP/1.1\r\n");
+    Check(handled.state == REQUEST_ACCEPTED && handled.handled,
+          "Initial inspection lost the handled field");
+
     InitialRequest close = Inspect("GET /jpip?cclose=47 HTTP/1.1\r\n");
     Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == 47,
           "Could not route a channel close request");
@@ -275,6 +280,11 @@ static void CheckJHVRequests() {
     Check(channel_request.accepts_http, "JHV HTTP transport was not accepted");
     Check(channel_request.has.len && channel_request.length_response == 512,
           "Wrong channel response limit");
+
+    jpip::Request handled_request;
+    Check(handled_request.Parse("GET /jpip?cid=7&handled HTTP/1.1") &&
+              handled_request.has.handled,
+          "Missing handled field");
 
     jpip::Request transport_request;
     Check(transport_request.Parse(

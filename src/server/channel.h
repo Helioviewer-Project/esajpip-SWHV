@@ -8,6 +8,8 @@
 
 typedef void (*ConnectionClosed)();
 
+extern const char JPIP_HANDLED_HEADER[];
+
 void RunChannel(const Config &cfg, const std::string &channel,
                 const std::shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed);

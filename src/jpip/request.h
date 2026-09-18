@@ -49,6 +49,7 @@ namespace jpip {
             bool len = false;
             bool target = false;
             bool tid = false;
+            bool handled = false;
             bool cid = false;
             bool cnew = false;
             bool cclose = false;

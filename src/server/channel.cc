@@ -24,24 +24,40 @@ using http::CRLF;
 using jpeg2000::FileManager;
 using jpip::DataBinServer;
 
+const char JPIP_HANDLED_HEADER[] =
+        "JPIP-handled: tid,cid,cnew=http,stream,len,handled\r\n";
+
 static const char ZERO[] = "0\r\n\r\n";
 static const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
         "Cache-Control: no-cache\r\n";
-static const char TARGET_ID_HEADERS[] =
-        "JPIP-tid: 0\r\n"
-        "Access-Control-Expose-Headers: JPIP-tid\r\n";
+static const char TARGET_ID_HEADER[] = "JPIP-tid: 0\r\n";
 static const string JPIP_HEADERS =
         string(COMMON_HEADERS) +
         "Transfer-Encoding: chunked\r\n"
         "Content-Type: image/jpp-stream\r\n";
 static const string JPIP_GZIP_HEADERS =
         JPIP_HEADERS + "Content-Encoding: gzip\r\n";
-static const string JPIP_TID_HEADERS =
-        string(TARGET_ID_HEADERS) + JPIP_HEADERS;
-static const string JPIP_TID_GZIP_HEADERS =
-        JPIP_TID_HEADERS + "Content-Encoding: gzip\r\n";
+
+static string OptionalJPIPHeaders(const jpip::Request &request) {
+    string headers;
+    if (request.has.tid)
+        headers += TARGET_ID_HEADER;
+    if (request.has.handled)
+        headers += JPIP_HANDLED_HEADER;
+    if (request.has.tid || request.has.handled) {
+        headers += "Access-Control-Expose-Headers: ";
+        if (request.has.tid)
+            headers += "JPIP-tid";
+        if (request.has.tid && request.has.handled)
+            headers += ',';
+        if (request.has.handled)
+            headers += "JPIP-handled";
+        headers += "\r\n";
+    }
+    return headers;
+}
 
 static int TimeoutMilliseconds(int seconds) {
     if (seconds <= 0)
@@ -52,9 +68,10 @@ static int TimeoutMilliseconds(int seconds) {
 }
 
 static bool SendError(http::Connection &connection, int code, const char *reason,
-                     const string &message) {
+                     const string &message, const string &jpip_headers = "") {
     ostringstream response;
     response << http::Response(code, reason)
+             << jpip_headers
              << COMMON_HEADERS
              << "Content-Type: text/plain" << CRLF
              << "Content-Length: " << message.size() << CRLF
@@ -173,7 +190,8 @@ private:
             string request_error;
             if (!req.Parse(request.line, &request_error)) {
                 LOG("Bad request: " << http::EscapeForLog(request.line));
-                SendError(connection, 400, "Bad Request", request_error);
+                SendError(connection, 400, "Bad Request", request_error,
+                          OptionalJPIPHeaders(req));
                 return FAIL_CHANNEL;
             }
 
@@ -203,7 +221,7 @@ private:
 
                     ostringstream msg;
                     msg << http::Response(200, "OK")
-                            << (req.has.tid ? TARGET_ID_HEADERS : "")
+                            << OptionalJPIPHeaders(req)
                             << COMMON_HEADERS
                             << "Content-Length: 0" << CRLF << CRLF;
                     (void) connection.Send(msg.str());
@@ -250,14 +268,16 @@ private:
 
             if (err_msg) {
                 LOG(err_msg);
-                SendError(connection, error_code, error_reason, err_msg);
+                SendError(connection, error_code, error_reason, err_msg,
+                          OptionalJPIPHeaders(req));
                 return FAIL_CHANNEL;
             }
 
             if (!data_server.SetRequest(*file_manager.GetImage(), req,
                                         &request_error)) {
                 LOG(request_error);
-                SendError(connection, 400, "Bad Request", request_error);
+                SendError(connection, 400, "Bad Request", request_error,
+                          OptionalJPIPHeaders(req));
                 return FAIL_CHANNEL;
             }
 
@@ -270,16 +290,24 @@ private:
                 msg << http::Response(200, "OK")
                         << http::Header("JPIP-cnew", "cid=" + id + ",path=jpip,transport=http")
                         << http::Header("JPIP-tid", "0")
-                        << "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid" << CRLF
+                        << (req.has.handled ? JPIP_HANDLED_HEADER : "")
+                        << (req.has.handled
+                                ? "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid,JPIP-handled"
+                                : "Access-Control-Expose-Headers: JPIP-cnew,JPIP-tid")
+                        << CRLF
                         << (send_gzip ? JPIP_GZIP_HEADERS : JPIP_HEADERS)
                         << CRLF;
                 sent = connection.Send(msg.str());
             } else {
-                const string &headers = req.has.tid
-                        ? (send_gzip ? JPIP_TID_GZIP_HEADERS
-                                     : JPIP_TID_HEADERS)
-                        : (send_gzip ? JPIP_GZIP_HEADERS : JPIP_HEADERS);
-                sent = connection.SendOK(headers);
+                const string &base_headers = send_gzip ? JPIP_GZIP_HEADERS
+                                                       : JPIP_HEADERS;
+                string optional_headers;
+                const string *headers = &base_headers;
+                if (req.has.tid || req.has.handled) {
+                    optional_headers = OptionalJPIPHeaders(req) + base_headers;
+                    headers = &optional_headers;
+                }
+                sent = connection.SendOK(*headers);
             }
             if (!sent ||
                 !SendData(connection, data_server, file_manager, buf, send_gzip) ||

@@ -472,6 +472,8 @@ namespace jpip {
                 }
             } else if (name == "tid") {
                 has.tid = true;
+            } else if (name == "handled") {
+                has.handled = true;
             } else if (name == "stream") {
                 if (ParseStream(value)) {
                     has.stream = true;

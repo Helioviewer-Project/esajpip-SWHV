@@ -29,6 +29,9 @@ namespace {
 
 using Clock = chrono::steady_clock;
 
+const char HANDLED_HEADER[] =
+        "JPIP-handled: tid,cid,cnew=http,stream,len,handled";
+
 pid_t supervisor_pid = -1;
 
 void Fail(const char *message) {
@@ -322,10 +325,11 @@ int main() {
 
     int unavailable = Connect(port);
     Check(unavailable >= 0, "Serving process did not start");
-    SendRequest(unavailable, "/jpip?cid=999");
+    SendRequest(unavailable, "/jpip?cid=999&handled");
     Response unavailable_response = ReadResponse(unavailable);
-    Check(unavailable_response.headers.find("503 Service Unavailable") != string::npos,
-          "Unknown channel did not return 503");
+    Check(unavailable_response.headers.find("503 Service Unavailable") != string::npos &&
+                  unavailable_response.headers.find(HANDLED_HEADER) != string::npos,
+          "Unknown channel did not return 503 with JPIP-handled");
     Check(unavailable_response.body == "JPIP channel does not exist",
           "Unknown channel response did not explain the failure");
     close(unavailable);
@@ -344,9 +348,11 @@ int main() {
 
     int bad_image = Connect(port);
     Check(bad_image >= 0, "Could not connect for the bad-image test");
-    SendRequest(bad_image, "/image.jpeg?cnew=http");
+    SendRequest(bad_image, "/image.jpeg?cnew=http&handled");
     Response bad_image_response = ReadResponse(bad_image);
     Check(bad_image_response.headers.find("500 Internal Server Error") !=
+                      string::npos &&
+                  bad_image_response.headers.find(HANDLED_HEADER) !=
                       string::npos &&
                   bad_image_response.body ==
                       "The requested image type is not supported",
@@ -390,11 +396,12 @@ int main() {
     Check(channel >= 0, "Could not connect for channel creation");
     SendRequest(channel,
                 "/image.jp2?cnew=http&type=jpp-stream&stream=0&metareq=[*]!!&"
-                "fsiz=1,1&rsiz=1,1&roff=0,0&len=128",
+                "fsiz=1,1&rsiz=1,1&roff=0,0&len=128&handled",
                 "Accept-Encoding: gzip\r\n");
     Response created = ReadResponse(channel);
-    Check(created.headers.find("HTTP/1.1 200 OK") == 0,
-          "Channel creation did not return 200");
+    Check(created.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  created.headers.find(HANDLED_HEADER) != string::npos,
+          "Channel creation did not return 200 with JPIP-handled");
     Check(created.headers.find("Content-Encoding: gzip") != string::npos,
           "Metadata response was not gzip encoded");
     Check(!Gunzip(created.body).empty(), "Gzip JPIP response was empty");
@@ -406,21 +413,23 @@ int main() {
     Check(replacement >= 0, "Could not create a replacement connection");
     SendRequest(replacement,
                 "/jpip?cid=" + to_string(channel_id) +
-                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&tid=0");
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&tid=0&handled");
     Response replaced = ReadResponse(replacement);
     Check(replaced.headers.find("HTTP/1.1 200 OK") == 0 &&
                   replaced.headers.find("JPIP-tid: 0") != string::npos &&
+                  replaced.headers.find(HANDLED_HEADER) != string::npos &&
                   !replaced.body.empty(),
           "Replacement connection did not continue the channel");
     CheckClosed(channel, 1000, "Replaced connection remained open");
     close(channel);
 
     SendRequest(replacement,
-                "/jpip?cclose=" + to_string(channel_id) + "&tid=0");
+                "/jpip?cclose=" + to_string(channel_id) + "&tid=0&handled");
     Response closed = ReadResponse(replacement);
     Check(closed.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  closed.headers.find("JPIP-tid: 0") != string::npos,
-          "Channel close did not return 200 with the target ID");
+                  closed.headers.find("JPIP-tid: 0") != string::npos &&
+                  closed.headers.find(HANDLED_HEADER) != string::npos,
+          "Channel close did not return 200 with JPIP capability headers");
     CheckClosed(replacement, 1000, "Closed channel retained its connection");
     close(replacement);
 
