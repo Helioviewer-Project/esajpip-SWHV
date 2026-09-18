@@ -80,32 +80,30 @@ namespace jpip {
             error_message->clear();
         data_writer.StartResponse();
 
+        vector<int> codestreams;
         if (req.has.stream || req.has.context) {
-            bool changed = streams.size() != req.codestreams.size();
-            for (size_t i = 0; i < req.codestreams.size(); ++i) {
-                int codestream = req.codestreams[i];
-                if (codestream < 0 ||
-                    static_cast<size_t>(codestream) >= image_index.GetNumCodestreams())
-                    return Reject(error_message,
-                                  "Requested JPIP codestream does not exist");
-                if (!changed && streams[i].id != codestream)
-                    changed = true;
-            }
-            if (changed) {
-                streams.clear();
-                streams.reserve(req.codestreams.size());
-                for (int codestream : req.codestreams)
-                    streams.emplace_back(codestream);
-                current_idx = 0;
-            }
+            if (!req.SelectCodestreams(image_index.GetNumCodestreams(),
+                                       &codestreams))
+                return Reject(error_message,
+                              "Too many JPIP codestreams were selected");
+        } else {
+            codestreams.push_back(0);
+        }
+        bool changed = streams.size() != codestreams.size();
+        for (size_t i = 0; i < codestreams.size(); ++i) {
+            if (!changed && streams[i].id != codestreams[i])
+                changed = true;
+        }
+        if (changed) {
+            streams.clear();
+            streams.reserve(codestreams.size());
+            for (int codestream : codestreams)
+                streams.emplace_back(codestream);
+            current_idx = 0;
         }
 
         has_woi = req.HasWOI();
         if (has_woi) {
-            if (streams.empty()) {
-                streams.emplace_back(0);
-                current_idx = 0;
-            }
             jpeg2000::Size requested_size =
                     req.has.rsiz ? req.woi_size : req.resolution_size;
             if (req.resolution_size.x <= 0 || req.resolution_size.y <= 0 ||

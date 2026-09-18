@@ -45,6 +45,8 @@
   boundaries to the selected resolution, and include every precinct
   intersecting the result. An empty intersection now returns
   `EOR WINDOW_DONE` instead of failing the channel.
+- Parse standard JPIP codestream lists, finite and open ranges, and sampling
+  factors instead of treating a colon as a range separator.
 - Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet counts
   and locations, codestream bounds, and linked-JPX references before serving
   data. Trailing zero `PLT` entries produced by the deployed OpenJPEG

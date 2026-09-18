@@ -2,9 +2,11 @@
 #include "request.h"
 #include "query.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <climits>
 #include <sstream>
+#include <unordered_set>
 
 #define MAXC 100000
 
@@ -114,21 +116,6 @@ namespace jpip {
             return true;
         }
 
-        bool AppendRange(int first, int last, vector<int> *values) {
-            size_t count = static_cast<size_t>(first > last ? first - last : last - first) + 1;
-            if (values->size() > MAXC + 1 - count)
-                return false;
-            values->reserve(values->size() + count);
-            if (first > last) {
-                for (int i = first; i >= last; --i)
-                    values->push_back(i);
-            } else {
-                for (int i = first; i <= last; ++i)
-                    values->push_back(i);
-            }
-            return true;
-        }
-
         bool ParseContext(const string &value, int *first, int *last) {
             string decoded;
             if (!Decode(value, &decoded) || decoded.compare(0, 5, "jpxl<") != 0 ||
@@ -228,6 +215,88 @@ namespace jpip {
             return descriptor_found;
         }
 
+    }
+
+    bool Request::ParseStream(const string &value) {
+        const char *position = value.c_str();
+        while (*position != '\0') {
+            uint64_t first;
+            if (!ParseUnsignedInteger(&position, UINT64_MAX, &first))
+                return false;
+
+            uint64_t last = first;
+            if (*position == '-') {
+                ++position;
+                if (*position == '\0' || *position == ',' || *position == ':')
+                    last = UINT64_MAX;
+                else if (!ParseUnsignedInteger(&position, UINT64_MAX, &last) ||
+                         last < first)
+                    return false;
+            }
+
+            uint64_t step = 1;
+            if (*position == ':') {
+                ++position;
+                if (!ParseUnsignedInteger(&position, UINT64_MAX, &step) || step == 0)
+                    return false;
+            }
+
+            codestream_selections.emplace_back(first, last, step);
+            if (*position == '\0')
+                return true;
+            if (*position++ != ',' || *position == '\0')
+                return false;
+        }
+        return false;
+    }
+
+    void Request::AddContext(int first, int last) {
+        codestream_selections.emplace_back(first, last, 1);
+    }
+
+    bool Request::SelectCodestreams(size_t available,
+                                    vector<int> *selected) const {
+        selected->clear();
+        uint64_t limit = min<uint64_t>(available,
+                                       static_cast<uint64_t>(INT_MAX) + 1);
+        unordered_set<int> seen;
+        auto append = [&](uint64_t id) {
+            if (id >= limit)
+                return true;
+            int value = static_cast<int>(id);
+            if (!seen.insert(value).second)
+                return true;
+            if (selected->size() == MAXC + 1)
+                return false;
+            selected->push_back(value);
+            return true;
+        };
+
+        for (const CodestreamSelection &selection : codestream_selections) {
+            if (selection.first > selection.last) {
+                for (uint64_t id = selection.first;; --id) {
+                    if (!append(id))
+                        return false;
+                    if (id <= selection.last)
+                        break;
+                }
+                continue;
+            }
+
+            if (selection.first >= limit)
+                continue;
+            uint64_t last = selection.last == UINT64_MAX
+                            ? limit - 1
+                            : min(selection.last, limit - 1);
+            for (uint64_t id = selection.first; id <= last;) {
+                if (!append(id))
+                    return false;
+                if (selection.step > last - id)
+                    break;
+                id += selection.step;
+            }
+        }
+        return true;
     }
 
     jpeg2000::Size Request::GetResolution(
@@ -351,17 +420,9 @@ namespace jpip {
                     SetError(error_message, "Invalid JPIP len parameter");
                 }
             } else if (name == "stream") {
-                if (ParseRange(value, ':', &x, &y)) {
-                    x = Clamp(x, 0, MAXC);
-                    y = Clamp(y, 0, MAXC);
-                    if (AppendRange(x, y, &codestreams)) {
-                        has.stream = true;
-                        TRACE("JPIP parameter: stream=" << x << ":" << y);
-                    } else {
-                        valid = false;
-                        SetError(error_message,
-                                 "Too many JPIP codestreams were selected");
-                    }
+                if (ParseStream(value)) {
+                    has.stream = true;
+                    TRACE("JPIP parameter: stream=" << value);
                 } else {
                     valid = false;
                     SetError(error_message, "Invalid JPIP stream parameter");
@@ -376,14 +437,9 @@ namespace jpip {
                 }
             } else if (name == "context") {
                 if (ParseContext(value, &x, &y)) {
-                    if (AppendRange(x, y, &codestreams)) {
-                        has.context = true;
-                        TRACE("JPIP parameter: context=" << value);
-                    } else {
-                        valid = false;
-                        SetError(error_message,
-                                 "Too many JPIP codestreams were selected");
-                    }
+                    AddContext(x, y);
+                    has.context = true;
+                    TRACE("JPIP parameter: context=" << value);
                 } else {
                     valid = false;
                     SetError(error_message, "Invalid JPIP context parameter");

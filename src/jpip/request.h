@@ -1,6 +1,8 @@
 #ifndef _JPIP_REQUEST_H_
 #define _JPIP_REQUEST_H_
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "woi.h"
@@ -12,7 +14,22 @@ namespace jpip {
 
     class Request {
     private:
+        struct CodestreamSelection {
+            uint64_t first;
+            uint64_t last;
+            uint64_t step;
+
+            CodestreamSelection(uint64_t _first, uint64_t _last,
+                                uint64_t _step)
+                    : first(_first), last(_last), step(_step) {
+            }
+        };
+
+        std::vector<CodestreamSelection> codestream_selections;
+
         bool ParseURI(const std::string &uri, std::string *error_message);
+        bool ParseStream(const std::string &value);
+        void AddContext(int first, int last);
 
     public:
         std::string object;
@@ -57,7 +74,6 @@ namespace jpip {
 
         jpeg2000::Size woi_size;           ///< WOI size
         jpeg2000::Point woi_position;      ///< WOI position
-        std::vector<int> codestreams; ///< Requested codestreams
         int length_response;     ///< Maximum response length
         Parameters has;          ///< Parameters present in the request
         jpeg2000::Size resolution_size;    ///< Size of the resolution level
@@ -80,6 +96,9 @@ namespace jpip {
         bool HasWOI() const {
             return has.fsiz || has.roff || has.rsiz;
         }
+
+        bool SelectCodestreams(std::size_t available,
+                               std::vector<int> *selected) const;
 
         /**
          * Obtains the resolution level and modifies the given WOI to adjust it

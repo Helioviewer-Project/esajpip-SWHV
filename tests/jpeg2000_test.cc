@@ -932,7 +932,7 @@ int main() {
 
     jpip::Request multi_stream_request;
     Check(multi_stream_request.Parse(
-              "GET /jpip?stream=0:1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
+              "GET /jpip?stream=0-1&fsiz=2,1&rsiz=2,1&roff=0,0&cid=0 HTTP/1.1"),
           "Could not parse a multi-codestream window request");
     jpip::DataBinServer multi_stream_server;
     Check(multi_stream_server.SetRequest(*embedded_two_manager.GetImage(),
@@ -965,6 +965,31 @@ int main() {
               multi_stream_response[1] == jpip::EOR::WINDOW_DONE &&
               multi_stream_response[2] == 0,
           "The range response did not complete every selected codestream");
+
+    jpip::DataBinServer default_stream_server;
+    Check(default_stream_server.SetRequest(*embedded_two_manager.GetImage(),
+                                           second_stream_request),
+          "Could not establish a non-default codestream selection");
+    multi_stream_length = sizeof multi_stream_response;
+    Check(default_stream_server.GenerateChunk(embedded_two_manager,
+                                                multi_stream_response,
+                                                &multi_stream_length,
+                                                &multi_stream_last) &&
+              multi_stream_last,
+          "Could not complete the non-default codestream response");
+    jpip::Request default_stream_request;
+    Check(default_stream_request.Parse(
+              "GET /jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0 HTTP/1.1") &&
+              default_stream_server.SetRequest(*embedded_two_manager.GetImage(),
+                                                default_stream_request),
+          "Could not restore the default codestream selection");
+    multi_stream_length = sizeof multi_stream_response;
+    Check(default_stream_server.GenerateChunk(embedded_two_manager,
+                                                multi_stream_response,
+                                                &multi_stream_length,
+                                                &multi_stream_last) &&
+              multi_stream_length > 3 && multi_stream_last,
+          "An omitted stream retained the previous codestream selection");
 
     jpeg2000::FileManager linked_manager;
     Check(OpenImage(directory, "linked.jpx", &linked_manager),
@@ -1191,8 +1216,20 @@ int main() {
               response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
           "A zero-sized window did not produce only a window-done EOR");
 
-    Check(RejectDataRequest(manager, "GET /jpip?stream=1&len=512&cid=0 HTTP/1.1"),
-          "Accepted unavailable codestream");
+    jpip::Request unavailable_stream_request;
+    Check(unavailable_stream_request.Parse(
+              "GET /jpip?stream=1&fsiz=1,1&rsiz=1,1&roff=0,0&len=512&cid=0 HTTP/1.1"),
+          "Could not parse unavailable codestream request");
+    jpip::DataBinServer unavailable_stream_server;
+    Check(unavailable_stream_server.SetRequest(*manager.GetImage(),
+                                                unavailable_stream_request),
+          "Rejected a non-existent codestream instead of ignoring it");
+    response_length = sizeof response;
+    Check(unavailable_stream_server.GenerateChunk(
+                  manager, response, &response_length, &last) &&
+              response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A non-existent codestream did not produce an empty response");
 
     jpip::Request missing_file_request;
     Check(missing_file_request.Parse("GET /jpip?stream=0&len=512&cid=0 HTTP/1.1"),

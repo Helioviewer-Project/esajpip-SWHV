@@ -54,6 +54,14 @@ static bool LoadConfig(const char *contents, Config *config,
     return loaded;
 }
 
+static vector<int> SelectCodestreams(const jpip::Request &request,
+                                     size_t available) {
+    vector<int> selected;
+    Check(request.SelectCodestreams(available, &selected),
+          "Could not expand JPIP codestream selection");
+    return selected;
+}
+
 static void CheckAppConfig() {
     const char *contents =
         "# Settings may be ordered freely.\n"
@@ -289,7 +297,7 @@ static void CheckJHVRequests() {
           "Missing channel ID");
     Check(metadata_request.target.empty(), "Unexpected target in metadata request");
     Check(metadata_request.has.metareq, "Missing metadata request");
-    Check(metadata_request.codestreams == vector<int>(1, 0),
+    Check(SelectCodestreams(metadata_request, 1) == vector<int>(1, 0),
           "Wrong metadata codestream");
     Check(metadata_request.length_response == 2000000,
           "Wrong metadata response limit");
@@ -300,7 +308,8 @@ static void CheckJHVRequests() {
               "roff=0,0&len=2097152&cid=7 HTTP/1.1"),
           "Could not parse JHV frame request");
     Check(frame_request.HasWOI(), "Missing frame window");
-    Check(frame_request.codestreams == vector<int>(1, 4013), "Wrong frame codestream");
+    Check(SelectCodestreams(frame_request, 4014) == vector<int>(1, 4013),
+          "Wrong frame codestream");
     Check(frame_request.resolution_size == jpeg2000::Size(4096, 4096),
           "Wrong frame resolution size");
     Check(frame_request.woi_size == jpeg2000::Size(4096, 4096),
@@ -399,7 +408,8 @@ static void CheckJHVRequests() {
     Check(close_request.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"),
           "Could not parse JHV close request");
     Check(close_request.has.cclose && close_request.channel == "7", "Missing close field");
-    Check(close_request.codestreams.empty(), "Unexpected codestream in close request");
+    Check(SelectCodestreams(close_request, 1).empty(),
+          "Unexpected codestream in close request");
 
     jpip::Request new_channel_request;
     Check(new_channel_request.Parse("GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
@@ -421,12 +431,41 @@ static void CheckJHVRequests() {
 
     jpip::Request selection_request;
     Check(selection_request.Parse(
-              "GET /jpip?stream=3:1&context=jpxl%3C4-6%3E&cid=7 HTTP/1.1"),
-          "Could not parse reduced codestream selectors");
-    Check(selection_request.codestreams == vector<int>({3, 2, 1, 4, 5, 6}),
+              "GET /jpip?stream=0,2-6:2,9-:3&context=jpxl%3C1-2%3E&cid=7 HTTP/1.1"),
+          "Could not parse codestream selectors");
+    Check(SelectCodestreams(selection_request, 16) ==
+                  vector<int>({0, 2, 4, 6, 9, 12, 15, 1}),
           "Wrong codestream selector ranges");
-    Check(RejectRequest(
-              "GET /jpip?stream=0:100000&stream=0:100000&cid=7 HTTP/1.1"),
+    jpip::Request overlapping_selection;
+    Check(overlapping_selection.Parse(
+              "GET /jpip?stream=0-2,1-3&cid=7 HTTP/1.1") &&
+              SelectCodestreams(overlapping_selection, 4) ==
+                      vector<int>({0, 1, 2, 3}),
+          "Did not combine overlapping codestream ranges");
+    jpip::Request sampled_single_request;
+    Check(sampled_single_request.Parse(
+              "GET /jpip?stream=0:1&cid=7 HTTP/1.1") &&
+              SelectCodestreams(sampled_single_request, 10) == vector<int>(1, 0),
+          "Treated a sampling factor as a range endpoint");
+    jpip::Request finite_range_request;
+    Check(finite_range_request.Parse(
+              "GET /jpip?stream=0-1&cid=7 HTTP/1.1") &&
+              SelectCodestreams(finite_range_request, 10) ==
+                      vector<int>({0, 1}),
+          "Could not parse a finite codestream range");
+    Check(RejectRequest("GET /jpip?stream=3-1&cid=7 HTTP/1.1"),
+          "Accepted a descending standard codestream range");
+    Check(RejectRequest("GET /jpip?stream=0-10:0&cid=7 HTTP/1.1"),
+          "Accepted a zero codestream sampling factor");
+    Check(RejectRequest("GET /jpip?stream=0,,1&cid=7 HTTP/1.1"),
+          "Accepted an empty codestream range");
+    jpip::Request oversized_selection;
+    Check(oversized_selection.Parse(
+              "GET /jpip?stream=0-&cid=7 HTTP/1.1"),
+          "Could not parse an open codestream range");
+    vector<int> oversized_codestreams;
+    Check(!oversized_selection.SelectCodestreams(100002,
+                                                  &oversized_codestreams),
           "Accepted an oversized expanded codestream selection");
 
     jpip::Request encoded_model_request;
