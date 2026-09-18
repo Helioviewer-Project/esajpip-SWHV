@@ -15,6 +15,15 @@ namespace jpip {
         return length;
     }
 
+    static size_t BinIDLength(uint64_t value) {
+        size_t length = 1;
+        while (value >= 16) {
+            value >>= 7;
+            length++;
+        }
+        return length;
+    }
+
     size_t DataBinWriter::HeaderLength(uint64_t bin_id, uint64_t bin_offset,
                                        uint64_t bin_length) const {
         int pres = 1;
@@ -23,9 +32,7 @@ namespace jpip {
         if (prev_codestream_idx != msg_codestream_idx)
             pres = 3;
 
-        size_t length = 1;
-        if (bin_id >= 16)
-            length += VBASLength(bin_id);
+        size_t length = BinIDLength(bin_id);
         if (pres >= 2)
             length += VBASLength(msg_databin_class);
         if (pres == 3)
@@ -119,13 +126,18 @@ namespace jpip {
         uint8_t first_b = (uint8_t) (pres << 5);
         if (last_byte) first_b |= (uint8_t) (1 << 4);
 
-        if (!(bin_id >> 4)) {
-            first_b |= (uint8_t) (bin_id & 0x0F);
-            *ptr++ = first_b;
-
-        } else {
-            *ptr++ = (first_b | (uint8_t) 0x80);
-            WriteVBAS(bin_id);
+        size_t bin_id_length = BinIDLength(bin_id);
+        unsigned shift = 7 * (bin_id_length - 1);
+        first_b |= (uint8_t) ((bin_id >> shift) & 0x0F);
+        if (shift != 0)
+            first_b |= (uint8_t) 0x80;
+        *ptr++ = first_b;
+        while (shift != 0) {
+            shift -= 7;
+            uint8_t byte = (uint8_t) ((bin_id >> shift) & 0x7F);
+            if (shift != 0)
+                byte |= (uint8_t) 0x80;
+            *ptr++ = byte;
         }
 
         if (pres >= 2) {

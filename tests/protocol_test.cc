@@ -866,6 +866,22 @@ static void CheckJPIPMessages() {
     Check(writer.GetCount() == sizeof expected, "Wrong JPIP message length");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "The JPIP message format changed");
+
+    char large_id_buf[6];
+    jpip::DataBinWriter large_id_writer;
+    large_id_writer.SetBuffer(large_id_buf, sizeof large_id_buf);
+    Check(large_id_writer.Write(jpip::DataBinClass::PRECINCT, 0, 200, 0,
+                                file, data::FileSegment::Null, true) ==
+                  jpip::DataBinWriter::Result::WRITTEN,
+          "Rejected a canonical two-byte Bin-ID message");
+    const unsigned char large_id_expected[] = {0xf1, 0x48, 0x00,
+                                                0x00, 0x00, 0x00};
+    Check(large_id_writer.GetCount() == sizeof large_id_expected,
+          "Wrong large Bin-ID message length");
+    for (size_t i = 0; i < sizeof large_id_expected; ++i)
+        Check(static_cast<unsigned char>(large_id_buf[i]) ==
+                      large_id_expected[i],
+              "Large Bin-ID was not encoded canonically");
 }
 
 static void CheckDataBinCapacity() {
