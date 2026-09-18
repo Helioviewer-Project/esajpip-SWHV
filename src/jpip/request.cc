@@ -470,6 +470,8 @@ namespace jpip {
                     valid = false;
                     SetError(error_message, "Invalid JPIP len parameter");
                 }
+            } else if (name == "tid") {
+                has.tid = true;
             } else if (name == "stream") {
                 if (ParseStream(value)) {
                     has.stream = true;

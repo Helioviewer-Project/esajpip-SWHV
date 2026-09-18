@@ -73,7 +73,8 @@ recovery rules are documented in
 | `len` | Supported | Limits the JPP message headers and data-bin payload generated for the response; the EOR message does not count toward the limit. The value is a ceiling, not a target: the writer reserves 60 bytes for framing and may leave up to 160 bytes unused rather than start a very small final fragment. When omitted, the server sends all data relevant to the request. Values below the three-byte EOR size are raised so that a valid EOR can still be sent. Negative and overflowing values are rejected. |
 | `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional single, closed, or open-ended codestream range. An unqualified descriptor applies to the first codestream in `stream`, or to codestream 0 when `stream` is absent, regardless of `context`. Each descriptor is validated against the selected image before it is applied. An invalid descriptor terminates the channel, so no partially applied model is reused. Since the source profile has one tile, only tile-header bin zero is valid. Implicit descriptors, subtractive descriptors, wildcards, tile descriptors, and layer-count descriptors are not supported. |
 | `metareq` | Compatibility subset | Its presence is recognized, including JHelioviewer's `[*]!!` form, but the expression is not parsed. Metadata is sent according to the server's fixed JPX metadata-bin representation. The field also enables gzip when the HTTP client accepts it. |
-| `type`, `tid`, `pref`, and unknown fields | Accepted but ignored | They do not affect serving. The server always returns JPP-stream and reports target ID zero. This tolerance preserves existing JHelioviewer requests, but is one reason this is not an Annex J profile. |
+| `tid` | Reduced | Does not affect target selection. A successful request carrying this field receives `JPIP-tid: 0`, indicating that the server does not assign a stable target identifier. |
+| `type`, `pref`, and unknown fields | Accepted but ignored | They do not affect serving. The server always returns JPP-stream. This tolerance preserves existing JHelioviewer requests, but is one reason this is not an Annex J profile. |
 | Other standard fields | Not supported | Fields including `subtarget`, `qid`, `comps`, `srate`, `roi`, `layers`, `quality`, `align`, `wait`, `drate`, `tpmodel`, `need`, `tpneed`, `mset`, upload, capability, timed-request, and delivery-control fields have no implemented semantics. |
 
 The server does not reject every unsupported field. Clients should rely on the
@@ -100,10 +101,16 @@ belongs to one channel. It is not shared with another client and cannot be
 recovered after the channel or serving process is lost.
 
 On channel creation, the response includes `JPIP-cnew` with the assigned `cid`,
-`path=jpip` and `transport=http`. It also includes `JPIP-tid: 0`, explicitly
-indicating that the server does not assign stable target identifiers or
-guarantee target identity across sessions. The remaining JPIP response
-preference and correction headers are not emitted.
+`path=jpip` and `transport=http`. It also includes `JPIP-tid: 0`. Later
+successful requests repeat `JPIP-tid: 0` when the request carries `tid`.
+The value explicitly indicates that the server does not assign stable target
+identifiers or guarantee target identity across sessions. The remaining JPIP
+response preference and correction headers are not emitted.
+
+The `path=jpip` value is deliberately an ABNF-compatible token rather than an
+echo of the request URI path. It directs subsequent requests to `/jpip`;
+JHelioviewer constructs that path by prepending the slash. Returning
+`path=/jpip` would conflict with the formal response grammar.
 
 ## Supported JPEG 2000 sources
 

@@ -48,6 +48,7 @@ namespace jpip {
             bool metareq = false;
             bool len = false;
             bool target = false;
+            bool tid = false;
             bool cid = false;
             bool cnew = false;
             bool cclose = false;

@@ -406,17 +406,21 @@ int main() {
     Check(replacement >= 0, "Could not create a replacement connection");
     SendRequest(replacement,
                 "/jpip?cid=" + to_string(channel_id) +
-                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&tid=0");
     Response replaced = ReadResponse(replacement);
-    Check(replaced.headers.find("HTTP/1.1 200 OK") == 0 && !replaced.body.empty(),
+    Check(replaced.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  replaced.headers.find("JPIP-tid: 0") != string::npos &&
+                  !replaced.body.empty(),
           "Replacement connection did not continue the channel");
     CheckClosed(channel, 1000, "Replaced connection remained open");
     close(channel);
 
-    SendRequest(replacement, "/jpip?cclose=" + to_string(channel_id));
+    SendRequest(replacement,
+                "/jpip?cclose=" + to_string(channel_id) + "&tid=0");
     Response closed = ReadResponse(replacement);
-    Check(closed.headers.find("HTTP/1.1 200 OK") == 0,
-          "Channel close did not return 200");
+    Check(closed.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  closed.headers.find("JPIP-tid: 0") != string::npos,
+          "Channel close did not return 200 with the target ID");
     CheckClosed(replacement, 1000, "Closed channel retained its connection");
     close(replacement);
 

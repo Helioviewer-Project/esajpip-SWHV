@@ -29,12 +29,19 @@ static const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Strict-Transport-Security: max-age=31536000; includeSubDomains;\r\n"
         "Cache-Control: no-cache\r\n";
+static const char TARGET_ID_HEADERS[] =
+        "JPIP-tid: 0\r\n"
+        "Access-Control-Expose-Headers: JPIP-tid\r\n";
 static const string JPIP_HEADERS =
         string(COMMON_HEADERS) +
         "Transfer-Encoding: chunked\r\n"
         "Content-Type: image/jpp-stream\r\n";
 static const string JPIP_GZIP_HEADERS =
         JPIP_HEADERS + "Content-Encoding: gzip\r\n";
+static const string JPIP_TID_HEADERS =
+        string(TARGET_ID_HEADERS) + JPIP_HEADERS;
+static const string JPIP_TID_GZIP_HEADERS =
+        JPIP_TID_HEADERS + "Content-Encoding: gzip\r\n";
 
 static int TimeoutMilliseconds(int seconds) {
     if (seconds <= 0)
@@ -196,6 +203,7 @@ private:
 
                     ostringstream msg;
                     msg << http::Response(200, "OK")
+                            << (req.has.tid ? TARGET_ID_HEADERS : "")
                             << COMMON_HEADERS
                             << "Content-Length: 0" << CRLF << CRLF;
                     (void) connection.Send(msg.str());
@@ -267,8 +275,11 @@ private:
                         << CRLF;
                 sent = connection.Send(msg.str());
             } else {
-                sent = connection.SendOK(send_gzip ? JPIP_GZIP_HEADERS
-                                                   : JPIP_HEADERS);
+                const string &headers = req.has.tid
+                        ? (send_gzip ? JPIP_TID_GZIP_HEADERS
+                                     : JPIP_TID_HEADERS)
+                        : (send_gzip ? JPIP_GZIP_HEADERS : JPIP_HEADERS);
+                sent = connection.SendOK(headers);
             }
             if (!sent ||
                 !SendData(connection, data_server, file_manager, buf, send_gzip) ||

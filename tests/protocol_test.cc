@@ -271,6 +271,7 @@ static void CheckJHVRequests() {
           "Could not parse JHV channel request");
     Check(channel_request.object == "/movie.jpx", "Wrong channel target");
     Check(channel_request.has.cnew, "Missing cnew field");
+    Check(channel_request.has.tid, "Missing target ID field");
     Check(channel_request.accepts_http, "JHV HTTP transport was not accepted");
     Check(channel_request.has.len && channel_request.length_response == 512,
           "Wrong channel response limit");
