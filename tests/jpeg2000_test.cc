@@ -966,6 +966,22 @@ int main() {
               multi_stream_response[2] == 0,
           "The range response did not complete every selected codestream");
 
+    jpip::Request unqualified_model_request;
+    Check(unqualified_model_request.Parse(
+              "GET /jpip?model=M0,Hm,H0,P0&stream=1&cid=0 HTTP/1.1"),
+          "Could not parse an unqualified cache model");
+    jpip::DataBinServer unqualified_model_server;
+    Check(unqualified_model_server.SetRequest(*embedded_two_manager.GetImage(),
+                                               unqualified_model_request),
+          "Rejected an unqualified cache model for the selected codestream");
+    multi_stream_length = sizeof multi_stream_response;
+    Check(unqualified_model_server.GenerateChunk(embedded_two_manager,
+                                                   multi_stream_response,
+                                                   &multi_stream_length,
+                                                   &multi_stream_last) &&
+              multi_stream_length == 3 && multi_stream_last,
+          "Applied an unqualified cache model to codestream 0");
+
     jpip::DataBinServer default_stream_server;
     Check(default_stream_server.SetRequest(*embedded_two_manager.GetImage(),
                                            second_stream_request),

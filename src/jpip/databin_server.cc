@@ -39,7 +39,8 @@ namespace jpip {
         }
 
         bool ApplyModel(const ImageIndex &image_index, CacheModel &cache_model,
-                        const vector<Request::ModelUpdate> &model) {
+                        const Request &request) {
+            const vector<Request::ModelUpdate> &model = request.model;
             for (const Request::ModelUpdate &update : model) {
                 if (update.id < 0 || update.amount < 0)
                     return false;
@@ -55,13 +56,20 @@ namespace jpip {
                     update.bin_class != DataBinClass::TILE_HEADER &&
                     update.bin_class != DataBinClass::PRECINCT)
                     return false;
-                if (update.first_codestream < 0 ||
-                    update.last_codestream < update.first_codestream ||
-                    update.last_codestream >= static_cast<int>(image_index.GetNumCodestreams()))
+                int first_codestream = update.first_codestream;
+                int last_codestream = update.last_codestream;
+                if (!update.has_codestream_qualifier &&
+                    !request.GetUnqualifiedModelCodestream(
+                            image_index.GetNumCodestreams(), &first_codestream))
+                    return false;
+                if (!update.has_codestream_qualifier)
+                    last_codestream = first_codestream;
+                if (first_codestream < 0 || last_codestream < first_codestream ||
+                    last_codestream >= static_cast<int>(image_index.GetNumCodestreams()))
                     return false;
                 if (update.bin_class == DataBinClass::TILE_HEADER && update.id != 0)
                     return false;
-                for (int i = update.first_codestream; i <= update.last_codestream; ++i) {
+                for (int i = first_codestream; i <= last_codestream; ++i) {
                     if (update.bin_class == DataBinClass::PRECINCT &&
                         update.id >= image_index.GetCodingParameters(i)->GetNumPrecinctDataBins())
                         return false;
@@ -136,7 +144,7 @@ namespace jpip {
             }
         }
 
-        if (req.has.model && !ApplyModel(image_index, cache_model, req.model))
+        if (req.has.model && !ApplyModel(image_index, cache_model, req))
             return Reject(error_message,
                           "JPIP cache model does not match the selected image");
 

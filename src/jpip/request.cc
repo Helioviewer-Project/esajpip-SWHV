@@ -137,6 +137,7 @@ namespace jpip {
             model->clear();
             int minimum_codestream = 0;
             int maximum_codestream = 0;
+            bool has_codestream_qualifier = false;
             bool descriptor_found = false;
             const char *position = text.c_str();
 
@@ -161,6 +162,7 @@ namespace jpip {
                     }
                     if (*position++ != ']')
                         return false;
+                    has_codestream_qualifier = true;
                     continue;
                 }
                 if (*position == '-') {
@@ -189,6 +191,7 @@ namespace jpip {
                 }
 
                 Request::ModelUpdate update;
+                update.has_codestream_qualifier = has_codestream_qualifier;
                 update.first_codestream = minimum_codestream;
                 update.last_codestream = maximum_codestream;
                 update.id = id;
@@ -219,18 +222,24 @@ namespace jpip {
 
     bool Request::ParseStream(const string &value) {
         const char *position = value.c_str();
+        uint64_t first_requested = 0;
+        bool first = true;
         while (*position != '\0') {
-            uint64_t first;
-            if (!ParseUnsignedInteger(&position, UINT64_MAX, &first))
+            uint64_t range_first;
+            if (!ParseUnsignedInteger(&position, UINT64_MAX, &range_first))
                 return false;
+            if (first) {
+                first_requested = range_first;
+                first = false;
+            }
 
-            uint64_t last = first;
+            uint64_t last = range_first;
             if (*position == '-') {
                 ++position;
                 if (*position == '\0' || *position == ',' || *position == ':')
                     last = UINT64_MAX;
                 else if (!ParseUnsignedInteger(&position, UINT64_MAX, &last) ||
-                         last < first)
+                         last < range_first)
                     return false;
             }
 
@@ -241,9 +250,12 @@ namespace jpip {
                     return false;
             }
 
-            codestream_selections.emplace_back(first, last, step);
-            if (*position == '\0')
+            codestream_selections.emplace_back(range_first, last, step);
+            if (*position == '\0') {
+                if (!has.stream)
+                    first_requested_codestream = first_requested;
                 return true;
+            }
             if (*position++ != ',' || *position == '\0')
                 return false;
         }
@@ -296,6 +308,15 @@ namespace jpip {
                 id += selection.step;
             }
         }
+        return true;
+    }
+
+    bool Request::GetUnqualifiedModelCodestream(size_t available,
+                                                int *codestream) const {
+        uint64_t selected = has.stream ? first_requested_codestream : 0;
+        if (selected >= available || selected > INT_MAX)
+            return false;
+        *codestream = static_cast<int>(selected);
         return true;
     }
 

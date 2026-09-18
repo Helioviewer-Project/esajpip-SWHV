@@ -26,6 +26,7 @@ namespace jpip {
         };
 
         std::vector<CodestreamSelection> codestream_selections;
+        uint64_t first_requested_codestream = 0;
 
         bool ParseURI(const std::string &uri, std::string *error_message);
         bool ParseStream(const std::string &value);
@@ -56,6 +57,7 @@ namespace jpip {
 
         struct ModelUpdate {
             DataBinClass bin_class;
+            bool has_codestream_qualifier;
             int first_codestream;
             int last_codestream;
             int id;
@@ -99,6 +101,8 @@ namespace jpip {
 
         bool SelectCodestreams(std::size_t available,
                                std::vector<int> *selected) const;
+        bool GetUnqualifiedModelCodestream(std::size_t available,
+                                           int *codestream) const;
 
         /**
          * Obtains the resolution level and modifies the given WOI to adjust it
