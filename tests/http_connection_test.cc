@@ -54,6 +54,7 @@ static void CheckRequestHead() {
             "GET /jpip?cid=7 HTTP/1.1\r\n"
             "Host: localhost\r\n"
             "Accept-Encoding: gzip\r\n"
+            "Connection: keep-alive, CLOSE\r\n"
             "\r\n";
     Check(write(sockets[0], request, sizeof request - 1) == sizeof request - 1,
           "Could not write an HTTP request head");
@@ -64,6 +65,7 @@ static void CheckRequestHead() {
     Check(head.line == "GET /jpip?cid=7 HTTP/1.1",
           "HTTP request line was changed");
     Check(head.accepts_gzip, "HTTP gzip support was not detected");
+    Check(head.close, "HTTP connection closure was not detected");
 
     close(sockets[0]);
     close(sockets[1]);

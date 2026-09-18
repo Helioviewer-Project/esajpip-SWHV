@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -56,6 +57,28 @@ bool SendBuffers(int fd, iovec *buffers, int count) {
         }
     }
     return true;
+}
+
+bool HasToken(const string &value, const char *token) {
+    size_t position = 0;
+    while (position < value.size()) {
+        while (position < value.size() &&
+               (value[position] == ' ' || value[position] == '\t' ||
+                value[position] == ','))
+            position++;
+        size_t end = value.find(',', position);
+        if (end == string::npos)
+            end = value.size();
+        size_t token_end = end;
+        while (token_end > position &&
+               (value[token_end - 1] == ' ' || value[token_end - 1] == '\t'))
+            token_end--;
+        if (token_end - position == strlen(token) &&
+            strncasecmp(value.data() + position, token, strlen(token)) == 0)
+            return true;
+        position = end + 1;
+    }
+    return false;
 }
 
 }
@@ -155,6 +178,7 @@ Connection::LineResult Connection::ReadLine(string &line, size_t &remaining) {
 Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
     request->line.clear();
     request->accepts_gzip = false;
+    request->close = false;
     size_t remaining = MAX_REQUEST_HEAD;
     LineResult result = ReadLine(request->line, remaining);
     if (result == LINE_INTERRUPTED)
@@ -203,6 +227,8 @@ Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
         if (header.Is("Accept-Encoding") &&
             header.value.find("gzip") != string::npos)
             request->accepts_gzip = true;
+        if (header.Is("Connection") && HasToken(header.value, "close"))
+            request->close = true;
     }
 }
 

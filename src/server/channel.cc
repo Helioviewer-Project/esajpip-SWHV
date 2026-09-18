@@ -314,6 +314,8 @@ private:
                 !connection.Send(ZERO, sizeof ZERO - 1))
                 return FAIL_CHANNEL;
             file_manager.ClearFiles();
+            if (request.close)
+                return KEEP_CHANNEL;
         }
     }
 

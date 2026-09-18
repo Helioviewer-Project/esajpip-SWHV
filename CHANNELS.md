@@ -98,6 +98,10 @@ Closing a persistent connection between complete responses does not close the
 channel immediately. The server waits for another connection carrying its
 `cid`, up to `connections.timeout`.
 
+If a request contains `Connection: close`, the server completes that response
+and closes the connection. The JPIP channel remains available for a later
+connection carrying its `cid`.
+
 ## Close a channel
 
 Send `cclose` with the channel identifier:

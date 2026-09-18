@@ -428,6 +428,25 @@ int main() {
     close(channel);
 
     SendRequest(replacement,
+                "/jpip?cid=" + to_string(channel_id) +
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128",
+                "Connection: close\r\n");
+    Check(ReadResponse(replacement).headers.find("HTTP/1.1 200 OK") == 0,
+          "Connection close request was not served");
+    CheckClosed(replacement, 1000,
+                "Connection close request retained its connection");
+    close(replacement);
+
+    replacement = Connect(port);
+    Check(replacement >= 0,
+          "Could not reconnect after Connection close");
+    SendRequest(replacement,
+                "/jpip?cid=" + to_string(channel_id) +
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+    Check(ReadResponse(replacement).headers.find("HTTP/1.1 200 OK") == 0,
+          "Channel was lost after Connection close");
+
+    SendRequest(replacement,
                 "/jpip?cclose=" + to_string(channel_id) + "&tid=0&handled");
     Response closed = ReadResponse(replacement);
     Check(closed.headers.find("HTTP/1.1 200 OK") == 0 &&

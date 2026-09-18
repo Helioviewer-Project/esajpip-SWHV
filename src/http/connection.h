@@ -11,6 +11,7 @@ std::string EscapeForLog(const std::string &text);
 struct RequestHead {
     std::string line;
     bool accepts_gzip;
+    bool close;
 };
 
 class Connection {
