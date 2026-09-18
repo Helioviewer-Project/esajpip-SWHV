@@ -353,6 +353,22 @@ int main() {
           "Image failure did not explain the unsupported type");
     close(bad_image);
 
+    int duplicate = Connect(port);
+    Check(duplicate >= 0, "Could not connect for duplicate channel creation");
+    SendRequest(duplicate, "/image.jp2?cnew=http&len=128");
+    Check(ReadResponse(duplicate).headers.find("HTTP/1.1 200 OK") == 0,
+          "Initial duplicate-test channel creation failed");
+    SendRequest(duplicate, "/image.jp2?cnew=http&len=128");
+    Response duplicate_response = ReadResponse(duplicate);
+    Check(duplicate_response.headers.find("503 Service Unavailable") !=
+                      string::npos &&
+                  duplicate_response.body ==
+                      "A JPIP channel is already open on this connection",
+          "A second channel on one connection did not return 503");
+    CheckClosed(duplicate, 1000,
+                "Duplicate channel request retained its connection");
+    close(duplicate);
+
     int channel = Connect(port);
     Check(channel >= 0, "Could not connect for channel creation");
     SendRequest(channel,

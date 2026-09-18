@@ -178,13 +178,19 @@ private:
             const char *error_reason = "Internal Server Error";
             string file_name;
             bool send_gzip = req.has.metareq && request.accepts_gzip;
+            auto set_channel_error = [&](const char *message) {
+                err_msg = message;
+                error_code = 503;
+                error_reason = "Service Unavailable";
+            };
 
             if (req.has.cclose) {
                 if (!file_manager.GetImage()) {
-                    err_msg = "No JPIP channel is open";
+                    set_channel_error("No JPIP channel is open");
                     /* Only one channel per client supported */
                 } else if (req.channel != "*" && req.channel != id) {
-                    err_msg = "The close request identifies a different JPIP channel";
+                    set_channel_error(
+                            "The close request identifies a different JPIP channel");
                 } else {
                     LOG("The channel " << id << " has been closed");
 
@@ -197,7 +203,8 @@ private:
                 }
             } else if (req.has.cnew) {
                 if (file_manager.GetImage()) {
-                    err_msg = "A JPIP channel is already open on this connection";
+                    set_channel_error(
+                            "A JPIP channel is already open on this connection");
                 } else {
                     file_name = req.has.target ? req.target : req.object;
 
@@ -219,9 +226,10 @@ private:
                 }
             } else if (req.has.cid) {
                 if (!file_manager.GetImage()) {
-                    err_msg = "No JPIP channel is open";
+                    set_channel_error("No JPIP channel is open");
                 } else if (req.channel != id)
-                    err_msg = "The request identifies a different JPIP channel";
+                    set_channel_error(
+                            "The request identifies a different JPIP channel");
             } else {
                 err_msg = "The request has no JPIP channel parameter";
             }
