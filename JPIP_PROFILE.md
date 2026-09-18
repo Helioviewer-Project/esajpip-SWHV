@@ -115,31 +115,35 @@ JPX specifications allow.
 
 - The file name must end in `.jp2`.
 - The first box must be the standard JPEG 2000 signature box, followed by the
-  file-type box.
+  file-type box with the `jp2 ` brand and compatibility entry.
 - Exactly one embedded codestream is supported.
-- The codestream must contain one tile, use zero image and tile origins, and
-  contain at least one valid `PLT` marker.
-- All five Part 1 progression orders are indexed. PCRL and CPRL additionally
-  require unit component sampling.
+- The codestream must contain one tile and use zero image and tile origins.
+- All five Part 1 progression orders are indexed. Components must use unit
+  sampling because the packet index has one shared precinct geometry.
 - Explicit precinct dimensions and the Part 1 default of 32,768 by 32,768
   samples are supported. An explicit zero exponent is accepted only at the
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
   marker and must contain all information needed to decode every tile-part.
-  `COD` and `QCD` markers in tile-part headers are rejected because tile-part
-  header overrides are not delivered to the client. Features that change the
-  packet layout elsewhere, including `POC` and component-specific coding or
-  quantization parameters, are outside the supported source profile even if
-  the parser accepts their marker segments.
+  `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers
+  are rejected because tile-part headers are not delivered to the client.
+  Main-header `COC` and `POC` markers are rejected because packet indexing is
+  derived from the main `COD` marker. Main-header component quantization and
+  region markers are preserved but do not affect packet indexing.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
+- The Part 1 multiple component transform is accepted when the codestream has
+  at least three components and the first three have equal bit depth, as
+  required by T.800.
 - Up to 64 tile-parts and multiple `PLT` markers may be indexed, subject to the
   validated marker, packet, and tile-part bounds. `TPsot` must start at zero
   and increase by one. If `TNsot` is nonzero, it must equal the final
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
   marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
   the codestream. Each tile-part's `PLT` lengths must exactly cover its packet
-  data.
+  data. As a compatibility exception for deployed OpenJPEG-transcoded files,
+  zero `Iplt` entries after the logical packet list are ignored; a nonzero
+  trailing entry is rejected.
 - Packet counts, packet locations, and file-backed data-bin offsets must fit
   the signed 32-bit JPIP state. Source files of 2 GiB or more are outside the
   supported profile.
@@ -152,7 +156,7 @@ transcoding step required for such inputs.
 
 - The file name must end in `.jpx`.
 - The first box must be the standard JPEG 2000 signature box, followed by the
-  file-type box.
+  file-type box with the `jpx ` brand and compatibility entry.
 - A JPX with no links must contain every declared codestream. Each embedded
   codestream keeps its own coding parameters.
 - If links are present, every declared codestream must have a link in the
@@ -161,9 +165,12 @@ transcoding step required for such inputs.
 - A linked codestream uses one `flst` entry containing exactly one fragment.
   The fragment must describe the complete codestream indexed in the referenced
   file.
+- Codestream header, contiguous codestream, and fragment table boxes must be at
+  the JPX file's top level.
 - Data references use version-zero `file://` URL boxes. Remote HTTP URLs,
   multiple-fragment codestreams, and serving a mixture of embedded and linked
-  codestreams are not supported.
+  codestreams are not supported. Relative paths are resolved from the directory
+  containing the JPX file.
 - Each link must resolve to a lowercase `.jp2` file with one embedded
   codestream. JPX-to-JPX links are not supported.
 - Top-level association boxes are exposed as separate metadata bins. Other box

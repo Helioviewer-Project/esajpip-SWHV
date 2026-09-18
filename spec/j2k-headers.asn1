@@ -42,10 +42,8 @@ EXPORTS ALL;
 -- ---------------------------------------------------------------------------
 
 Siz ::= SEQUENCE {
-    rsiz        INTEGER (0..65535),           -- capabilities. DELIBERATE WIDENING: Table A.10
-                                              -- defines only 0, 1, 2; later amendments and
-                                              -- Part 2 assign the high bits and deployed files
-                                              -- carry them. The server ignores Rsiz.
+    rsiz        INTEGER (0..65535),           -- capability flags are preserved for the client;
+                                              -- packet-layout features are checked separately
     xsiz        INTEGER (1..4294967295),      -- reference grid width
     ysiz        INTEGER (1..4294967295),      -- reference grid height
     xosiz       INTEGER (0..4294967294),      -- image horizontal offset
@@ -177,7 +175,12 @@ Siz-Profile ::= Siz (WITH COMPONENTS {
     xosiz   (0..0),
     yosiz   (0..0),
     xtosiz  (0..0),
-    ytosiz  (0..0)
+    ytosiz  (0..0),
+    components (WITH COMPONENT (WITH COMPONENTS {
+        ...,
+        xrsiz (1..1),                         -- one shared precinct geometry
+        yrsiz (1..1)                          -- (ReadSIZMarker)
+    }))
 })
 
 Cod-Profile ::= Cod                           -- see README.md, "Expected initial failures"
@@ -203,10 +206,14 @@ END
 --         xosiz < xsiz  and  yosiz < ysiz              (non-empty image)
 --         xtosiz <= xosiz  and  ytosiz <= yosiz
 --         xtosiz + xtsiz > xosiz  and  ytosiz + ytsiz > yosiz
+--   Siz/Cod: sgcod.mct != 0 requires csiz >= 3 and components 0..2 with the
+--         same depth and sub-sampling (A.6.1, G.2; ReadSIZMarker/ReadCODMarker)
 --   Cod:  spcod.precincts present  <=>  scod.customPrecincts
 --         spcod.precincts.higher has exactly spcod.levels entries
 --         spcod.cbWidthExp + spcod.cbHeightExp <= 8
---   Plt:  where a tile-part has PLT segments, the sum of their Iplt values
+--   Plt:  within a tile-part, Zplt runs 0, 1, 2, ... in segment order
+--         (A.7.3; ReadPLTMarker)
+--         where a tile-part has PLT segments, the sum of their Iplt values
 --         equals that tile-part's data length (A.7.3: every packet is listed;
 --         ImageIndex::GetOffsetPacket rejects both excess and shortfall)
 --
@@ -215,5 +222,5 @@ END
 --         the packet count, sum over resolutions of the precinct count
 --         (B.6) times csiz times sgcod.layers, is <= 2^31 - 1
 --                                                     (CodingParameters::FillPrecinctCounts)
---         sgcod.progression >= 3 (PCRL, CPRL)  =>  every Component has
---         xrsiz == yrsiz == 1                            (position_order_supported)
+--         (component sampling xrsiz == yrsiz == 1 is a Siz-Profile constraint,
+--         not a rule)

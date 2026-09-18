@@ -22,10 +22,12 @@
 #define MC_SOC 65359
 #define MC_SIZ 65361
 #define MC_COD 65362
+#define MC_COC 65363
 #define MC_QCD 65372
 #define MC_TLM 65365
 #define MC_PLM 65367
 #define MC_PPM 65376
+#define MC_POC 65375
 #define MC_CRG 65379
 #define MC_PLT 65368
 #define MC_SOT 65424
@@ -46,14 +48,19 @@ static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
     if (!(s->xtosiz <= s->xosiz && s->ytosiz <= s->yosiz)) return "siz.tile-origin";
     if (!(s->xtosiz + s->xtsiz > s->xosiz && s->ytosiz + s->ytsiz > s->yosiz))
         return "siz.tile-covers-origin";
+    if (cod != NULL && cod->sgcod.mct != 0) {
+        int i;
+        if (s->components.nCount < 3) return "siz.mct-components";
+        for (i = 1; i < 3; ++i)
+            if (s->components.arr[i].depthMinus1 !=
+                        s->components.arr[0].depthMinus1 ||
+                s->components.arr[i].xrsiz != s->components.arr[0].xrsiz ||
+                s->components.arr[i].yrsiz != s->components.arr[0].yrsiz)
+                return "siz.mct-geometry";
+    }
     if (layer >= CF_PROFILE) {
         if (!(s->xtsiz >= s->xsiz && s->ytsiz >= s->ysiz)) return "siz.single-tile";
-        if (cod != NULL && cod->sgcod.progression >= 3) {
-            int i;
-            for (i = 0; i < s->components.nCount; ++i)
-                if (s->components.arr[i].xrsiz != 1 || s->components.arr[i].yrsiz != 1)
-                    return "siz.position-order-sampling";
-        }
+        /* Component sampling 1:1 is a Siz-Profile constraint (WITH COMPONENT). */
     }
     return NULL;
 }
@@ -138,38 +145,38 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                  * A.6.1 / A.6.4: COD and QCD appear in a tile-part header at
                  * most once, and only in the first tile-part of the tile. */
                 uint64_t plt_sum = 0;
-                int tp_plts = 0, tp_cod = 0, tp_qcd = 0;
+                int expected_zplt = 0;
+                int tp_plts = 0;
+#ifndef CF_TILE_PLT_ONLY
+                int tp_cod = 0, tp_qcd = 0;
+#endif
                 for (j = 0; j < tp->rest.headers.nCount; ++j) {
                     const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
                     if (ts->body.kind == CF_K(TileBody, plt)) {
                         const CF_T(Plt) *plt = &ts->body.u.plt.body;
                         int e;
+                        if ((int) plt->zplt != expected_zplt++)
+                            return "plt.zplt-sequence";
                         tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e)
                             plt_sum += CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
                     }
+#ifndef CF_TILE_PLT_ONLY
                     if (ts->body.kind == CF_K(TileBody, cod)) tp_cod++;
                     if (ts->body.kind == CF_K(TileBody, qcd)) tp_qcd++;
+#endif
                 }
                 plts += tp_plts;
                 if (tp_plts > 0 && plt_sum != (uint64_t) tp->rest.data.nCount)
                     return "plt.coverage";
+#ifndef CF_TILE_PLT_ONLY
                 if (tp_cod > 1 || (tp_cod && tp->tpsot != 0)) return "tile.cod-once";
                 if (tp_qcd > 1 || (tp_qcd && tp->tpsot != 0)) return "tile.qcd-once";
-                if (layer >= CF_PROFILE && (tp_cod != 0 || tp_qcd != 0))
-                    return "tile.header-coding-default";
+#endif
+                /* Layer 2: TileBody-Profile admits only PLT, so any other
+                 * tile-header segment already failed to decode. */
                 if (layer >= CF_PROFILE && tp_plts == 0) return "codestream.no-plt";
             }
-#ifdef CF_HAS_OTHER
-            for (j = 0; j < tp->rest.headers.nCount; ++j) {
-                const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
-                if (ts->body.kind == CF_K(TileBody, other)) {
-                    int tc = (int) ts->code;
-                    if (tc == MC_SOC || tc == MC_SIZ || tc == MC_SOT || tc == MC_EOC)
-                        return "tile.other-code";
-                }
-            }
-#endif
             continue;
         }
         if (!seen_tile) {
@@ -193,6 +200,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
         if (seg->body.kind == CF_K(MainBody, cod) &&
             (r = CF_CAT3(cf_cod, CF_S, )(&seg->body.u.cod.body)) != NULL)
             return r;
+#ifndef CF_TILE_PLT_ONLY
         if (seg->body.kind == CF_K(MainBody, tilePart)) {
             const CF_T(TilePart) *tp = &seg->body.u.tilePart;
             for (j = 0; j < tp->rest.headers.nCount; ++j)
@@ -200,6 +208,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                     (r = CF_CAT3(cf_cod, CF_S, )(&tp->rest.headers.arr[j].body.u.cod.body)) != NULL)
                     return r;
         }
+#endif
     }
     if (layer >= CF_PROFILE) {
         if (tile_parts > 64) return "codestream.tile-part-limit";
@@ -225,6 +234,17 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         memcmp(file->boxes.arr[0].payload.u.jP.data.arr, "\x0D\x0A\x87\x0A", 4) != 0)
         return "file.signature";
     if (file->boxes.arr[1].tbox != BT_FTYP) return "file.ftyp-second";
+    {
+        const Ftyp *ftyp = &file->boxes.arr[1].payload.u.ftyp;
+        const char *expected = kind == CF_JP2 ? "jp2 " : "jpx ";
+        int compatible = 0;
+        if (file->boxes.arr[1].payload.kind != CF_K(TopPayload, ftyp) ||
+            memcmp(ftyp->brand.arr, expected, 4) != 0)
+            return "file.ftyp-brand";
+        for (i = 0; i < ftyp->compat.nCount; ++i)
+            compatible |= memcmp(ftyp->compat.arr[i].arr, expected, 4) == 0;
+        if (!compatible) return "file.ftyp-compatibility";
+    }
 
     /* First pass: dtbl (ndr is needed to validate fragment references). */
     for (i = 0; i < file->boxes.nCount; ++i) {

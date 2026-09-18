@@ -52,6 +52,7 @@
 /* Marker codes and box types (decimal, as in the .asn1). */
 enum {
     MC_SOC = 65359, MC_SIZ = 65361, MC_COD = 65362, MC_QCD = 65372,
+    MC_COC = 65363, MC_POC = 65375,
     MC_PLT = 65368, MC_COM = 65380, MC_SOT = 65424, MC_SOD = 65427, MC_EOC = 65497
 };
 enum {
@@ -330,18 +331,22 @@ static void add_opaque_box(Jp2Family *f, uint32_t type, const void *data, size_t
     b->tbox = type;
     switch (type) {
         case BT_JP:   b->payload.kind = TopPayload_jP_PRESENT;   OCTETS(b->payload.u.jP.data, data, n); break;
-        case BT_FTYP: b->payload.kind = TopPayload_ftyp_PRESENT; OCTETS(b->payload.u.ftyp.data, data, n); break;
         default: die("add_opaque_box: unsupported type");
     }
 }
 
 static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
-    unsigned char ftyp[12];
+    TopBox *b;
+    Ftyp *ftyp;
     add_opaque_box(f, BT_JP, "\x0D\x0A\x87\x0A", 4);
-    memcpy(ftyp, brand, 4);
-    put32(ftyp + 4, 0);
-    memcpy(ftyp + 8, brand, 4);
-    add_opaque_box(f, BT_FTYP, ftyp, 12);
+    b = &f->boxes.arr[f->boxes.nCount++];
+    b->tbox = BT_FTYP;
+    b->payload.kind = TopPayload_ftyp_PRESENT;
+    ftyp = &b->payload.u.ftyp;
+    OCTETS(ftyp->brand, brand, 4);
+    ftyp->minor = 0;
+    ftyp->compat.nCount = 1;
+    OCTETS(ftyp->compat.arr[0], brand, 4);
 }
 
 static void add_jp2h(Jp2Family *f, int width, int height) {
@@ -630,7 +635,7 @@ typedef struct {
 
 static const FieldMutant field_mutants[] = {
     { "siz.rsiz", set_siz_rsiz, 2, "table A.10 value 2 (profile 1)", 0, X_VALID },
-    { "siz.rsiz", set_siz_rsiz, 32768, "amendment bit 15", 0, X_VALID },
+    { "siz.rsiz", set_siz_rsiz, 32768, "extension capability flag", 0, X_VALID },
     { "siz.xsiz", set_siz_xsiz, 0, "min-1", 0, X_STD },
     { "siz.xsiz", set_siz_xsiz, 2147483648, "profile max+1", 0, X_PROF },
     { "siz.xsiz", set_siz_xsiz, 4294967295u, "standard max (tile smaller: single-tile rule)", 0, X_PROF },
@@ -655,6 +660,7 @@ static const FieldMutant field_mutants[] = {
     { "cod.sgcod.progression", set_cod_progression, 3, "PCRL with unit sampling: valid", 0, X_VALID },
     { "cod.sgcod.layers", set_cod_layers, 0, "min-1", 0, X_STD },
     { "cod.sgcod.mct", set_cod_mct, 2, "max+1", 0, X_STD },
+    { "cod.sgcod.mct", set_cod_mct, 1, "MCT requires three components", 0, X_STD },
     { "cod.spcod.levels", set_cod_levels, 33, "max+1", 0, X_STD },
     { "cod.spcod.cbWidthExp", set_cod_cbw, 9, "max+1", 0, X_STD },
     { "cod.spcod.cbWidthExp", set_cod_cbw, 5, "5+4 = 9 > 8: code-block area", 0, X_STD },
@@ -673,7 +679,7 @@ static const FieldMutant field_mutants[] = {
     { "sot.tpsot", set_sot_tpsot, 255, "reserved", 0, X_STD },
     { "sot.tnsot", set_sot_tnsot, 0, "unspecified count: valid", 0, X_VALID },
     { "sot.tnsot", set_sot_tnsot, 2, "count 2 with one tile-part", 0, X_STD },
-    { "plt.zplt", set_plt_zplt, 1, "index 1: valid", 0, X_VALID },
+    { "plt.zplt", set_plt_zplt, 1, "first PLT index is not zero", 0, X_STD },
     { "plt.iplt.b0.bits", set_iplt_bits, 0, "packet length 0: PLT coverage short", 0, X_STD },
 };
 
@@ -865,9 +871,43 @@ static void rule_iplt_too_long(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
     e->b0.more = 0; e->b0.bits = 2;                        /* data holds 1 byte */
 }
-static void rule_pcrl_subsampled(Jp2Family *f, int box) {
-    cod_of(f, box)->sgcod.progression = 3;
-    cs_of(f, box)->siz.body.components.arr[0].xrsiz = 2;   /* profile: position order needs unit sampling */
+static void rule_subsampled(Jp2Family *f, int box) {
+    cs_of(f, box)->siz.body.components.arr[0].xrsiz = 2;   /* profile: one shared precinct geometry */
+}
+static void add_main_opaque(Jp2Family *f, int box, int code) {
+    Codestream *cs = cs_of(f, box);                        /* insert before the tile-part */
+    MainSegment *seg;
+    cs->segments.arr[3] = cs->segments.arr[2];
+    seg = &cs->segments.arr[2];
+    seg->code = code;
+    seg->body.kind = code == MC_COC ? MainBody_coc_PRESENT : MainBody_poc_PRESENT;
+    OCTETS(seg->body.u.coc.body.data, "\x00\x00\x00", 3);
+    cs->segments.nCount = 4;
+}
+static void rule_main_coc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_COC); }
+static void rule_main_poc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_POC); }
+static void rule_ftyp_brand(Jp2Family *f, int box) {
+    (void) box;
+    memcpy(f->boxes.arr[1].payload.u.ftyp.brand.arr, "abcd", 4);           /* wrong brand */
+}
+static void rule_ftyp_compat(Jp2Family *f, int box) {
+    (void) box;
+    memcpy(f->boxes.arr[1].payload.u.ftyp.compat.arr[0].arr, "abcd", 4);   /* brand missing from list */
+}
+static void rule_ftyp_two_compat(Jp2Family *f, int box) {
+    Ftyp *ftyp = &f->boxes.arr[1].payload.u.ftyp;                          /* brand second: valid */
+    (void) box;
+    ftyp->compat.nCount = 2;
+    ftyp->compat.arr[1] = ftyp->compat.arr[0];
+    memcpy(ftyp->compat.arr[0].arr, "jpxb", 4);
+}
+static void rule_jp2c_in_jpch(Jp2Family *f, int box) {
+    Superbox *sb = &f->boxes.arr[2].payload.u.jpch;        /* jpx-embedded: first jpch */
+    InnerBox *c = &sb->children.arr[sb->children.nCount++];
+    (void) box;
+    c->tbox = BT_JP2C;                                     /* layer 1: no alternative; layer 2: other */
+    c->payload.kind = InnerPayload_free_PRESENT;           /* any opaque alternative; code patched below */
+    OCTETS(c->payload.u.free.data, "\x00", 1);
 }
 static void rule_missing_signature(Jp2Family *f, int box) {
     int i;
@@ -901,10 +941,11 @@ static const RuleMutant rule_mutants[] = {
     { "sot.tnsot-late", rule_tnsot_declared_late, "TNsot 0 then 2: valid", 0, 0, X_VALID },
     { "codestream.tile-part-limit", rule_tile_parts_64, "64 tile-parts: profile maximum, valid", 0, 0, X_VALID },
     { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
-    { "tile.com", rule_com_in_tile_header, "COM in the tile-part header: valid", 0, 0, X_VALID },
+    { "tile.header-marker", rule_com_in_tile_header, "COM in the tile-part header: profile invalid", 0, 0, X_PROF },
     { "jpx.pairing", rule_jpx_jp2c_before_jpch, "jp2c before any jpch: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.embedded-count", rule_jpx_missing_jp2c, "two jpch, one jp2c: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpch.nested-jp2c", rule_jp2c_in_jpch, "jp2c inside a jpch superbox", CF_JPX, 0, X_STD },
     { "sot.tnsot-inconsistent", rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0, 0, X_STD },
     { "codestream.tile-part-limit", rule_tile_parts_65, "65 tile-parts: profile invalid", 0, 0, X_PROF },
     { "main.com", rule_com_segment, "COM segment: valid", 0, 0, X_VALID },
@@ -917,7 +958,12 @@ static const RuleMutant rule_mutants[] = {
     { "tile.cod-first-part", rule_tile_cod_second_part, "COD in the second tile-part", 0, 0, X_STD },
     { "codestream.packet-count", rule_packet_count_overflow, "2^32 packets: profile invalid", 0, 0, X_PROF },
     { "plt.iplt-six-bytes", rule_iplt_six_bytes, "6-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
-    { "siz.position-order-sampling", rule_pcrl_subsampled, "PCRL with 2:1 sampling: profile invalid", 0, 0, X_PROF },
+    { "siz.component-sampling", rule_subsampled, "2:1 sampling: profile invalid", 0, 0, X_PROF },
+    { "main.packet-layout-override", rule_main_coc, "COC in the main header: profile invalid", 0, 0, X_PROF },
+    { "main.packet-layout-override", rule_main_poc, "POC in the main header: profile invalid", 0, 0, X_PROF },
+    { "file.ftyp-brand", rule_ftyp_brand, "ftyp brand 'abcd'", 0, 0, X_STD },
+    { "file.ftyp-compatibility", rule_ftyp_compat, "brand absent from the compatibility list", 0, 0, X_STD },
+    { "file.ftyp-compatibility", rule_ftyp_two_compat, "brand second in the compatibility list: valid", 0, 0, X_VALID },
     { "file.signature", rule_missing_signature, "no jP box (T.800 I.4)", CF_JP2, 0, X_STD },
     { "jp2.one-codestream", rule_two_jp2c, "two jp2c in .jp2", CF_JP2, 0, X_PROF },
 };
@@ -1163,8 +1209,8 @@ int main(int argc, char **argv) {
 
     /* Linked JPX: emit the two companion frames first, read back their
      * codestream extents, then build the JPX that references them. The
-     * server maps "file://./" to the image directory, so the test copies
-     * the companions next to the vector. */
+     * server resolves a relative "file://" path against the directory of
+     * the JPX itself, so the test copies the companions next to the vector. */
     {
         static const char *const urls[2] = { "file://./jpx-linked-frame1.jp2", "file://./jpx-linked-frame2.jp2" };
         uint64_t off[2];

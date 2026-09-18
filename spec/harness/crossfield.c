@@ -19,11 +19,13 @@
 #define CF_FILE Jp2File_Profile
 #define CF_FN cf_check_profile_common_
 #define CF_HAS_OTHER
+#define CF_TILE_PLT_ONLY     /* TileBody-Profile has the plt alternative only */
 #include "crossfield_impl.h"
 #undef CF_S
 #undef CF_FILE
 #undef CF_FN
 #undef CF_HAS_OTHER
+#undef CF_TILE_PLT_ONLY
 
 const char *cf_check_jp2_profile(const Jp2File_Profile *file) {
     return cf_check_profile_common_(file, CF_PROFILE, CF_JP2);

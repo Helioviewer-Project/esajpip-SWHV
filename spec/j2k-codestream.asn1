@@ -140,8 +140,13 @@ TileBody ::= CHOICE {
 
 -- Any marker code the server tolerates in that position; the listed
 -- alternatives are interpreted, everything else is `other` (skipped).
-MainMarkerCode-Profile ::= INTEGER (65281..65534)   -- FF01..FFFE; SOC/SIZ excluded by rule
-TileMarkerCode-Profile ::= INTEGER (65281..65534)   -- SOC/SIZ/SOT/EOC excluded by rule
+-- COC (FF53) and POC (FF5F) are outside the value set: the server rejects
+-- them because packet indexing is derived from the main COD alone.
+MainMarkerCode-Profile ::= INTEGER (65281..65362 | 65364..65374 | 65376..65534)
+                                                    -- FF01..FFFE minus COC/POC; SOC/SIZ excluded by rule
+-- PLT is the only tile-header segment the server accepts (the served
+-- tile-header data-bin is empty, so nothing else could reach the client).
+TileMarkerCode-Profile ::= INTEGER (65368..65368)
 
 Codestream-Profile ::= SEQUENCE {
     soc         INTEGER (65359..65359),
@@ -163,11 +168,9 @@ MainSegment-Profile ::= SEQUENCE {
 
 MainBody-Profile ::= CHOICE {
     cod         CodSegment-Profile,
-    coc         OpaqueSegment,
     qcd         QcdSegment-Profile,
     qcc         OpaqueSegment,
     rgn         OpaqueSegment,
-    poc         OpaqueSegment,
     tlm         OpaqueSegment,
     plm         OpaqueSegment,
     ppm         OpaqueSegment,
@@ -196,16 +199,7 @@ TileSegment-Profile ::= SEQUENCE {
 }
 
 TileBody-Profile ::= CHOICE {
-    cod         CodSegment-Profile,
-    coc         OpaqueSegment,
-    qcd         QcdSegment-Profile,
-    qcc         OpaqueSegment,
-    rgn         OpaqueSegment,
-    poc         OpaqueSegment,
-    plt         PltSegment-Profile,
-    ppt         OpaqueSegment,
-    com         ComSegment-Profile,
-    other       OpaqueSegment                 -- any other code: skipped by length
+    plt         PltSegment-Profile            -- the only code TileMarkerCode-Profile admits
 }
 
 END
@@ -229,11 +223,12 @@ END
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
 --
 -- Profile only:
---   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51); tile-header
---     `other` codes are never SOC, SIZ, SOT (FF90) or EOC (FFD9) — the server
+--   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51) — the server
 --     rejects those (ReadCodestream), everything else it skips.
---   Tile-part headers contain no COD or QCD marker. Their coding and
---     quantization defaults come entirely from the main header.
+--   (Types, not rules: MainMarkerCode-Profile excludes COC and POC, and
+--     TileMarkerCode-Profile / TileBody-Profile admit only PLT, so a tile
+--     header carrying COD, QCD, COM or anything else fails to decode at
+--     layer 2.)
 --   1..64 tile-parts in total (single tile, so per tile == total).
 --   Every tile-part header holds at least one PLT segment (ReadSODMarker).
 --   Whole codestream <= INT_MAX bytes.

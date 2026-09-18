@@ -163,18 +163,16 @@ MainSegment-Profile [] {
 
 MainBody-Profile <INTEGER:code> [] {
     cod         [present-when code == 65362],
-    coc         [present-when code == 65363],
     qcd         [present-when code == 65372],
     qcc         [present-when code == 65373],
     rgn         [present-when code == 65374],
-    poc         [present-when code == 65375],
     tlm         [present-when code == 65365],
     plm         [present-when code == 65367],
     ppm         [present-when code == 65376],
     crg         [present-when code == 65379],
     com         [present-when code == 65380],
     tilePart    [present-when code == 65424],
-    other       [present-when not (code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424)]
+    other       [present-when not (code == 65362 or code == 65372 or code == 65373 or code == 65374 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424)]
 }
 
 TilePart-Profile [] {
@@ -197,16 +195,7 @@ TileSegment-Profile [] {
 }
 
 TileBody-Profile <INTEGER:code> [] {
-    cod         [present-when code == 65362],
-    coc         [present-when code == 65363],
-    qcd         [present-when code == 65372],
-    qcc         [present-when code == 65373],
-    rgn         [present-when code == 65374],
-    poc         [present-when code == 65375],
-    plt         [present-when code == 65368],
-    ppt         [present-when code == 65377],
-    com         [present-when code == 65380],
-    other       [present-when not (code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65368 or code == 65377 or code == 65380)]
+    plt         [present-when code == 65368]
 }
 
 END

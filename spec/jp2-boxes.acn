@@ -58,6 +58,12 @@ OpaqueBox [] {
     data        [size deduced]
 }
 
+Ftyp [] {
+    brand       [],
+    minor       [encoding pos-int, size 32, endianness big],
+    compat      [size deduced]
+}
+
 InnerBox [] {
     lbox        [encoding pos-int, size 32, endianness big, mapping-function lbox],
     tbox        [encoding pos-int, size 32, endianness big],

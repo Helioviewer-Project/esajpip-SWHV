@@ -253,9 +253,13 @@ Two conventions worth knowing before you edit:
 - **Layer 2 can only narrow.** A `*-Profile` type is either a `WITH
   COMPONENTS` subtype (ranges narrowed) or, where the framing has to repeat
   with profile bodies inside `CONTAINING`, a copy with profile types
-  substituted. It cannot *widen*. So if esajpip accepts something T.800
-  forbids, that cannot be written into layer 2; it shows up as a failing
-  test instead.
+  substituted — with fewer `CHOICE` alternatives or a smaller marker-code
+  value set where the server rejects a whole class (`TileBody-Profile` is
+  `plt` only; `MainMarkerCode-Profile` excludes COC and POC). Such
+  rejections then come from the decoder or constraint checker, not from a
+  hand-written rule. It cannot *widen*. So if esajpip accepts something
+  T.800 forbids, that cannot be written into layer 2; it shows up as a
+  failing test instead.
 
 ## The test contract
 
@@ -354,6 +358,10 @@ fallback that changes no bytes:
 3. **A parameter passed through a `CONTAINING` field**
    (`payload <tbox> [size lbox]` in `jp2-boxes.acn`). If rejected, move
    `tbox` into each wrapper as an ACN-inserted determinant.
+4. **Inner subtyping of a `SEQUENCE OF`** (`components (WITH COMPONENT
+   (WITH COMPONENTS {..., xrsiz (1..1), yrsiz (1..1)}))` in `Siz-Profile`).
+   If the compiler rejects `WITH COMPONENT`, drop it and restore the
+   equivalent cross-field rule `siz.component-sampling` in `crossfield.c`.
 
 Optional, later: 4.9.0.0 has `post-decoding-validator <name>`, which makes
 the generated decoder call a C function after decoding. Attaching the
@@ -388,13 +396,15 @@ From each base:
    structural change per cross-field rule — a second COD or QCD, no QCD, a
    QCD after the tile-part, no PLT, contradictory TNsot, 65 tile-parts, a
    packet length beyond or short of the data, COD twice in a tile header or
-   in a second tile-part, COD or QCD defaults in a tile header, a packet
-   count above 2^31, no `jP` box, two `jp2c`, a `jp2c` before any `jpch`,
-   fewer `jp2c` than `jpch`, no `jpch`, `DR = 0`, `NDR` mismatch, two
-   `flst`, an `http` URL, a link to a `.jpx` — plus the valid shapes the
-   rules must *not* reject: two tile-parts, TNsot given only in the second,
-   64 tile-parts, packet lengths split over two PLT segments, a COM in the
-   tile header. Names look like `jp2-rule-codestream.no-plt-4` (the number
+   in a second tile-part, COD, QCD or COM in a tile header, COC or POC in
+   the main header, 2:1 component sampling, a packet count above 2^31, no
+   `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` before
+   any `jpch` or inside one, fewer `jp2c` than `jpch`, no `jpch`, `DR = 0`,
+   `NDR` mismatch, two `flst`, an `http` URL, a link to a `.jpx` — plus the
+   valid shapes the rules must *not* reject: two tile-parts, TNsot given
+   only in the second, 64 tile-parts, packet lengths split over two PLT
+   segments, a COM in the main header. Names look like
+   `jp2-rule-codestream.no-plt-4` (the number
    is the mutant's index in its table, so it shifts when a mutant is
    inserted before it).
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
@@ -501,9 +511,9 @@ each until the model does:
   the server does. A vector with e.g. a `CAP` segment would be
   `standard=invalid, profile=valid` — a finding about layer 1's list, not a
   gap.
-- `Rsiz` is modelled as `0..65535` although Table A.10 defines 0–2, on
-  purpose (deployed files carry amendment bits); `asoc` nesting is limited
-  to one level.
+- `Rsiz` is modelled as a 16-bit capability field because the server preserves
+  it for the client and validates packet-layout features separately; `asoc`
+  nesting is limited to one level.
 - The linked-JPX check that each `flst` fragment equals the referenced
   file's codestream extent needs the second file; keep `MakeLinkedJPX`'s
   test for it.

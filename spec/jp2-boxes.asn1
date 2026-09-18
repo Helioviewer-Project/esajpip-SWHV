@@ -80,7 +80,7 @@ TopPayload ::= CHOICE {
     asoc        Superbox,                     -- association: nlst/lbl/xml/asoc...
     jp2c        OCTET STRING (CONTAINING Codestream),
     jP          OpaqueBox,
-    ftyp        OpaqueBox,
+    ftyp        Ftyp,
     jp2h        Superbox,
     jplh        Superbox,
     rreq        OpaqueBox,
@@ -88,6 +88,16 @@ TopPayload ::= CHOICE {
     xml         OpaqueBox,
     uinf        Superbox,
     free        OpaqueBox
+}
+
+-- T.800 I.5.2 / T.801 M.11, File Type box: brand, minor version, then a
+-- compatibility list filling the box (so the box is >= 12 bytes and a
+-- multiple of 4 by construction). Which brand is required and that the
+-- list contains it depend on the file extension: cross-field rules.
+Ftyp ::= SEQUENCE {
+    brand       OCTET STRING (SIZE (4)),
+    minor       INTEGER (0..4294967295),
+    compat      SEQUENCE (SIZE (1..16)) OF OCTET STRING (SIZE (4))   -- corpus bound
 }
 
 Superbox ::= SEQUENCE {
@@ -179,7 +189,7 @@ TopPayload-Profile ::= CHOICE {
     asoc        Superbox,
     jp2c        OCTET STRING (CONTAINING Codestream-Profile),
     jP          OpaqueBox,
-    ftyp        OpaqueBox,
+    ftyp        Ftyp,
     jp2h        Superbox,
     jplh        Superbox,
     rreq        OpaqueBox,
@@ -246,6 +256,9 @@ END
 --
 -- Standard (both layers):
 --   T.800 I.4: the first box is jP with payload 0D0A870A, the second is ftyp.
+--   T.800 I.5.2 / T.801 M.11: the ftyp brand is 'jp2 ' for a .jp2 and
+--     'jpx ' for a .jpx, and its compatibility list contains that brand
+--     (ReadFileType). Box size and alignment are the Ftyp type's job.
 --   DataReferences.references has exactly ndr elements and every one is url.
 --   FragmentList.fragments has exactly nf elements.
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
