@@ -38,6 +38,10 @@ Host: server.example:8900
 
 ```
 
+The `cnew` value is a comma-separated list of acceptable transports. The server
+selects `http`, so the list must contain `http`; JHelioviewer sends
+`cnew=http`.
+
 It may instead be supplied through `target`:
 
 ```http
@@ -118,6 +122,7 @@ These are all HTTP status codes emitted by the server:
 | `400 Bad Request` | A request reaches a channel but its HTTP request line, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and channel are closed. Create a new channel after correcting the request. |
 | `404 Not Found` | A `cnew` request names a target that does not exist below the configured image directory. | No usable channel is created; the connection is closed. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and channel are closed. Create a new channel with a smaller request. |
+| `501 Not Implemented` | A valid `cnew` request offers no supported transport. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
 | `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
 | `503 Service Unavailable` | A request names an unknown, ended, different, or otherwise unavailable channel; attempts another `cnew` on an open channel; or the channel already has a replacement connection waiting. The response body distinguishes these cases. | A channel-level failure closes that channel. A dispatcher-level rejection leaves an existing channel unchanged. Create a new channel unless the client knows that the referenced channel remains alive. |
 

@@ -202,7 +202,11 @@ private:
                     return CLOSE_CHANNEL;
                 }
             } else if (req.has.cnew) {
-                if (file_manager.GetImage()) {
+                if (!req.accepts_http) {
+                    err_msg = "The requested JPIP channel transport is not supported";
+                    error_code = 501;
+                    error_reason = "Not Implemented";
+                } else if (file_manager.GetImage()) {
                     set_channel_error(
                             "A JPIP channel is already open on this connection");
                 } else {

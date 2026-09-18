@@ -88,6 +88,31 @@ namespace jpip {
             return *position == '\0';
         }
 
+        bool ParseTransports(const string &value, bool *accepts_http) {
+            *accepts_http = false;
+            size_t begin = 0;
+            for (;;) {
+                size_t end = value.find(',', begin);
+                if (end == string::npos)
+                    end = value.size();
+                if (end == begin)
+                    return false;
+                for (size_t i = begin; i < end; ++i) {
+                    char c = value[i];
+                    if (!((c >= 'A' && c <= 'Z') ||
+                          (c >= 'a' && c <= 'z') ||
+                          (c >= '0' && c <= '9') ||
+                          c == '.' || c == '_' || c == '-'))
+                        return false;
+                }
+                if (value.compare(begin, end - begin, "http") == 0)
+                    *accepts_http = true;
+                if (end == value.size())
+                    return true;
+                begin = end + 1;
+            }
+        }
+
         bool HexDigit(char character, unsigned char *value) {
             if (character >= '0' && character <= '9')
                 *value = character - '0';
@@ -381,7 +406,12 @@ namespace jpip {
             } else if (name == "cid") {
                 has.cid = true;
             } else if (name == "cnew") {
-                has.cnew = true;
+                if (ParseTransports(value, &accepts_http))
+                    has.cnew = true;
+                else {
+                    valid = false;
+                    SetError(error_message, "Invalid JPIP cnew parameter");
+                }
             } else if (name == "cclose") {
                 has.cclose = true;
             } else if (name == "metareq") {

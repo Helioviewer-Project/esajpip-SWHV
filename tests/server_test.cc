@@ -353,11 +353,28 @@ int main() {
           "Image failure did not explain the unsupported type");
     close(bad_image);
 
+    int unsupported_transport = Connect(port);
+    Check(unsupported_transport >= 0,
+          "Could not connect for unsupported transport test");
+    SendRequest(unsupported_transport, "/image.jp2?cnew=http-tcp&len=128");
+    Response unsupported_transport_response = ReadResponse(unsupported_transport);
+    Check(unsupported_transport_response.headers.find("501 Not Implemented") !=
+                      string::npos &&
+                  unsupported_transport_response.headers.find("JPIP-cnew:") ==
+                      string::npos &&
+                  unsupported_transport_response.body ==
+                      "The requested JPIP channel transport is not supported",
+          "An unsupported channel transport did not return 501 without a channel");
+    close(unsupported_transport);
+
     int duplicate = Connect(port);
     Check(duplicate >= 0, "Could not connect for duplicate channel creation");
-    SendRequest(duplicate, "/image.jp2?cnew=http&len=128");
-    Check(ReadResponse(duplicate).headers.find("HTTP/1.1 200 OK") == 0,
-          "Initial duplicate-test channel creation failed");
+    SendRequest(duplicate, "/image.jp2?cnew=http-tcp,http&len=128");
+    Response selected_transport = ReadResponse(duplicate);
+    Check(selected_transport.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  selected_transport.headers.find("transport=http") !=
+                      string::npos,
+          "HTTP was not selected from the offered transports");
     SendRequest(duplicate, "/image.jp2?cnew=http&len=128");
     Response duplicate_response = ReadResponse(duplicate);
     Check(duplicate_response.headers.find("503 Service Unavailable") !=

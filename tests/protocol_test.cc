@@ -271,8 +271,21 @@ static void CheckJHVRequests() {
           "Could not parse JHV channel request");
     Check(channel_request.object == "/movie.jpx", "Wrong channel target");
     Check(channel_request.has.cnew, "Missing cnew field");
+    Check(channel_request.accepts_http, "JHV HTTP transport was not accepted");
     Check(channel_request.has.len && channel_request.length_response == 512,
           "Wrong channel response limit");
+
+    jpip::Request transport_request;
+    Check(transport_request.Parse(
+              "GET /movie.jpx?cnew=http-tcp,http HTTP/1.1") &&
+              transport_request.accepts_http,
+          "HTTP was not selected from a transport list");
+    Check(transport_request.Parse(
+              "GET /movie.jpx?cnew=http-tcp HTTP/1.1") &&
+              !transport_request.accepts_http,
+          "An unsupported transport offer was not preserved");
+    Check(RejectRequest("GET /movie.jpx?cnew=http,,http-tcp HTTP/1.1"),
+          "Accepted a malformed transport list");
 
     jpip::Request target_request;
     Check(target_request.Parse(
