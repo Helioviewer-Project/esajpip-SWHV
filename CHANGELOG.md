@@ -41,9 +41,10 @@
   across requests. An omitted `len` is unlimited, small limits still produce a
   complete end-of-response message, and metadata resumes correctly even when a
   model ends inside a JPX placeholder.
-- Apply the standard window defaults, crop windows to the selected resolution,
-  and include every precinct intersecting the window. An empty intersection
-  now returns `EOR WINDOW_DONE` instead of failing the channel.
+- Apply the standard window defaults and resolution selection, map both window
+  boundaries to the selected resolution, and include every precinct
+  intersecting the result. An empty intersection now returns
+  `EOR WINDOW_DONE` instead of failing the channel.
 - Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet counts
   and locations, codestream bounds, and linked-JPX references before serving
   data. Trailing zero `PLT` entries produced by the deployed OpenJPEG

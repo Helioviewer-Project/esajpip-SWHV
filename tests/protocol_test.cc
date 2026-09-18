@@ -311,6 +311,12 @@ static void CheckJHVRequests() {
           "Wrong frame rounding mode");
     Check(frame_request.length_response == 2097152, "Wrong frame response limit");
 
+    jpip::Request default_round_request;
+    Check(default_round_request.Parse(
+              "GET /jpip?fsiz=4096,4096&cid=7 HTTP/1.1") &&
+              default_round_request.round_direction == jpip::Request::ROUNDDOWN,
+          "Frame size did not default to round-down");
+
     jpip::Request incomplete_window;
     Check(!incomplete_window.Parse("GET /jpip?rsiz=1,1&cid=7 HTTP/1.1") &&
               incomplete_window.resolution_size == jpeg2000::Size(),
@@ -728,6 +734,28 @@ static void CheckResolutionSelection() {
               selected == jpeg2000::Size(1025, 1024),
           "Wrong round-down resolution size");
 
+    params.size = jpeg2000::Size(100, 100);
+    params.num_levels = 1;
+    Check(params.GetClosestResolution(jpeg2000::Size(77, 77), &selected) == 0 &&
+              selected == jpeg2000::Size(50, 50),
+          "Closest resolution was not selected by area");
+    Check(params.GetClosestResolution(jpeg2000::Size(125, 50), &selected) == 1 &&
+              selected == jpeg2000::Size(100, 100),
+          "Closest resolution tie did not select the larger image");
+
+    params.size = jpeg2000::Size(2, 2);
+    params.num_levels = 0;
+    jpip::Request mapped_request;
+    mapped_request.resolution_size = jpeg2000::Size(3, 3);
+    mapped_request.round_direction = jpip::Request::ROUNDDOWN;
+    jpip::WOI mapped_woi;
+    mapped_woi.position = jpeg2000::Point(1, 1);
+    mapped_woi.size = jpeg2000::Size(1, 1);
+    mapped_request.GetResolution(&params, &mapped_woi);
+    Check(mapped_woi.position == jpeg2000::Point(0, 0) &&
+              mapped_woi.size == jpeg2000::Size(2, 2),
+          "Window was not mapped by its floor and ceiling boundaries");
+
     params.size = jpeg2000::Size(INT_MAX, INT_MAX);
     params.num_levels = 32;
     Check(params.GetRoundDownResolution(jpeg2000::Size(1, 1), &selected) == 1 &&
@@ -736,11 +764,12 @@ static void CheckResolutionSelection() {
 
     jpip::Request request;
     request.resolution_size = jpeg2000::Size(INT_MAX - 1, INT_MAX - 1);
+    request.round_direction = jpip::Request::CLOSEST;
     jpip::WOI woi;
     woi.position = jpeg2000::Point(INT_MAX - 2, INT_MAX - 2);
     woi.size = jpeg2000::Size(1, 1);
     request.GetResolution(&params, &woi);
-    Check(woi.position == jpeg2000::Point(INT_MAX - 1, INT_MAX - 1) &&
+    Check(woi.position == jpeg2000::Point(INT_MAX - 2, INT_MAX - 2) &&
               woi.size == jpeg2000::Size(2, 2),
           "Window scaling overflowed");
 }

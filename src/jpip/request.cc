@@ -18,9 +18,16 @@ namespace jpip {
             return value < minimum ? minimum : (value > maximum ? maximum : value);
         }
 
-        int Scale(int value, int numerator, int denominator) {
-            uint64_t scaled = static_cast<uint64_t>(value) * numerator;
-            return static_cast<int>((scaled + denominator - 1) / denominator);
+        void MapInterval(int selected_size, int requested_size,
+                         int *offset, int *length) {
+            uint64_t end = static_cast<uint64_t>(*offset) + *length;
+            int mapped_offset = static_cast<int>(
+                    static_cast<uint64_t>(*offset) * selected_size /
+                    requested_size);
+            uint64_t mapped_end = end * selected_size;
+            mapped_end = (mapped_end + requested_size - 1) / requested_size;
+            *offset = mapped_offset;
+            *length = static_cast<int>(mapped_end) - mapped_offset;
         }
 
         void SetError(string *error_message, const char *message) {
@@ -239,12 +246,10 @@ namespace jpip {
 
         if (resolution_size.x > 0 && resolution_size.y > 0 &&
             resolution_size != res_image_size) {
-            woi->position.x = Scale(woi->position.x, res_image_size.x,
-                                    resolution_size.x);
-            woi->position.y = Scale(woi->position.y, res_image_size.y,
-                                    resolution_size.y);
-            woi->size.x = Scale(woi->size.x, res_image_size.x, resolution_size.x);
-            woi->size.y = Scale(woi->size.y, res_image_size.y, resolution_size.y);
+            MapInterval(res_image_size.x, resolution_size.x,
+                        &woi->position.x, &woi->size.x);
+            MapInterval(res_image_size.y, resolution_size.y,
+                        &woi->position.y, &woi->size.y);
         }
         return res_image_size;
     }
@@ -304,8 +309,10 @@ namespace jpip {
                         round_direction = ROUNDUP;
                     else if (round == "round-down")
                         round_direction = ROUNDDOWN;
-                    else if (round.empty() || round == "closest")
+                    else if (round == "closest")
                         round_direction = CLOSEST;
+                    else if (round.empty())
+                        round_direction = ROUNDDOWN;
                     else {
                         valid = false;
                         SetError(error_message, "Invalid JPIP fsiz parameter");

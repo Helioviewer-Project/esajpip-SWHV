@@ -2,7 +2,6 @@
 
 #include <climits>
 #include <cstdint>
-#include <cstdlib>
 
 namespace jpeg2000 {
 
@@ -61,16 +60,19 @@ namespace jpeg2000 {
 
     int CodingParameters::GetClosestResolution(const Size &res_size, Size *res_image_size) const {
         int final_level = 0;
-        int64_t distance_x = static_cast<int64_t>(size.x) - res_size.x;
-        int64_t distance_y = static_cast<int64_t>(size.y) - res_size.y;
-        int64_t minimum = std::abs(distance_x) + std::abs(distance_y);
+        uint64_t requested_area = static_cast<uint64_t>(res_size.x) * res_size.y;
+        uint64_t level_area = static_cast<uint64_t>(size.x) * size.y;
+        uint64_t minimum = level_area > requested_area
+                           ? level_area - requested_area
+                           : requested_area - level_area;
         *res_image_size = size;
 
         for (int level = 1; level <= num_levels; ++level) {
             Size level_size = SizeAtLevel(level);
-            distance_x = static_cast<int64_t>(level_size.x) - res_size.x;
-            distance_y = static_cast<int64_t>(level_size.y) - res_size.y;
-            int64_t distance = std::abs(distance_x) + std::abs(distance_y);
+            level_area = static_cast<uint64_t>(level_size.x) * level_size.y;
+            uint64_t distance = level_area > requested_area
+                                ? level_area - requested_area
+                                : requested_area - level_area;
 
             if (distance < minimum) {
                 *res_image_size = level_size;

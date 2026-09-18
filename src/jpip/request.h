@@ -74,7 +74,7 @@ namespace jpip {
         Request() {
             object = "/";
             length_response = 0;
-            round_direction = CLOSEST;
+            round_direction = ROUNDDOWN;
         }
 
         bool HasWOI() const {
