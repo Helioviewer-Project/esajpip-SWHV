@@ -820,6 +820,12 @@ static void rule_iplt_six_bytes(Jp2Family *f, int box) {
     e->b4.more = 1; e->exist.b5 = 1;
     e->b5.more = 0; e->b5.bits = 1;                        /* 6 bytes: standard valid, profile invalid */
 }
+static void rule_trailing_zero_iplt(Jp2Family *f, int box) {
+    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body;
+    Iplt *e = &plt->entries.arr[plt->entries.nCount++];    /* one Iplt more than packets */
+    memset(e, 0, sizeof *e);
+    e->b0.more = 0; e->b0.bits = 0;                        /* value 0: tolerated by the server */
+}
 static void rule_iplt_too_short(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     tp->rest.data.nCount += 1;                              /* one byte no PLT entry covers */
@@ -942,8 +948,9 @@ static const RuleMutant rule_mutants[] = {
     { "codestream.tile-part-limit", rule_tile_parts_64, "64 tile-parts: profile maximum, valid", 0, 0, X_VALID },
     { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
     { "tile.header-marker", rule_com_in_tile_header, "COM in the tile-part header: profile invalid", 0, 0, X_PROF },
-    { "jpx.pairing", rule_jpx_jp2c_before_jpch, "jp2c before any jpch: profile invalid", CF_JPX, 0, X_PROF },
-    { "jpx.embedded-count", rule_jpx_missing_jp2c, "two jpch, one jp2c: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpx.box-order", rule_jpx_jp2c_before_jpch, "jp2c before the jpch boxes: valid (counts match)", CF_JPX, 0, X_VALID },
+    { "jpx.codestream-count", rule_jpx_missing_jp2c, "two jpch, one jp2c: profile invalid", CF_JPX, 0, X_PROF },
+    { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: valid (deployed files)", 0, 0, X_VALID },
     { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
     { "jpch.nested-jp2c", rule_jp2c_in_jpch, "jp2c inside a jpch superbox", CF_JPX, 0, X_STD },
     { "sot.tnsot-inconsistent", rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0, 0, X_STD },
@@ -998,7 +1005,7 @@ static const RuleMutant linked_rule_mutants[] = {
     { "url.file-scheme", rule_url_scheme, "http URL: profile invalid", CF_JPX, 0, X_PROF },
     { "url.version", rule_url_version, "VERS = 1: profile invalid", CF_JPX, 0, X_PROF },
     { "url.jp2-target", rule_url_jpx_target, "link to a .jpx: profile invalid", CF_JPX, 0, X_PROF },
-    { "jpx.linked-precedence", rule_mixed_linked_embedded, "jp2c next to ftbl: links win, valid", CF_JPX, 0, X_VALID },
+    { "jpx.mixed-sources", rule_mixed_linked_embedded, "jp2c next to ftbl: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.linked-shape", rule_no_dtbl, "no dtbl", CF_JPX, 0, X_STD },
 };
 

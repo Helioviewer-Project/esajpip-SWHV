@@ -168,9 +168,9 @@ Jp2File-Profile ::= SEQUENCE {
 }
 
 -- .jpx: N jpch boxes and either N jp2c boxes (embedded) or N ftbl/flst
--- boxes plus one dtbl holding the url boxes (linked). When links are
--- present they take precedence and any embedded codestreams are ignored
--- (JPIP_PROFILE.md, "Supported JPEG 2000 sources").
+-- boxes plus one dtbl holding the url boxes (linked), never both. Codestreams
+-- are numbered by source-box order (JPIP_PROFILE.md, "Supported JPEG 2000
+-- sources").
 JpxFile-Profile ::= SEQUENCE {
     boxes       SEQUENCE (SIZE (1..32)) OF TopBox-Profile
 }
@@ -271,14 +271,11 @@ END
 -- Profile only (ReadJP2 / ReadJPX):
 --   Jp2File-Profile: exactly one jp2c among the top-level boxes.
 --   JpxFile-Profile: let N = number of jpch boxes, N >= 1.
---       (linked)   if any ftbl is present: exactly N ftbl boxes, exactly one
---                  top-level dtbl, every flst's dr in 1..ndr. Embedded jp2c
---                  boxes may also be present and are ignored (links take
---                  precedence, JPIP_PROFILE.md).
---       (embedded) otherwise: exactly N jp2c boxes.
---     At every point in the file, the number of jp2c boxes seen so far is
---     less than or equal to the number of jpch boxes seen so far
---     (ReadJPX rejects a jp2c that has no jpch to pair with).
+--     jp2c boxes and ftbl boxes do not both occur (no mixed sources), and
+--     their total is N: each jp2c or ftbl is one codestream, numbered by
+--     source-box order independently of where the jpch boxes sit.
+--       (linked)   exactly one top-level dtbl; every flst's dr in 1..ndr.
+--     (ReadJPX; the order of jp2c relative to jpch is not constrained.)
 --   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
 --     jp2c boxes.
 --   Every url loc begins with "file://" and ends with ".jp2" (ReadJPX: links

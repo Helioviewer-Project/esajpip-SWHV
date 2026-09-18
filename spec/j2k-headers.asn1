@@ -215,7 +215,12 @@ END
 --         (A.7.3; ReadPLTMarker)
 --         where a tile-part has PLT segments, the sum of their Iplt values
 --         equals that tile-part's data length (A.7.3: every packet is listed;
---         ImageIndex::GetOffsetPacket rejects both excess and shortfall)
+--         ImageIndex::GetOffsetPacket rejects both excess and shortfall).
+--         The Iplt COUNT is deliberately not compared with the packet count:
+--         the server tolerates zero-valued entries after the last packet
+--         (deployed files, JPIP_PROFILE.md), which A.7.3 does not, and layer 2
+--         cannot widen a layer-1 rule. The sum rule still rejects any non-zero
+--         excess entry.
 --
 -- Profile only:
 --   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)

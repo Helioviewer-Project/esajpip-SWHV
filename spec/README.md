@@ -325,12 +325,14 @@ the parser code involved: a length mutant points at `ReadBoxHeader` /
 `ReadCodestream`'s limit checks, a field mutant at the corresponding
 `Read*Marker`, a rule mutant at the structural checks.
 
-Two things that look like failures are not. A JPX carrying both `jp2c` and
-`ftbl` boxes is valid: links take precedence and embedded codestreams are
-ignored (`JPIP_PROFILE.md`), and the `jpx.linked-precedence` vector is
-expected to be accepted. An `Iplt` written in more 7-bit groups than its
-value needs is valid at both layers: the server bounds packet lengths by
-value, not by byte count (`plt.iplt-five-bytes`, `plt.iplt-six-bytes`).
+Two things that look like failures are not. An `Iplt` written in more
+7-bit groups than its value needs is valid at both layers: the server bounds
+packet lengths by value, not by byte count (`plt.iplt-five-bytes`,
+`plt.iplt-six-bytes`). A zero-valued `Iplt` entry after the last packet is
+accepted by the server for deployed files and is not rejected by the model
+either, because the model checks the PLT *sum* against the data and
+deliberately not the entry count (`plt.trailing-zero`); a non-zero trailing
+entry fails the sum rule at both.
 
 ## Compiler checks (first run of asn1scc on this model)
 
@@ -398,12 +400,13 @@ From each base:
    packet length beyond or short of the data, COD twice in a tile header or
    in a second tile-part, COD, QCD or COM in a tile header, COC or POC in
    the main header, 2:1 component sampling, a packet count above 2^31, no
-   `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` before
-   any `jpch` or inside one, fewer `jp2c` than `jpch`, no `jpch`, `DR = 0`,
-   `NDR` mismatch, two `flst`, an `http` URL, a link to a `.jpx` — plus the
-   valid shapes the rules must *not* reject: two tile-parts, TNsot given
-   only in the second, 64 tile-parts, packet lengths split over two PLT
-   segments, a COM in the main header. Names look like
+   `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` inside a
+   `jpch`, fewer `jp2c` than `jpch`, no `jpch`, `jp2c` and `ftbl` in one
+   JPX, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a link to a
+   `.jpx` — plus the valid shapes the rules must *not* reject: two
+   tile-parts, TNsot given only in the second, 64 tile-parts, packet lengths
+   split over two PLT segments, a trailing zero PLT entry, a COM in the main
+   header, `jp2c` boxes ahead of the `jpch` boxes. Names look like
    `jp2-rule-codestream.no-plt-4` (the number
    is the mutant's index in its table, so it shifts when a mutant is
    inserted before it).

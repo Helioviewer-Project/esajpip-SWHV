@@ -276,8 +276,6 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
                 jp2c++;
                 if ((r = CF_CAT3(cf_codestream, CF_S, )(&b->payload.u.jp2c, layer)) != NULL)
                     return r;
-                if (layer >= CF_PROFILE && kind == CF_JPX && jp2c > jpch)
-                    return "jpx.codestream-before-jpch";   /* ReadJPX: no jpch to pair with */
                 break;
             case CF_K(TopPayload, jpch):
                 jpch++;
@@ -310,13 +308,12 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
             if (jp2c != 1) return "jp2.one-codestream";
         } else {
             if (jpch < 1) return "jpx.no-jpch";
-            if (ftbl > 0) {
-                /* Linked: links take precedence; embedded jp2c are ignored. */
-                if (ftbl != jpch || dtbl != 1) return "jpx.linked-shape";
-            } else {
-                if (jp2c != jpch) return "jpx.embedded-count";
-                if (jp2c == 0) return "jpx.no-codestreams";
-            }
+            /* ReadJPX numbers codestreams by source-box order: every jp2c or
+             * ftbl is one codestream, and there must be one jpch per
+             * codestream. Embedded and linked codestreams do not mix. */
+            if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
+            if (jp2c + ftbl != jpch) return "jpx.codestream-count";
+            if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
             if (dtbl > 1) return "jpx.one-dtbl";
         }
     }
