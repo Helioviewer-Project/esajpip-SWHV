@@ -121,7 +121,8 @@ namespace jpip {
                 decoded.size() < 7 || decoded.back() != '>')
                 return false;
 
-            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', first, last))
+            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', first, last) ||
+                *first < 0 || *last < *first)
                 return false;
             *first = Clamp(*first, 0, MAXC);
             *last = Clamp(*last, 0, MAXC);
@@ -284,16 +285,6 @@ namespace jpip {
         };
 
         for (const CodestreamSelection &selection : codestream_selections) {
-            if (selection.first > selection.last) {
-                for (uint64_t id = selection.first;; --id) {
-                    if (!append(id))
-                        return false;
-                    if (id <= selection.last)
-                        break;
-                }
-                continue;
-            }
-
             if (selection.first >= limit)
                 continue;
             uint64_t last = selection.last == UINT64_MAX

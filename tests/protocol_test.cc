@@ -461,6 +461,9 @@ static void CheckJHVRequests() {
           "Could not parse a finite codestream range");
     Check(RejectRequest("GET /jpip?stream=3-1&cid=7 HTTP/1.1"),
           "Accepted a descending standard codestream range");
+    Check(RejectRequest(
+              "GET /jpip?context=jpxl%3C3-1%3E&cid=7 HTTP/1.1"),
+          "Accepted a descending JPX layer range");
     Check(RejectRequest("GET /jpip?stream=0-10:0&cid=7 HTTP/1.1"),
           "Accepted a zero codestream sampling factor");
     Check(RejectRequest("GET /jpip?stream=0,,1&cid=7 HTTP/1.1"),
