@@ -66,8 +66,8 @@ recovery rules are documented in
 | --- | --- | --- |
 | `target` | Supported on `cnew` | Selects the file. If absent, the request URI path selects it. A channel cannot change target after creation. Parent-directory path segments are rejected. |
 | `cnew` | Reduced | Accepts a comma-separated transport list and creates one independent channel when `http` is offered. Channel association through a simultaneous `cid` is not implemented. |
-| `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. Channel IDs are server-generated canonical unsigned decimal integers. |
-| `cclose` | Reduced | Closes one channel named by a canonical decimal ID. `cclose=*` is accepted when `cid` also identifies the channel to route. Lists and multi-channel session closure are not implemented. |
+| `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. Channel IDs contain 128 random bits encoded as 32 lowercase hexadecimal characters. They are opaque bearer capabilities and must not be guessed or derived from connection numbers. |
+| `cclose` | Reduced | Closes one channel named by its exact channel ID. `cclose=*`, lists, and multi-channel session closure are not implemented. |
 | `fsiz`, `roff`, `rsiz` | Reduced | Select a resolution and rectangular window of interest. `fsiz` must have positive dimensions and is required when either other window field is present. `roff` defaults to `(0,0)` and `rsiz` defaults to the area from that offset to the lower-right corner. `round-up`, `round-down`, and `closest` are recognized on `fsiz`; omitted rounding defaults to `round-down`, and `closest` compares image area. The requested window is mapped to the selected resolution by flooring its upper-left corner and ceiling its lower-right corner. As a compatibility extension, signed offsets are accepted and cropped to the image; request-region sizes must be non-negative. An empty intersection returns only `EOR WINDOW_DONE`. At every resolution up to the selected one, the served precincts are those whose partition cells intersect the cropped window, with cell indices computed as the floor of the window corners divided by the precinct size at that resolution, so a window edge on a partition boundary includes the cell it starts. Server-adjusted window response fields are not generated. |
 | `stream` | Supported with a selection limit | Accepts the standard comma-separated list of single codestreams, inclusive `first-last` ranges, open `first-` ranges, and positive `:sampling-factor` qualifiers. Non-existent codestreams are ignored, overlapping ranges are combined, and omission selects codestream 0 unless `context` determines the selection. At most 100,001 existing codestreams may be selected across all `stream` and `context` fields in one request. Each selected codestream maps the requested window through its own dimensions and packet geometry, and their packets are delivered in interleaved order. |
 | `context` | Reduced | Recognizes `jpxl` with one layer number or one ascending inclusive range, capped at 100,000, and treats the selected compositing-layer numbers as codestream numbers. The combined selection limit described for `stream` applies. Standard sampling factors, geometry suffixes, and other context syntax are rejected rather than ignored. JPX composition instructions and remapping are not implemented. This is sufficient for the one-codestream-per-frame JPX movies served to JHelioviewer. |
@@ -161,8 +161,10 @@ expectations, not that it conforms completely to JP2 or JPX.
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
   marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
   the codestream. Each tile-part's `PLT` lengths must exactly cover its packet
-  data, and no packet data may follow the packet set derived from `COD`. As a
-  compatibility exception for deployed JPEG 2000 files, zero `Iplt`
+  data, and no packet data may follow the packet set derived from `COD`. Marker
+  structure is checked while opening the source; coverage and packet bounds are
+  checked lazily as packets are indexed. As a compatibility exception for
+  deployed JPEG 2000 files, zero `Iplt`
   entries after the logical packet list are ignored; a nonzero trailing entry
   is rejected.
 - Packet counts, packet locations, and file-backed data-bin offsets must fit

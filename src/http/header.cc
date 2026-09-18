@@ -7,13 +7,33 @@
 
 namespace http {
 
+    static bool IsToken(const std::string &text) {
+        if (text.empty())
+            return false;
+        for (unsigned char c : text) {
+            if ((c >= '0' && c <= '9') ||
+                (c >= 'A' && c <= 'Z') ||
+                (c >= 'a' && c <= 'z'))
+                continue;
+            switch (c) {
+                case '!': case '#': case '$': case '%': case '&': case '\'':
+                case '*': case '+': case '-': case '.': case '^': case '_':
+                case '`': case '|': case '~':
+                    continue;
+                default:
+                    return false;
+            }
+        }
+        return true;
+    }
+
     Header::Header(const std::string &_name, const std::string &_value)
         : name(_name), value(_value) {
     }
 
     bool Header::Parse(const std::string &line) {
         size_t colon = line.find(':');
-        if (colon == std::string::npos)
+        if (colon == std::string::npos || !IsToken(line.substr(0, colon)))
             return false;
 
         size_t value_begin = colon + 1;

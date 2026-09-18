@@ -21,6 +21,7 @@
 #include "net/address.h"
 #include "net/poll_table.h"
 #include "server/channel.h"
+#include "server/channel_id.h"
 #include "server/initial_request.h"
 #include "server/server.h"
 
@@ -44,7 +45,8 @@ struct PendingConnection {
 };
 
 struct ChannelInfo {
-    uint64_t id;
+    uint64_t number;
+    string id;
     shared_ptr<ConnectionQueue> queue;
 };
 
@@ -74,8 +76,8 @@ bool SetBlocking(int fd) {
            fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == 0;
 }
 
-void SendUnavailableChannel(int fd, const char *message,
-                            const InitialRequest &request) {
+void SendDispatchError(int fd, int code, const char *reason,
+                       const char *message, const InitialRequest &request) {
     const char *exposed_headers = "";
     if (request.tid && request.handled)
         exposed_headers =
@@ -86,7 +88,7 @@ void SendUnavailableChannel(int fd, const char *message,
         exposed_headers = "Access-Control-Expose-Headers: JPIP-handled\r\n";
     char response[512];
     int length = snprintf(response, sizeof response,
-                          "HTTP/1.1 503 Service Unavailable\r\n"
+                          "HTTP/1.1 %d %s\r\n"
                           "%s"
                           "%s"
                           "%s"
@@ -96,6 +98,7 @@ void SendUnavailableChannel(int fd, const char *message,
                           "Content-Length: %zu\r\n"
                           "Connection: close\r\n"
                           "\r\n%s",
+                          code, reason,
                           request.tid ? "JPIP-tid: 0\r\n" : "",
                           request.handled ? JPIP_HANDLED_HEADER : "",
                           exposed_headers,
@@ -136,14 +139,23 @@ void NotifyConnection() {
 
 bool StartChannel(const Config &cfg, const ChannelInfo &channel) {
     try {
-        thread([&cfg, channel]() {
-            RunChannel(cfg, to_string(channel.id), channel.queue,
-                       NotifyConnection);
-            Notify(CHANNEL_COMPLETED, channel.id);
+        thread([&cfg, channel]() noexcept {
+            try {
+                RunChannel(cfg, channel.id, channel.number, channel.queue,
+                           NotifyConnection);
+            } catch (...) {
+                // RunChannel has already closed its connections. Nothing may
+                // escape a detached thread and terminate the serving process.
+            }
+            try {
+                Notify(CHANNEL_COMPLETED, channel.number);
+            } catch (...) {
+                // The serving loop also removes closed queues during dispatch.
+            }
         }).detach();
         return true;
     } catch (const system_error &error) {
-        ERROR("A thread for channel " << channel.id << " can not be created: "
+        ERROR("A thread for channel " << channel.number << " can not be created: "
               << error.what());
         return false;
     }
@@ -199,21 +211,38 @@ bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
                                  }), channels.end());
         if (channels.size() >= static_cast<size_t>(cfg.max_connections())) {
             LOG("A new channel was refused because the limit has been reached");
-            SendUnavailableChannel(connection.fd,
-                                   "JPIP channel limit has been reached",
-                                   request);
+            SendDispatchError(connection.fd, 503, "Service Unavailable",
+                              "JPIP channel limit has been reached", request);
+            return false;
+        }
+
+        string id;
+        if (!GenerateChannelId(&id)) {
+            ERROR("A secure JPIP channel ID can not be generated: "
+                  << strerror(errno));
+            SendDispatchError(connection.fd, 500, "Internal Server Error",
+                              "Could not create JPIP channel", request);
+            return false;
+        }
+        if (find_if(channels.begin(), channels.end(),
+                    [&id](const ChannelInfo &entry) {
+                        return entry.id == id;
+                    }) != channels.end()) {
+            ERROR("A generated JPIP channel ID is already in use");
+            SendDispatchError(connection.fd, 500, "Internal Server Error",
+                              "Could not create JPIP channel", request);
             return false;
         }
 
         shared_ptr<ConnectionQueue> queue = make_shared<ConnectionQueue>();
-        ChannelInfo channel = {connection.id, queue};
+        ChannelInfo channel = {connection.id, id, queue};
         if (!queue->IsValid()) {
             ERROR("The connection queue can not be created");
         } else if (!queue->Push(connection.fd)) {
             ERROR("The initial channel connection can not be queued");
         } else if (StartChannel(cfg, channel)) {
             channels.push_back(channel);
-            LOG("Creating channel " << channel.id << " for connection ["
+            LOG("Creating channel " << channel.number << " for connection ["
                                     << connection.id << "]");
             return true;
         }
@@ -226,22 +255,21 @@ bool DispatchConnection(const Config &cfg, vector<ChannelInfo> &channels,
                         return entry.id == request.channel;
                     });
     if (channel == channels.end()) {
-        LOG("The connection [" << connection.id << "] references unknown channel "
-                               << request.channel);
-        SendUnavailableChannel(connection.fd, "JPIP channel does not exist",
-                               request);
+        LOG("The connection [" << connection.id << "] references an unknown channel");
+        SendDispatchError(connection.fd, 503, "Service Unavailable",
+                          "JPIP channel does not exist", request);
         return false;
     }
     if (channel->queue->Push(connection.fd))
         return true;
     if (channel->queue->IsClosed()) {
         channels.erase(channel);
-        SendUnavailableChannel(connection.fd, "JPIP channel has ended",
-                               request);
+        SendDispatchError(connection.fd, 503, "Service Unavailable",
+                          "JPIP channel has ended", request);
     } else {
-        SendUnavailableChannel(connection.fd,
-                               "JPIP channel already has a waiting connection",
-                               request);
+        SendDispatchError(connection.fd, 503, "Service Unavailable",
+                          "JPIP channel already has a waiting connection",
+                          request);
     }
     return false;
 }
@@ -352,10 +380,10 @@ int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
                         vector<ChannelInfo>::iterator channel =
                                 find_if(channels.begin(), channels.end(),
                                         [&completion](const ChannelInfo &entry) {
-                                            return entry.id == completion.id;
+                                            return entry.number == completion.id;
                                         });
                         if (channel != channels.end()) {
-                            LOG("The channel " << channel->id << " has ended");
+                            LOG("The channel " << channel->number << " has ended");
                             channels.erase(channel);
                         }
                     }

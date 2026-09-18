@@ -13,6 +13,7 @@
 #include <cerrno>
 #include <climits>
 #include <cstring>
+#include <exception>
 #include <poll.h>
 #include <vector>
 #include <sys/socket.h>
@@ -153,6 +154,7 @@ class Channel {
 private:
     const Config &cfg;
     const string id;
+    const uint64_t number;
     const shared_ptr<ConnectionQueue> queue;
     const ConnectionClosed connection_closed;
     DataBinServer data_server;
@@ -173,7 +175,7 @@ private:
                 if (read_result == http::Connection::INTERRUPTED)
                     return KEEP_CHANNEL;
                 if (read_result == http::Connection::TIMED_OUT) {
-                    LOG("The channel " << id << " timed out");
+                    LOG("The channel " << number << " timed out");
                     return FAIL_CHANNEL;
                 }
                 if (read_result == http::Connection::REQUEST_TOO_LARGE) {
@@ -220,11 +222,11 @@ private:
                 if (!file_manager.GetImage()) {
                     set_channel_error("No JPIP channel is open");
                     /* Only one channel per client supported */
-                } else if (req.channel != "*" && req.channel != id) {
+                } else if (req.channel != id) {
                     set_channel_error(
                             "The close request identifies a different JPIP channel");
                 } else {
-                    LOG("The channel " << id << " has been closed");
+                    LOG("The channel " << number << " has been closed");
 
                     ostringstream msg;
                     msg << http::Response(200, "OK")
@@ -290,7 +292,7 @@ private:
 
             bool sent;
             if (req.has.cnew) {
-                LOG("The channel " << id << " has been opened for the image '"
+                LOG("The channel " << number << " has been opened for the image '"
                                     << file_name << "'");
 
                 ostringstream msg;
@@ -337,29 +339,29 @@ private:
             return false;
         }
         if (result == 0) {
-            LOG("The channel " << id << " timed out");
+            LOG("The channel " << number << " timed out");
             return false;
         }
         if (!(fd.revents & POLLIN)) {
-            LOG("The channel " << id << " handoff failed");
+            LOG("The channel " << number << " handoff failed");
             return false;
         }
         return queue->Pop(connection);
     }
 
     void CloseConnection(int fd) {
-        LOG("Closing connection [" << fd << "] (client finished)");
         shutdown(fd, SHUT_RDWR);
         close(fd);
         connection_closed();
+        LOG("Closing connection [" << fd << "] (client finished)");
     }
 
 public:
-    Channel(const Config &_cfg, const string &_id,
+    Channel(const Config &_cfg, const string &_id, uint64_t _number,
             const shared_ptr<ConnectionQueue> &_queue,
             ConnectionClosed _connection_closed)
-        : cfg(_cfg), id(_id), queue(_queue), connection_closed(_connection_closed),
-          buf(_cfg.max_chunk_size()) {}
+        : cfg(_cfg), id(_id), number(_number), queue(_queue),
+          connection_closed(_connection_closed), buf(_cfg.max_chunk_size()) {}
 
     void Run() {
         if (!file_manager.Init(cfg.image_directory())) {
@@ -367,11 +369,19 @@ public:
         } else {
             int fd;
             while (WaitForConnection(&fd)) {
-                http::Connection connection(fd, queue->GetDescriptor(),
-                                            cfg.connection_timeout());
-                ServeResult result = connection.Configure() ? Serve(connection)
-                                                            : FAIL_CHANNEL;
+                ServeResult result = FAIL_CHANNEL;
+                bool failed_with_exception = false;
+                try {
+                    http::Connection connection(fd, queue->GetDescriptor(),
+                                                cfg.connection_timeout());
+                    if (connection.Configure())
+                        result = Serve(connection);
+                } catch (...) {
+                    failed_with_exception = true;
+                }
                 CloseConnection(fd);
+                if (failed_with_exception)
+                    ERROR("The channel " << number << " failed with an exception");
                 if (result != KEEP_CHANNEL)
                     break;
             }
@@ -383,8 +393,27 @@ public:
     }
 };
 
-void RunChannel(const Config &cfg, const string &channel,
+static void CloseQueuedConnection(const shared_ptr<ConnectionQueue> &queue,
+                                  ConnectionClosed connection_closed) {
+    int pending;
+    if (queue->Close(pending)) {
+        shutdown(pending, SHUT_RDWR);
+        close(pending);
+        connection_closed();
+    }
+}
+
+void RunChannel(const Config &cfg, const string &channel, uint64_t channel_number,
                 const shared_ptr<ConnectionQueue> &queue,
                 ConnectionClosed connection_closed) {
-    Channel(cfg, channel, queue, connection_closed).Run();
+    try {
+        Channel(cfg, channel, channel_number, queue, connection_closed).Run();
+        return;
+    } catch (const exception &error) {
+        CloseQueuedConnection(queue, connection_closed);
+        ERROR("The channel " << channel_number << " failed: " << error.what());
+    } catch (...) {
+        CloseQueuedConnection(queue, connection_closed);
+        ERROR("The channel " << channel_number << " failed with an unknown exception");
+    }
 }

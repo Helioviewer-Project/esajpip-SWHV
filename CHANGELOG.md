@@ -31,6 +31,8 @@
   quality layers, or precinct layouts.
 - Require HTTP/1.1, matching the chunked responses used by the server and the
   requests sent by JHelioviewer.
+- Replace connection-derived channel numbers with random opaque identifiers so
+  one client cannot guess and interfere with another client's channel.
 
 ### Fixed
 
@@ -47,11 +49,12 @@
   `EOR WINDOW_DONE` instead of failing the channel.
 - Parse standard JPIP codestream lists, finite and open ranges, and sampling
   factors instead of treating a colon as a range separator.
-- Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet counts
-  and locations, codestream bounds, and linked-JPX references before serving
-  data. Trailing zero `PLT` entries found in deployed JPEG 2000 files are
-  tolerated without treating them as packets; nonzero trailing entries remain
-  invalid. Tile-part coding overrides, JPX-to-JPX links,
+- Validate JPEG 2000 boxes, markers, tile parts, packet counts and locations,
+  codestream bounds, and linked-JPX references before serving data. PLT marker
+  structure is checked while opening; packet coverage and bounds are checked
+  lazily as packets are indexed. Trailing zero `PLT` entries found in deployed
+  JPEG 2000 files are tolerated without treating them as packets; nonzero
+  trailing entries remain invalid. Tile-part coding overrides, JPX-to-JPX links,
   unsupported geometry, files of 2 GiB or more, and codestreams with more than
   64 packet segments are rejected during parsing instead of failing later or
   producing an inconsistent stream.

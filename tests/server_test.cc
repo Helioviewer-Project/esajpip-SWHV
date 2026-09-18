@@ -197,15 +197,19 @@ string Gunzip(const string &compressed) {
     return plain;
 }
 
-uint64_t ChannelId(const string &headers) {
+string ChannelId(const string &headers) {
     const string prefix = "JPIP-cnew: cid=";
     size_t position = headers.find(prefix);
     Check(position != string::npos, "Channel response has no JPIP-cnew header");
     position += prefix.size();
-    char *end;
-    uint64_t id = strtoull(headers.c_str() + position, &end, 10);
-    Check(end != headers.c_str() + position && *end == ',',
+    size_t end = headers.find(',', position);
+    Check(end != string::npos,
           "Channel response has an invalid channel ID");
+    string id = headers.substr(position, end - position);
+    Check(id.size() == 32, "Channel response has a wrongly sized channel ID");
+    for (char c : id)
+        Check((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'),
+              "Channel response has a non-canonical channel ID");
     return id;
 }
 
@@ -325,7 +329,8 @@ int main() {
 
     int unavailable = Connect(port);
     Check(unavailable >= 0, "Serving process did not start");
-    SendRequest(unavailable, "/jpip?cid=999&tid=0&handled");
+    SendRequest(unavailable,
+                "/jpip?cid=ffffffffffffffffffffffffffffffff&tid=0&handled");
     Response unavailable_response = ReadResponse(unavailable);
     Check(unavailable_response.headers.find("503 Service Unavailable") != string::npos &&
                   unavailable_response.headers.find("JPIP-tid: 0") != string::npos &&
@@ -422,14 +427,14 @@ int main() {
     Check(created.headers.find("Content-Encoding: gzip") != string::npos,
           "Metadata response was not gzip encoded");
     Check(!Gunzip(created.body).empty(), "Gzip JPIP response was empty");
-    uint64_t channel_id = ChannelId(created.headers);
+    string channel_id = ChannelId(created.headers);
 
-    string partial = "GET /jpip?cid=" + to_string(channel_id);
+    string partial = "GET /jpip?cid=" + channel_id;
     WriteAll(channel, partial.data(), partial.size());
     int replacement = Connect(port);
     Check(replacement >= 0, "Could not create a replacement connection");
     SendRequest(replacement,
-                "/jpip?cid=" + to_string(channel_id) +
+                "/jpip?cid=" + channel_id +
                 "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&tid=0&handled");
     Response replaced = ReadResponse(replacement);
     Check(replaced.headers.find("HTTP/1.1 200 OK") == 0 &&
@@ -441,7 +446,7 @@ int main() {
     close(channel);
 
     SendRequest(replacement,
-                "/jpip?cid=" + to_string(channel_id) +
+                "/jpip?cid=" + channel_id +
                 "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128",
                 "Connection: close\r\n");
     Check(ReadResponse(replacement).headers.find("HTTP/1.1 200 OK") == 0,
@@ -454,13 +459,13 @@ int main() {
     Check(replacement >= 0,
           "Could not reconnect after Connection close");
     SendRequest(replacement,
-                "/jpip?cid=" + to_string(channel_id) +
+                "/jpip?cid=" + channel_id +
                 "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
     Check(ReadResponse(replacement).headers.find("HTTP/1.1 200 OK") == 0,
           "Channel was lost after Connection close");
 
     SendRequest(replacement,
-                "/jpip?cclose=" + to_string(channel_id) + "&tid=0&handled");
+                "/jpip?cclose=" + channel_id + "&tid=0&handled");
     Response closed = ReadResponse(replacement);
     Check(closed.headers.find("HTTP/1.1 200 OK") == 0 &&
                   closed.headers.find("JPIP-tid: 0") != string::npos &&
@@ -477,8 +482,8 @@ int main() {
     Response oversized_created = ReadResponse(oversized);
     Check(oversized_created.headers.find("HTTP/1.1 200 OK") == 0,
           "Request-limit channel creation failed");
-    uint64_t oversized_channel = ChannelId(oversized_created.headers);
-    SendRequest(oversized, "/jpip?cid=" + to_string(oversized_channel),
+    string oversized_channel = ChannelId(oversized_created.headers);
+    SendRequest(oversized, "/jpip?cid=" + oversized_channel,
                 "X-Large: " + string(4096, 'x') + "\r\n");
     Response oversized_response = ReadResponse(oversized);
     Check(oversized_response.headers.find(
@@ -504,15 +509,21 @@ int main() {
     close(expiring);
 
     int limited[2];
-    for (int &connection : limited) {
+    string limited_ids[2];
+    for (int i = 0; i < 2; ++i) {
+        int &connection = limited[i];
         connection = Connect(port);
         Check(connection >= 0, "Could not fill the connection limit");
         SendRequest(connection,
                     "/image.jp2?cnew=http&type=jpp-stream&stream=0&"
                     "fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
-        Check(ReadResponse(connection).headers.find("HTTP/1.1 200 OK") == 0,
+        Response response = ReadResponse(connection);
+        Check(response.headers.find("HTTP/1.1 200 OK") == 0,
               "Connection-limit channel creation failed");
+        limited_ids[i] = ChannelId(response.headers);
     }
+    Check(limited_ids[0] != limited_ids[1],
+          "Two channels received the same random ID");
     int refused = Connect(port);
     Check(refused >= 0, "Could not connect for the connection-limit test");
     CheckClosed(refused, 1000, "Connection limit did not reject a client");
@@ -525,7 +536,8 @@ int main() {
     Check(replacement_server > 0, "Supervisor did not restart the serving process");
     int after_restart = Connect(port);
     Check(after_restart >= 0, "Restarted serving process did not accept connections");
-    SendRequest(after_restart, "/jpip?cid=999");
+    SendRequest(after_restart,
+                "/jpip?cid=ffffffffffffffffffffffffffffffff");
     Check(ReadResponse(after_restart).headers.find("503 Service Unavailable") != string::npos,
           "Restarted serving process did not handle a request");
     close(after_restart);

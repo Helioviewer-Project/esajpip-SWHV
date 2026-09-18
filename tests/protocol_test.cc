@@ -167,6 +167,9 @@ static InitialRequest Inspect(const char *request) {
 }
 
 static void CheckInitialRequest() {
+    static const char id[] = "0123456789abcdef0123456789abcdef";
+    static const char other_id[] = "fedcba9876543210fedcba9876543210";
+
     Check(Inspect(NULL).state == REQUEST_PENDING, "Rejected an idle connection before its deadline");
     Check(Inspect("G").state == REQUEST_PENDING, "Rejected a partial GET method");
     Check(Inspect("POST").state == REQUEST_REJECTED, "Accepted a non-GET method");
@@ -181,7 +184,7 @@ static void CheckInitialRequest() {
     Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1junk\r\n").state == REQUEST_REJECTED,
           "Accepted an invalid HTTP version token");
 
-    string incomplete_limit = "GET /jpip?cid=7 HTTP/1.1";
+    string incomplete_limit = string("GET /jpip?cid=") + id + " HTTP/1.1";
     incomplete_limit.resize(2047, 'x');
     Check(Inspect(incomplete_limit.c_str()).state == REQUEST_PENDING,
           "Rejected a bounded incomplete initial request");
@@ -189,41 +192,44 @@ static void CheckInitialRequest() {
     Check(Inspect(incomplete_limit.c_str()).state == REQUEST_REJECTED,
           "Accepted an unterminated 2 KiB initial request");
 
-    InitialRequest request = Inspect("GET /jpip?stream=2&cid=47 HTTP/1.1\r\n");
-    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == 47,
+    string existing = string("GET /jpip?stream=2&cid=") + id + " HTTP/1.1\r\n";
+    InitialRequest request = Inspect(existing.c_str());
+    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == id,
           "Could not route an existing channel request");
 
-    InitialRequest handled =
-            Inspect("GET /jpip?stream=2&cid=47&tid=0&handled HTTP/1.1\r\n");
+    string handled_line = string("GET /jpip?stream=2&cid=") + id +
+                          "&tid=0&handled HTTP/1.1\r\n";
+    InitialRequest handled = Inspect(handled_line.c_str());
     Check(handled.state == REQUEST_ACCEPTED && handled.tid && handled.handled,
           "Initial inspection lost a response-obligation field");
 
-    InitialRequest close = Inspect("GET /jpip?cclose=47 HTTP/1.1\r\n");
-    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == 47,
+    string close_line = string("GET /jpip?cclose=") + id + " HTTP/1.1\r\n";
+    InitialRequest close = Inspect(close_line.c_str());
+    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == id,
           "Could not route a channel close request");
 
-    InitialRequest close_all = Inspect("GET /jpip?cid=47&cclose=* HTTP/1.1\r\n");
-    Check(close_all.state == REQUEST_ACCEPTED && close_all.channel == 47,
-          "Could not route an all-channel close request");
+    string close_all_line = string("GET /jpip?cid=") + id +
+                            "&cclose=* HTTP/1.1\r\n";
+    Check(Inspect(close_all_line.c_str()).state == REQUEST_REJECTED,
+          "Accepted an all-channel close request");
 
-    Check(Inspect("GET /jpip?cid=047 HTTP/1.1\r\n").state == REQUEST_REJECTED,
-          "Accepted a non-canonical channel ID");
-    Check(Inspect("GET /jpip?cid=+47 HTTP/1.1\r\n").state == REQUEST_REJECTED,
-          "Accepted a signed channel ID");
-    InitialRequest maximum =
-            Inspect("GET /jpip?cid=18446744073709551615 HTTP/1.1\r\n");
-    Check(maximum.state == REQUEST_ACCEPTED && maximum.channel == UINT64_MAX,
-          "Rejected the maximum channel ID");
-    Check(Inspect("GET /jpip?cid=18446744073709551616 HTTP/1.1\r\n").state ==
+    Check(Inspect("GET /jpip?cid=0123456789abcdef HTTP/1.1\r\n").state ==
                   REQUEST_REJECTED,
-          "Accepted an overflowing channel ID");
+          "Accepted a short channel ID");
+    Check(Inspect("GET /jpip?cid=0123456789ABCDEF0123456789ABCDEF HTTP/1.1\r\n").state ==
+                  REQUEST_REJECTED,
+          "Accepted a non-canonical channel ID");
 
-    InitialRequest duplicate = Inspect("GET /jpip?cid=46&cid=47 HTTP/1.1\r\n");
-    Check(duplicate.state == REQUEST_ACCEPTED && duplicate.channel == 47,
+    string duplicate_line = string("GET /jpip?cid=") + other_id + "&cid=" + id +
+                            " HTTP/1.1\r\n";
+    InitialRequest duplicate = Inspect(duplicate_line.c_str());
+    Check(duplicate.state == REQUEST_ACCEPTED && duplicate.channel == id,
           "Initial inspection did not use the last channel ID");
 
-    InitialRequest mixed = Inspect("GET /jpip?cclose=47&cid=48 HTTP/1.1\r\n");
-    Check(mixed.state == REQUEST_ACCEPTED && mixed.channel == 47,
+    string mixed_line = string("GET /jpip?cclose=") + id + "&cid=" + other_id +
+                        " HTTP/1.1\r\n";
+    InitialRequest mixed = Inspect(mixed_line.c_str());
+    Check(mixed.state == REQUEST_ACCEPTED && mixed.channel == id,
           "Initial inspection did not give cclose routing priority");
 }
 
@@ -442,6 +448,8 @@ static void CheckJHVRequests() {
           "Accepted a signed response length");
     Check(RejectRequest("GET /jpip?len=2147483648&cid=7 HTTP/1.1"),
           "Accepted an overflowing response length");
+    Check(RejectRequest("GET /jpip?cid=7 HTTP/1.1 trailing"),
+          "Accepted data after the HTTP version");
     jpip::Request minimum_offset_request;
     Check(minimum_offset_request.Parse(
               "GET /jpip?fsiz=1,1&roff=-2147483648,0&cid=7 HTTP/1.1") &&
@@ -464,10 +472,8 @@ static void CheckJHVRequests() {
     Check(duplicate_channel_request.Parse("GET /jpip?cid=46&cid=47 HTTP/1.1") &&
               duplicate_channel_request.channel == "47",
           "Full parsing did not use the last channel ID");
-    jpip::Request close_all_request;
-    Check(close_all_request.Parse("GET /jpip?cid=47&cclose=* HTTP/1.1") &&
-              close_all_request.has.cclose && close_all_request.channel == "*",
-          "Could not parse the all-channel close form");
+    Check(RejectRequest("GET /jpip?cid=47&cclose=* HTTP/1.1"),
+          "Accepted the unsupported all-channel close form");
     jpip::Request close_priority_request;
     Check(close_priority_request.Parse("GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
               close_priority_request.has.cclose && close_priority_request.channel == "47",

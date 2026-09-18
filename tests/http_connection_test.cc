@@ -97,6 +97,28 @@ static void CheckRequestBodyDetection() {
     close(sockets[1]);
 }
 
+static void CheckInvalidHeaderName() {
+    int sockets[2];
+    CreateSocketPair(sockets, "Could not create invalid-header test sockets");
+    ConnectionQueue queue;
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
+
+    const char request[] =
+            "GET /jpip?cid=7 HTTP/1.1\r\n"
+            "Content-Length : 1\r\n"
+            "\r\n"
+            "x";
+    Check(write(sockets[0], request, sizeof request - 1) == sizeof request - 1,
+          "Could not write an invalid HTTP header");
+
+    http::RequestHead head;
+    Check(connection.ReadRequestHead(&head) == http::Connection::READ_FAILED,
+          "Accepted whitespace in an HTTP field name");
+
+    close(sockets[0]);
+    close(sockets[1]);
+}
+
 static void CheckRequestLimit() {
     int sockets[2];
     CreateSocketPair(sockets, "Could not create request-limit sockets");
@@ -173,6 +195,7 @@ static void CheckResponseFraming() {
 int main() {
     CheckRequestHead();
     CheckRequestBodyDetection();
+    CheckInvalidHeaderName();
     CheckRequestLimit();
     CheckInterrupt();
     CheckResponseFraming();

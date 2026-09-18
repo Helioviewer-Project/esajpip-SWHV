@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &reuse_address,
                    sizeof reuse_address) != 0 ||
         ::bind(listen_socket, listen_addr.GetSockAddr(), listen_addr.GetSize()) != 0 ||
-        listen(listen_socket, 10) != 0)
+        listen(listen_socket, SOMAXCONN) != 0)
         return CERR("The server listen socket can not be initialized: " << strerror(errno));
     int flags = fcntl(listen_socket, F_GETFL);
     if (flags < 0 || fcntl(listen_socket, F_SETFL, flags | O_NONBLOCK) != 0)

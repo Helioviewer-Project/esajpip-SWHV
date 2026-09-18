@@ -403,7 +403,7 @@ namespace jpip {
     }
 
     bool Request::Parse(const string &line, string *error_message) {
-        string method, uri, protocol;
+        string method, uri, protocol, extra;
 
         if (error_message != NULL)
             error_message->clear();
@@ -415,7 +415,7 @@ namespace jpip {
 
         istringstream in(line);
         if (!(in >> method >> uri >> protocol) || method != "GET" ||
-            protocol != "HTTP/1.1") {
+            protocol != "HTTP/1.1" || (in >> extra)) {
             SetError(error_message, "The request must use HTTP/1.1 GET");
             return false;
         }
@@ -452,7 +452,13 @@ namespace jpip {
                     SetError(error_message, "Invalid JPIP cnew parameter");
                 }
             } else if (name == "cclose") {
-                has.cclose = true;
+                if (value == "*") {
+                    valid = false;
+                    SetError(error_message,
+                             "Closing every JPIP channel is not supported");
+                } else {
+                    has.cclose = true;
+                }
             } else if (name == "metareq") {
                 has.metareq = true;
             } else if (name == "fsiz") {

@@ -17,7 +17,8 @@ as recorded in its Git history.
 ## Build and install
 
 The build requires a C++11 compiler, CMake, pkg-config, GLib, zlib, and POSIX
-threads. On Debian 12, install the required packages with:
+threads. Debian 13 is the minimum supported Debian release. Install the
+required packages with:
 
 ```sh
 sudo apt-get install build-essential cmake pkg-config libglib2.0-dev zlib1g-dev
@@ -58,7 +59,7 @@ all four sections must be present. Restart the server after changing it.
 | `connections.limit` | `500` | Positive limit applied independently to physical connections and active channels. |
 | `logging.directory` | `SWHV_DIR_LOG` | Directory for log files when file logging is enabled. It must exist and be writable. |
 | `logging.file_enabled` | `1` | Set to `1` to log to a file or `0` to log to standard output. |
-| `logging.requests` | `0` | Set to `1` to include request lines in the log. Other server messages are unaffected by this setting. |
+| `logging.requests` | `0` | Set to `1` to include request lines in the log. Request lines contain bearer channel IDs, so protect these logs as client credentials. Other server messages are unaffected by this setting. |
 
 Directory paths may contain spaces. The server adds a trailing slash when
 needed. `logging.directory` may be empty only when file logging is disabled.

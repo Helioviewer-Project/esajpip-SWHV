@@ -50,11 +50,11 @@ Host: server.example:8900
 
 ```
 
-A successful response creates the channel and returns its decimal identifier:
+A successful response creates the channel and returns its opaque identifier:
 
 ```http
 HTTP/1.1 200 OK
-JPIP-cnew: cid=42,path=jpip,transport=http
+JPIP-cnew: cid=0123456789abcdef0123456789abcdef,path=jpip,transport=http
 JPIP-tid: 0
 Transfer-Encoding: chunked
 Content-Type: image/jpp-stream
@@ -74,7 +74,7 @@ body is gzip encoded and the response includes `Content-Encoding: gzip`.
 Every later image request includes the returned `cid`:
 
 ```http
-GET /jpip?cid=42&stream=7&fsiz=4096,4096,closest&rsiz=1024,1024&roff=0,0&len=2097152 HTTP/1.1
+GET /jpip?cid=0123456789abcdef0123456789abcdef&stream=7&fsiz=4096,4096,closest&rsiz=1024,1024&roff=0,0&len=2097152 HTTP/1.1
 Host: server.example:8900
 
 ```
@@ -107,14 +107,14 @@ connection carrying its `cid`.
 Send `cclose` with the channel identifier:
 
 ```http
-GET /jpip?cclose=42 HTTP/1.1
+GET /jpip?cclose=0123456789abcdef0123456789abcdef HTTP/1.1
 Host: server.example:8900
 
 ```
 
 The server replies with `200 OK` and an empty body, then closes the connection
-and releases the channel state. `cclose=*` is also accepted when `cid` identifies
-the channel. Channel lists and session-wide closure are not supported.
+and releases the channel state. `cclose=*`, channel lists, and session-wide
+closure are not supported.
 
 ## HTTP responses
 
@@ -127,8 +127,8 @@ These are all HTTP status codes emitted by the server:
 | `404 Not Found` | A `cnew` request names a target that does not exist below the configured image directory. | No usable channel is created; the connection is closed. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and channel are closed. Create a new channel with a smaller request. |
 | `501 Not Implemented` | A valid `cnew` request offers no supported transport. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
-| `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
-| `503 Service Unavailable` | A request names an unknown, ended, different, or otherwise unavailable channel; attempts another `cnew` on an open channel; or the channel already has a replacement connection waiting. The response body distinguishes these cases. | A channel-level failure closes that channel. A dispatcher-level rejection leaves an existing channel unchanged. Create a new channel unless the client knows that the referenced channel remains alive. |
+| `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation, or the server cannot generate a channel ID. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
+| `503 Service Unavailable` | A request names an unknown, ended, different, or otherwise unavailable channel; attempts another `cnew` on an open channel; the active-channel limit has been reached; or the channel already has a replacement connection waiting. The response body distinguishes these cases. | A channel-level failure closes that channel. A dispatcher-level rejection leaves an existing channel unchanged. Create a new channel unless the client knows that the referenced channel remains alive. |
 
 Channel-level error responses contain a short plain-text body and
 `Connection: close`. Successful responses and channel-level errors also include
@@ -140,7 +140,7 @@ Some failures close the socket without an HTTP response:
 
 - The initial bytes are not a recognizable HTTP/1.1 JPIP `GET` request.
 - The initial request does not arrive before `connections.initial_timeout`.
-- The physical-connection or active-channel limit has been reached.
+- The physical-connection limit has been reached.
 - A request head is incomplete or contains a malformed HTTP header.
 - The socket fails while a request or response is in progress.
 - The serving process exits or restarts.

@@ -2,7 +2,7 @@
 #define _SERVER_INITIAL_REQUEST_H_
 
 #include <cstddef>
-#include <cstdint>
+#include <string>
 
 enum RequestState {
     REQUEST_PENDING,
@@ -15,7 +15,7 @@ struct InitialRequest {
     bool new_channel;
     bool tid;
     bool handled;
-    uint64_t channel;
+    std::string channel;
 };
 
 InitialRequest ClassifyInitialRequest(const char *data, std::size_t length);

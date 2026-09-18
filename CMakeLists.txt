@@ -55,6 +55,7 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpip/query.cc
     ${ESAJPIP_TOP}/jpip/request.cc
     ${ESAJPIP_TOP}/server/channel.cc
+    ${ESAJPIP_TOP}/server/channel_id.cc
     ${ESAJPIP_TOP}/server/connection_queue.cc
     ${ESAJPIP_TOP}/server/initial_request.cc
     ${ESAJPIP_TOP}/server/server.cc
