@@ -442,6 +442,12 @@ static void CheckJHVRequests() {
               SelectCodestreams(overlapping_selection, 4) ==
                       vector<int>({0, 1, 2, 3}),
           "Did not combine overlapping codestream ranges");
+    jpip::Request ordered_selection;
+    Check(ordered_selection.Parse(
+              "GET /jpip?stream=5-7,0-6&cid=7 HTTP/1.1") &&
+              SelectCodestreams(ordered_selection, 8) ==
+                      vector<int>({5, 6, 7, 0, 1, 2, 3, 4}),
+          "Did not preserve codestream selection order");
     jpip::Request sampled_single_request;
     Check(sampled_single_request.Parse(
               "GET /jpip?stream=0:1&cid=7 HTTP/1.1") &&

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <climits>
 #include <sstream>
-#include <unordered_set>
 
 #define MAXC 100000
 
@@ -271,16 +270,16 @@ namespace jpip {
         selected->clear();
         uint64_t limit = min<uint64_t>(available,
                                        static_cast<uint64_t>(INT_MAX) + 1);
-        unordered_set<int> seen;
+        vector<bool> seen(limit);
         auto append = [&](uint64_t id) {
             if (id >= limit)
                 return true;
-            int value = static_cast<int>(id);
-            if (!seen.insert(value).second)
+            if (seen[id])
                 return true;
+            seen[id] = true;
             if (selected->size() == MAXC + 1)
                 return false;
-            selected->push_back(value);
+            selected->push_back(static_cast<int>(id));
             return true;
         };
 

@@ -111,6 +111,16 @@ The server must find packet boundaries without decoding or transcoding the
 image. For that reason, it accepts a narrower set of files than the full JP2 and
 JPX specifications allow.
 
+The lists below describe the source layout that the serving code expects, not
+a complete JP2 or JPX conformance check. esajpip validates the fields it needs
+for packet indexing, data-bin construction, links, and file bounds. It reads but
+does not enforce the file-type minor version, does not use codestream `Rsiz` to
+reject unsupported extensions, and does not check every mandatory box or box
+ordering rule. Conversely, the JPX parser requires a `jpch` box for every
+codestream even where the JPX specification permits defaults to be inherited.
+A successful open therefore means that a file matches this parser's operational
+expectations, not that it conforms completely to JP2 or JPX.
+
 ### JP2
 
 - The file name must end in `.jp2`.
