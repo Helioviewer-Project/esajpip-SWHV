@@ -6,6 +6,14 @@ imagery from JP2 and JPX files and is designed primarily for JHelioviewer.
 It serves JPP streams over HTTP. It does not provide TLS or authentication, so
 put it behind a suitable network boundary or reverse proxy if either is needed.
 
+## History
+
+The original ESA JPIP server was developed for the ESA/NASA Helioviewer
+project by Juan Pablo García Ortiz and collaborators at the University of
+Almería, and was published on [Launchpad](https://code.launchpad.net/esajpip).
+This repository contains subsequent maintenance and substantial rearchitecting,
+as recorded in its Git history.
+
 ## Build and install
 
 The build requires a C++11 compiler, CMake, pkg-config, GLib, zlib, and POSIX
