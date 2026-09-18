@@ -3,6 +3,7 @@
 #include "query.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <climits>
 #include <sstream>
@@ -21,6 +22,11 @@ namespace jpip {
 
         void MapInterval(int selected_size, int requested_size,
                          int *offset, int *length) {
+            assert(selected_size > 0 && requested_size > 0);
+            assert(*offset >= 0 && *length >= 0 &&
+                   *offset <= requested_size &&
+                   *length <= requested_size - *offset);
+
             uint64_t end = static_cast<uint64_t>(*offset) + *length;
             int mapped_offset = static_cast<int>(
                     static_cast<uint64_t>(*offset) * selected_size /
