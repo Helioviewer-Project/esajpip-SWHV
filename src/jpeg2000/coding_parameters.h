@@ -16,9 +16,8 @@ namespace jpeg2000 {
     private:
         int total_precincts;
 
-        static int DivideRoundUp(int value, uint64_t divisor) {
-            return static_cast<int>((static_cast<uint64_t>(value) + divisor - 1) /
-                                    divisor);
+        static int DivideRoundUp(uint64_t value, uint64_t divisor) {
+            return static_cast<int>((value + divisor - 1) / divisor);
         }
 
         Size SizeAtLevel(int level) const;
@@ -100,6 +99,7 @@ namespace jpeg2000 {
         };
 
         Size size;                ///< Image size
+        Point origin;             ///< Image origin on the reference grid
         int num_levels;            ///< Number of resolution levels
         int num_layers;            ///< Number of quality layers
         int progression;        ///< Progression order

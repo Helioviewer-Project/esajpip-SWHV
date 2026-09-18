@@ -658,6 +658,16 @@ static void CheckWOIPackets() {
                   !composer.GetNextPacket(&boundary_parameters),
           "Omitted the final precinct intersecting a window");
 
+    jpeg2000::CodingParameters offset_parameters;
+    offset_parameters.size = jpeg2000::Size(129, 1);
+    offset_parameters.origin = jpeg2000::Point(1, 0);
+    offset_parameters.num_levels = 1;
+    jpeg2000::Size offset_level_size;
+    Check(offset_parameters.GetRoundDownResolution(
+              jpeg2000::Size(64, 1), &offset_level_size) == 0 &&
+              offset_level_size == jpeg2000::Size(64, 1),
+          "Resolution size did not follow T.808 Equation C-1");
+
     jpeg2000::CodingParameters scaled_parameters;
     scaled_parameters.num_levels = 2;
     scaled_parameters.num_layers = 1;

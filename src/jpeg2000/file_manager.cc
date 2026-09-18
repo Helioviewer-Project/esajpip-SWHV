@@ -337,6 +337,7 @@ namespace jpeg2000 {
             return false;
 
         params->size = Size(image[0] - image[2], image[1] - image[3]);
+        params->origin = Point(image[2], image[3]);
         params->num_components = num_components;
         int first_depth = -1;
         *mct_compatible = num_components >= 3;

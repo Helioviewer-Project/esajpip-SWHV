@@ -6,9 +6,14 @@
 namespace jpeg2000 {
 
     Size CodingParameters::SizeAtLevel(int level) const {
+        // T.808 Equation C-1: ceil(Xsiz / scale) - ceil(XOsiz / scale).
         uint64_t scale = uint64_t(1) << level;
-        return Size(DivideRoundUp(size.x, scale),
-                    DivideRoundUp(size.y, scale));
+        return Size(DivideRoundUp(static_cast<uint64_t>(origin.x) + size.x,
+                                  scale) -
+                        DivideRoundUp(origin.x, scale),
+                    DivideRoundUp(static_cast<uint64_t>(origin.y) + size.y,
+                                  scale) -
+                        DivideRoundUp(origin.y, scale));
     }
 
     int CodingParameters::GetPositionIndex(int r, int px, int py, int *position_resolutions,
