@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstdint>
 #include <climits>
-#include <sstream>
 
 #define MAXC 100000
 
@@ -400,27 +399,6 @@ namespace jpip {
                         &woi->position.y, &woi->size.y);
         }
         return res_image_size;
-    }
-
-    bool Request::Parse(const string &line, string *error_message) {
-        string method, uri, protocol, extra;
-
-        if (error_message != NULL)
-            error_message->clear();
-
-        if (line.empty()) {
-            SetError(error_message, "The HTTP request line is empty");
-            return false;
-        }
-
-        istringstream in(line);
-        if (!(in >> method >> uri >> protocol) || method != "GET" ||
-            protocol != "HTTP/1.1" || (in >> extra)) {
-            SetError(error_message, "The request must use HTTP/1.1 GET");
-            return false;
-        }
-
-        return ParseTarget(uri, error_message);
     }
 
     bool Request::ParseTarget(const string &target, string *error_message) {

@@ -72,20 +72,19 @@ void ChannelWork::Perform() {
         case Kind::OPEN:
             result.open = engine.Open(target);
             break;
-        case Kind::BEGIN:
-            if (engine.Begin(request, gzip, &result.error))
+        case Kind::BEGIN: {
+            jpip::Request current = std::move(request);
+            if (engine.Begin(current, gzip, &result.error))
                 GenerateChunk();
             else
                 result.request_rejected = true;
             break;
+        }
         case Kind::GENERATE:
             GenerateChunk();
             break;
         case Kind::CLEANUP:
             engine.Finish();
-            break;
-        case Kind::NONE:
-            result.error = "No channel operation was selected";
             break;
         }
     } catch (const exception &failure) {

@@ -14,7 +14,6 @@ namespace server {
 class ChannelWork {
 public:
     enum class Kind {
-        NONE,
         OPEN,
         BEGIN,
         GENERATE,
@@ -22,7 +21,7 @@ public:
     };
 
     struct Result {
-        Kind kind = Kind::NONE;
+        Kind kind = Kind::OPEN;
         jpeg2000::FileManager::OpenResult open =
                 jpeg2000::FileManager::OpenResult::INVALID;
         ChannelEngine::GenerateResult generation =

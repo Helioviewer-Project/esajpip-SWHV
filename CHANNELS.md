@@ -250,6 +250,6 @@ The source responsibilities are:
 | `main.cc` | Configuration and server startup |
 | `server/server.cc` | Listener, signals, event loop, admission, routing, channel lifetime, and response writes |
 | `server/connection.cc` | Loop-owned libuv connection, deadlines, parsing, and ordered writes |
-| `http/request_head.cc` | Bounded llhttp request-head parser |
+| `server/request_head.cc` | Bounded llhttp request-head parser |
 | `server/channel_work.cc` | Serialized transfer between the loop and worker pool |
 | `server/channel_engine.cc` | Socket-free JPIP and JPEG 2000 processing for one channel |

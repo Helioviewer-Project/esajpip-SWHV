@@ -68,7 +68,7 @@ void Connection::UnblockRequests() {
     if (response_active)
         return;
     if (has_retained_request) {
-        http::RequestHead request = std::move(retained_request);
+        RequestHead request = std::move(retained_request);
         has_retained_request = false;
         Dispatch(std::move(request));
     }
@@ -86,7 +86,7 @@ void Connection::FinishResponse() {
     if (IsClosing())
         return;
     if (has_retained_request) {
-        http::RequestHead request = std::move(retained_request);
+        RequestHead request = std::move(retained_request);
         has_retained_request = false;
         Dispatch(std::move(request));
     } else if (!requests_blocked) {
@@ -167,24 +167,24 @@ void Connection::Consume(const char *data, size_t size) {
     size_t offset = 0;
     while (offset < size && !IsClosing()) {
         size_t consumed;
-        http::RequestHeadParser::Result result =
+        RequestHeadParser::Result result =
                 parser.Parse(data + offset, size - offset, &consumed);
         offset += consumed;
         if (deadline == Deadline::IDENTIFICATION &&
             parser.HasCompleteJPIPRequestLine())
             SetDeadline(Deadline::READ, connection_timeout);
-        if (result == http::RequestHeadParser::INCOMPLETE)
+        if (result == RequestHeadParser::INCOMPLETE)
             break;
-        if (result == http::RequestHeadParser::MALFORMED) {
+        if (result == RequestHeadParser::MALFORMED) {
             ReportReadFailure(ReadFailure::MALFORMED);
             return;
         }
-        if (result == http::RequestHeadParser::TOO_LARGE) {
+        if (result == RequestHeadParser::TOO_LARGE) {
             ReportReadFailure(ReadFailure::TOO_LARGE);
             return;
         }
 
-        http::RequestHead request = parser.TakeRequest();
+        RequestHead request = parser.TakeRequest();
         Dispatch(std::move(request));
         if ((requests_blocked ||
              (response_active && has_retained_request)) && offset < size) {
@@ -196,7 +196,7 @@ void Connection::Consume(const char *data, size_t size) {
     }
 }
 
-void Connection::Dispatch(http::RequestHead &&request) {
+void Connection::Dispatch(RequestHead &&request) {
     if (response_active) {
         if (!has_retained_request) {
             retained_request = std::move(request);

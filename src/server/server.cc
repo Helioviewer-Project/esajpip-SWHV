@@ -2,6 +2,7 @@
 
 #include <csignal>
 #include <cstdio>
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <memory>
@@ -10,15 +11,15 @@
 #include <vector>
 #include <unistd.h>
 
+#include <glib.h>
 #include <uv.h>
 
 #include "config.h"
-#include "http/request_head.h"
 #include "jpip/request.h"
 #include "net/address.h"
-#include "server/channel_id.h"
 #include "server/channel_work.h"
 #include "server/connection.h"
+#include "server/request_head.h"
 #include "trace.h"
 
 using namespace std;
@@ -33,6 +34,28 @@ const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Cache-Control: no-cache\r\n";
 
+int GenerateChannelId(string *id) {
+    uint8_t random[16];
+    int result = uv_random(NULL, NULL, random, sizeof random, 0, NULL);
+    if (result != 0)
+        return result;
+
+    static const char hex[] = "0123456789abcdef";
+    id->resize(sizeof random * 2);
+    for (size_t i = 0; i < sizeof random; ++i) {
+        (*id)[i * 2] = hex[random[i] >> 4];
+        (*id)[i * 2 + 1] = hex[random[i] & 15];
+    }
+    return 0;
+}
+
+string EscapeForLog(const string &text) {
+    char *escaped = g_strescape(text.c_str(), NULL);
+    string result(escaped);
+    g_free(escaped);
+    return result;
+}
+
 class Server;
 struct Channel;
 void WorkDone(server::ChannelWork &, void *owner);
@@ -46,7 +69,7 @@ struct Client {
     server::Connection::Write write;
     Channel *channel = NULL;
     jpip::Request waiting_request;
-    http::RequestHead waiting_head;
+    server::RequestHead waiting_head;
     bool counted = false;
 };
 
@@ -65,7 +88,7 @@ struct Buffer {
 };
 
 struct Channel {
-    enum State { OPEN_QUEUED, OPENING, ACTIVE, IDLE, ENDING };
+    enum State { OPEN_QUEUED, OPENING, OPEN, ENDING };
 
     Channel(Server *_server, string _id, uint64_t _number,
             uv_loop_t *loop, const Config &cfg);
@@ -79,7 +102,7 @@ struct Channel {
     Client *active = NULL;
     Client *waiting = NULL;
     jpip::Request request;
-    http::RequestHead head;
+    server::RequestHead head;
     string target;
     State state = OPEN_QUEUED;
     int work_buffer = -1;
@@ -234,11 +257,11 @@ private:
             clients[id]->connection->Abort();
     }
 
-    void Route(Client &client, http::RequestHead &&head) {
+    void Route(Client &client, server::RequestHead &&head) {
         jpip::Request request;
         string error;
         if (!request.ParseTarget(head.target, &error)) {
-            LOG("Bad request: " << http::EscapeForLog(head.target));
+            LOG("Bad request: " << EscapeForLog(head.target));
             SendError(client, 400, "Bad Request", error, &request);
             if (!request.has.cnew)
                 EndRequestedChannel(request);
@@ -256,7 +279,7 @@ private:
             return;
         }
         if (cfg.log_requests())
-            LOG("Request: " << http::EscapeForLog(head.target));
+            LOG("Request: " << EscapeForLog(head.target));
 
         if (request.has.cnew) {
             NewChannel(client, std::move(request), std::move(head));
@@ -271,7 +294,7 @@ private:
             return;
         }
         Channel &channel = *found->second;
-        if (channel.active == NULL && channel.state == Channel::IDLE) {
+        if (channel.active == NULL && channel.state == Channel::OPEN) {
             StartRequest(channel, client, std::move(request), std::move(head));
         } else if (channel.waiting == NULL) {
             channel.waiting = &client;
@@ -287,7 +310,7 @@ private:
     }
 
     void NewChannel(Client &client, jpip::Request request,
-                    http::RequestHead head) {
+                    server::RequestHead head) {
         if (!request.accepts_http) {
             SendError(client, 501, "Not Implemented",
                       "The requested JPIP channel transport is not supported",
@@ -332,7 +355,7 @@ private:
     }
 
     void StartRequest(Channel &channel, Client &client, jpip::Request request,
-                      http::RequestHead head) {
+                      server::RequestHead head) {
         if (channel.timer_initialized)
             uv_timer_stop(&channel.timer);
         channel.active = &client;
@@ -348,7 +371,7 @@ private:
                 server::Connection::Deadline::CHANNEL_WAIT);
 
         if (channel.request.has.cclose) {
-            channel.state = Channel::ACTIVE;
+            channel.state = Channel::OPEN;
             channel.cleanup_complete = true;
             client.connection->StartResponse();
             string response = "HTTP/1.1 200 OK\r\n" +
@@ -410,7 +433,7 @@ private:
         int index = FreeBuffer(channel);
         if (index < 0)
             return;
-        channel.state = Channel::ACTIVE;
+        channel.state = Channel::OPEN;
         channel.work_buffer = index;
         channel.buffers[index].busy = true;
         bool gzip = channel.request.has.metareq && channel.head.accepts_gzip;
@@ -640,7 +663,7 @@ private:
             dead_channels.push_back(channel.id);
             uv_async_send(&reaper);
         } else {
-            channel.state = Channel::IDLE;
+            channel.state = Channel::OPEN;
             if (channel.waiting) {
                 Client *next = channel.waiting;
                 channel.waiting = NULL;
@@ -831,7 +854,7 @@ public:
         return run_result == 0 && close_result == 0 ? 0 : -1;
     }
 
-    void OnRequest(Client &client, http::RequestHead &&head) {
+    void OnRequest(Client &client, server::RequestHead &&head) {
         Route(client, std::move(head));
     }
     void OnReadFailure(Client &client, server::Connection::ReadFailure failure) {
@@ -847,7 +870,7 @@ Client::Client(Server *_server, uint64_t _id, const Config &cfg)
     : server(_server), id(_id) {
     connection.reset(new server::Connection(
             cfg.initial_timeout(), cfg.connection_timeout(),
-            [this](server::Connection &, http::RequestHead &&head) {
+            [this](server::Connection &, server::RequestHead &&head) {
                 server->OnRequest(*this, std::move(head));
             },
             [this](server::Connection &, server::Connection::ReadFailure failure) {

@@ -18,7 +18,6 @@
 #include "jpip/request.h"
 #include "jpip/woi_composer.h"
 #include "net/address.h"
-#include "server/channel_id.h"
 
 using namespace std;
 
@@ -53,15 +52,6 @@ static vector<int> SelectCodestreams(const jpip::Request &request,
     Check(request.SelectCodestreams(available, &selected),
           "Could not expand JPIP codestream selection");
     return selected;
-}
-
-static void CheckChannelIds() {
-    string id;
-    Check(GenerateChannelId(&id) == 0,
-          "Could not generate a secure channel identifier");
-    Check(id.size() == 32 &&
-                  id.find_first_not_of("0123456789abcdef") == string::npos,
-          "Generated an invalid channel identifier");
 }
 
 static void CheckAppConfig() {
@@ -200,13 +190,13 @@ static void CheckAppConfig() {
 
 static bool RejectRequest(const string &line) {
     jpip::Request request;
-    return !request.Parse(line);
+    return !request.ParseTarget(line);
 }
 
 static void CheckJHVRequests() {
     jpip::Request channel_request;
-    Check(channel_request.Parse(
-              "GET /movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512 HTTP/1.1"),
+    Check(channel_request.ParseTarget(
+              "/movie.jpx?cnew=http&type=jpp-stream&tid=0&len=512"),
           "Could not parse JHV channel request");
     Check(channel_request.object == "/movie.jpx", "Wrong channel target");
     Check(channel_request.has.cnew, "Missing cnew field");
@@ -216,60 +206,58 @@ static void CheckJHVRequests() {
           "Wrong channel response limit");
 
     jpip::Request absolute_request;
-    Check(absolute_request.Parse(
-              "GET http://get.jpeg.org/images/kids.jp2?cnew=http HTTP/1.1") &&
+    Check(absolute_request.ParseTarget(
+              "http://get.jpeg.org/images/kids.jp2?cnew=http") &&
               absolute_request.object == "/images/kids.jp2",
           "Could not extract the path from an absolute request target");
 
     jpip::Request mismatched_target_request;
-    Check(mismatched_target_request.Parse(
-              "GET /jpip?cid=7&model=M0:100&tid=1 HTTP/1.1") &&
+    Check(mismatched_target_request.ParseTarget(
+              "/jpip?cid=7&model=M0:100&tid=1") &&
               mismatched_target_request.has.tid &&
               !mismatched_target_request.has.model &&
               mismatched_target_request.model.empty(),
           "Retained a cache model for a different target ID");
 
     jpip::Request matching_target_request;
-    Check(matching_target_request.Parse(
-              "GET /jpip?cid=7&model=M0:100&tid=0 HTTP/1.1") &&
+    Check(matching_target_request.ParseTarget(
+              "/jpip?cid=7&model=M0:100&tid=0") &&
               matching_target_request.has.model,
           "Discarded a cache model for the current target ID");
 
     jpip::Request handled_request;
-    Check(handled_request.Parse("GET /jpip?cid=7&handled HTTP/1.1") &&
+    Check(handled_request.ParseTarget("/jpip?cid=7&handled") &&
               handled_request.has.handled,
           "Missing handled field");
 
     jpip::Request transport_request;
-    Check(transport_request.Parse(
-              "GET /movie.jpx?cnew=http-tcp,http HTTP/1.1") &&
+    Check(transport_request.ParseTarget(
+              "/movie.jpx?cnew=http-tcp,http") &&
               transport_request.accepts_http,
           "HTTP was not selected from a transport list");
-    Check(transport_request.Parse(
-              "GET /movie.jpx?cnew=http-tcp HTTP/1.1") &&
+    Check(transport_request.ParseTarget(
+              "/movie.jpx?cnew=http-tcp") &&
               !transport_request.accepts_http,
           "An unsupported transport offer was not preserved");
-    Check(RejectRequest("GET /movie.jpx?cnew=http,,http-tcp HTTP/1.1"),
+    Check(RejectRequest("/movie.jpx?cnew=http,,http-tcp"),
           "Accepted a malformed transport list");
 
     jpip::Request target_request;
-    Check(target_request.Parse(
-              "GET /jpip?target=movie.jpx&cnew=http&len=512 HTTP/1.1"),
+    Check(target_request.ParseTarget(
+              "/jpip?target=movie.jpx&cnew=http&len=512"),
           "Could not parse target-form channel request");
     Check(target_request.has.target && target_request.target == "movie.jpx",
           "Missing target field");
 
     jpip::Request quoted_target_request;
-    Check(quoted_target_request.Parse(
-              "GET /jpip?target=a\"b.jp2&cnew=http HTTP/1.1\r") &&
+    Check(quoted_target_request.ParseTarget(
+              "/jpip?target=a\"b.jp2&cnew=http") &&
               quoted_target_request.target == "a\"b.jp2",
           "Changed the request while preparing it for logging");
-    Check(RejectRequest("GET /jpip?cid=7 HTTP/1.1\\r"),
-          "Accepted an escaped request-line terminator");
 
     jpip::Request metadata_request;
-    Check(metadata_request.Parse(
-              "GET /jpip?stream=0&metareq=[*]!!&len=2000000&cid=7 HTTP/1.1"),
+    Check(metadata_request.ParseTarget(
+              "/jpip?stream=0&metareq=[*]!!&len=2000000&cid=7"),
           "Could not parse JHV metadata request");
     Check(metadata_request.has.cid && metadata_request.channel == "7",
           "Missing channel ID");
@@ -281,9 +269,9 @@ static void CheckJHVRequests() {
           "Wrong metadata response limit");
 
     jpip::Request frame_request;
-    Check(frame_request.Parse(
-              "GET /jpip?stream=4013&fsiz=4096,4096,closest&rsiz=4096,4096&"
-              "roff=0,0&len=2097152&cid=7 HTTP/1.1"),
+    Check(frame_request.ParseTarget(
+              "/jpip?stream=4013&fsiz=4096,4096,closest&rsiz=4096,4096&"
+              "roff=0,0&len=2097152&cid=7"),
           "Could not parse JHV frame request");
     Check(frame_request.HasWOI(), "Missing frame window");
     Check(SelectCodestreams(frame_request, 4014) == vector<int>(1, 4013),
@@ -299,35 +287,30 @@ static void CheckJHVRequests() {
     Check(frame_request.length_response == 2097152, "Wrong frame response limit");
 
     jpip::Request default_round_request;
-    Check(default_round_request.Parse(
-              "GET /jpip?fsiz=4096,4096&cid=7 HTTP/1.1") &&
+    Check(default_round_request.ParseTarget(
+              "/jpip?fsiz=4096,4096&cid=7") &&
               default_round_request.round_direction == jpip::Request::ROUNDDOWN,
           "Frame size did not default to round-down");
 
     jpip::Request incomplete_window;
-    Check(!incomplete_window.Parse("GET /jpip?rsiz=1,1&cid=7 HTTP/1.1") &&
+    Check(!incomplete_window.ParseTarget("/jpip?rsiz=1,1&cid=7") &&
               incomplete_window.resolution_size == jpeg2000::Size(),
           "Accepted a region size without a frame size");
 
-    Check(RejectRequest("GET /jpip?fsiz=abc&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?fsiz=abc&cid=7"),
           "Accepted a malformed frame size");
-    Check(RejectRequest("GET /jpip?fsiz=1,1,sideways&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?fsiz=1,1,sideways&cid=7"),
           "Accepted an unknown frame-size rounding mode");
-    Check(RejectRequest("GET /jpip?roff=abc&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?roff=abc&cid=7"),
           "Accepted a malformed region offset");
-    Check(RejectRequest("GET /jpip?rsiz=abc&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?rsiz=abc&cid=7"),
           "Accepted a malformed region size");
-    Check(RejectRequest("GET /jpip?stream=abc&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?stream=abc&cid=7"),
           "Accepted a malformed codestream selector");
-    Check(RejectRequest("GET /jpip?context=abc&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?context=abc&cid=7"),
           "Accepted a malformed context selector");
-    Check(RejectRequest("GET /movie.jpx?cnew=http HTTP/1.0"),
-          "Accepted an HTTP/1.0 request");
-    Check(RejectRequest("GET /movie.jpx?cnew=http HTTP/1.1junk"),
-          "Accepted an invalid HTTP version token");
-
     jpip::Request model_request;
-    Check(model_request.Parse("GET /jpip?stream=0&cid=7&model=M0 HTTP/1.1"),
+    Check(model_request.ParseTarget("/jpip?stream=0&cid=7&model=M0"),
           "Could not parse terminal cache model");
     Check(model_request.has.model, "Missing terminal cache model");
     Check(model_request.model.size() == 1 &&
@@ -337,8 +320,8 @@ static void CheckJHVRequests() {
           "Wrong terminal metadata model");
 
     jpip::Request partial_model_request;
-    Check(partial_model_request.Parse(
-              "GET /jpip?stream=0&cid=7&model=M0:446 HTTP/1.1"),
+    Check(partial_model_request.ParseTarget(
+              "/jpip?stream=0&cid=7&model=M0:446"),
           "Could not parse terminal partial cache model");
     Check(partial_model_request.has.model, "Missing terminal partial cache model");
     Check(partial_model_request.model.size() == 1 &&
@@ -346,8 +329,8 @@ static void CheckJHVRequests() {
           "Wrong terminal partial metadata model");
 
     jpip::Request empty_resolution_request;
-    Check(empty_resolution_request.Parse(
-              "GET /jpip?fsiz=0,0&rsiz=1,1&roff=0,0 HTTP/1.1"),
+    Check(empty_resolution_request.ParseTarget(
+              "/jpip?fsiz=0,0&rsiz=1,1&roff=0,0"),
           "Could not parse request with an empty frame size");
     jpeg2000::CodingParameters coding_parameters;
     coding_parameters.size = jpeg2000::Size(4096, 4096);
@@ -359,98 +342,96 @@ static void CheckJHVRequests() {
     Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
     Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
 
-    Check(RejectRequest("GET /jpip?model=M-1 HTTP/1.1"),
+    Check(RejectRequest("/jpip?model=M-1"),
           "Accepted negative metadata ID");
-    Check(RejectRequest("GET /jpip?model=P-1 HTTP/1.1"),
+    Check(RejectRequest("/jpip?model=P-1"),
           "Accepted negative precinct ID");
-    Check(RejectRequest("GET /jpip?model=M0:-1 HTTP/1.1"),
+    Check(RejectRequest("/jpip?model=M0:-1"),
           "Accepted negative model length");
-    Check(RejectRequest("GET /jpip?model= HTTP/1.1"), "Accepted empty cache model");
-    Check(RejectRequest("GET /jpip?model=M0% HTTP/1.1"),
+    Check(RejectRequest("/jpip?model="), "Accepted empty cache model");
+    Check(RejectRequest("/jpip?model=M0%"),
           "Accepted truncated cache-model escape");
-    Check(RejectRequest("GET /jpip?model=M0%00M1 HTTP/1.1"),
+    Check(RejectRequest("/jpip?model=M0%00M1"),
           "Accepted a cache model containing NUL");
-    Check(RejectRequest("GET /jpip?len=-1&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?len=-1&cid=7"),
           "Accepted negative response length");
-    Check(RejectRequest("GET /jpip?len=+1&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?len=+1&cid=7"),
           "Accepted a signed response length");
-    Check(RejectRequest("GET /jpip?len=2147483648&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?len=2147483648&cid=7"),
           "Accepted an overflowing response length");
-    Check(RejectRequest("GET /jpip?cid=7 HTTP/1.1 trailing"),
-          "Accepted data after the HTTP version");
     jpip::Request minimum_offset_request;
-    Check(minimum_offset_request.Parse(
-              "GET /jpip?fsiz=1,1&roff=-2147483648,0&cid=7 HTTP/1.1") &&
+    Check(minimum_offset_request.ParseTarget(
+              "/jpip?fsiz=1,1&roff=-2147483648,0&cid=7") &&
               minimum_offset_request.woi_position.x == INT_MIN,
           "Could not parse the minimum signed window offset");
 
     jpip::Request close_request;
-    Check(close_request.Parse("GET /jpip?cclose=7&len=0 HTTP/1.1"),
+    Check(close_request.ParseTarget("/jpip?cclose=7&len=0"),
           "Could not parse JHV close request");
     Check(close_request.has.cclose && close_request.channel == "7", "Missing close field");
     Check(SelectCodestreams(close_request, 1).empty(),
           "Unexpected codestream in close request");
 
     jpip::Request new_channel_request;
-    Check(new_channel_request.Parse("GET /movie.jpx?cnew=http&len=512 HTTP/1.1"),
+    Check(new_channel_request.ParseTarget("/movie.jpx?cnew=http&len=512"),
           "Could not parse a new channel request");
     Check(new_channel_request.channel.empty(), "Unexpected channel ID in new channel request");
 
     jpip::Request duplicate_channel_request;
-    Check(duplicate_channel_request.Parse("GET /jpip?cid=46&cid=47 HTTP/1.1") &&
+    Check(duplicate_channel_request.ParseTarget("/jpip?cid=46&cid=47") &&
               duplicate_channel_request.channel == "47",
           "Full parsing did not use the last channel ID");
-    Check(RejectRequest("GET /jpip?cid=47&cclose=* HTTP/1.1"),
+    Check(RejectRequest("/jpip?cid=47&cclose=*"),
           "Accepted the unsupported all-channel close form");
-    Check(RejectRequest("GET /image.jp2?cnew=http&cclose=47 HTTP/1.1"),
+    Check(RejectRequest("/image.jp2?cnew=http&cclose=47"),
           "Accepted conflicting channel creation and closure fields");
     jpip::Request close_priority_request;
-    Check(close_priority_request.Parse("GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
+    Check(close_priority_request.ParseTarget("/jpip?cclose=47&cid=48") &&
               close_priority_request.has.cclose && close_priority_request.channel == "47",
           "Full parsing did not give cclose routing priority");
 
     jpip::Request selection_request;
-    Check(selection_request.Parse(
-              "GET /jpip?stream=0,2-6:2,9-:3&context=jpxl%3C1-2%3E&cid=7 HTTP/1.1"),
+    Check(selection_request.ParseTarget(
+              "/jpip?stream=0,2-6:2,9-:3&context=jpxl%3C1-2%3E&cid=7"),
           "Could not parse codestream selectors");
     Check(SelectCodestreams(selection_request, 16) ==
                   vector<int>({0, 2, 4, 6, 9, 12, 15, 1}),
           "Wrong codestream selector ranges");
     jpip::Request overlapping_selection;
-    Check(overlapping_selection.Parse(
-              "GET /jpip?stream=0-2,1-3&cid=7 HTTP/1.1") &&
+    Check(overlapping_selection.ParseTarget(
+              "/jpip?stream=0-2,1-3&cid=7") &&
               SelectCodestreams(overlapping_selection, 4) ==
                       vector<int>({0, 1, 2, 3}),
           "Did not combine overlapping codestream ranges");
     jpip::Request ordered_selection;
-    Check(ordered_selection.Parse(
-              "GET /jpip?stream=5-7,0-6&cid=7 HTTP/1.1") &&
+    Check(ordered_selection.ParseTarget(
+              "/jpip?stream=5-7,0-6&cid=7") &&
               SelectCodestreams(ordered_selection, 8) ==
                       vector<int>({5, 6, 7, 0, 1, 2, 3, 4}),
           "Did not preserve codestream selection order");
     jpip::Request sampled_single_request;
-    Check(sampled_single_request.Parse(
-              "GET /jpip?stream=0:1&cid=7 HTTP/1.1") &&
+    Check(sampled_single_request.ParseTarget(
+              "/jpip?stream=0:1&cid=7") &&
               SelectCodestreams(sampled_single_request, 10) == vector<int>(1, 0),
           "Treated a sampling factor as a range endpoint");
     jpip::Request finite_range_request;
-    Check(finite_range_request.Parse(
-              "GET /jpip?stream=0-1&cid=7 HTTP/1.1") &&
+    Check(finite_range_request.ParseTarget(
+              "/jpip?stream=0-1&cid=7") &&
               SelectCodestreams(finite_range_request, 10) ==
                       vector<int>({0, 1}),
           "Could not parse a finite codestream range");
-    Check(RejectRequest("GET /jpip?stream=3-1&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?stream=3-1&cid=7"),
           "Accepted a descending standard codestream range");
     Check(RejectRequest(
-              "GET /jpip?context=jpxl%3C3-1%3E&cid=7 HTTP/1.1"),
+              "/jpip?context=jpxl%3C3-1%3E&cid=7"),
           "Accepted a descending JPX layer range");
-    Check(RejectRequest("GET /jpip?stream=0-10:0&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?stream=0-10:0&cid=7"),
           "Accepted a zero codestream sampling factor");
-    Check(RejectRequest("GET /jpip?stream=0,,1&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?stream=0,,1&cid=7"),
           "Accepted an empty codestream range");
     jpip::Request oversized_selection;
-    Check(oversized_selection.Parse(
-              "GET /jpip?stream=0-&cid=7 HTTP/1.1"),
+    Check(oversized_selection.ParseTarget(
+              "/jpip?stream=0-&cid=7"),
           "Could not parse an open codestream range");
     vector<int> oversized_codestreams;
     Check(!oversized_selection.SelectCodestreams(100002,
@@ -458,8 +439,8 @@ static void CheckJHVRequests() {
           "Accepted an oversized expanded codestream selection");
 
     jpip::Request encoded_model_request;
-    Check(encoded_model_request.Parse(
-              "GET /jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7 HTTP/1.1"),
+    Check(encoded_model_request.ParseTarget(
+              "/jpip?model=%5B1-2%5DHm:3,H4:5,P6:7,M8:9&cid=7"),
           "Could not parse encoded cache-model descriptors");
     Check(encoded_model_request.model.size() == 4 &&
               encoded_model_request.model[0].bin_class ==
@@ -480,19 +461,19 @@ static void CheckJHVRequests() {
           "Wrong encoded cache model");
 
     jpip::Request open_model_request;
-    Check(open_model_request.Parse(
-              "GET /jpip?model=%5B5-%5DHm&cid=7 HTTP/1.1") &&
+    Check(open_model_request.ParseTarget(
+              "/jpip?model=%5B5-%5DHm&cid=7") &&
               open_model_request.model.size() == 1 &&
               open_model_request.model[0].first_codestream == 5 &&
               open_model_request.model[0].last_codestream == INT_MAX,
           "Could not parse an open cache-model codestream range");
 
     jpip::Request encoded_target_request;
-    Check(encoded_target_request.Parse(
-              "GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&
+    Check(encoded_target_request.ParseTarget(
+              "/jpip?target=movie%20name.jpx&cnew=http") &&
               encoded_target_request.target == "movie%20name.jpx",
           "Unexpectedly decoded a target value");
-    Check(RejectRequest("GET /jpip?len=12junk&cid=7 HTTP/1.1"),
+    Check(RejectRequest("/jpip?len=12junk&cid=7"),
           "Accepted a response length with trailing data");
 }
 
@@ -1036,7 +1017,6 @@ static void CheckMetadataPlaceHolder() {
 
 int main() {
     CheckAppConfig();
-    CheckChannelIds();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

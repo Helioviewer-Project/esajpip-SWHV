@@ -1,14 +1,12 @@
-#ifndef _HTTP_REQUEST_HEAD_H_
-#define _HTTP_REQUEST_HEAD_H_
+#ifndef _SERVER_REQUEST_HEAD_H_
+#define _SERVER_REQUEST_HEAD_H_
 
 #include <cstddef>
 #include <string>
 
 #include <llhttp.h>
 
-namespace http {
-
-std::string EscapeForLog(const std::string &text);
+namespace server {
 
 struct RequestHead {
     std::string target;
@@ -64,4 +62,4 @@ public:
 
 }
 
-#endif /* _HTTP_REQUEST_HEAD_H_ */
+#endif /* _SERVER_REQUEST_HEAD_H_ */

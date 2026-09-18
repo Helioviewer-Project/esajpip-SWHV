@@ -56,7 +56,6 @@ set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/config.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
-    ${ESAJPIP_TOP}/http/request_head.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
     ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
     ${ESAJPIP_TOP}/jpeg2000/image_index.cc
@@ -65,9 +64,9 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpip/query.cc
     ${ESAJPIP_TOP}/jpip/request.cc
     ${ESAJPIP_TOP}/server/channel_engine.cc
-    ${ESAJPIP_TOP}/server/channel_id.cc
     ${ESAJPIP_TOP}/server/channel_work.cc
     ${ESAJPIP_TOP}/server/connection.cc
+    ${ESAJPIP_TOP}/server/request_head.cc
     ${ESAJPIP_TOP}/server/server.cc
     ${ESAJPIP_TOP}/trace.cc)
 

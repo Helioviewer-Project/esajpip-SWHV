@@ -513,6 +513,10 @@ int main() {
           "Metadata response was not gzip encoded");
     Check(!Gunzip(created.body).empty(), "Gzip JPIP response was empty");
     string channel_id = ChannelId(created.headers);
+    Check(channel_id.size() == 32 &&
+                  channel_id.find_first_not_of("0123456789abcdef") ==
+                      string::npos,
+          "The server returned an invalid channel ID");
 
     int conflicting_close = Connect(port);
     Check(conflicting_close >= 0,

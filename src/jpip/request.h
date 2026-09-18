@@ -38,8 +38,6 @@ namespace jpip {
         std::string channel;
         bool accepts_http = false;
 
-        bool Parse(const std::string &line,
-                   std::string *error_message = NULL);
         bool ParseTarget(const std::string &target,
                          std::string *error_message = NULL);
 

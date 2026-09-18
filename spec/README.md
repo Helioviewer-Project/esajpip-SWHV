@@ -550,7 +550,7 @@ syntax (text), and the JPP response stream (its message headers are
 7-bit-group chains like `Iplt`, but the payload is sized by the *value*
 assembled from the chain, which no determinant can reference). For those the
 complementary tool is a fuzz target over `Request::Parse` and
-`http::Connection::ReadRequestHead` using the existing `ESAJPIP_SANITIZE`
+`server::Connection` using the existing `ESAJPIP_SANITIZE`
 build option; `tests/server_test.cc` already drives the live process and is
 the place to add wire-level cases.
 

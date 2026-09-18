@@ -7,7 +7,7 @@
 
 #include <uv.h>
 
-#include "http/request_head.h"
+#include "server/request_head.h"
 
 namespace server {
 
@@ -39,7 +39,7 @@ public:
         bool active = false;
     };
 
-    typedef std::function<void(Connection &, http::RequestHead &&)> RequestReady;
+    typedef std::function<void(Connection &, RequestHead &&)> RequestReady;
     typedef std::function<void(Connection &, ReadFailure)> ReadFailed;
     typedef std::function<void(Connection &, Deadline)> DeadlineReached;
     typedef std::function<void(Connection &)> Closed;
@@ -47,7 +47,7 @@ public:
 private:
     uv_tcp_t socket;
     uv_timer_t timer;
-    http::RequestHeadParser parser;
+    RequestHeadParser parser;
     RequestReady request_ready;
     ReadFailed read_failed;
     DeadlineReached deadline_reached;
@@ -57,7 +57,7 @@ private:
     char incoming[4096];
     char retained_input[4096];
     std::size_t retained_size = 0;
-    http::RequestHead retained_request;
+    RequestHead retained_request;
     Deadline deadline = Deadline::NONE;
     std::size_t pending_writes = 0;
     int open_handles = 0;
@@ -85,7 +85,7 @@ private:
     void StopReading();
     void ReportReadFailure(ReadFailure failure);
     void Consume(const char *data, std::size_t size);
-    void Dispatch(http::RequestHead &&request);
+    void Dispatch(RequestHead &&request);
     void SetDeadline(Deadline reason, int seconds);
     void ClearDeadline();
     void StartShutdown();

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -25,6 +26,21 @@ void Check(bool condition, const char *message) {
     if (!condition) {
         cerr << message << endl;
         exit(EXIT_FAILURE);
+    }
+}
+
+void CheckRequestSyntax() {
+    const char *invalid[] = {
+        "GET /movie.jpx?cnew=http HTTP/1.0\r\nHost: localhost\r\n\r\n",
+        "GET /movie.jpx?cnew=http HTTP/1.1junk\r\nHost: localhost\r\n\r\n",
+        "GET /jpip?cid=7 HTTP/1.1 trailing\r\nHost: localhost\r\n\r\n"
+    };
+    for (const char *head : invalid) {
+        server::RequestHeadParser parser;
+        size_t consumed;
+        Check(parser.Parse(head, strlen(head), &consumed) ==
+                      server::RequestHeadParser::MALFORMED,
+              "The HTTP parser accepted an invalid request line");
     }
 }
 
@@ -50,7 +66,7 @@ struct Exchange {
         self->connection.reset(new server::Connection(
                 1, 3,
                 [self](server::Connection &connection,
-                       http::RequestHead &&request) {
+                       server::RequestHead &&request) {
                     self->requests.push_back(request.target);
                     connection.StartResponse();
                     size_t index = self->requests.size() == 1 ? 0 : 2;
@@ -204,7 +220,7 @@ struct FailureExchange {
         self->connection.reset(new server::Connection(
                 1, 2,
                 [self](server::Connection &connection,
-                       http::RequestHead &&request) {
+                       server::RequestHead &&request) {
                     self->failed.store(true);
                     connection.Abort();
                 },
@@ -316,6 +332,7 @@ struct FailureExchange {
 
 int main() {
     signal(SIGPIPE, SIG_IGN);
+    CheckRequestSyntax();
 
     Exchange exchange;
     exchange.Run();

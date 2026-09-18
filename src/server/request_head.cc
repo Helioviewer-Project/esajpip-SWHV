@@ -1,11 +1,9 @@
-#include "http/request_head.h"
+#include "server/request_head.h"
 
 #include <algorithm>
 #include <cstring>
 #include <strings.h>
 #include <utility>
-
-#include <glib.h>
 
 #include "jpip/query.h"
 
@@ -52,14 +50,7 @@ string Trim(const string &value) {
 
 }
 
-namespace http {
-
-string EscapeForLog(const string &text) {
-    char *escaped = g_strescape(text.c_str(), NULL);
-    string result(escaped);
-    g_free(escaped);
-    return result;
-}
+namespace server {
 
 RequestHeadParser::RequestHeadParser() {
     llhttp_settings_init(&settings);
