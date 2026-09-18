@@ -81,7 +81,15 @@ files. That is the "linked JPX" form and the production workload.
 The formal references are ITU-T T.800 (JPEG 2000 Part 1: Annex A is the
 codestream, Annex I is the JP2 file format) and T.801 (Part 2: Annex M has
 the JPX boxes). The model files cite the relevant table or clause on every
-field, so you rarely need the standards themselves.
+field, so you rarely need the standards themselves. Local copies live in
+`standards/`, which is outside Git.
+
+Two requirements a strict JPX reader enforces are deliberately absent from
+both layers, because the server ignores them and layer 2 may not widen
+layer 1: the Reader Requirements box that T.801 M.11.1 requires immediately
+after `ftyp`, and the `MinV` value (0 for JP2, 1 for JPX, which readers
+shall accept whatever it is). The generated vectors carry the conforming
+`MinV` and no `rreq` box.
 
 ### ASN.1 and ACN, in ten lines
 
@@ -402,8 +410,8 @@ From each base:
    the main header, 2:1 component sampling, a packet count above 2^31, no
    `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` inside a
    `jpch`, fewer `jp2c` than `jpch`, no `jpch`, `jp2c` and `ftbl` in one
-   JPX, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a link to a
-   `.jpx` — plus the valid shapes the rules must *not* reject: two
+   JPX, two `dtbl`, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a
+   link to a `.jpx` — plus the valid shapes the rules must *not* reject: two
    tile-parts, TNsot given only in the second, 64 tile-parts, packet lengths
    split over two PLT segments, a trailing zero PLT entry, a COM in the main
    header, `jp2c` boxes ahead of the `jpch` boxes. Names look like

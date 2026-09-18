@@ -302,19 +302,31 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         }
     }
 
+    if (kind == CF_JPX) {
+        /* T.801 M.11.2: "A JPX file shall contain zero or one Data Reference
+         * boxes, and that Data Reference box shall be at the top level of the
+         * file." */
+        if (dtbl > 1) return "jpx.one-dtbl";
+        /* T.801 M.11.6: "If Codestream Header boxes appear anywhere in the
+         * file, the number of codestreams found in the file shall be the same
+         * as the number of available codestream headers." Every jp2c or ftbl
+         * is one codestream, numbered by source-box order. A file with no
+         * jpch box takes its header information from jp2h and is unconstrained
+         * here. The model has no jclx or Multiple Codestream box, so every
+         * codestream and every header is top level. */
+        if (jpch > 0 && jp2c + ftbl != jpch) return "jpx.codestream-count";
+    }
+
     if (layer >= CF_PROFILE) {
         if (kind == CF_JP2) {
             /* ReadJP2 looks at jp2c boxes only. */
             if (jp2c != 1) return "jp2.one-codestream";
         } else {
+            /* ReadJPX requires the header the standard makes optional. */
             if (jpch < 1) return "jpx.no-jpch";
-            /* ReadJPX numbers codestreams by source-box order: every jp2c or
-             * ftbl is one codestream, and there must be one jpch per
-             * codestream. Embedded and linked codestreams do not mix. */
+            /* Embedded and linked codestreams do not mix. */
             if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
-            if (jp2c + ftbl != jpch) return "jpx.codestream-count";
             if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
-            if (dtbl > 1) return "jpx.one-dtbl";
         }
     }
     return NULL;

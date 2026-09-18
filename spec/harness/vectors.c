@@ -344,7 +344,11 @@ static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     b->payload.kind = TopPayload_ftyp_PRESENT;
     ftyp = &b->payload.u.ftyp;
     OCTETS(ftyp->brand, brand, 4);
-    ftyp->minor = 0;
+    /* MinV: T.800 I.5.2 requires 0 in a JP2 file, T.801 M.8 requires 1 in a
+     * JPX file. Readers shall parse the file whatever the value, and esajpip
+     * ignores it, so neither layer constrains it; the base vectors carry the
+     * conforming value so that a valid vector is valid to a strict reader. */
+    ftyp->minor = memcmp(brand, "jpx ", 4) == 0 ? 1 : 0;
     ftyp->compat.nCount = 1;
     OCTETS(ftyp->compat.arr[0], brand, 4);
 }
@@ -949,7 +953,7 @@ static const RuleMutant rule_mutants[] = {
     { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
     { "tile.header-marker", rule_com_in_tile_header, "COM in the tile-part header: profile invalid", 0, 0, X_PROF },
     { "jpx.box-order", rule_jpx_jp2c_before_jpch, "jp2c before the jpch boxes: valid (counts match)", CF_JPX, 0, X_VALID },
-    { "jpx.codestream-count", rule_jpx_missing_jp2c, "two jpch, one jp2c: profile invalid", CF_JPX, 0, X_PROF },
+    { "jpx.codestream-count", rule_jpx_missing_jp2c, "two jpch, one jp2c (T.801 M.11.6)", CF_JPX, 0, X_STD },
     { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: valid (deployed files)", 0, 0, X_VALID },
     { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
     { "jpch.nested-jp2c", rule_jp2c_in_jpch, "jp2c inside a jpch superbox", CF_JPX, 0, X_STD },
@@ -994,8 +998,19 @@ static void rule_url_jpx_target(Jp2Family *f, int box) {
     strcpy((char *) f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
 }
 static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
-static void rule_mixed_linked_embedded(Jp2Family *f, int box) { (void) box; add_jp2c(f, BASE_W, BASE_H, 0, 0, 1); }
+/* A third codestream as jp2c beside the two ftbl ones, with its own jpch so
+ * that the codestream count still matches and mixing is the only violation. */
+static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
+    (void) box;
+    add_jp2c(f, BASE_W, BASE_H, 0, 0, 1);
+    add_jpch(f);
+}
 static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
+static void rule_two_dtbl(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[7] = f->boxes.arr[6];                    /* second top-level dtbl */
+    f->boxes.nCount = 8;
+}
 
 static const RuleMutant linked_rule_mutants[] = {
     { "flst.dr-external", rule_dr_zero, "DR = 0 (this file): profile invalid", CF_JPX, 0, X_PROF },
@@ -1007,6 +1022,7 @@ static const RuleMutant linked_rule_mutants[] = {
     { "url.jp2-target", rule_url_jpx_target, "link to a .jpx: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.mixed-sources", rule_mixed_linked_embedded, "jp2c next to ftbl: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.linked-shape", rule_no_dtbl, "no dtbl", CF_JPX, 0, X_STD },
+    { "jpx.one-dtbl", rule_two_dtbl, "two dtbl boxes (T.801 M.11.2)", CF_JPX, 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */

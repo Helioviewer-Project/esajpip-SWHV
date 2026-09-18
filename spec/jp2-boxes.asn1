@@ -27,6 +27,14 @@
 --     determinant-sized and deduced.
 --   * Box types outside the listed sets are a decode error at layer 1;
 --     layer 2 skips them through an `other` alternative, as the server does.
+--   * T.801 M.11.1 requires a JPX file to carry exactly one rreq box
+--     immediately after ftyp. The server ignores rreq, and layer 2 may not
+--     widen layer 1, so neither layer requires it and the generated JPX
+--     vectors carry no rreq: they are valid to esajpip and to this model,
+--     not to a strict JPX reader.
+--   * Codestream Header boxes inside a Compositing Layer Extensions box, and
+--     codestreams inside a Multiple Codestream box, are outside the model;
+--     every jpch, jp2c and ftbl here is top level, as the server requires.
 --
 -- Cross-field rules are at the end (harness/crossfield.c).
 
@@ -256,9 +264,19 @@ END
 --
 -- Standard (both layers):
 --   T.800 I.4: the first box is jP with payload 0D0A870A, the second is ftyp.
---   T.800 I.5.2 / T.801 M.11: the ftyp brand is 'jp2 ' for a .jp2 and
---     'jpx ' for a .jpx, and its compatibility list contains that brand
---     (ReadFileType). Box size and alignment are the Ftyp type's job.
+--   T.800 I.5.2 / T.801 M.8: the ftyp brand is 'jp2 ' for a .jp2 and
+--     'jpx ' for a .jpx, and the compatibility list contains that brand. The
+--     standard states this per format -- a conforming JP2 file carries 'jp2 '
+--     in a CLi field, a conforming JPX file carries 'jpx ' -- which for the
+--     two permitted brands is the same rule (ReadFileType). Box size and
+--     alignment are the Ftyp type's job. MinV (0 for JP2, 1 for JPX) binds
+--     writers only: readers shall parse the file whatever its value and
+--     esajpip ignores it, so neither layer constrains it.
+--   T.801 M.11.2: at most one dtbl box, at the top level.
+--   T.801 M.11.6: if any jpch box is present, the number of codestreams
+--     (jp2c and ftbl boxes) equals the number of codestream headers; each is
+--     numbered by source-box order. A file with no jpch box inherits its
+--     header information from jp2h and is unconstrained here.
 --   DataReferences.references has exactly ndr elements and every one is url.
 --   FragmentList.fragments has exactly nf elements.
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
@@ -270,11 +288,11 @@ END
 --
 -- Profile only (ReadJP2 / ReadJPX):
 --   Jp2File-Profile: exactly one jp2c among the top-level boxes.
---   JpxFile-Profile: let N = number of jpch boxes, N >= 1.
---     jp2c boxes and ftbl boxes do not both occur (no mixed sources), and
---     their total is N: each jp2c or ftbl is one codestream, numbered by
---     source-box order independently of where the jpch boxes sit.
---       (linked)   exactly one top-level dtbl; every flst's dr in 1..ndr.
+--   JpxFile-Profile: at least one jpch box, where the standard lets a JPX
+--     file fall back on jp2h. jp2c boxes and ftbl boxes do not both occur
+--     (no mixed sources); the standard allows a file to hold some codestreams
+--     inline and others by reference. Linked: exactly one top-level dtbl and
+--     every flst's dr in 1..ndr.
 --     (ReadJPX; the order of jp2c relative to jpch is not constrained.)
 --   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
 --     jp2c boxes.
