@@ -938,7 +938,7 @@ static void CheckMetadataPlaceHolder() {
                                        data::FileSegment(0, sizeof header));
     writer.SetBuffer(buf, sizeof buf);
     writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
-                            place_holder, true);
+                            place_holder, 0, true);
 
     const unsigned char expected[] = {
         0x70, 0x08, 0x00, 0x00, 0x1c,
@@ -955,11 +955,29 @@ static void CheckMetadataPlaceHolder() {
     jpip::DataBinWriter exact_writer;
     exact_writer.SetBuffer(exact_buf, sizeof exact_buf);
     exact_writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
-                                  place_holder, true);
+                                  place_holder, 0, true);
 
     Check(exact_writer.GetCount() == sizeof expected, "Did not fill the place-holder buffer exactly");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(exact_buf[i]) == expected[i], "Wrong exact-size metadata place-holder");
+
+    char partial_buf[64];
+    jpip::DataBinWriter partial_writer;
+    partial_writer.SetBuffer(partial_buf, sizeof partial_buf);
+    partial_writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0,
+                                    file, place_holder, 3, true);
+    const unsigned char partial_header[] = {0x70, 0x08, 0x00, 0x03, 0x19};
+    Check(partial_writer.GetCount() ==
+                  static_cast<ptrdiff_t>(sizeof partial_header +
+                                         sizeof expected - 5 - 3),
+          "Wrong partial metadata place-holder length");
+    for (size_t i = 0; i < sizeof partial_header; ++i)
+        Check(static_cast<unsigned char>(partial_buf[i]) == partial_header[i],
+              "Wrong partial metadata place-holder header");
+    for (size_t i = 0; i < sizeof expected - 5 - 3; ++i)
+        Check(static_cast<unsigned char>(partial_buf[sizeof partial_header + i]) ==
+                      expected[5 + 3 + i],
+              "Wrong partial metadata place-holder payload");
 }
 
 int main() {

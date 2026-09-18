@@ -125,12 +125,13 @@ namespace jpip {
             if (cached != INT_MAX && seg_cached < place_holder.length()) {
                 if (seg_cached < 0)
                     seg_cached = 0;
-                if (data_writer.GetFree() - CHUNK_RESERVE < place_holder.length())
+                int remaining = place_holder.length() - seg_cached;
+                if (data_writer.GetFree() - CHUNK_RESERVE < remaining)
                     return SegmentResult::FULL;
 
                 DataBinWriter::Result result = data_writer.WritePlaceHolder(
                         DataBinClass::META_DATA, num_codestream, id, offset,
-                        *file, place_holder, last);
+                        *file, place_holder, seg_cached, last);
                 if (result == DataBinWriter::Result::FULL)
                     return SegmentResult::FULL;
                 if (result == DataBinWriter::Result::FAILED)

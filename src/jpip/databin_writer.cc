@@ -164,35 +164,42 @@ namespace jpip {
     DataBinWriter::Result DataBinWriter::WritePlaceHolder(
             int databin_class, int codestream_idx, uint64_t bin_id,
             uint64_t bin_offset, File &file, const PlaceHolder &place_holder,
-            bool last_byte) {
+            uint64_t skip, bool last_byte) {
+        unsigned char encoded[60];
+        if (place_holder.length() > static_cast<int>(sizeof encoded) ||
+            skip > static_cast<uint64_t>(place_holder.length()))
+            return Result::FAILED;
+
+        unsigned char *out = encoded;
+        auto write_value = [&out](uint64_t value, size_t size) {
+            for (size_t i = size; i > 0; --i)
+                *out++ = (value >> (8 * (i - 1))) & 0xFF;
+        };
+        write_value(place_holder.length(), 4); // LBox
+        write_value(0x70686c64, 4);            // TBox
+        write_value(place_holder.is_jp2c ? 4 : 1, 4); // Flags
+        write_value(place_holder.is_jp2c ? 0 : place_holder.id, 8); // OrigID
+        if (place_holder.header.length > 0) {
+            file.Seek(place_holder.header.offset);
+            if (!file.Read(out, place_holder.header.length))
+                return Result::FAILED;
+            out += place_holder.header.length;
+        }
+        if (place_holder.is_jp2c) {
+            write_value(0, 8);                 // EquivID
+            write_value(0, 8);                 // EquivBH
+            write_value(place_holder.id, 8);   // CSID
+        }
+
+        uint64_t length = place_holder.length() - skip;
         Result result = BeginMessage(databin_class, codestream_idx, bin_id,
-                                     bin_offset, place_holder.length(), last_byte);
+                                     bin_offset + skip, length, last_byte);
         if (result != Result::WRITTEN)
             return result;
 
-        char *aux_ptr = ptr;
-        /* LBox   */  WriteValue<uint32_t>(place_holder.length());
-        /* TBox   */  WriteValue<uint32_t>(0x70686c64);
-        /* Flags  */  WriteValue<uint32_t>(place_holder.is_jp2c ? 4 : 1);
-        /* OrigID */  WriteValue<uint64_t>(place_holder.is_jp2c ? 0 : place_holder.id);
-
-        /* OrigBH */
-        if (place_holder.header.length > 0) {
-            file.Seek(place_holder.header.offset);
-            if (!file.Read(ptr, place_holder.header.length)) {
-                ptr = aux_ptr;
-                return Result::FAILED;
-            }
-            ptr += place_holder.header.length;
-        }
-
-        if (place_holder.is_jp2c) {
-            /* EquivID */ WriteValue<uint64_t>(0);
-            /* EquivBH */ WriteValue<uint64_t>(0);
-            /* CSID    */ WriteValue<uint64_t>(place_holder.id);
-        }
-
-        msg_len += place_holder.length();
+        memcpy(ptr, encoded + skip, length);
+        ptr += length;
+        msg_len += length;
         msg_last = last_byte;
         return Result::WRITTEN;
     }

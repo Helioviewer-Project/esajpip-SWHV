@@ -55,16 +55,6 @@ namespace jpip {
                             uint64_t bin_length) const;
 
         /**
-         * Writes a value into the buffer.
-         * @param value Value to write.
-         */
-        template<typename T>
-        void WriteValue(T value) {
-            for (int i = sizeof(T) - 1; i >= 0; --i)
-                *ptr++ = (value >> (8 * i)) & 0xFF;
-        }
-
-        /**
          * Writes a new integer value into the buffer coded as VBAS.
          * @param value Value to write.
          */
@@ -151,6 +141,7 @@ namespace jpip {
                                 uint64_t bin_id, uint64_t bin_offset,
                                 data::File &file,
                                 const jpeg2000::PlaceHolder &place_holder,
+                                uint64_t skip = 0,
                                 bool last_byte = false);
 
         /**
