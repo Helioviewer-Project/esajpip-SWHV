@@ -13,6 +13,7 @@ enum RequestState {
 struct InitialRequest {
     RequestState state;
     bool new_channel;
+    bool tid;
     bool handled;
     uint64_t channel;
 };

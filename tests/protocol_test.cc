@@ -194,9 +194,9 @@ static void CheckInitialRequest() {
           "Could not route an existing channel request");
 
     InitialRequest handled =
-            Inspect("GET /jpip?stream=2&cid=47&handled HTTP/1.1\r\n");
-    Check(handled.state == REQUEST_ACCEPTED && handled.handled,
-          "Initial inspection lost the handled field");
+            Inspect("GET /jpip?stream=2&cid=47&tid=0&handled HTTP/1.1\r\n");
+    Check(handled.state == REQUEST_ACCEPTED && handled.tid && handled.handled,
+          "Initial inspection lost a response-obligation field");
 
     InitialRequest close = Inspect("GET /jpip?cclose=47 HTTP/1.1\r\n");
     Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == 47,

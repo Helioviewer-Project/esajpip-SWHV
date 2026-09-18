@@ -325,11 +325,15 @@ int main() {
 
     int unavailable = Connect(port);
     Check(unavailable >= 0, "Serving process did not start");
-    SendRequest(unavailable, "/jpip?cid=999&handled");
+    SendRequest(unavailable, "/jpip?cid=999&tid=0&handled");
     Response unavailable_response = ReadResponse(unavailable);
     Check(unavailable_response.headers.find("503 Service Unavailable") != string::npos &&
-                  unavailable_response.headers.find(HANDLED_HEADER) != string::npos,
-          "Unknown channel did not return 503 with JPIP-handled");
+                  unavailable_response.headers.find("JPIP-tid: 0") != string::npos &&
+                  unavailable_response.headers.find(HANDLED_HEADER) != string::npos &&
+                  unavailable_response.headers.find(
+                      "Access-Control-Expose-Headers: JPIP-tid,JPIP-handled") !=
+                      string::npos,
+          "Unknown channel did not return 503 with JPIP response headers");
     Check(unavailable_response.body == "JPIP channel does not exist",
           "Unknown channel response did not explain the failure");
     close(unavailable);
