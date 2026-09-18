@@ -34,7 +34,7 @@ not formal Annex J conformance.
 
 | Area | Support | Behavior and reason |
 | --- | --- | --- |
-| HTTP | Reduced | HTTP/1.1 `GET` requests are accepted. Successful image responses use chunked transfer encoding; a successful `cclose` has an empty fixed-length body. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
+| HTTP | Reduced | HTTP/1.1 `GET` requests in origin-form or absolute-form are accepted. For an absolute URI, the authority is discarded and its path selects the local target. Successful image responses use chunked transfer encoding; a successful `cclose` has an empty fixed-length body. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
 | Return type | JPP-stream only | Successful image responses use `image/jpp-stream`. JPT-stream, complete-file return types, and return-type negotiation are not implemented because JHelioviewer consumes precinct-based JPP-streams. |
 | Transport | HTTP only | A `cnew` offer is accepted only when its transport list includes `http`, which is then selected in `JPIP-cnew`. A valid offer containing only unsupported transports receives `501` without a `JPIP-cnew` header because stateless service is not implemented. Auxiliary TCP, UDP, and upload transports are not implemented. |
 | Sessions and channels | Stateful, reduced | `cnew`, `cid`, and `cclose` are supported. One channel owns one target and processes one request and response at a time. This matches JHelioviewer's access pattern and keeps cache and JPEG 2000 ownership explicit. |

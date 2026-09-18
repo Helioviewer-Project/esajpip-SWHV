@@ -20,6 +20,39 @@ namespace jpip {
             return value < minimum ? minimum : (value > maximum ? maximum : value);
         }
 
+        bool IsScheme(const string &uri, size_t length) {
+            if (length == 0 ||
+                !((uri[0] >= 'A' && uri[0] <= 'Z') ||
+                  (uri[0] >= 'a' && uri[0] <= 'z')))
+                return false;
+            for (size_t i = 1; i < length; ++i) {
+                char c = uri[i];
+                if (!((c >= 'A' && c <= 'Z') ||
+                      (c >= 'a' && c <= 'z') ||
+                      (c >= '0' && c <= '9') || c == '+' || c == '-' ||
+                      c == '.'))
+                    return false;
+            }
+            return true;
+        }
+
+        string GetObject(const string &uri, size_t end) {
+            if (uri.empty() || uri[0] == '/')
+                return uri.substr(0, end);
+
+            size_t colon = uri.find(':');
+            if (colon == string::npos || colon >= end || !IsScheme(uri, colon))
+                return uri.substr(0, end);
+
+            size_t path = colon + 1;
+            if (path + 1 < end && uri[path] == '/' && uri[path + 1] == '/') {
+                path = uri.find('/', path + 2);
+                if (path == string::npos || path >= end)
+                    return "/";
+            }
+            return uri.substr(path, end - path);
+        }
+
         void MapInterval(int selected_size, int requested_size,
                          int *offset, int *length) {
             assert(selected_size > 0 && requested_size > 0);
@@ -392,7 +425,7 @@ namespace jpip {
 
     bool Request::ParseURI(const string &uri, string *error_message) {
         size_t question = uri.find('?');
-        object = uri.substr(0, question);
+        object = GetObject(uri, question);
 
         if (question == string::npos)
             return true;

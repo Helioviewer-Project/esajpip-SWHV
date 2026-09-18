@@ -281,6 +281,12 @@ static void CheckJHVRequests() {
     Check(channel_request.has.len && channel_request.length_response == 512,
           "Wrong channel response limit");
 
+    jpip::Request absolute_request;
+    Check(absolute_request.Parse(
+              "GET http://get.jpeg.org/images/kids.jp2?cnew=http HTTP/1.1") &&
+              absolute_request.object == "/images/kids.jp2",
+          "Could not extract the path from an absolute request target");
+
     jpip::Request mismatched_target_request;
     Check(mismatched_target_request.Parse(
               "GET /jpip?cid=7&model=M0:100&tid=1 HTTP/1.1") &&

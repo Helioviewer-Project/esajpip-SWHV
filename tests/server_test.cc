@@ -399,8 +399,8 @@ int main() {
     int channel = Connect(port);
     Check(channel >= 0, "Could not connect for channel creation");
     SendRequest(channel,
-                "/image.jp2?cnew=http&type=jpp-stream&stream=0&metareq=[*]!!&"
-                "fsiz=1,1&rsiz=1,1&roff=0,0&len=128&handled",
+                "http://localhost/image.jp2?cnew=http&type=jpp-stream&stream=0&"
+                "metareq=[*]!!&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&handled",
                 "Accept-Encoding: gzip\r\n");
     Response created = ReadResponse(channel);
     Check(created.headers.find("HTTP/1.1 200 OK") == 0 &&
