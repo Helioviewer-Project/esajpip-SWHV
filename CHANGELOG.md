@@ -54,8 +54,8 @@
   64 packet segments are rejected during parsing instead of failing later or
   producing an inconsistent stream.
 - Keep each embedded JPX codestream's coding parameters separate, use the
-  standard default precinct size, and reject image origins the packet index
-  cannot represent.
+  standard default precinct size, number JPX codestreams by physical box order,
+  and reject image origins the packet index cannot represent.
 - Bound and validate client-controlled request values before allocation. This
   includes cache models, response limits, codestream selectors, and the 4 KiB
   HTTP request-head limit on established channels.

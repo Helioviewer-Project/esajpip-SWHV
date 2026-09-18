@@ -569,7 +569,9 @@ namespace jpeg2000 {
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
         vector<ImageIndex::Codestream> codestreams;
+        size_t num_codestream_headers = 0;
         size_t num_codestreams = 0;
+        size_t ftbl_codestream = 0;
         vector<Link> links;
         vector<Container> containers{{0, file->GetSize()}};
 
@@ -596,15 +598,15 @@ namespace jpeg2000 {
                 case JPCH_BOX_ID: TRACE("JPCH box...");
                     if (containers.size() != 1)
                         return false;
-                    num_codestreams++;
+                    num_codestream_headers++;
                     if (length_box != 0)
                         containers.push_back({type_box, box_end});
                     break;
                 case JP2C_BOX_ID: {
                     TRACE("JP2C box...");
-                    if (containers.size() != 1 || num_codestreams == 0 ||
-                        codestreams.size() >= num_codestreams)
+                    if (containers.size() != 1)
                         return false;
+                    size_t codestream_id = num_codestreams++;
                     codestreams.emplace_back(image_index->path_name);
                     ImageIndex::Codestream &codestream = codestreams.back();
                     if (!ReadCodestream(file, length_box, codestream))
@@ -613,7 +615,7 @@ namespace jpeg2000 {
                         return false;
                     image_index->meta_data.bin0.emplace_back(
                             FileSegment(meta_start, prefix_length),
-                            PlaceHolder(num_codestreams - 1, true,
+                            PlaceHolder(codestream_id, true,
                                         FileSegment(box_start, header_length)));
                     meta_start = file->GetOffset();
                     break;
@@ -633,6 +635,7 @@ namespace jpeg2000 {
                     if (containers.size() != 1)
                         return false;
                     num_flst = 0;
+                    ftbl_codestream = num_codestreams++;
                     ftbl_prefix = FileSegment(meta_start, prefix_length);
                     ftbl_header = FileSegment(box_start, header_length);
                     if (length_box < 8)
@@ -650,7 +653,7 @@ namespace jpeg2000 {
                     num_flst++;
                     image_index->meta_data.bin0.emplace_back(
                             ftbl_prefix,
-                            PlaceHolder(links.size(), true, ftbl_header));
+                            PlaceHolder(ftbl_codestream, true, ftbl_header));
                     links.push_back({data_reference, fragment});
                     meta_start = file->GetOffset();
                     break;
@@ -686,8 +689,13 @@ namespace jpeg2000 {
         image_index->meta_data.tail =
                 FileSegment(meta_start, file->GetOffset() - meta_start);
 
-        if (containers.size() != 1 || num_codestreams == 0 ||
+        if (containers.size() != 1 || num_codestream_headers == 0 ||
+            num_codestreams != num_codestream_headers ||
             references.size() != num_data_references)
+            return false;
+
+        // This profile supports embedded or linked codestreams, not a mixture.
+        if (!codestreams.empty() && !links.empty())
             return false;
 
         bool sequential_references = links.size() == references.size();
@@ -716,7 +724,6 @@ namespace jpeg2000 {
 
         if (paths.size() != num_codestreams)
             return false;
-        vector<ImageIndex::Codestream>().swap(codestreams);
         image_index->codestreams.reserve(paths.size());
         for (size_t i = 0; i < paths.size(); ++i) {
             if (paths[i].size() < 4 ||

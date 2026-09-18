@@ -390,12 +390,10 @@ static vector<unsigned char> MakeEmbeddedJPX(const vector<unsigned char> &codest
     return file;
 }
 
-static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
-                                            uint32_t codestream_length,
-                                            uint16_t reference_count = 1) {
-    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
-    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
-
+static void AppendLinkedCodestream(vector<unsigned char> &file,
+                                   const string &linked_path,
+                                   uint32_t codestream_length,
+                                   uint16_t reference_count = 1) {
     vector<unsigned char> fragment;
     Append16(fragment, 1);                 // one fragment
     Append64(fragment, JP2_CODESTREAM_OFFSET);
@@ -414,6 +412,36 @@ static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
     Append16(references, reference_count);
     AppendBox(references, 0x75726C20, url); // url
     AppendBox(file, 0x6474626C, references); // dtbl
+}
+
+static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
+                                            uint32_t codestream_length,
+                                            uint16_t reference_count = 1) {
+    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
+    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
+    AppendLinkedCodestream(file, linked_path, codestream_length,
+                           reference_count);
+    return file;
+}
+
+static vector<unsigned char> MakeHeaderFirstEmbeddedJPX(
+        const vector<unsigned char> &first,
+        const vector<unsigned char> &second) {
+    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
+    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch 0
+    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch 1
+    AppendBox(file, 0x6A703263, first);                   // jp2c 0
+    AppendBox(file, 0x6A703263, second);                  // jp2c 1
+    return file;
+}
+
+static vector<unsigned char> MakeMixedJPX(
+        const vector<unsigned char> &codestream, const string &linked_path) {
+    vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
+    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch 0
+    AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch 1
+    AppendBox(file, 0x6A703263, codestream);              // jp2c 0
+    AppendLinkedCodestream(file, linked_path, codestream.size()); // ftbl 1
     return file;
 }
 
@@ -587,6 +615,12 @@ int main() {
     WriteFile(directory + "embedded-two.jpx",
               MakeEmbeddedJPX(codestream,
                               MakeCodestream(0, 1, 2, 2, 0, 2, 1, 2)));
+    WriteFile(directory + "header-first-embedded.jpx",
+              MakeHeaderFirstEmbeddedJPX(
+                      codestream,
+                      MakeCodestream(0, 1, 2, 2, 0, 2, 1, 2)));
+    WriteFile(directory + "mixed.jpx",
+              MakeMixedJPX(codestream, directory + "image.jp2"));
     WriteFile(directory + "linked.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size()));
     string self_linked_file = directory + "self-linked.jpx";
@@ -880,6 +914,21 @@ int main() {
                       embedded_file, 1,
                       jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
           "Could not index the second embedded codestream");
+
+    jpeg2000::FileManager header_first_manager;
+    Check(OpenImage(directory, "header-first-embedded.jpx",
+                    &header_first_manager),
+          "Could not parse JPX with headers before its codestream boxes");
+    const jpeg2000::Metadata &header_first_metadata =
+            header_first_manager.GetImage()->GetMetadata();
+    Check(header_first_metadata.bin0.size() == 2 &&
+              header_first_metadata.bin0[0].placeholder.id == 0 &&
+              header_first_metadata.bin0[1].placeholder.id == 1,
+          "JPX placeholders do not follow physical codestream order");
+
+    jpeg2000::FileManager mixed_manager;
+    Check(!OpenImage(directory, "mixed.jpx", &mixed_manager),
+          "Accepted mixed embedded and linked JPX codestreams");
 
     jpip::Request multi_stream_request;
     Check(multi_stream_request.Parse(
@@ -1192,6 +1241,8 @@ int main() {
 
     remove((directory + "embedded.jpx").c_str());
     remove((directory + "embedded-two.jpx").c_str());
+    remove((directory + "header-first-embedded.jpx").c_str());
+    remove((directory + "mixed.jpx").c_str());
     remove((directory + "linked.jpx").c_str());
     remove((directory + "outside-linked.jpx").c_str());
     remove(outside_file.c_str());

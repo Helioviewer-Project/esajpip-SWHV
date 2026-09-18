@@ -160,8 +160,9 @@ transcoding step required for such inputs.
 - A JPX with no links must contain every declared codestream. Each embedded
   codestream keeps its own coding parameters.
 - If links are present, every declared codestream must have a link in the
-  supported fragment-table/data-reference form. Any embedded codestreams in the
-  same JPX are ignored, and the linked codestreams are served instead.
+  supported fragment-table/data-reference form.
+- Codestreams are numbered by the physical order of their contiguous
+  codestream or fragment table boxes, independently of codestream header order.
 - A linked codestream uses one `flst` entry containing exactly one fragment.
   The fragment must describe the complete codestream indexed in the referenced
   file.
