@@ -4,21 +4,13 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
-#include <poll.h>
-#include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 #include <unistd.h>
 
 #include "config.h"
-#include "server/connection_queue.h"
-#include "server/initial_request.h"
 #include "data/file.h"
 #include "data/file_segment.h"
-#include "http/header.h"
-#include "http/protocol.h"
-#include "http/response.h"
 #include "jpeg2000/place_holder.h"
 #include "jpip/cache_model.h"
 #include "jpip/databin_writer.h"
@@ -26,6 +18,7 @@
 #include "jpip/request.h"
 #include "jpip/woi_composer.h"
 #include "net/address.h"
+#include "server/channel_id.h"
 
 using namespace std;
 
@@ -62,12 +55,21 @@ static vector<int> SelectCodestreams(const jpip::Request &request,
     return selected;
 }
 
+static void CheckChannelIds() {
+    string id;
+    Check(GenerateChannelId(&id) == 0,
+          "Could not generate a secure channel identifier");
+    Check(id.size() == 32 &&
+                  id.find_first_not_of("0123456789abcdef") == string::npos,
+          "Generated an invalid channel identifier");
+}
+
 static void CheckAppConfig() {
     const char *contents =
         "# Settings may be ordered freely.\n"
         "[logging]\n"
-        "file_enabled = 1\n"
-        "requests = 0\n"
+        "file_enabled = true\n"
+        "requests = false\n"
         "directory = /var/log/esajpip/\n"
         "cache_max_time = -1\n"
         "\n"
@@ -82,7 +84,10 @@ static void CheckAppConfig() {
         "[connections]\n"
         "limit = 250\n"
         "timeout = 60\n"
-        "initial_timeout = 4\n";
+        "initial_timeout = 4\n"
+        "\n"
+        "[channels]\n"
+        "limit = 500\n";
 
     Config config;
     Check(LoadConfig(contents, &config), "Could not parse INI configuration");
@@ -92,23 +97,32 @@ static void CheckAppConfig() {
     Check(config.log_directory() == "/var/log/esajpip/", "Wrong configured log directory");
     Check(config.max_chunk_size() == 4096, "Wrong configured chunk size");
     Check(config.max_connections() == 250, "Wrong configured connection limit");
+    Check(config.max_channels() == 500, "Wrong configured channel limit");
     Check(config.initial_timeout() == 4, "Wrong configured initial timeout");
     Check(config.connection_timeout() == 60, "Wrong configured connection timeout");
     Check(config.file_logging() && !config.log_requests(), "Wrong configured logging flags");
 
-    const char *minimal =
+    const char *missing_setting =
         "[listen]\n"
+        "address = 127.0.0.1\n"
         "port = 8090\n"
         "[jpip]\n"
         "image_directory = /srv/jpip\n"
         "chunk_size = 128\n"
         "[connections]\n"
         "limit = 10\n"
-        "[logging]\n";
-    Config defaults;
-    Check(LoadConfig(minimal, &defaults), "Could not apply configuration defaults");
-    Check(defaults.initial_timeout() == 3 && defaults.connection_timeout() == 60,
-          "Wrong configuration defaults");
+        "initial_timeout = 3\n"
+        "[channels]\n"
+        "limit = 20\n"
+        "[logging]\n"
+        "directory =\n"
+        "file_enabled = false\n"
+        "requests = false\n";
+    string error;
+    Config missing_timeout;
+    Check(!LoadConfig(missing_setting, &missing_timeout, &error) &&
+                  error.find("timeout") != string::npos,
+          "Accepted configuration with a missing setting");
 
     Config missing_group;
     Check(!LoadConfig("[listen]\nport = 8090\n", &missing_group),
@@ -119,14 +133,21 @@ static void CheckAppConfig() {
 
     const char *invalid_port =
         "[listen]\n"
+        "address = 127.0.0.1\n"
         "port = invalid\n"
         "[jpip]\n"
         "image_directory = /srv/jpip\n"
         "chunk_size = 128\n"
         "[connections]\n"
         "limit = 10\n"
-        "[logging]\n";
-    string error;
+        "initial_timeout = 3\n"
+        "timeout = 60\n"
+        "[channels]\n"
+        "limit = 20\n"
+        "[logging]\n"
+        "directory =\n"
+        "file_enabled = false\n"
+        "requests = false\n";
     Config invalid_port_config;
     Check(!LoadConfig(invalid_port, &invalid_port_config, &error) &&
               error.find("port") != string::npos,
@@ -134,13 +155,21 @@ static void CheckAppConfig() {
 
     const char *invalid_value =
         "[listen]\n"
+        "address = 127.0.0.1\n"
         "port = 8090\n"
         "[jpip]\n"
         "image_directory = /srv/jpip\n"
         "chunk_size = 127\n"
         "[connections]\n"
         "limit = 10\n"
-        "[logging]\n";
+        "initial_timeout = 3\n"
+        "timeout = 60\n"
+        "[channels]\n"
+        "limit = 20\n"
+        "[logging]\n"
+        "directory =\n"
+        "file_enabled = false\n"
+        "requests = false\n";
     Config invalid_chunk;
     Check(!LoadConfig(invalid_value, &invalid_chunk, &error) &&
               error == "jpip.chunk_size must be at least 128",
@@ -148,126 +177,25 @@ static void CheckAppConfig() {
 
     const char *missing_log_directory =
         "[listen]\n"
+        "address = 127.0.0.1\n"
         "port = 8090\n"
         "[jpip]\n"
         "image_directory = /srv/jpip\n"
         "chunk_size = 128\n"
         "[connections]\n"
         "limit = 10\n"
+        "initial_timeout = 3\n"
+        "timeout = 60\n"
+        "[channels]\n"
+        "limit = 20\n"
         "[logging]\n"
-        "file_enabled = 1\n";
+        "directory =\n"
+        "file_enabled = true\n"
+        "requests = false\n";
     Config invalid_logging;
     Check(!LoadConfig(missing_log_directory, &invalid_logging, &error) &&
               error == "logging.directory must not be empty when file logging is enabled",
           "Accepted file logging without a directory");
-}
-
-static InitialRequest Inspect(const char *request) {
-    return ClassifyInitialRequest(request ? request : "", request ? strlen(request) : 0);
-}
-
-static void CheckInitialRequest() {
-    static const char id[] = "0123456789abcdef0123456789abcdef";
-    static const char other_id[] = "fedcba9876543210fedcba9876543210";
-
-    Check(Inspect(NULL).state == REQUEST_PENDING, "Rejected an idle connection before its deadline");
-    Check(Inspect("G").state == REQUEST_PENDING, "Rejected a partial GET method");
-    Check(Inspect("POST").state == REQUEST_REJECTED, "Accepted a non-GET method");
-    Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1\r\n").state == REQUEST_ACCEPTED,
-          "Rejected a JHV channel request");
-    Check(Inspect("GET /jpip?target=movie.jpx&cnew=http HTTP/1.0\r\n").state == REQUEST_REJECTED,
-          "Accepted an HTTP/1.0 channel request");
-    Check(Inspect("GET /movie.jpx?xcnew=http HTTP/1.1\r\n").state == REQUEST_REJECTED,
-          "Accepted a request without a cnew parameter");
-    Check(Inspect("GET /movie.jpx?cnew=http HTTP/2\r\n").state == REQUEST_REJECTED,
-          "Accepted an unsupported HTTP version");
-    Check(Inspect("GET /movie.jpx?cnew=http HTTP/1.1junk\r\n").state == REQUEST_REJECTED,
-          "Accepted an invalid HTTP version token");
-
-    string incomplete_limit = string("GET /jpip?cid=") + id + " HTTP/1.1";
-    incomplete_limit.resize(2047, 'x');
-    Check(Inspect(incomplete_limit.c_str()).state == REQUEST_PENDING,
-          "Rejected a bounded incomplete initial request");
-    incomplete_limit.push_back('x');
-    Check(Inspect(incomplete_limit.c_str()).state == REQUEST_REJECTED,
-          "Accepted an unterminated 2 KiB initial request");
-
-    string existing = string("GET /jpip?stream=2&cid=") + id + " HTTP/1.1\r\n";
-    InitialRequest request = Inspect(existing.c_str());
-    Check(request.state == REQUEST_ACCEPTED && !request.new_channel && request.channel == id,
-          "Could not route an existing channel request");
-
-    string handled_line = string("GET /jpip?stream=2&cid=") + id +
-                          "&tid=0&handled HTTP/1.1\r\n";
-    InitialRequest handled = Inspect(handled_line.c_str());
-    Check(handled.state == REQUEST_ACCEPTED && handled.tid && handled.handled,
-          "Initial inspection lost a response-obligation field");
-
-    string close_line = string("GET /jpip?cclose=") + id + " HTTP/1.1\r\n";
-    InitialRequest close = Inspect(close_line.c_str());
-    Check(close.state == REQUEST_ACCEPTED && !close.new_channel && close.channel == id,
-          "Could not route a channel close request");
-
-    string close_all_line = string("GET /jpip?cid=") + id +
-                            "&cclose=* HTTP/1.1\r\n";
-    Check(Inspect(close_all_line.c_str()).state == REQUEST_REJECTED,
-          "Accepted an all-channel close request");
-
-    Check(Inspect("GET /jpip?cid=0123456789abcdef HTTP/1.1\r\n").state ==
-                  REQUEST_REJECTED,
-          "Accepted a short channel ID");
-    Check(Inspect("GET /jpip?cid=0123456789ABCDEF0123456789ABCDEF HTTP/1.1\r\n").state ==
-                  REQUEST_REJECTED,
-          "Accepted a non-canonical channel ID");
-
-    string duplicate_line = string("GET /jpip?cid=") + other_id + "&cid=" + id +
-                            " HTTP/1.1\r\n";
-    InitialRequest duplicate = Inspect(duplicate_line.c_str());
-    Check(duplicate.state == REQUEST_ACCEPTED && duplicate.channel == id,
-          "Initial inspection did not use the last channel ID");
-
-    string mixed_line = string("GET /jpip?cclose=") + id + "&cid=" + other_id +
-                        " HTTP/1.1\r\n";
-    InitialRequest mixed = Inspect(mixed_line.c_str());
-    Check(mixed.state == REQUEST_ACCEPTED && mixed.channel == id,
-          "Initial inspection did not give cclose routing priority");
-}
-
-static void CheckConnectionQueue() {
-    ConnectionQueue queue;
-    Check(queue.IsValid(), "Could not create a connection queue");
-    Check(queue.Push(0), "Could not queue a channel connection");
-    pollfd wake = {queue.GetDescriptor(), POLLIN, 0};
-    Check(poll(&wake, 1, 0) == 1 && (wake.revents & POLLIN),
-          "Queued connection did not wake the channel");
-    Check(!queue.Push(8), "Queued concurrent channel connections");
-    int connection;
-    Check(queue.Pop(&connection), "Could not retrieve a channel connection");
-    Check(connection == 0, "Retrieved the wrong channel connection");
-    Check(!queue.Pop(&connection), "Retrieved a channel connection twice");
-    wake.revents = 0;
-    Check(poll(&wake, 1, 0) == 0,
-          "Retrieving a connection did not drain its wake byte");
-
-    ConnectionQueue concurrent;
-    bool first = false;
-    bool second = false;
-    thread first_push([&] { first = concurrent.Push(11); });
-    thread second_push([&] { second = concurrent.Push(12); });
-    first_push.join();
-    second_push.join();
-    Check(first != second, "Concurrent pushes did not admit exactly one connection");
-    Check(concurrent.Pop(&connection), "Could not retrieve the concurrent connection");
-    Check(connection == (first ? 11 : 12),
-          "Retrieved the wrong concurrent connection");
-
-    Check(queue.Push(9), "Could not queue a channel connection before closing");
-    int pending;
-    Check(queue.Close(pending), "Connection queue lost its pending connection on close");
-    Check(queue.IsClosed(), "Connection queue remained open");
-    Check(pending == 9,
-          "Connection queue did not return its pending connection");
-    Check(!queue.Push(10), "Connection queue accepted a connection after closing");
 }
 
 static bool RejectRequest(const string &line) {
@@ -474,6 +402,8 @@ static void CheckJHVRequests() {
           "Full parsing did not use the last channel ID");
     Check(RejectRequest("GET /jpip?cid=47&cclose=* HTTP/1.1"),
           "Accepted the unsupported all-channel close form");
+    Check(RejectRequest("GET /image.jp2?cnew=http&cclose=47 HTTP/1.1"),
+          "Accepted conflicting channel creation and closure fields");
     jpip::Request close_priority_request;
     Check(close_priority_request.Parse("GET /jpip?cclose=47&cid=48 HTTP/1.1") &&
               close_priority_request.has.cclose && close_priority_request.channel == "47",
@@ -579,43 +509,6 @@ static void CheckInetAddress() {
 
     net::InetAddress invalid("", 8099);
     Check(!invalid.IsValid(), "An empty Internet address was resolved");
-}
-
-static void CheckHTTPResponse() {
-    ostringstream out;
-    out << http::Response(200, "OK")
-        << http::Header("JPIP-cnew", "cid=7,path=jpip,transport=http")
-        << http::Header("JPIP-tid", "0")
-        << http::Header("Transfer-Encoding", "chunked")
-        << http::Header("Content-Type", "image/jpp-stream")
-        << http::CRLF;
-
-    Check(out.str() ==
-          "HTTP/1.1 200 OK\r\n"
-          "JPIP-cnew: cid=7,path=jpip,transport=http\r\n"
-          "JPIP-tid: 0\r\n"
-          "Transfer-Encoding: chunked\r\n"
-          "Content-Type: image/jpp-stream\r\n\r\n",
-          "The JHV response headers changed");
-}
-
-static void CheckHTTPHeaders() {
-    const char *lines[] = {
-        "Accept-Encoding: gzip",
-        "Accept-Encoding:gzip",
-        "Accept-Encoding:\tgzip \t"
-    };
-
-    for (const char *line : lines) {
-        http::Header header;
-        Check(header.Parse(line), "Could not parse an HTTP header");
-        Check(header.name == "Accept-Encoding", "Wrong HTTP header name");
-        Check(header.value == "gzip", "Wrong HTTP header value");
-    }
-
-    http::Header header;
-    Check(header.Parse("X-Empty:"), "Could not parse an empty HTTP header");
-    Check(header.name == "X-Empty" && header.value.empty(), "Wrong empty HTTP header");
 }
 
 static void CheckCacheModel() {
@@ -1143,13 +1036,10 @@ static void CheckMetadataPlaceHolder() {
 
 int main() {
     CheckAppConfig();
-    CheckInitialRequest();
-    CheckConnectionQueue();
+    CheckChannelIds();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();
-    CheckHTTPHeaders();
-    CheckHTTPResponse();
     CheckWOIPackets();
     CheckProgressionIndexes();
     CheckResolutionSelection();

@@ -40,6 +40,8 @@ namespace jpip {
 
         bool Parse(const std::string &line,
                    std::string *error_message = NULL);
+        bool ParseTarget(const std::string &target,
+                         std::string *error_message = NULL);
 
         struct Parameters {
             bool fsiz = false;

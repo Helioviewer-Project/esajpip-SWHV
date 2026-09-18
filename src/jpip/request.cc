@@ -420,7 +420,13 @@ namespace jpip {
             return false;
         }
 
-        return ParseURI(uri.substr(0, MAX_URI_LENGTH), error_message);
+        return ParseTarget(uri, error_message);
+    }
+
+    bool Request::ParseTarget(const string &target, string *error_message) {
+        if (error_message != NULL)
+            error_message->clear();
+        return ParseURI(target.substr(0, MAX_URI_LENGTH), error_message);
     }
 
     bool Request::ParseURI(const string &uri, string *error_message) {
@@ -549,6 +555,11 @@ namespace jpip {
         const string *route = FindParameter(query, has.cclose ? "cclose" : "cid");
         if (route)
             channel = *route;
+        if (has.cnew && has.cclose) {
+            valid = false;
+            SetError(error_message,
+                     "JPIP cnew and cclose can not be combined");
+        }
         if ((has.roff || has.rsiz) && !has.fsiz) {
             valid = false;
             SetError(error_message,

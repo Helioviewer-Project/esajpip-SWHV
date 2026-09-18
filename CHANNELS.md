@@ -15,7 +15,9 @@ connection.
 
 esajpip supports one target and one request/response at a time per channel. A
 client may keep using the original HTTP connection or send a later request for
-the same `cid` on a new connection. Requests must use HTTP/1.1 `GET`.
+the same `cid` on a new connection. One connection may carry requests for
+different channels, which allows normal browser and reverse-proxy connection
+pooling. Requests must use HTTP/1.1 `GET`.
 
 [JPEG 2000 Part 9](https://www.itu.int/rec/T-REC-T.808/en) separates HTTP
 connections from JPIP sessions. A persistent HTTP connection neither establishes
@@ -83,16 +85,11 @@ The request may use the existing persistent connection. It may also use a new
 connection. This is useful for browser and HTTP-library clients that do not
 control socket reuse.
 
-The client should send requests serially and consume each complete response
-before sending the next one. The server does not run concurrent requests or
-cancel an active response. It permits at most one replacement connection to
-wait for a channel.
-
-If a replacement arrives while the old connection is stalled in an incomplete
-request head, the server abandons that partial request, closes the old
-connection, and reads the request from the replacement. If a response is
-already being sent, it is allowed to finish before the replacement is used.
-An additional replacement receives `503 Service Unavailable`.
+The server does not run concurrent requests or cancel an active response within
+one channel. One later request may wait for that channel. An additional request
+for the busy channel receives `503 Service Unavailable`. Requests for other
+channels remain independent, even when a browser sends them on the same
+connection.
 
 Closing a persistent connection between complete responses does not close the
 channel immediately. The server waits for another connection carrying its
@@ -128,22 +125,19 @@ These are all HTTP status codes emitted by the server:
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and channel are closed. Create a new channel with a smaller request. |
 | `501 Not Implemented` | A valid `cnew` request offers no supported transport. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
 | `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation, or the server cannot generate a channel ID. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
-| `503 Service Unavailable` | A request names an unknown, ended, different, or otherwise unavailable channel; attempts another `cnew` on an open channel; the active-channel limit has been reached; or the channel already has a replacement connection waiting. The response body distinguishes these cases. | A channel-level failure closes that channel. A dispatcher-level rejection leaves an existing channel unchanged. Create a new channel unless the client knows that the referenced channel remains alive. |
+| `503 Service Unavailable` | A request names an unknown or ended channel, both request slots for a channel are occupied, a channel wait expires, or the active-channel limit has been reached. The response body distinguishes these cases. | A routing rejection leaves an existing channel unchanged. Create a new channel after an ended or unknown-channel response. |
 
-Channel-level error responses contain a short plain-text body and
-`Connection: close`. Successful responses and channel-level errors also include
-CORS, HSTS, and no-cache headers. The dispatcher-level `503` includes the CORS
-and no-cache headers but not HSTS. `cnew` exposes `JPIP-cnew` and `JPIP-tid` to
-browser clients.
+Error responses contain a short plain-text body and `Connection: close`.
+Responses include CORS and no-cache headers. TLS and HSTS belong at the reverse
+proxy. `cnew` exposes `JPIP-cnew` and `JPIP-tid` to browser clients.
 
 Some failures close the socket without an HTTP response:
 
 - The initial bytes are not a recognizable HTTP/1.1 JPIP `GET` request.
 - The initial request does not arrive before `connections.initial_timeout`.
 - The physical-connection limit has been reached.
-- A request head is incomplete or contains a malformed HTTP header.
 - The socket fails while a request or response is in progress.
-- The serving process exits or restarts.
+- The server process exits.
 
 Requests must not contain a body. A nonzero `Content-Length`, an invalid
 `Content-Length`, or any `Transfer-Encoding` receives `400 Bad Request`, and
@@ -151,31 +145,33 @@ the connection is closed after the response.
 
 A response that ends before its HTTP chunk terminator or JPIP end-of-response
 message is incomplete. The client must discard that response. Since all channel
-state is lost on a serving-process restart, the safe recovery is to create a
+state is lost when the server process exits, the safe recovery is to create a
 new channel and rebuild the client cache from its responses.
 
 ## Request and connection limits
 
-Initial inspection examines at most 2 KiB and accepts only request lines
-containing `cnew`, `cid`, or a usable `cclose`. The deadline is absolute:
+The parser limits a request line to 2 KiB and identifies only lines containing
+`cnew`, `cid`, or a usable `cclose`. The identification deadline is absolute:
 sending a few bytes does not extend `connections.initial_timeout`. Rejected
 connections do not allocate a channel or JPEG 2000 state.
 
 After identification, the complete HTTP request head is limited to 4 KiB.
-`connections.timeout` limits each wait for request data, response writes, and
-the wait for a replacement connection. Successful I/O starts the next wait; the
-setting is not an absolute channel lifetime. Values of `0` and `-1` disable this
-timeout.
+`connections.timeout` limits each wait for request data, response writes, a
+busy channel, and an idle channel. Successful I/O starts the next wait; the
+setting is not an absolute channel lifetime. Values of `0` and `-1` disable
+this timeout.
 
-`connections.limit` applies independently to physical connections and active
-channels. A channel can have one active connection and at most one queued
-replacement. Clients should close connections they no longer use.
+`connections.limit` limits physical HTTP connections.
+`channels.limit` separately limits active JPIP channels. A channel
+can have one active request and at most one waiting request. A connection may
+be reused for multiple channels, but responses on that connection remain in
+request order. Clients should close connections they no longer use.
 
 ## Channel lifetime
 
 A channel ends after a successful `cclose`, a malformed request, an invalid
 image request, a response failure, or an inactivity timeout. It also disappears
-when the serving process restarts. Channels are not restored after a restart.
+when the server process exits. Channels are not restored after a restart.
 
 The server deliberately ends a channel after an incomplete response. Its cache
 model may already include bytes that did not reach the client, so reusing that
@@ -183,20 +179,14 @@ state could make a later response incomplete from the client's point of view.
 
 ## Ownership
 
-The supervisor keeps the listening socket open but does not accept clients. The
-serving process accepts each connection and keeps a small `PendingConnection`
-record until it can identify the request. That record contains the connection's
-stable identifier, descriptor, and absolute deadline. Once identified, the
-descriptor goes directly to the selected `ConnectionQueue` and the pending
-record is removed. The serving loop retains the total connection count but no
-record for the active socket.
+One libuv loop owns the listener, signals, every connection, parser, timer,
+channel route, and pending write. Socket state is never accessed by workers.
 
-Each channel thread owns its `FileManager`, `ImageIndex`, linked-JPX graph,
-`DataBinServer`, cache model, traversal state, and response buffer. No JPEG 2000
-state is shared between channels. The serving loop and channel thread share only
-one mutable per-channel object, the connection queue. Configuration is shared
-read-only, and channel threads report connection and channel completion through
-an unnamed datagram socket pair.
+Each channel owns its `FileManager`, `ImageIndex`, linked-JPX graph,
+`DataBinServer`, cache model, and traversal state. The state is processed by at
+most one libuv worker at a time and is never shared with another channel. Work
+may move between pool threads only at chunk boundaries. Completed response
+buffers return to the event loop, which queues the socket writes.
 
 ## Admission and dispatch
 
@@ -204,66 +194,48 @@ an unnamed datagram socket pair.
 TCP accept
     |
     v
-serving process: pending connection + absolute identification deadline
+libuv loop: connection + absolute identification deadline
     |
     +-- no complete request line before deadline -----> close
     +-- unsupported or unrelated traffic -------------> close
     |
     v
-bounded cnew/cid/cclose recognition
+bounded HTTP parsing and cnew/cid/cclose routing
     |
     v
-direct transfer to the selected channel queue
+selected channel: active slot or one waiting slot
 ```
 
-Initial inspection peeks at no more than 2 KiB and does not consume the request.
-The serving loop retains a pending connection only until it recognizes `cnew`,
-`cid`, or `cclose`. Rejected and expired connections never create a channel
-thread or allocate JPEG 2000 state.
+llhttp consumes each request head once. A 2 KiB request-line limit and 4 KiB
+complete-head limit bound parser storage. Rejected and expired connections do
+not allocate JPEG 2000 state.
 
-For `cnew`, the serving loop creates a channel ID and a capacity-one connection
-queue, places the first connection in that queue, and starts a detached channel
-thread. For `cid` or `cclose`, it finds the existing channel and places the new
-connection in the same queue. The pending record is removed as soon as ownership
-passes to the channel.
+For `cnew`, the loop reserves an opaque channel ID and places image opening in
+a bounded FIFO. At most two opens run concurrently, leaving pool capacity for
+established channels. For `cid` or `cclose`, the loop routes the parsed request
+to the channel without transferring the socket. Each channel serializes its
+worker items and has one active and one waiting request slot.
 
-The channel thread processes one request at a time. Buffered requests on its
-current persistent connection take precedence. When it needs more bytes, it
-waits on both the TCP connection and the connection queue. A queued replacement
-therefore interrupts an incomplete request, closes the old descriptor, and
-wakes the thread on the new one.
+## Termination
 
-## Termination and restart
+When a channel terminates, the loop cancels queued work where possible, waits
+for active work and writes to return, then releases the channel state. A waiting
+request receives `503` immediately. An incomplete response closes its connection
+without inventing an HTTP terminator or JPIP end-of-response marker.
 
-When a channel terminates, its thread closes the active descriptor and any
-queued descriptor, reports each physical connection as complete, closes its
-connection queue, and reports that the channel has ended. The serving loop keeps
-socket table entries only while identifying new connections. Completion
-notifications update its total connection count without retaining records for
-active channel sockets.
-
-If the serving process restarts, accepted sockets and all channel state are
-lost. The supervisor retains the listening socket, so new connections can wait
-in the listen backlog during the one-second restart delay. Clients must create
-new channels after the restart. If the serving process was killed, the
-replacement records that fact in its log; other unexpected exits are recorded
-separately.
-
-The serving process ignores `SIGINT` and `SIGTERM` and polls one end of a private
-Unix socket pair. The supervisor handles those signals and closes the other
-endpoint. This wakes the serving loop, which records the shutdown, drains the
-log, and exits the process without waiting for channel threads. Each replacement
-serving process receives a fresh socket pair.
+Libuv handles `SIGINT` and `SIGTERM`. The server stops admission, ends its
+channels, closes its connections, drains the log, and exits. A host process
+manager or container runtime may restart it, but accepted sockets and channel
+state are not preserved. Clients must create new channels after a restart.
 
 ## Deliberate limits
 
-- `connections.limit` independently limits physical connections and active
-  channels in the serving process.
-- A channel has one active request/response and at most one queued replacement
-  connection.
-- A connection cannot carry simultaneous work for multiple channels, although
-  the general JPIP model permits it.
-- Channel state is never reconstructed or shared between channel threads.
+- `connections.limit` and `channels.limit` independently limit
+  physical connections and JPIP channels.
+- A channel has one active request/response and at most one waiting request.
+- One connection can serve different channels, but has only one response in
+  flight and one retained request.
+- Channel JPEG 2000 state is never reconstructed or shared between channels.
 
 These limits keep ownership clear and work bounded while preserving the current
 JHelioviewer wire behavior. They still allow an HTTP library or browser to
@@ -275,10 +247,9 @@ The source responsibilities are:
 
 | Source | Responsibility |
 | --- | --- |
-| `main.cc` | Configuration and listening-socket setup |
-| `server/supervisor.cc` | Serving-process lifetime and restart |
-| `server/server.cc` | Connection admission, channel routing, and log output |
-| `server/initial_request.cc` | Bounded inspection for `cnew`, `cid`, or `cclose` traffic |
-| `server/connection_queue.cc` | Capacity-one queue shared with one channel thread |
-| `http/connection.cc` | Socket setup, bounded HTTP request-head I/O, and chunk framing |
-| `server/channel.cc` | JPIP request handling and all state retained for one channel |
+| `main.cc` | Configuration and server startup |
+| `server/server.cc` | Listener, signals, event loop, admission, routing, channel lifetime, and response writes |
+| `server/connection.cc` | Loop-owned libuv connection, deadlines, parsing, and ordered writes |
+| `http/request_head.cc` | Bounded llhttp request-head parser |
+| `server/channel_work.cc` | Serialized transfer between the loop and worker pool |
+| `server/channel_engine.cc` | Socket-free JPIP and JPEG 2000 processing for one channel |

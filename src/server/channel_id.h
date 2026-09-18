@@ -3,7 +3,6 @@
 
 #include <string>
 
-bool GenerateChannelId(std::string *id);
-bool IsChannelId(const std::string &id);
+int GenerateChannelId(std::string *id);
 
 #endif /* _SERVER_CHANNEL_ID_H_ */

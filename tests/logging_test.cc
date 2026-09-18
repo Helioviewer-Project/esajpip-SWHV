@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 #include "trace.h"
 
@@ -25,6 +26,22 @@ static string ReadFile(const string &name) {
     return string((istreambuf_iterator<char>(input)), istreambuf_iterator<char>());
 }
 
+static string FindLog(const string &directory, const string &prefix) {
+    DIR *files = opendir(directory.c_str());
+    Check(files != NULL, "Could not list logging test files");
+    string result;
+    for (dirent *entry = readdir(files); entry != NULL; entry = readdir(files)) {
+        string name = entry->d_name;
+        if (name.compare(0, prefix.size(), prefix) == 0 &&
+            name.size() >= 4 && name.compare(name.size() - 4, 4, ".log") == 0) {
+            result = directory + "/" + name;
+            break;
+        }
+    }
+    closedir(files);
+    return result;
+}
+
 int main() {
     char directory[] = "/tmp/esajpip-log-XXXXXX";
     Check(mkdtemp(directory) != NULL, "Could not create logging test directory");
@@ -33,31 +50,20 @@ int main() {
 
     LOG("first message");
     LOG("second message");
-    trace::Drain();
+    trace::Flush();
 
     thread worker([] {
         LOG("worker message");
     });
     worker.join();
-    Check(trace::DrainOne(), "Could not write worker log message");
+    trace::Flush();
 
     LOG(string(2000, 'x'));
-    Check(trace::DrainOne(), "Could not rotate log");
+    trace::Flush();
     LOG("message after rollover");
-    Check(trace::DrainOne(), "Could not write after log rollover");
+    trace::Flush();
 
-    DIR *files = opendir(directory);
-    Check(files != NULL, "Could not list logging test files");
-    string active;
-    for (dirent *entry = readdir(files); entry != NULL; entry = readdir(files)) {
-        string name = entry->d_name;
-        if (name.compare(0, 7, "server.") == 0 &&
-            name.compare(name.size() - 4, 4, ".log") == 0) {
-            active = string(directory) + "/" + name;
-            break;
-        }
-    }
-    closedir(files);
+    string active = FindLog(directory, "server.");
     Check(!active.empty(), "Active log was not created");
     string backup = active + ".1";
 
@@ -76,37 +82,62 @@ int main() {
     Check(new_messages.find("message after rollover") != string::npos,
           "Message missing after rollover");
 
-    for (int i = 0; i < 10000; ++i)
-        LOG(string(1800, 'x'));
-    while (trace::DrainOne()) {
+    vector<thread> producers;
+    for (int producer = 0; producer < 8; ++producer) {
+        producers.emplace_back([producer] {
+            for (int i = 0; i < 2000; ++i)
+                LOG("concurrent message " << producer << ':' << i);
+        });
     }
+    for (thread &producer : producers)
+        producer.join();
+    trace::Flush();
     LOG("message after queue saturation");
-    Check(trace::DrainOne(), "Dropped-message summary was not queued");
-    Check(trace::DrainOne(), "Message was not queued after saturation");
+    trace::Flush();
     new_messages = ReadFile(active);
-    Check(new_messages.find("log messages dropped") != string::npos,
+    old_messages = ReadFile(backup);
+    Check(new_messages.find("log messages dropped") != string::npos ||
+                  old_messages.find("log messages dropped") != string::npos,
           "Dropped log messages were not reported");
-    Check(new_messages.find("message after queue saturation") != string::npos,
+    Check(new_messages.find("message after queue saturation") != string::npos ||
+                  old_messages.find("message after queue saturation") != string::npos,
           "Logging did not recover after queue saturation");
 
     unlink(backup.c_str());
     Check(mkdir(backup.c_str(), 0700) == 0, "Could not obstruct log rollover");
     LOG(string(1100, 'x'));
-    Check(!trace::DrainOne(), "Failed log rollover did not disable logging");
+    trace::Flush();
+    int active_fd = open(active.c_str(), O_RDONLY);
+    Check(active_fd >= 0, "Could not open the disabled log");
+    off_t disabled_size = lseek(active_fd, 0, SEEK_END);
+    close(active_fd);
+    Check(disabled_size >= 0, "Could not measure the disabled log");
 
-    int reused_fd = open("/dev/null", O_WRONLY);
-    Check(reused_fd >= 0, "Could not reuse a descriptor after failed rollover");
     LOG("message after failed rollover");
-    Check(trace::DrainOne(), "Could not discard a log after rollover failure");
-    LOG("first discarded message");
-    LOG("second discarded message");
+    trace::Flush();
+    active_fd = open(active.c_str(), O_RDONLY);
+    Check(active_fd >= 0, "Could not reopen the disabled log");
+    Check(lseek(active_fd, 0, SEEK_END) == disabled_size,
+          "Logging continued after rollover failure");
+    close(active_fd);
+
     trace::Drain();
-    Check(!trace::DrainOne(), "Drain left a message after logging was disabled");
-    close(reused_fd);
     Check(rmdir(backup.c_str()) == 0, "Could not remove rollover obstruction");
+
+    string shutdown_base = string(directory) + "/shutdown";
+    Check(trace::Initialize(shutdown_base),
+          "Could not reinitialize logging for shutdown");
+    LOG("message queued before shutdown");
+    trace::Drain();
+    string shutdown_log = FindLog(directory, "shutdown.");
+    Check(!shutdown_log.empty() &&
+                  ReadFile(shutdown_log).find("message queued before shutdown") !=
+                      string::npos,
+          "Logger shutdown did not drain queued records");
 
     unlink(backup.c_str());
     unlink(active.c_str());
+    unlink(shutdown_log.c_str());
     rmdir(directory);
     return EXIT_SUCCESS;
 }

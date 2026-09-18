@@ -34,18 +34,18 @@ not formal Annex J conformance.
 
 | Area | Support | Behavior and reason |
 | --- | --- | --- |
-| HTTP | Reduced | HTTP/1.1 `GET` requests in origin-form or absolute-form are accepted. For an absolute URI, the authority is discarded and its path selects the local target. Successful image responses use chunked transfer encoding; a successful `cclose` has an empty fixed-length body. Initial inspection rejects other methods and HTTP versions so unrelated Internet traffic consumes as few resources as possible. |
+| HTTP | Reduced | HTTP/1.1 `GET` requests in origin-form or absolute-form are accepted. For an absolute URI, the authority is discarded and its path selects the local target. Successful image responses use chunked transfer encoding; a successful `cclose` has an empty fixed-length body. Bounded llhttp parsing rejects other methods and HTTP versions. |
 | Return type | JPP-stream only | Successful image responses use `image/jpp-stream`. JPT-stream, complete-file return types, and return-type negotiation are not implemented because JHelioviewer consumes precinct-based JPP-streams. |
 | Transport | HTTP only | A `cnew` offer is accepted only when its transport list includes `http`, which is then selected in `JPIP-cnew`. A valid offer containing only unsupported transports receives `501` without a `JPIP-cnew` header because stateless service is not implemented. Auxiliary TCP, UDP, and upload transports are not implemented. |
 | Sessions and channels | Stateful, reduced | `cnew`, `cid`, and `cclose` are supported. One channel owns one target and processes one request and response at a time. This matches JHelioviewer's access pattern and keeps cache and JPEG 2000 ownership explicit. |
-| HTTP connection reuse | Supported | A channel normally remains on a persistent connection, but a later request for its `cid` may arrive on a new connection. `Connection: close` closes the connection after its response without ending the channel. At most one replacement connection may wait. The channel, not the HTTP connection, owns the JPIP session state. |
+| HTTP connection reuse | Supported | A later request for a `cid` may arrive on the same or a different connection, and one pooled connection may carry requests for different channels. `Connection: close` closes the connection after its response without ending the channel. Each channel has one active and one waiting request. The channel, not the HTTP connection, owns the JPIP session state. |
 | HTTP request bodies | Not supported | Requests with a nonzero or invalid `Content-Length`, or with any `Transfer-Encoding`, receive `400 Bad Request`. The connection and channel are then closed so body bytes cannot be interpreted as another request. |
-| Stateless requests | Not supported | Initial inspection requires `cnew`, `cid`, or a usable `cclose`. All cache and image state belongs to one channel thread. |
+| Stateless requests | Not supported | Requests require `cnew`, `cid`, or a usable `cclose`. All cache and image state belongs to one channel. |
 | Concurrent requests | Not supported | Responses are not preempted by a newer request and requests are not served concurrently within a channel. `qid`, `wait`, and window-change cancellation are not implemented. Serial service avoids shared JPEG 2000 state and is compatible with JHelioviewer. |
 | Compression | Reduced | If a request contains `metareq` and `Accept-Encoding` contains `gzip`, the JPP response is gzip encoded. Other content codings and general HTTP content negotiation are not implemented. |
-| Errors | Reduced | Requests that reach a channel receive `400` for malformed supported fields, `404` for a missing target, `431` for a request head over 4 KiB, `501` for an unsupported channel transport, `503` for an invalid or conflicting channel state, or `500` for other failures. The dispatcher also returns `503` when the channel is unknown, has ended, or already has a replacement connection waiting. Each HTTP error response has a short plain-text body identifying the failure. Errors terminate the connection and, after channel creation, the channel. Traffic rejected during initial inspection is closed without an HTTP response. The complete JPIP correction-header model is not implemented. |
+| Errors | Reduced | Identified requests receive `400` for malformed supported fields, `404` for a missing target, `431` for a request head over 4 KiB, `501` for an unsupported channel transport, `503` for an invalid or conflicting channel state, or `500` for other failures. The event loop also returns `503` when the channel is unknown, has ended, or already has a request waiting. Each HTTP error response has a short plain-text body identifying the failure. Errors terminate the connection and any referenced channel; routing rejections leave an existing channel unchanged. Traffic rejected before JPIP identification is closed without an HTTP response. The complete JPIP correction-header model is not implemented. |
 
-Initial inspection examines at most a 2 KiB request line. The JPIP parser uses
+The HTTP parser accepts at most a 2 KiB request line. The JPIP parser uses
 at most the first 1,023 characters of the URI. Request paths and `target` values
 are not subject to general URI decoding, so clients should use the literal file
 names known to the server. Percent escapes are decoded only within the supported
@@ -65,7 +65,7 @@ recovery rules are documented in
 | Field | Support | Current interpretation |
 | --- | --- | --- |
 | `target` | Supported on `cnew` | Selects the file. If absent, the request URI path selects it. A channel cannot change target after creation. Parent-directory path segments are rejected. |
-| `cnew` | Reduced | Accepts a comma-separated transport list and creates one independent channel when `http` is offered. Channel association through a simultaneous `cid` is not implemented. |
+| `cnew` | Reduced | Accepts a comma-separated transport list and creates one independent channel when `http` is offered. Channel association through a simultaneous `cid` is not implemented. A request combining `cnew` with `cclose` is rejected. |
 | `cid` | Supported | Routes a request to an existing channel, including when it arrives on a replacement HTTP connection. Channel IDs contain 128 random bits encoded as 32 lowercase hexadecimal characters. They are opaque bearer capabilities and must not be guessed or derived from connection numbers. |
 | `cclose` | Reduced | Closes one channel named by its exact channel ID. `cclose=*`, lists, and multi-channel session closure are not implemented. |
 | `fsiz`, `roff`, `rsiz` | Reduced | Select a resolution and rectangular window of interest. `fsiz` must have positive dimensions and is required when either other window field is present. `roff` defaults to `(0,0)` and `rsiz` defaults to the area from that offset to the lower-right corner. `round-up`, `round-down`, and `closest` are recognized on `fsiz`; omitted rounding defaults to `round-down`, and `closest` compares image area. The requested window is mapped to the selected resolution by flooring its upper-left corner and ceiling its lower-right corner. As a compatibility extension, signed offsets are accepted and cropped to the image; request-region sizes must be non-negative. An empty intersection returns only `EOR WINDOW_DONE`. At every resolution up to the selected one, the served precincts are those whose partition cells intersect the cropped window, with cell indices computed as the floor of the window corners divided by the precinct size at that resolution, so a window edge on a partition boundary includes the cell it starts. Server-adjusted window response fields are not generated. |
@@ -101,7 +101,7 @@ Data-bin offsets and completion flags let the client assemble data across
 responses. The channel remembers how much of each metadata, header, and precinct
 bin it has sent. An additive `model` request can extend that record. This state
 belongs to one channel. It is not shared with another client and cannot be
-recovered after the channel or serving process is lost.
+recovered after the channel or server process is lost.
 
 On channel creation, the response includes `JPIP-cnew` with the assigned `cid`,
 `path=jpip` and `transport=http`. It also includes `JPIP-tid: 0`. Later
@@ -220,11 +220,11 @@ frame. JHelioviewer first requests metadata and then asks for rectangular
 precinct windows. Serving that layout directly avoids decoding or rewriting the
 source data and keeps each client's memory inside its own channel.
 
-Each channel thread exclusively owns its file index, linked-JPX graph, cache
-model, traversal state, and response buffer. Only connection routing is shared.
-Broader standard support should preserve this ownership rule. New syntax or
-file-model behavior belongs inside a channel and must not introduce shared
-JPEG 2000 state between channel threads.
+Each channel exclusively owns its file index, linked-JPX graph, cache model,
+and traversal state. One worker operates on that state at a time; sockets and
+routing stay on the libuv loop. Broader standard support should preserve this
+ownership rule. New syntax or file-model behavior belongs inside a channel and
+must not introduce shared JPEG 2000 state between channels.
 
 Add unsupported features when a real client or source file needs them and their
 data-bin behavior can be checked against T.808. Ignoring an unknown field for

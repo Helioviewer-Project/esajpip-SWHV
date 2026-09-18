@@ -38,15 +38,25 @@ endfunction()
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)
 pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36)
+pkg_check_modules(LLHTTP REQUIRED IMPORTED_TARGET libllhttp)
+pkg_check_modules(LIBUV REQUIRED IMPORTED_TARGET libuv>=1.50)
 
+set(ESAJPIP_IMAGE_DIRECTORY "images" CACHE STRING
+    "Image directory written to server.ini")
+set(ESAJPIP_LOG_DIRECTORY "" CACHE STRING
+    "Log directory written to server.ini; empty uses standard output")
+if(ESAJPIP_LOG_DIRECTORY)
+    set(ESAJPIP_FILE_LOGGING true)
+else()
+    set(ESAJPIP_FILE_LOGGING false)
+endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/config.cc
     ${ESAJPIP_TOP}/data/file_segment.cc
-    ${ESAJPIP_TOP}/http/connection.cc
-    ${ESAJPIP_TOP}/http/header.cc
+    ${ESAJPIP_TOP}/http/request_head.cc
     ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
     ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
     ${ESAJPIP_TOP}/jpeg2000/image_index.cc
@@ -54,12 +64,11 @@ set(ESAJPIP_SRCS
     ${ESAJPIP_TOP}/jpip/databin_writer.cc
     ${ESAJPIP_TOP}/jpip/query.cc
     ${ESAJPIP_TOP}/jpip/request.cc
-    ${ESAJPIP_TOP}/server/channel.cc
+    ${ESAJPIP_TOP}/server/channel_engine.cc
     ${ESAJPIP_TOP}/server/channel_id.cc
-    ${ESAJPIP_TOP}/server/connection_queue.cc
-    ${ESAJPIP_TOP}/server/initial_request.cc
+    ${ESAJPIP_TOP}/server/channel_work.cc
+    ${ESAJPIP_TOP}/server/connection.cc
     ${ESAJPIP_TOP}/server/server.cc
-    ${ESAJPIP_TOP}/server/supervisor.cc
     ${ESAJPIP_TOP}/trace.cc)
 
 add_library(esajpip_core STATIC ${ESAJPIP_SRCS})
@@ -69,6 +78,8 @@ target_include_directories(esajpip_core BEFORE PUBLIC
     ${ESAJPIP_TOP})
 target_link_libraries(esajpip_core PUBLIC
     PkgConfig::PKG
+    PkgConfig::LLHTTP
+    PkgConfig::LIBUV
     ZLIB::ZLIB
     Threads::Threads)
 
@@ -92,7 +103,9 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION bin)
 if(BUILD_TESTING)
     add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
     esajpip_configure_target(logging_test)
-    target_compile_definitions(logging_test PRIVATE ESAJPIP_LOG_LIMIT=1024)
+    target_compile_definitions(logging_test PRIVATE
+        ESAJPIP_LOG_LIMIT=1024
+        ESAJPIP_LOG_QUEUE_LIMIT=4096)
     target_include_directories(logging_test PRIVATE ${ESAJPIP_TOP})
     target_link_libraries(logging_test PRIVATE Threads::Threads)
     add_test(NAME logging COMMAND logging_test)
@@ -102,16 +115,15 @@ if(BUILD_TESTING)
     target_link_libraries(protocol_test PRIVATE esajpip_core)
     add_test(NAME protocol COMMAND protocol_test)
 
-    add_executable(http_connection_test tests/http_connection_test.cc)
-    esajpip_configure_target(http_connection_test)
-    target_link_libraries(http_connection_test PRIVATE esajpip_core)
-    add_test(NAME http_connection COMMAND http_connection_test)
-
     add_executable(server_test tests/server_test.cc)
     esajpip_configure_target(server_test)
     target_link_libraries(server_test PRIVATE esajpip_core)
     add_test(NAME server COMMAND server_test)
-    set_tests_properties(server PROPERTIES TIMEOUT 20)
+
+    add_executable(server_connection_test tests/server_connection_test.cc)
+    esajpip_configure_target(server_connection_test)
+    target_link_libraries(server_connection_test PRIVATE esajpip_core)
+    add_test(NAME server_connection COMMAND server_connection_test)
 
     add_executable(jpeg2000_test tests/jpeg2000_test.cc)
     esajpip_configure_target(jpeg2000_test)

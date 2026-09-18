@@ -10,22 +10,27 @@
 - Stream gzip output one configured chunk at a time instead of buffering the
   complete compressed response. This removes libgsf and its dependencies.
 - Keep channels alive when a later request arrives on a replacement HTTP
-  connection, even when the previous connection stopped partway through a
-  request. This lets browser-managed clients retain their JPIP cache and JPEG
-  2000 state without controlling the underlying socket.
-- Identify JPIP traffic before starting a channel thread or allocating JPEG
-  2000 state. Silent and unrelated connections now expire at the short initial
-  timeout with only their sockets retained.
+  connection. A persistent connection may also carry requests for different
+  channels, allowing ordinary browser and reverse-proxy connection pooling
+  without tying a JPIP channel to one socket.
+- Replace the thread-per-channel transport with one libuv event loop and a
+  bounded worker pool. The loop owns sockets, parsing, routing, deadlines, and
+  writes; each channel's JPEG 2000 state remains private and is processed by at
+  most one worker at a time. Multiple response buffers let generation continue
+  while earlier chunks are being written.
+- Identify JPIP traffic before allocating JPEG 2000 state. Silent and unrelated
+  connections expire at the short initial timeout with only their sockets
+  retained. Physical connections and JPIP channels now have independent limits.
 - Replace the old libconfig file with `server.ini`, parsed by GLib. Existing
   configuration files must be rewritten for 2.0.
-- Replace log4cpp with bounded, nonblocking logging. Serving threads no longer
-  wait for log-file I/O. Logs still include timestamps and optional request
-  lines, roll at 1 GiB, and retain one backup.
-- Simplify operation around a supervisor and one serving process. The
-  supervisor keeps the listening socket open and restarts the server after an
-  unexpected exit, with a short delay to prevent a persistent failure from
-  causing a tight restart loop. The unused `status` command and its shared-memory
-  registry are gone, and log names now include the listening address and port.
+- Replace log4cpp with bounded, asynchronous logging. The event loop and worker
+  pool do not perform log-file I/O. Logs still include timestamps and optional
+  request lines, roll at 1 GiB, and retain one backup.
+- Run as one foreground process whose libuv loop owns the listener, signals,
+  connections, and channels. Process restart is left to the host process
+  manager or container runtime. The unused `status` command and its
+  shared-memory registry are gone, and log names include the listening address
+  and port.
 - Add verified PCRL and CPRL packet traversal and allow one multi-codestream
   request to cover frames with different dimensions, decomposition levels,
   quality layers, or precinct layouts.
@@ -71,9 +76,8 @@
   resolved filesystem paths through `JPIP-tid`. Trusted links stored inside JPX
   files may still refer to sources outside the image directory.
 - Improve failure handling and diagnosis. Logs identify a linked JP2 file that
-  prevents its JPX from loading, parser and thread failures release their files
-  and connections, orderly shutdown drains queued logs, and unexpected serving
-  process exits are recorded when the replacement starts.
+  prevents its JPX from loading, parser and worker failures release their files
+  and connections, and orderly shutdown drains queued logs.
 
 ## 1.9.0-rc1 - 2026-09-14
 

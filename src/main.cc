@@ -1,13 +1,11 @@
-#include <sys/socket.h>
-
 #include <cerrno>
-#include <fcntl.h>
+#include <cstdlib>
 #include <string>
 
-#include "trace.h"
 #include "config.h"
 #include "net/address.h"
-#include "server/supervisor.h"
+#include "server/server.h"
+#include "trace.h"
 
 using namespace std;
 
@@ -25,8 +23,20 @@ int main(int argc, char **argv) {
     if (!cfg.Load(CONFIG_FILE, config_error))
         return CERR("Configuration error in '" << CONFIG_FILE << "': " << config_error);
 
-    cout << endl << SERVER_NAME << " " << SERVER_VERSION << endl;
-    cout << endl << '-' << cfg << endl;
+    const char *pool_text = getenv("UV_THREADPOOL_SIZE");
+    if (pool_text == NULL) {
+        if (setenv("UV_THREADPOOL_SIZE", "16", 0) != 0)
+            return CERR("The worker-pool size can not be configured");
+    } else {
+        char *end;
+        errno = 0;
+        long pool_size = strtol(pool_text, &end, 10);
+        if (errno != 0 || *pool_text == '\0' || *end != '\0' ||
+            pool_size < 4 || pool_size > 1024)
+            return CERR("UV_THREADPOOL_SIZE must be an integer from 4 to 1024");
+    }
+
+    cout << '\n' << SERVER_NAME << ' ' << SERVER_VERSION << "\n\n" << cfg;
 
     net::InetAddress listen_addr = cfg.address().empty()
                                        ? net::InetAddress(cfg.port())
@@ -34,24 +44,10 @@ int main(int argc, char **argv) {
     if (!listen_addr.IsValid())
         return CERR("The listen address '" << cfg.address() << "' can not be resolved");
 
-    int listen_socket = socket(PF_INET, SOCK_STREAM, 0);
-    if (listen_socket < 0)
-        return CERR("The server listen socket can not be created: " << strerror(errno));
-    int reuse_address = 1;
-    if (setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, &reuse_address,
-                   sizeof reuse_address) != 0 ||
-        ::bind(listen_socket, listen_addr.GetSockAddr(), listen_addr.GetSize()) != 0 ||
-        listen(listen_socket, SOMAXCONN) != 0)
-        return CERR("The server listen socket can not be initialized: " << strerror(errno));
-    int flags = fcntl(listen_socket, F_GETFL);
-    if (flags < 0 || fcntl(listen_socket, F_SETFL, flags | O_NONBLOCK) != 0)
-        return CERR("The server listen socket can not be made nonblocking: "
-                    << strerror(errno));
-
     string log_name = cfg.file_logging()
             ? cfg.log_directory() + SERVER_LOG_NAME + "." +
                     listen_addr.GetPath() + "." + to_string(listen_addr.GetPort())
             : "";
     string description = string(SERVER_NAME) + " " + SERVER_VERSION;
-    return RunSupervisor(cfg, listen_socket, log_name, description);
+    return RunServer(cfg, listen_addr, log_name, description);
 }

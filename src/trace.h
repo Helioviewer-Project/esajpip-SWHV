@@ -8,8 +8,7 @@
 namespace trace {
 
 bool Initialize(const std::string &file_name);
-int ReadDescriptor();
-bool DrainOne();
+void Flush();
 void Drain();
 void Write(const std::string &message);
 

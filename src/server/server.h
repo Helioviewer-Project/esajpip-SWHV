@@ -4,11 +4,9 @@
 #include <string>
 
 class Config;
+namespace net { class InetAddress; }
 
-const int SERVER_STARTUP_FAILURE = 2;
-
-int RunServer(const Config &cfg, int listen_socket, int supervisor_fd,
-              const std::string &log_name, const std::string &description,
-              const std::string &restart_message);
+int RunServer(const Config &cfg, const net::InetAddress &listen_address,
+              const std::string &log_name, const std::string &description);
 
 #endif /* _SERVER_SERVER_H_ */

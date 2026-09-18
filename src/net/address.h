@@ -22,14 +22,6 @@ namespace net {
 
     public:
         /**
-         * Initializes the address to zero.
-         */
-        InetAddress() {
-            memset(&sock_addr, 0, sizeof sock_addr);
-            sock_addr.sin_family = AF_INET;
-        }
-
-        /**
          * Initializes the address with given port. The used path
          * is <code>INADDR_ANY</code>.
          * @param port Port number.
@@ -75,20 +67,12 @@ namespace net {
             }
         }
 
-        sockaddr *GetSockAddr() {
-            return reinterpret_cast<sockaddr *>(&sock_addr);
-        }
-
         const sockaddr *GetSockAddr() const {
             return reinterpret_cast<const sockaddr *>(&sock_addr);
         }
 
         bool IsValid() const {
             return sock_addr.sin_family == AF_INET;
-        }
-
-        socklen_t GetSize() const {
-            return sizeof sock_addr;
         }
 
         /**

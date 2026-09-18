@@ -3,12 +3,18 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <unistd.h>
+
+#include <uv.h>
+#include <zlib.h>
 
 #include "jpeg2000/file_manager.h"
 #include "jpip/databin_server.h"
 #include "jpip/request.h"
+#include "server/channel_engine.h"
+#include "server/channel_work.h"
 
 using namespace std;
 
@@ -20,6 +26,149 @@ static void Check(bool condition, const char *message) {
         exit(EXIT_FAILURE);
     }
 }
+
+static vector<char> GenerateEngineResponse(const string &directory,
+                                           bool gzip,
+                                           int output_size) {
+    ChannelEngine engine(128);
+    Check(engine.Init(directory), "Could not initialize the channel engine");
+
+    jpeg2000::FileManager::OpenResult open_result;
+    thread open([&] { open_result = engine.Open("image.jp2"); });
+    open.join();
+    Check(open_result == jpeg2000::FileManager::OpenResult::OPENED,
+          "Could not open an image on a migrated engine thread");
+
+    jpip::Request request;
+    Check(request.ParseTarget(
+                  "/jpip?stream=0&metareq=[*]!!&fsiz=1,1&rsiz=1,1&"
+                  "roff=0,0&cid=0"),
+          "Could not parse the migrated engine request");
+    bool begun = false;
+    string error;
+    thread begin([&] { begun = engine.Begin(request, gzip, &error); });
+    begin.join();
+    Check(begun, "Could not begin a response on a migrated engine thread");
+
+    vector<char> response;
+    vector<char> output(output_size);
+    ChannelEngine::GenerateResult result;
+    do {
+        int length = 0;
+        thread generate([&] {
+            result = engine.Generate(output.data(), output.size(), &length);
+        });
+        generate.join();
+        Check(result != ChannelEngine::GenerateResult::FAILED,
+              "Could not generate data on a migrated engine thread");
+        response.insert(response.end(), output.begin(), output.begin() + length);
+    } while (result != ChannelEngine::GenerateResult::COMPLETE);
+
+    thread finish([&] { engine.Finish(); });
+    finish.join();
+    return response;
+}
+
+static vector<char> Gunzip(const vector<char> &compressed) {
+    z_stream stream = {};
+    Check(inflateInit2(&stream, MAX_WBITS + 16) == Z_OK,
+          "Could not initialize migrated gzip validation");
+    stream.next_in = reinterpret_cast<Bytef *>(
+            const_cast<char *>(compressed.data()));
+    stream.avail_in = compressed.size();
+
+    vector<char> result;
+    char output[128];
+    int status;
+    do {
+        stream.next_out = reinterpret_cast<Bytef *>(output);
+        stream.avail_out = sizeof output;
+        status = inflate(&stream, Z_NO_FLUSH);
+        Check(status == Z_OK || status == Z_STREAM_END,
+              "Could not decompress the migrated gzip response");
+        result.insert(result.end(), output,
+                      output + sizeof output - stream.avail_out);
+    } while (status != Z_STREAM_END);
+    inflateEnd(&stream);
+    return result;
+}
+
+struct PooledResponse {
+    uv_loop_t loop;
+    server::ChannelWork *work = NULL;
+    jpip::Request request;
+    vector<char> output;
+    vector<char> response;
+    bool failed = false;
+
+    static void Completed(server::ChannelWork &work, void *owner) {
+        PooledResponse *self = static_cast<PooledResponse *>(owner);
+        const server::ChannelWork::Result &result = work.GetResult();
+        if (!result.error.empty()) {
+            if (!result.error.empty())
+                cerr << result.error << endl;
+            self->failed = true;
+            return;
+        }
+
+        switch (result.kind) {
+        case server::ChannelWork::Kind::OPEN:
+            if (result.open !=
+                    jpeg2000::FileManager::OpenResult::OPENED ||
+                !work.Begin(std::move(self->request), false,
+                            self->output.data(), self->output.size()))
+                self->failed = true;
+            break;
+        case server::ChannelWork::Kind::BEGIN:
+        case server::ChannelWork::Kind::GENERATE:
+            self->response.insert(self->response.end(), self->output.begin(),
+                                  self->output.begin() + result.length);
+            if (result.generation ==
+                ChannelEngine::GenerateResult::MORE) {
+                if (!work.Generate(self->output.data(), self->output.size()))
+                    self->failed = true;
+            } else if (result.generation ==
+                       ChannelEngine::GenerateResult::COMPLETE) {
+                if (!work.Cleanup())
+                    self->failed = true;
+            } else {
+                self->failed = true;
+            }
+            break;
+        case server::ChannelWork::Kind::CLEANUP:
+            break;
+        case server::ChannelWork::Kind::NONE:
+            self->failed = true;
+            break;
+        }
+    }
+
+    explicit PooledResponse(int output_size) : output(output_size) {
+    }
+
+    vector<char> Generate(const string &directory) {
+        Check(uv_loop_init(&loop) == 0,
+              "Could not initialize the channel-work test loop");
+        Check(request.ParseTarget(
+                      "/jpip?stream=0&metareq=[*]!!&fsiz=1,1&rsiz=1,1&"
+                      "roff=0,0&cid=0"),
+              "Could not parse the pooled channel request");
+        server::ChannelWork channel_work(&loop, 128, directory, Completed,
+                                         this);
+        work = &channel_work;
+        Check(work->IsInitialized() && work->Open("image.jp2"),
+              "Could not queue pooled image opening");
+        Check(!work->Open("image.jp2"),
+              "Queued concurrent work for one channel");
+        uv_run(&loop, UV_RUN_DEFAULT);
+        Check(!failed && !work->IsActive(),
+              "The pooled channel response failed");
+        work = NULL;
+        Check(uv_loop_close(&loop) == 0,
+              "The channel-work test loop retained handles");
+        return response;
+    }
+};
 
 static void CheckProgressionMappings() {
     for (int progression = 0; progression <= 4; ++progression) {
@@ -661,6 +810,17 @@ int main() {
     WriteFile(outside_file, jp2);
     WriteFile(directory + "outside-linked.jpx",
               MakeLinkedJPX(outside_file, codestream.size()));
+
+    vector<char> plain_engine_response =
+            GenerateEngineResponse(directory, false, 128);
+    vector<char> gzip_engine_response =
+            GenerateEngineResponse(directory, true, 8);
+    Check(!plain_engine_response.empty() &&
+                  Gunzip(gzip_engine_response) == plain_engine_response,
+          "Migrating the channel engine changed the generated response");
+    PooledResponse pooled_response(128);
+    Check(pooled_response.Generate(directory) == plain_engine_response,
+          "Pool scheduling changed the generated response");
 
     jpeg2000::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
