@@ -141,9 +141,10 @@ JPX specifications allow.
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
   marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
   the codestream. Each tile-part's `PLT` lengths must exactly cover its packet
-  data. As a compatibility exception for deployed OpenJPEG-transcoded files,
-  zero `Iplt` entries after the logical packet list are ignored; a nonzero
-  trailing entry is rejected.
+  data, and no packet data may follow the packet set derived from `COD`. As a
+  compatibility exception for deployed JPEG 2000 files, zero `Iplt`
+  entries after the logical packet list are ignored; a nonzero trailing entry
+  is rejected.
 - Packet counts, packet locations, and file-backed data-bin offsets must fit
   the signed 32-bit JPIP state. Source files of 2 GiB or more are outside the
   supported profile.

@@ -82,20 +82,36 @@ namespace jpeg2000 {
             if (!packet_data_done)
                 return false;
 
-            // The deployed OpenJPEG transcoder pads PLT with zero entries
+            // Some deployed JPEG 2000 files contain zero PLT entries
             // after the logical packet list. T.800 defines one Iplt value per
-            // packet, so accept only zero padding and never expose it as
-            // additional packets.
-            while (!plt_done) {
-                uint64_t padding = 0;
-                if (!GetPLTLength(file, codestream, &padding) || padding != 0)
+            // packet, so accept only those zero entries and never expose them
+            // as additional packets.
+            for (;;) {
+                while (!plt_done) {
+                    uint64_t padding = 0;
+                    if (!GetPLTLength(file, codestream, &padding) || padding != 0)
+                        return false;
+                    plt_done = codestream.plt_cursor.index ==
+                               codestream.tile_parts[
+                                       codestream.data_cursor.index].plt.size();
+                }
+
+                codestream.data_cursor.index++;
+                if (codestream.data_cursor.index == codestream.tile_parts.size())
+                    break;
+                TilePart &next =
+                        codestream.tile_parts[codestream.data_cursor.index];
+                if (next.data.length != 0)
                     return false;
-                plt_done = codestream.plt_cursor.index == tile_part.plt.size();
+                codestream.data_cursor.offset = next.data.offset;
+                codestream.plt_cursor.index = 0;
+                codestream.plt_cursor.offset = next.plt[0].offset;
+                plt_done = false;
             }
         }
 
         codestream.packet_index.Add(FileSegment(offset, length_packet));
-        if (packet_data_done && plt_done) {
+        if (!final_packet && packet_data_done && plt_done) {
             codestream.data_cursor.index++;
             if (codestream.data_cursor.index < codestream.tile_parts.size()) {
                 TilePart &next =

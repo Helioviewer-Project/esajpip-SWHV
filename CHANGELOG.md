@@ -49,9 +49,9 @@
   factors instead of treating a colon as a range separator.
 - Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet counts
   and locations, codestream bounds, and linked-JPX references before serving
-  data. Trailing zero `PLT` entries produced by the deployed OpenJPEG
-  transcoder are tolerated without treating them as packets; nonzero trailing
-  entries remain invalid. Tile-part coding overrides, JPX-to-JPX links,
+  data. Trailing zero `PLT` entries found in deployed JPEG 2000 files are
+  tolerated without treating them as packets; nonzero trailing entries remain
+  invalid. Tile-part coding overrides, JPX-to-JPX links,
   unsupported geometry, files of 2 GiB or more, and codestreams with more than
   64 packet segments are rejected during parsing instead of failing later or
   producing an inconsistent stream.

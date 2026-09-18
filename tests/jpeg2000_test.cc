@@ -539,6 +539,8 @@ int main() {
     WriteFile(directory + "short-plt.jp2",
               MakeJP2(ShortenFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 4, 2, 2))));
+    WriteFile(directory + "extra-tile-part-packet.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 2)));
     WriteFile(directory + "multiple-plt.jp2",
               MakeJP2(SplitFirstPLT(
                   MakeCodestream(0, 1, 1, 1, 0, 2, 1, 2))));
@@ -726,6 +728,18 @@ int main() {
               short_plt_file, 0,
               jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
           "Accepted PLT lengths shorter than their tile-part data");
+
+    jpeg2000::FileManager extra_packet_manager;
+    Check(OpenImage(directory, "extra-tile-part-packet.jp2",
+                    &extra_packet_manager),
+          "Rejected a lazy-indexed extra-packet fixture during parsing");
+    data::File *extra_packet_file = extra_packet_manager.GetFile(
+            directory + "extra-tile-part-packet.jp2");
+    Check(extra_packet_file != NULL &&
+              !extra_packet_manager.GetImage()->GetPacket(
+                      extra_packet_file, 0,
+                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Accepted packet data beyond the COD-derived packet set");
 
     jpeg2000::FileManager multiple_plt_manager;
     Check(OpenImage(directory, "multiple-plt.jp2", &multiple_plt_manager),
@@ -1278,6 +1292,7 @@ int main() {
     remove((directory + "main-coc.jp2").c_str());
     remove((directory + "main-poc.jp2").c_str());
     remove((directory + "short-plt.jp2").c_str());
+    remove((directory + "extra-tile-part-packet.jp2").c_str());
     remove((directory + "multiple-plt.jp2").c_str());
     remove((directory + "repeated-plt-index.jp2").c_str());
     remove((directory + "zero-padded-plt.jp2").c_str());
