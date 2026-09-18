@@ -99,7 +99,9 @@ namespace jpeg2000 {
         };
 
         Size size;                ///< Image size
-        Point origin;             ///< Image origin on the reference grid
+        // Keep rejecting nonzero origins until all precinct and progression
+        // geometry is made origin-aware, not only resolution sizing.
+        Point origin;
         int num_levels;            ///< Number of resolution levels
         int num_layers;            ///< Number of quality layers
         int progression;        ///< Progression order

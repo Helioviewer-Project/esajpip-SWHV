@@ -236,6 +236,8 @@ private:
                             "The request identifies a different JPIP channel");
             } else {
                 err_msg = "The request has no JPIP channel parameter";
+                error_code = 400;
+                error_reason = "Bad Request";
             }
 
             if (err_msg) {
