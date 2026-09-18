@@ -187,6 +187,13 @@ private:
                 return FAIL_CHANNEL;
             }
 
+            if (request.unsupported_body) {
+                const char message[] = "HTTP request bodies are not supported";
+                LOG(message);
+                SendError(connection, 400, "Bad Request", message);
+                return FAIL_CHANNEL;
+            }
+
             string request_error;
             if (!req.Parse(request.line, &request_error)) {
                 LOG("Bad request: " << http::EscapeForLog(request.line));

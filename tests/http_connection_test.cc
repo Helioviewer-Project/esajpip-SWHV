@@ -55,6 +55,7 @@ static void CheckRequestHead() {
             "Host: localhost\r\n"
             "Accept-Encoding: gzip\r\n"
             "Connection: keep-alive, CLOSE\r\n"
+            "Content-Length: 0\r\n"
             "\r\n";
     Check(write(sockets[0], request, sizeof request - 1) == sizeof request - 1,
           "Could not write an HTTP request head");
@@ -66,6 +67,31 @@ static void CheckRequestHead() {
           "HTTP request line was changed");
     Check(head.accepts_gzip, "HTTP gzip support was not detected");
     Check(head.close, "HTTP connection closure was not detected");
+    Check(!head.unsupported_body, "A zero-length request body was rejected");
+
+    close(sockets[0]);
+    close(sockets[1]);
+}
+
+static void CheckRequestBodyDetection() {
+    int sockets[2];
+    CreateSocketPair(sockets, "Could not create request-body test sockets");
+    ConnectionQueue queue;
+    http::Connection connection(sockets[1], queue.GetDescriptor(), 5);
+
+    const char request[] =
+            "GET /jpip?cid=7 HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Transfer-Encoding: chunked\r\n"
+            "\r\n"
+            "0\r\n\r\n";
+    Check(write(sockets[0], request, sizeof request - 1) == sizeof request - 1,
+          "Could not write a body-bearing HTTP request");
+
+    http::RequestHead head;
+    Check(connection.ReadRequestHead(&head) == http::Connection::REQUEST_READY,
+          "Could not read a body-bearing HTTP request head");
+    Check(head.unsupported_body, "HTTP request body was not detected");
 
     close(sockets[0]);
     close(sockets[1]);
@@ -146,6 +172,7 @@ static void CheckResponseFraming() {
 
 int main() {
     CheckRequestHead();
+    CheckRequestBodyDetection();
     CheckRequestLimit();
     CheckInterrupt();
     CheckResponseFraming();

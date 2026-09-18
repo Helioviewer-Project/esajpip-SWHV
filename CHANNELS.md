@@ -123,7 +123,7 @@ These are all HTTP status codes emitted by the server:
 | Status | When it is returned | Effect on the channel |
 | --- | --- | --- |
 | `200 OK` | A channel is created, a channel request is served, or `cclose` succeeds. Image responses use `Transfer-Encoding: chunked` and `Content-Type: image/jpp-stream`; `cclose` has `Content-Length: 0`. | The channel remains available after an image response. A successful `cclose` ends it. |
-| `400 Bad Request` | A request reaches a channel but its HTTP request line, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and channel are closed. Create a new channel after correcting the request. |
+| `400 Bad Request` | A request reaches a channel but its HTTP request line, body framing, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and channel are closed. Create a new channel after correcting the request. |
 | `404 Not Found` | A `cnew` request names a target that does not exist below the configured image directory. | No usable channel is created; the connection is closed. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and channel are closed. Create a new channel with a smaller request. |
 | `501 Not Implemented` | A valid `cnew` request offers no supported transport. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
@@ -144,6 +144,10 @@ Some failures close the socket without an HTTP response:
 - A request head is incomplete or contains a malformed HTTP header.
 - The socket fails while a request or response is in progress.
 - The serving process exits or restarts.
+
+Requests must not contain a body. A nonzero `Content-Length`, an invalid
+`Content-Length`, or any `Transfer-Encoding` receives `400 Bad Request`, and
+the connection is closed after the response.
 
 A response that ends before its HTTP chunk terminator or JPIP end-of-response
 message is incomplete. The client must discard that response. Since all channel

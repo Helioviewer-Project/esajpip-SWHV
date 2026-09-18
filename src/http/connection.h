@@ -12,6 +12,7 @@ struct RequestHead {
     std::string line;
     bool accepts_gzip;
     bool close;
+    bool unsupported_body;
 };
 
 class Connection {

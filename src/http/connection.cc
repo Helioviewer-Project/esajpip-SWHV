@@ -81,6 +81,16 @@ bool HasToken(const string &value, const char *token) {
     return false;
 }
 
+bool IsZeroContentLength(const string &value) {
+    if (value.empty())
+        return false;
+    for (char digit : value) {
+        if (digit != '0')
+            return false;
+    }
+    return true;
+}
+
 }
 
 namespace http {
@@ -179,6 +189,7 @@ Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
     request->line.clear();
     request->accepts_gzip = false;
     request->close = false;
+    request->unsupported_body = false;
     size_t remaining = MAX_REQUEST_HEAD;
     LineResult result = ReadLine(request->line, remaining);
     if (result == LINE_INTERRUPTED)
@@ -229,6 +240,10 @@ Connection::ReadResult Connection::ReadRequestHead(RequestHead *request) {
             request->accepts_gzip = true;
         if (header.Is("Connection") && HasToken(header.value, "close"))
             request->close = true;
+        if ((header.Is("Content-Length") &&
+             !IsZeroContentLength(header.value)) ||
+            header.Is("Transfer-Encoding"))
+            request->unsupported_body = true;
     }
 }
 

@@ -350,6 +350,19 @@ int main() {
           "Bad JPIP request did not explain the invalid field");
     close(bad_request);
 
+    int request_body = Connect(port);
+    Check(request_body >= 0, "Could not connect for request-body test");
+    SendRequest(request_body, "/image.jp2?cnew=http", "Content-Length: 1\r\n");
+    WriteAll(request_body, "x", 1);
+    Response request_body_response = ReadResponse(request_body);
+    Check(request_body_response.headers.find("400 Bad Request") != string::npos &&
+                  request_body_response.body ==
+                      "HTTP request bodies are not supported",
+          "Body-bearing request did not return 400");
+    CheckClosed(request_body, 1000,
+                "Body-bearing request retained its connection");
+    close(request_body);
+
     int bad_image = Connect(port);
     Check(bad_image >= 0, "Could not connect for the bad-image test");
     SendRequest(bad_image, "/image.jpeg?cnew=http&handled");
