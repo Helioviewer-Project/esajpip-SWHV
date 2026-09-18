@@ -281,6 +281,20 @@ static void CheckJHVRequests() {
     Check(channel_request.has.len && channel_request.length_response == 512,
           "Wrong channel response limit");
 
+    jpip::Request mismatched_target_request;
+    Check(mismatched_target_request.Parse(
+              "GET /jpip?cid=7&model=M0:100&tid=1 HTTP/1.1") &&
+              mismatched_target_request.has.tid &&
+              !mismatched_target_request.has.model &&
+              mismatched_target_request.model.empty(),
+          "Retained a cache model for a different target ID");
+
+    jpip::Request matching_target_request;
+    Check(matching_target_request.Parse(
+              "GET /jpip?cid=7&model=M0:100&tid=0 HTTP/1.1") &&
+              matching_target_request.has.model,
+          "Discarded a cache model for the current target ID");
+
     jpip::Request handled_request;
     Check(handled_request.Parse("GET /jpip?cid=7&handled HTTP/1.1") &&
               handled_request.has.handled,

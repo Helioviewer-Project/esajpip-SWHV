@@ -399,6 +399,8 @@ namespace jpip {
 
         bool valid = true;
         Query query = ParseQuery(uri.data() + question + 1, uri.data() + uri.size());
+        const string *tid = FindParameter(query, "tid");
+        bool accept_model = tid == NULL || *tid == "0";
         for (const QueryParameter &parameter : query) {
             const string &name = parameter.name;
             const string &value = parameter.value;
@@ -482,10 +484,10 @@ namespace jpip {
                     valid = false;
                     SetError(error_message, "Invalid JPIP stream parameter");
                 }
-            } else if (name == "model") {
-                if (ParseModel(value, &model))
+            } else if (name == "model" && accept_model) {
+                if (ParseModel(value, &model)) {
                     has.model = true;
-                else {
+                } else {
                     valid = false;
                     SetError(error_message,
                              "Invalid or unsupported JPIP model parameter");
