@@ -512,6 +512,14 @@ static void CheckJHVRequests() {
               encoded_model_request.model[3].amount == 9,
           "Wrong encoded cache model");
 
+    jpip::Request open_model_request;
+    Check(open_model_request.Parse(
+              "GET /jpip?model=%5B5-%5DHm&cid=7 HTTP/1.1") &&
+              open_model_request.model.size() == 1 &&
+              open_model_request.model[0].first_codestream == 5 &&
+              open_model_request.model[0].last_codestream == INT_MAX,
+          "Could not parse an open cache-model codestream range");
+
     jpip::Request encoded_target_request;
     Check(encoded_target_request.Parse(
               "GET /jpip?target=movie%20name.jpx&cnew=http HTTP/1.1") &&

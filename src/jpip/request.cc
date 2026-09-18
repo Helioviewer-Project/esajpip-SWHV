@@ -186,10 +186,14 @@ namespace jpip {
                     maximum_codestream = minimum_codestream;
                     if (*position == '-') {
                         ++position;
-                        if (!ParseInteger(&position, &maximum_codestream))
-                            return false;
-                        maximum_codestream = Clamp(maximum_codestream,
-                                                   minimum_codestream, MAXC);
+                        if (*position == ']')
+                            maximum_codestream = INT_MAX;
+                        else {
+                            if (!ParseInteger(&position, &maximum_codestream))
+                                return false;
+                            maximum_codestream = Clamp(maximum_codestream,
+                                                       minimum_codestream, MAXC);
+                        }
                     }
                     if (*position++ != ']')
                         return false;

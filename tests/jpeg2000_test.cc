@@ -1052,6 +1052,15 @@ int main() {
               multi_stream_length > 3 && multi_stream_last,
           "Applied an unqualified context cache model outside codestream 0");
 
+    jpip::Request open_model_request;
+    Check(open_model_request.Parse(
+              "GET /jpip?model=[1-]Hm&cid=0 HTTP/1.1"),
+          "Could not parse an open cache-model codestream range");
+    jpip::DataBinServer open_model_server;
+    Check(open_model_server.SetRequest(*embedded_two_manager.GetImage(),
+                                       open_model_request),
+          "Could not apply an open cache-model codestream range");
+
     jpip::DataBinServer default_stream_server;
     Check(default_stream_server.SetRequest(*embedded_two_manager.GetImage(),
                                            second_stream_request),

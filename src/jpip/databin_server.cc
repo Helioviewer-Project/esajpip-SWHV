@@ -1,6 +1,7 @@
 #include "databin_server.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstdint>
 
 using namespace std;
@@ -64,6 +65,9 @@ namespace jpip {
                     return false;
                 if (!update.has_codestream_qualifier)
                     last_codestream = first_codestream;
+                else if (last_codestream == INT_MAX)
+                    last_codestream =
+                            static_cast<int>(image_index.GetNumCodestreams()) - 1;
                 if (first_codestream < 0 || last_codestream < first_codestream ||
                     last_codestream >= static_cast<int>(image_index.GetNumCodestreams()))
                     return false;
