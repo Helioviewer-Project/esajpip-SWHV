@@ -793,6 +793,8 @@ int main() {
                   MakeJP2(MakeCodestream(progression, 1, 4, 4, 0, 2, 1, 8, 0,
                                          vector<unsigned char>{0x00, 0x11})));
     }
+    WriteFile(directory + "many-layers.jp2",
+              MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 10000, 40, 250)));
     for (int progression = 0; progression <= 4; ++progression) {
         WriteFile(directory + "subsampled-" + to_string(progression) + ".jp2",
                   MakeJP2(MakeCodestream(progression, 2)));
@@ -1045,6 +1047,7 @@ int main() {
         Check(packet.length == 1, "Wrong spatially progressive packet length");
     }
 
+    vector<char> progression_response;
     for (int progression = 0; progression <= 4; ++progression) {
         string name = "progression-" + to_string(progression) + ".jp2";
         jpeg2000::FileManager progression_manager;
@@ -1083,6 +1086,30 @@ int main() {
         Check(progression_file->GetOffset() == plt_offset &&
                       packet.offset == first_segment.offset + earlier_index,
               "Rebuilt or returned the wrong earlier packet");
+
+        jpip::Request progression_request;
+        Check(progression_request.ParseTarget(
+                      "/jpip?fsiz=4,1&rsiz=4,1&roff=0,0&"
+                      "model=Hm,H0&cid=0"),
+              "Could not parse a progression-order response request");
+        jpip::DataBinServer progression_server;
+        Check(progression_server.SetRequest(*image, progression_request),
+              "Rejected a progression-order response request");
+        char progression_buffer[4096];
+        int progression_length = sizeof progression_buffer;
+        bool progression_last = false;
+        Check(progression_server.GenerateChunk(
+                      progression_manager, progression_buffer,
+                      &progression_length, &progression_last) &&
+                      progression_last,
+              "Could not complete a progression-order response");
+        vector<char> generated(progression_buffer,
+                               progression_buffer + progression_length);
+        if (progression == 0)
+            progression_response = generated;
+        else
+            Check(generated == progression_response,
+                  "Source progression order changed JPIP response bytes");
     }
     for (int progression = 0; progression <= 4; ++progression) {
         jpeg2000::FileManager subsampled_manager;
@@ -1395,6 +1422,30 @@ int main() {
               response[response_length - 1] == 0,
           "Unlimited response has no window-done EOR");
 
+    jpeg2000::FileManager many_layers_manager;
+    Check(OpenImage(directory, "many-layers.jp2", &many_layers_manager),
+          "Could not parse the many-layer response fixture");
+    jpip::Request many_layers_request;
+    Check(many_layers_request.ParseTarget(
+                  "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
+          "Could not parse the many-layer response request");
+    jpip::DataBinServer many_layers_server;
+    Check(many_layers_server.SetRequest(*many_layers_manager.GetImage(),
+                                        many_layers_request),
+          "Rejected the many-layer response request");
+    vector<char> many_layers_response(32768);
+    response_length = many_layers_response.size();
+    Check(many_layers_server.GenerateChunk(
+                  many_layers_manager, many_layers_response.data(),
+                  &response_length, &last),
+          "Could not generate the many-layer response");
+    Check(last && response_length > 10000 &&
+              many_layers_response[response_length - 3] == 0 &&
+              many_layers_response[response_length - 2] ==
+                      jpip::EOR::WINDOW_DONE &&
+              many_layers_response[response_length - 1] == 0,
+          "Did not complete the many-layer response");
+
     jpip::Request default_window_request;
     Check(default_window_request.ParseTarget("/jpip?fsiz=1,1&cid=0"),
           "Could not parse a window with default region and offset");
@@ -1560,8 +1611,12 @@ int main() {
     rmdir((directory + "nested").c_str());
     remove((directory + "pcrl.jp2").c_str());
     remove((directory + "cprl.jp2").c_str());
-    for (int progression = 0; progression <= 4; ++progression)
+    for (int progression = 0; progression <= 4; ++progression) {
+        remove((directory + "progression-" + to_string(progression) +
+                ".jp2").c_str());
         remove((directory + "subsampled-" + to_string(progression) + ".jp2").c_str());
+    }
+    remove((directory + "many-layers.jp2").c_str());
     remove((directory + "multi-tile.jp2").c_str());
     remove((directory + "bad-tile-index.jp2").c_str());
     remove((directory + "64-tile-parts.jp2").c_str());

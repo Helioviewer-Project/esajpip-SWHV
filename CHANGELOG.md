@@ -41,6 +41,8 @@
 
 ### Fixed
 
+- Compute precinct data-bin offsets incrementally so response generation stays
+  linear in packet count for sources with many quality layers.
 - Keep parsed request values local to one HTTP request. A later request can no
   longer inherit a window size, offset, response limit, or rounding direction
   omitted by that request.

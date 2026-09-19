@@ -137,11 +137,6 @@ namespace jpeg2000 {
 
         bool FillPrecinctCounts();
 
-        bool IsLayerLastProgression() const {
-            return progression == RPCL_PROGRESSION || progression == PCRL_PROGRESSION ||
-                   progression == CPRL_PROGRESSION;
-        }
-
         int GetNumPrecinctDataBins() const {
             return total_precincts * num_components;
         }

@@ -130,6 +130,8 @@ namespace jpip {
                 if (!CropWindow(&new_woi, req.resolution_size)) {
                     stream.empty = true;
                     stream.woi = WOI();
+                    stream.bin_offsets.clear();
+                    stream.bin_idx = 0;
                     continue;
                 }
 
@@ -146,10 +148,14 @@ namespace jpip {
                 if (!CropWindow(&new_woi, resolution_size)) {
                     stream.empty = true;
                     stream.woi = WOI();
+                    stream.bin_offsets.clear();
+                    stream.bin_idx = 0;
                 } else if (stream.empty || new_woi != stream.woi) {
                     stream.empty = false;
                     stream.woi = new_woi;
                     stream.composer.Reset(coding_parameters, stream.woi);
+                    stream.bin_offsets.clear();
+                    stream.bin_idx = 0;
                 }
             }
         }
@@ -256,13 +262,27 @@ namespace jpip {
             const CodingParameters *coding_parameters =
                     image_index->GetCodingParameters(stream.id);
             FileSegment segment;
-            int bin_offset;
             if (!image_index->GetPacket(stream.file, stream.id, packet,
-                                        &segment, &bin_offset))
+                                        &segment))
                 return SegmentResult::FAILED;
             int bin_id = coding_parameters->GetPrecinctDataBinId(packet);
             bool last_packet =
                     packet.layer >= coding_parameters->num_layers - 1;
+
+            int bin_offset;
+            if (packet.layer == 0) {
+                if (stream.bin_idx != stream.bin_offsets.size()) {
+                    ERROR("Invalid precinct-bin traversal state");
+                    return SegmentResult::FAILED;
+                }
+                bin_offset = 0;
+            } else {
+                if (stream.bin_idx >= stream.bin_offsets.size()) {
+                    ERROR("Invalid precinct-bin traversal state");
+                    return SegmentResult::FAILED;
+                }
+                bin_offset = stream.bin_offsets[stream.bin_idx];
+            }
 
             if (segment.offset > stream.file->GetSize() ||
                 segment.length > stream.file->GetSize() - segment.offset) {
@@ -283,7 +303,23 @@ namespace jpip {
             if (result == SegmentResult::FULL)
                 return result;
 
+            if (segment.length > static_cast<uint64_t>(INT_MAX - bin_offset)) {
+                ERROR("Precinct data-bin exceeds the supported offset range");
+                return SegmentResult::FAILED;
+            }
+            int next_offset = bin_offset + static_cast<int>(segment.length);
+            if (packet.layer == 0)
+                stream.bin_offsets.push_back(next_offset);
+            else
+                stream.bin_offsets[stream.bin_idx] = next_offset;
+
+            int layer = packet.layer;
             stream.composer.GetNextPacket(coding_parameters);
+            if (stream.composer.HasPacket() &&
+                stream.composer.GetCurrentPacket().layer == layer)
+                stream.bin_idx++;
+            else
+                stream.bin_idx = 0;
             current_idx = (current_idx + 1) % streams.size();
         }
     }

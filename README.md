@@ -129,9 +129,12 @@ four buffers are occupied. Gzip responses also use one temporary buffer of the
 same size, retained after its first use. At the shipped settings, this is
 256,000 bytes per plain channel and 320,000 bytes per channel that has used
 gzip. At the maximum chunk size, the corresponding bounds are 1 MiB and 1.25
-MiB. Source-file mappings remain response-scoped: completing a response closes
-and unmaps every codestream it touched, bounding file descriptors and virtual
-memory at the cost of reopening those files on the next response. Set
+MiB. Window traversal also retains one 4-byte cumulative offset for every
+selected precinct bin until the window changes or the channel closes.
+Source-file mappings remain response-scoped: completing a response unmaps every
+codestream it touched, bounding virtual address space and VMA count at the cost
+of reopening those files on the next response. File descriptors are closed
+immediately after mapping. Set
 `channels.limit` according to the largest movies and the memory available on
 the deployment host. Set `connections.limit` according to expected browser or
 proxy connection use.

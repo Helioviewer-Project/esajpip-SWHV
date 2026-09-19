@@ -169,9 +169,9 @@ expectations, not that it conforms completely to JP2 or JPX.
   deployed JPEG 2000 files, zero `Iplt`
   entries after the logical packet list are ignored; a nonzero trailing entry
   is rejected.
-- Packet counts, packet locations, and file-backed data-bin offsets must fit
-  the signed 32-bit JPIP state. Source files of 2 GiB or more are outside the
-  supported profile.
+- Packet counts, packet locations, and each data-bin's cumulative byte length
+  must fit the signed 32-bit JPIP state. Source files larger than `INT_MAX`
+  bytes are outside the supported profile.
 
 Files without `PLT` packet-length information are rejected. esajpip does not
 decode packets to rediscover their boundaries and does not replace the separate

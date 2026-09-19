@@ -127,11 +127,9 @@ namespace jpeg2000 {
          * Returns the file segment of a packet.
          * @param num_codestream Codestream number.
          * @param packet Packet information.
-         * @param offset If it is not <code>NULL</code> receives the
-         * offset of the packet.
          */
-        bool GetPacket(data::File *file, int num_codestream, const Packet &packet,
-                       data::FileSegment *segment, int *offset = NULL);
+        bool GetPacket(data::File *file, int num_codestream,
+                       const Packet &packet, data::FileSegment *segment);
 
         ~ImageIndex() {
             TRACE("Destroying the image index of '" << path_name << "'");

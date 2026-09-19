@@ -28,10 +28,16 @@ namespace jpip {
             data::File *file;
             WOIComposer composer;
             WOI woi;
+            // WOIComposer visits the selected precinct bins in the same order
+            // in every layer. Keep each bin's cumulative packet length so the
+            // next layer's data-bin offset is available in constant time.
+            std::vector<int> bin_offsets;
+            size_t bin_idx;
             int id;
             bool empty;
 
-            explicit Stream(int _id) : file(NULL), id(_id), empty(true) {
+            explicit Stream(int _id)
+                    : file(NULL), bin_idx(0), id(_id), empty(true) {
             }
         };
 
@@ -58,6 +64,19 @@ namespace jpip {
             COMPLETE
         };
 
+        template<DataBinClass BIN_CLASS>
+        bool GetCachedRemainder(int num_codestream, int id, int offset,
+                                int *remainder) {
+            int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
+            if (cached < offset) {
+                ERROR("Invalid cache-model offset: cached=" << cached
+                      << ", segment=" << offset);
+                return false;
+            }
+            *remainder = cached == INT_MAX ? INT_MAX : cached - offset;
+            return true;
+        }
+
         /**
          * Writes a new data-bin segment or a part of it that is not already cached.
          * @param num_codestream Index number of the codestream.
@@ -71,16 +90,13 @@ namespace jpip {
         SegmentResult WriteSegment(data::File *file, int num_codestream, int id,
                                    const data::FileSegment &segment, int offset = 0,
                                    bool last = true) {
-            int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
-            if (cached == INT_MAX)
-                return SegmentResult::COMPLETE;
-            if (cached < offset) {
-                ERROR("Invalid cache-model offset: cached=" << cached
-                      << ", segment=" << offset);
+            int seg_cached;
+            if (!GetCachedRemainder<BIN_CLASS>(num_codestream, id, offset,
+                                               &seg_cached))
                 return SegmentResult::FAILED;
-            }
+            if (seg_cached == INT_MAX)
+                return SegmentResult::COMPLETE;
 
-            int seg_cached = cached - offset;
             if (static_cast<uint64_t>(seg_cached) <= segment.length) {
 
                 int free = data_writer.GetFree() - CHUNK_RESERVE;
@@ -97,7 +113,8 @@ namespace jpip {
                 }
 
                 DataBinWriter::Result result = data_writer.Write(
-                        BIN_CLASS, num_codestream, id, cached, *file, part, last);
+                        BIN_CLASS, num_codestream, id, offset + seg_cached,
+                        *file, part, last);
                 if (result == DataBinWriter::Result::FULL)
                     return SegmentResult::FULL;
                 if (result == DataBinWriter::Result::FAILED)
@@ -122,16 +139,13 @@ namespace jpip {
         SegmentResult WritePlaceHolder(data::File *file, int num_codestream, int id,
                                        const jpeg2000::PlaceHolder &place_holder,
                                        int offset = 0, bool last = false) {
-            int cached = cache_model.GetDataBin(DataBinClass::META_DATA, num_codestream, id);
-            if (cached == INT_MAX)
-                return SegmentResult::COMPLETE;
-            if (cached < offset) {
-                ERROR("Invalid cache-model offset: cached=" << cached
-                      << ", placeholder=" << offset);
+            int seg_cached;
+            if (!GetCachedRemainder<DataBinClass::META_DATA>(
+                        num_codestream, id, offset, &seg_cached))
                 return SegmentResult::FAILED;
-            }
+            if (seg_cached == INT_MAX)
+                return SegmentResult::COMPLETE;
 
-            int seg_cached = cached - offset;
             if (seg_cached < place_holder.length()) {
                 int remaining = place_holder.length() - seg_cached;
                 if (data_writer.GetFree() - CHUNK_RESERVE < remaining)
