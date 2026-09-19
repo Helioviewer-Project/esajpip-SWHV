@@ -67,24 +67,22 @@ perform those operations. A passing corpus means that the server agrees with
 the modelled structural rules and its declared source profile; it does not mean
 that an arbitrary JPEG 2000 decoder is conformant.
 
-The first four gates are complete. Continue in this order:
+The model, corpus integration, and coverage map are complete. Continue in this
+order:
 
 1. Keep the deferred-ACN compiler regressions passing and the compiler revision
    pinned in `spec/VERSION`. Build the generated code as strict C11 and run the
    harness in Linux Docker with AddressSanitizer and UndefinedBehaviorSanitizer
    whenever the model changes. Do not hand-edit generated output or corpus
    labels.
-2. Add `spec/COVERAGE.md`, mapping each relevant T.800/T.801 clause to its model
-   rule, accepted vectors, rejected vectors, server code, and any profile
-   decision.
-3. Expand the highest-value production paths first: packet indexing across
+2. Expand the highest-value production paths first: packet indexing across
    progression orders, layers, precincts, PLT segments and tile-parts, followed
    by complete linked-JPX graphs and their companion JP2 files.
-4. Then model additional valid-but-unsupported forms such as `Psot = 0`,
+3. Then model additional valid-but-unsupported forms such as `Psot = 0`,
    `LBox = 0`, XLBox, deeper association trees, Multiple Codestream boxes, and
    more general JPX layouts. The result may be an explicit profile rejection;
    modeling a form does not oblige the server to support it.
-5. Keep extensions to T.808 requests, JPIP channel state, JPP-stream framing,
+4. Keep extensions to T.808 requests, JPIP channel state, JPP-stream framing,
    hvJP2K output, and decoder interoperability as separate test layers. Reuse
    this corpus where useful, but do not make the source-file model responsible
    for HTTP, session, or image-decoding behaviour.
@@ -211,6 +209,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `asn1scc-patches/` | Ordered, described compiler patches and their focused regressions. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository, applies the patch stack to a temporary clean tree, builds the Docker image, and strict-compiles its focused regressions. |
 | `check-model.sh` | Generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
+| `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. |
 | `harness/mapping.{h,c}` | Three tiny functions ACN needs because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8). |
