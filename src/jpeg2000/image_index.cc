@@ -150,14 +150,25 @@ namespace jpeg2000 {
             *offset = 0;
 
             if (coding_parameters.IsLayerLastProgression()) {
-                for (int l = packet.layer; l > 0; --l)
-                    *offset += packet_index[--idx].length;
+                for (int l = packet.layer; l > 0; --l) {
+                    FileSegment previous;
+                    if (!packet_index.Get(--idx, &previous)) {
+                        ERROR("Invalid preceding packet index: " << idx);
+                        return false;
+                    }
+                    *offset += previous.length;
+                }
             } else {
                 Packet p_aux = packet;
                 for (int l = 0; l < packet.layer; ++l) {
                     p_aux.layer = l;
                     idx = coding_parameters.GetProgressionIndex(p_aux);
-                    *offset += packet_index[idx].length;
+                    FileSegment previous;
+                    if (!packet_index.Get(idx, &previous)) {
+                        ERROR("Invalid preceding packet index: " << idx);
+                        return false;
+                    }
+                    *offset += previous.length;
                 }
             }
         }

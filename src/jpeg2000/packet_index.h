@@ -107,12 +107,6 @@ namespace jpeg2000 {
             }
         }
 
-        data::FileSegment operator[](int i) const {
-            data::FileSegment segment;
-            Get(i, &segment);
-            return segment;
-        }
-
     };
 }
 

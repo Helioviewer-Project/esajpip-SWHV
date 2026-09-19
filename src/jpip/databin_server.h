@@ -72,13 +72,16 @@ namespace jpip {
                                    const data::FileSegment &segment, int offset = 0,
                                    bool last = true) {
             int cached = cache_model.GetDataBin(BIN_CLASS, num_codestream, id);
-            int seg_cached = cached - offset;
+            if (cached == INT_MAX)
+                return SegmentResult::COMPLETE;
+            if (cached < offset) {
+                ERROR("Invalid cache-model offset: cached=" << cached
+                      << ", segment=" << offset);
+                return SegmentResult::FAILED;
+            }
 
-            if (cached != INT_MAX &&
-                (seg_cached < 0 ||
-                 static_cast<uint64_t>(seg_cached) <= segment.length)) {
-                if (seg_cached < 0)
-                    seg_cached = 0;
+            int seg_cached = cached - offset;
+            if (static_cast<uint64_t>(seg_cached) <= segment.length) {
 
                 int free = data_writer.GetFree() - CHUNK_RESERVE;
 

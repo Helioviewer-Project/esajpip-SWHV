@@ -36,8 +36,6 @@ const size_t QUEUE_LIMIT = ESAJPIP_LOG_QUEUE_LIMIT;
 #endif
 
 const size_t MAX_MESSAGE = 1900;
-const int LOCK_ATTEMPTS = 64;
-
 struct Record {
     int64_t seconds;
     int32_t microseconds;
@@ -236,13 +234,7 @@ void Write(const string &message) {
     if (!Enabled())
         return;
 
-    unique_lock<mutex> lock(queue_mutex, defer_lock);
-    for (int attempt = 0; attempt < LOCK_ATTEMPTS && !lock.try_lock(); ++attempt)
-        this_thread::yield();
-    if (!lock.owns_lock()) {
-        dropped.fetch_add(1, memory_order_relaxed);
-        return;
-    }
+    unique_lock<mutex> lock(queue_mutex);
     if (!accepting.load(memory_order_relaxed) ||
         !output_enabled.load(memory_order_relaxed))
         return;
