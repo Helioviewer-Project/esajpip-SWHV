@@ -674,8 +674,6 @@ private:
         if (client) {
             client->channel = NULL;
         }
-        for (Buffer &buffer : channel.buffers)
-            vector<char>().swap(buffer.data);
         if (channel.state == Channel::ENDING) {
             if (!channel.timer_closed)
                 return;

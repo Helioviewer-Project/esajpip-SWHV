@@ -66,6 +66,33 @@ void CheckLongRequestTarget() {
     }
 }
 
+void CheckRouteClassification() {
+    server::RequestHeadParser parser;
+    size_t consumed;
+    const string routed =
+            "GET /image.jp2?cnew=http HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    Check(parser.Parse(routed.data(), routed.size(), &consumed) ==
+                  server::RequestHeadParser::COMPLETE &&
+                  parser.HasJPIPRoute(),
+          "Could not classify a complete JPIP request line");
+    parser.TakeRequest();
+
+    const string unrelated =
+            "GET /status HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    Check(parser.Parse(unrelated.data(), unrelated.size(), &consumed) ==
+                  server::RequestHeadParser::COMPLETE &&
+                  !parser.HasJPIPRoute(),
+          "JPIP route classification survived parser reset");
+
+    server::RequestHeadParser partial_parser;
+    const string oversized = "GET /image.jp2?cnew=http&padding=" +
+            string(2050, 'x');
+    Check(partial_parser.Parse(oversized.data(), oversized.size(), &consumed) ==
+                  server::RequestHeadParser::TOO_LARGE &&
+                  partial_parser.HasJPIPRoute(),
+          "An oversized partial JPIP request lost route identification");
+}
+
 struct Exchange {
     uv_loop_t loop;
     uv_tcp_t listener;
@@ -352,6 +379,7 @@ int main() {
     signal(SIGPIPE, SIG_IGN);
     CheckRequestSyntax();
     CheckLongRequestTarget();
+    CheckRouteClassification();
 
     Exchange exchange;
     exchange.Run();

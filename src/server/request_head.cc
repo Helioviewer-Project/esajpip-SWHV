@@ -69,6 +69,8 @@ void RequestHeadParser::Reset() {
     head_size = 0;
     line_size = 0;
     line_complete = false;
+    route_checked = false;
+    route_present = false;
     host_count = 0;
     content_length_count = 0;
     malformed = false;
@@ -172,6 +174,10 @@ RequestHeadParser::Result RequestHeadParser::Parse(const char *data,
         *consumed = 0;
     }
     CountBytes(data, *consumed);
+    if (line_complete && !route_checked) {
+        route_present = FindJPIPRoute();
+        route_checked = true;
+    }
 
     if ((!line_complete && line_size >= MAX_INITIAL_REQUEST_LINE) ||
         line_size > MAX_INITIAL_REQUEST_LINE || head_size > MAX_REQUEST_HEAD)
@@ -186,14 +192,18 @@ RequestHeadParser::Result RequestHeadParser::Parse(const char *data,
 bool RequestHeadParser::HasCompleteJPIPRequestLine() {
     return line_complete && llhttp_get_method(&parser) == HTTP_GET &&
            llhttp_get_http_major(&parser) == 1 &&
-           llhttp_get_http_minor(&parser) == 1 && HasJPIPRoute();
+           llhttp_get_http_minor(&parser) == 1 && route_present;
 }
 
-bool RequestHeadParser::HasJPIPRoute() const {
+bool RequestHeadParser::FindJPIPRoute() const {
     jpip::Query query = jpip::ParseTargetQuery(request.target);
     return jpip::FindParameter(query, "cnew") != NULL ||
            jpip::FindParameter(query, "cid") != NULL ||
            jpip::FindParameter(query, "cclose") != NULL;
+}
+
+bool RequestHeadParser::HasJPIPRoute() const {
+    return route_checked ? route_present : FindJPIPRoute();
 }
 
 const string &RequestHeadParser::GetTarget() const {

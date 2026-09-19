@@ -33,6 +33,8 @@ private:
     std::size_t head_size = 0;
     std::size_t line_size = 0;
     bool line_complete = false;
+    bool route_checked = false;
+    bool route_present = false;
     int host_count = 0;
     int content_length_count = 0;
     bool malformed = false;
@@ -48,6 +50,7 @@ private:
 
     void ProcessHeader();
     void CountBytes(const char *data, std::size_t length);
+    bool FindJPIPRoute() const;
     void Reset();
 
 public:

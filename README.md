@@ -121,12 +121,14 @@ closes silent or unrelated connections without allocating JPEG 2000 state.
 
 After channel creation, `connections.timeout` applies to request input,
 response progress, channel waits, and idle channels. Each channel owns its JPEG
-2000 index, cache model, and traversal state. Active responses use four
-`jpip.chunk_size` output buffers as a bounded pipeline: JPEG 2000 generation can
-continue while earlier chunks are waiting for non-blocking socket writes, and
-pauses when all four buffers are occupied. Set `channels.limit` according to
-the largest movies and the memory available on the deployment host. Set
-`connections.limit` according to expected browser or proxy connection use.
+2000 index, cache model, and traversal state. It lazily allocates up to four
+`jpip.chunk_size` output buffers and retains them until the channel closes.
+These buffers form a bounded pipeline: JPEG 2000 generation can continue while
+earlier chunks are waiting for non-blocking socket writes, and pauses when all
+four buffers are occupied. At the shipped settings, the absolute buffer ceiling
+is 256 KiB per channel. Set `channels.limit` according to the largest movies and
+the memory available on the deployment host. Set `connections.limit` according
+to expected browser or proxy connection use.
 
 JPEG 2000 work runs in libuv's worker pool. esajpip sets
 `UV_THREADPOOL_SIZE=16` when the variable is absent. An explicit value from 2
