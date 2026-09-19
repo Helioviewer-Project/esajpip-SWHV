@@ -44,8 +44,9 @@ the reproducible compiler source. The 394-vector corpus is committed under
 `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
 the server parser and lazy packet indexer.
 
-If you are here to **run the current server tests**, you need nothing from
-this directory. If you are here to **change what the server accepts**, read
+If you are here to **run the current server tests**, use `./tests/run.sh` and
+the [test guide](../tests/README.md). You need nothing from this directory.
+If you are here to **change what the server accepts**, read
 "Background", then "Quick start", then edit the model and regenerate. If a
 corpus test **just failed**, go to "When a vector fails".
 
@@ -327,11 +328,10 @@ Two conventions worth knowing before you edit:
 
 ## The test contract
 
-For every vector, `jpeg2000_test` writes it (and its companions) to the
-image directory under the names in its manifest row, calls
-`FileManager::OpenImage`, and — if that succeeds — indexes the first packet
-of codestream 0 with `GetPacket(file, 0, jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &segment)`
-(the call `jpeg2000_test.cc` already makes for its hand-built files).
+For every vector, `jpeg2000_test` reads the committed file and its companions
+from the corpus directory under the names in its manifest row, calls
+`FileManager::OpenImage`, and — if that succeeds — indexes every declared
+packet of every codestream with `GetPacket`.
 "Accept" means both succeed; "reject" means either fails. The second step
 matters because the server parses PLT entries lazily: a malformed or
 over-long packet length is only detected when a packet is indexed.
@@ -351,7 +351,7 @@ cross-field rules for that layer hold (`crossfield.c`). The compiler performs
 the evaluation, but the ASN.1/ACN model and the imperative cross-field rules
 are human-maintained sources that cite the corresponding standard clauses.
 
-The corpus tests *acceptance* (open plus first-packet indexing), not
+The corpus tests *acceptance* (open plus complete packet indexing), not
 serving. Packet data in generated files is arbitrary bytes; nothing here
 claims a file decodes to an image.
 

@@ -39,6 +39,10 @@ ctest --test-dir build --output-on-failure
 cmake --install build
 ```
 
+For a separate test build, run `./tests/run.sh`, or `./tests/run.sh sanitize`
+for ASan/UBSan. See the [test guide](tests/README.md) for coverage, focused runs,
+and failure diagnosis.
+
 The executable and `server.ini` are installed in `$HOME/esajpip/bin`. Use any
 other installation prefix that suits the host.
 

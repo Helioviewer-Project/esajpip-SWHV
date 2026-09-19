@@ -12,6 +12,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -36,13 +37,17 @@ const char HANDLED_HEADER[] =
         "JPIP-handled: tid,cid,cnew=http,stream,len,handled";
 
 pid_t server_pid = -1;
+string test_directory;
+string test_case;
 
 void Fail(const char *message) {
     if (server_pid > 0) {
         kill(-server_pid, SIGKILL);
         waitpid(server_pid, NULL, 0);
     }
+    if (!test_case.empty()) cerr << test_case << ": ";
     cerr << message << endl;
+    if (!test_directory.empty()) cerr << "Test files and logs: " << test_directory << endl;
     exit(EXIT_FAILURE);
 }
 
@@ -135,6 +140,17 @@ struct Response {
     string body;
 };
 
+size_t ResponseLength(const string &text, int base) {
+    const char *digits = base == 16 ? "0123456789abcdefABCDEF" : "0123456789";
+    Check(!text.empty() && text.find_first_not_of(digits) == string::npos,
+          "Invalid HTTP response length");
+    errno = 0;
+    unsigned long long length = strtoull(text.c_str(), NULL, base);
+    Check(errno == 0 && length <= numeric_limits<size_t>::max() - 2,
+          "Overflowing HTTP response length");
+    return static_cast<size_t>(length);
+}
+
 Response ReadResponse(int fd, string *input) {
     size_t end;
     while ((end = input->find("\r\n\r\n")) == string::npos)
@@ -147,7 +163,8 @@ Response ReadResponse(int fd, string *input) {
         size_t position = response.headers.find("Content-Length: ");
         Check(position != string::npos, "HTTP response has no body framing");
         position += strlen("Content-Length: ");
-        size_t length = strtoul(response.headers.c_str() + position, NULL, 10);
+        size_t end = response.headers.find("\r\n", position);
+        size_t length = ResponseLength(response.headers.substr(position, end - position), 10);
         while (input->size() < length)
             Check(ReceiveMore(fd, input), "Connection closed inside HTTP body");
         response.body.assign(*input, 0, length);
@@ -155,11 +172,14 @@ Response ReadResponse(int fd, string *input) {
         return response;
     }
 
+    Check(response.headers.find("Content-Length:") == string::npos,
+          "Chunked response also carries Content-Length");
+
     for (;;) {
         size_t line_end;
         while ((line_end = input->find("\r\n")) == string::npos)
             Check(ReceiveMore(fd, input), "Connection closed inside chunk header");
-        size_t length = strtoul(input->substr(0, line_end).c_str(), NULL, 16);
+        size_t length = ResponseLength(input->substr(0, line_end), 16);
         input->erase(0, line_end + 2);
         while (input->size() < length + 2)
             Check(ReceiveMore(fd, input), "Connection closed inside HTTP chunk");
@@ -190,11 +210,12 @@ string Gunzip(const string &compressed) {
     do {
         stream.next_out = reinterpret_cast<Bytef *>(output);
         stream.avail_out = sizeof output;
-        result = inflate(&stream, Z_FINISH);
+        result = inflate(&stream, Z_NO_FLUSH);
         plain.append(output, sizeof output - stream.avail_out);
     } while (result == Z_OK);
+    bool complete = result == Z_STREAM_END && stream.avail_in == 0;
     inflateEnd(&stream);
-    Check(result == Z_STREAM_END, "Server returned invalid gzip data");
+    Check(complete, "Server returned truncated gzip data or bytes after the gzip stream");
     return plain;
 }
 
@@ -302,6 +323,7 @@ int main() {
     char *directory_name = mkdtemp(directory_template);
     Check(directory_name != NULL, "Could not create the server test directory");
     string directory = directory_name;
+    test_directory = directory;
 
     static const unsigned char image[] = {
         0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87, 0x0A,
@@ -497,65 +519,6 @@ int main() {
     CheckClosed(fragmented, 1000,
                 "Fragmented-request channel retained its connection");
     close(fragmented);
-
-    const string metadata_target =
-            "/image.jp2?cnew=http&type=jpp-stream&stream=0&metareq=[*]!!&"
-            "fsiz=1,1&rsiz=1,1&roff=0,0&len=128";
-    int plain = Connect(port);
-    Check(plain >= 0, "Could not connect for plain JPIP response test");
-    SendRequest(plain, metadata_target);
-    Response plain_response = ReadResponse(plain);
-    Check(plain_response.headers.find("Content-Encoding: gzip") == string::npos &&
-                  !plain_response.body.empty(),
-          "Plain JPIP response was empty or encoded");
-    string plain_channel = ChannelId(plain_response.headers);
-
-    int compressed = Connect(port);
-    Check(compressed >= 0, "Could not connect for gzip JPIP response test");
-    SendRequest(compressed, metadata_target, "Accept-Encoding: gzip\r\n");
-    Response compressed_response = ReadResponse(compressed);
-    Check(compressed_response.headers.find("Content-Encoding: gzip") != string::npos,
-          "Gzip JPIP response was not encoded");
-    Check(Gunzip(compressed_response.body) == plain_response.body,
-          "Plain and gzip JPIP responses differ after decompression");
-    string compressed_channel = ChannelId(compressed_response.headers);
-
-    SendRequest(plain, "/jpip?cclose=" + plain_channel);
-    Check(ReadResponse(plain).headers.find("HTTP/1.1 200 OK") == 0,
-          "Plain-response channel could not be closed");
-    close(plain);
-    SendRequest(compressed, "/jpip?cclose=" + compressed_channel);
-    Check(ReadResponse(compressed).headers.find("HTTP/1.1 200 OK") == 0,
-          "Gzip-response channel could not be closed");
-    close(compressed);
-
-    int modeled = Connect(port);
-    Check(modeled >= 0, "Could not connect for cache-model test");
-    SendRequest(modeled, "/image.jp2?cnew=http&len=3");
-    Response model_created = ReadResponse(modeled);
-    Check(model_created.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  model_created.body.size() == 3,
-          "Could not create an initially empty cache model");
-    string modeled_channel = ChannelId(model_created.headers);
-    string modeled_target =
-            "/jpip?cid=" + modeled_channel +
-            "&stream=0&model=Hm:1&fsiz=1,1&rsiz=1,1&roff=0,0&len=512";
-    SendRequest(modeled, modeled_target);
-    Response partial_model = ReadResponse(modeled);
-    Check(partial_model.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  partial_model.body.size() > 3,
-          "Partial cache model did not produce the missing data");
-    SendRequest(modeled,
-                "/jpip?cid=" + modeled_channel +
-                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=512");
-    Response accumulated_model = ReadResponse(modeled);
-    Check(accumulated_model.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  accumulated_model.body.size() == 3,
-          "Cache-model state did not accumulate across responses");
-    SendRequest(modeled, "/jpip?cclose=" + modeled_channel);
-    Check(ReadResponse(modeled).headers.find("HTTP/1.1 200 OK") == 0,
-          "Cache-model channel could not be closed");
-    close(modeled);
 
     int duplicate = Connect(port);
     Check(duplicate >= 0, "Could not connect for duplicate channel creation");

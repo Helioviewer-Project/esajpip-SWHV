@@ -56,7 +56,7 @@ static vector<int> SelectCodestreams(const jpip::Request &request,
     return selected;
 }
 
-static void CheckAppConfig() {
+static void CheckConfig() {
     const char *contents =
         "# Settings may be ordered freely.\n"
         "[logging]\n"
@@ -95,28 +95,6 @@ static void CheckAppConfig() {
     Check(config.connection_timeout() == 60, "Wrong configured connection timeout");
     Check(config.file_logging() && !config.log_requests(), "Wrong configured logging flags");
 
-    const char *missing_setting =
-        "[listen]\n"
-        "address = 127.0.0.1\n"
-        "port = 8090\n"
-        "[jpip]\n"
-        "image_directory = /srv/jpip\n"
-        "chunk_size = 128\n"
-        "[connections]\n"
-        "limit = 10\n"
-        "initial_timeout = 3\n"
-        "[channels]\n"
-        "limit = 20\n"
-        "[logging]\n"
-        "directory =\n"
-        "file_enabled = false\n"
-        "requests = false\n";
-    string error;
-    Config missing_timeout;
-    Check(!LoadConfig(missing_setting, &missing_timeout, &error) &&
-                  error.find("timeout") != string::npos,
-          "Accepted configuration with a missing setting");
-
     Config missing_group;
     Check(!LoadConfig("[listen]\nport = 8090\n", &missing_group),
           "Accepted configuration with missing groups");
@@ -124,101 +102,60 @@ static void CheckAppConfig() {
     Config invalid;
     Check(!LoadConfig("not an INI file", &invalid), "Accepted malformed configuration");
 
-    const char *invalid_port =
-        "[listen]\n"
-        "address = 127.0.0.1\n"
-        "port = invalid\n"
-        "[jpip]\n"
-        "image_directory = /srv/jpip\n"
-        "chunk_size = 128\n"
-        "[connections]\n"
-        "limit = 10\n"
-        "initial_timeout = 3\n"
-        "timeout = 60\n"
-        "[channels]\n"
-        "limit = 20\n"
-        "[logging]\n"
-        "directory =\n"
-        "file_enabled = false\n"
-        "requests = false\n";
-    Config invalid_port_config;
-    Check(!LoadConfig(invalid_port, &invalid_port_config, &error) &&
-              error.find("port") != string::npos,
-          "Did not report an invalid port value");
-
-    const char *invalid_value =
-        "[listen]\n"
-        "address = 127.0.0.1\n"
-        "port = 8090\n"
-        "[jpip]\n"
-        "image_directory = /srv/jpip\n"
-        "chunk_size = 127\n"
-        "[connections]\n"
-        "limit = 10\n"
-        "initial_timeout = 3\n"
-        "timeout = 60\n"
-        "[channels]\n"
-        "limit = 20\n"
-        "[logging]\n"
-        "directory =\n"
-        "file_enabled = false\n"
-        "requests = false\n";
-    Config invalid_chunk;
-    Check(!LoadConfig(invalid_value, &invalid_chunk, &error) &&
-              error == "jpip.chunk_size must be between 128 and 262144",
-          "Did not report an invalid configuration value");
-
-    string excessive_chunk = contents;
-    size_t chunk_value = excessive_chunk.find("chunk_size = 262144");
-    Check(chunk_value != string::npos,
-          "Could not prepare maximum chunk-size test");
-    excessive_chunk.replace(chunk_value, strlen("chunk_size = 262144"),
-                            "chunk_size = 262145");
-    Config excessive_chunk_config;
-    Check(!LoadConfig(excessive_chunk.c_str(), &excessive_chunk_config,
-                      &error) &&
-                  error ==
-                      "jpip.chunk_size must be between 128 and 262144",
-          "Accepted an excessive chunk size");
-
-    string disabled_timeout = contents;
-    size_t timeout_value = disabled_timeout.find("timeout = 60");
-    Check(timeout_value != string::npos, "Could not prepare timeout test");
-    disabled_timeout.replace(timeout_value, strlen("timeout = 60"),
-                             "timeout = 0");
-    Config zero_timeout;
-    Check(!LoadConfig(disabled_timeout.c_str(), &zero_timeout, &error) &&
-              error == "connections.timeout must be positive",
-          "Accepted a disabled channel timeout");
-
-    disabled_timeout.replace(timeout_value, strlen("timeout = 0"),
-                             "timeout = -1");
-    Config negative_timeout;
-    Check(!LoadConfig(disabled_timeout.c_str(), &negative_timeout, &error) &&
-              error == "connections.timeout must be positive",
-          "Accepted a negative channel timeout");
-
-    const char *missing_log_directory =
-        "[listen]\n"
-        "address = 127.0.0.1\n"
-        "port = 8090\n"
-        "[jpip]\n"
-        "image_directory = /srv/jpip\n"
-        "chunk_size = 128\n"
-        "[connections]\n"
-        "limit = 10\n"
-        "initial_timeout = 3\n"
-        "timeout = 60\n"
-        "[channels]\n"
-        "limit = 20\n"
-        "[logging]\n"
-        "directory =\n"
-        "file_enabled = true\n"
-        "requests = false\n";
-    Config invalid_logging;
-    Check(!LoadConfig(missing_log_directory, &invalid_logging, &error) &&
-              error == "logging.directory must not be empty when file logging is enabled",
-          "Accepted file logging without a directory");
+    // Change exactly one setting in an otherwise valid configuration.
+    // An empty diagnostic denotes an accepted boundary value.
+    struct Case { const char *setting; const char *replacement; const char *error; };
+    const Case cases[] = {
+        {"port = 8090", "port = invalid", "port"},
+        {"port = 8090", "port = 0", "listen.port must be between 1 and 65535"},
+        {"port = 8090", "port = 65536", "listen.port must be between 1 and 65535"},
+        {"port = 8090", "port = 1", ""},
+        {"port = 8090", "port = 65535", ""},
+        {"chunk_size = 262144", "chunk_size = 127", "jpip.chunk_size must be between 128 and 262144"},
+        {"chunk_size = 262144", "chunk_size = 262145", "jpip.chunk_size must be between 128 and 262144"},
+        {"chunk_size = 262144", "chunk_size = 128", ""},
+        {"timeout = 60", "timeout = 0", "connections.timeout must be positive"},
+        {"timeout = 60", "timeout = -1", "connections.timeout must be positive"},
+        {"initial_timeout = 4", "initial_timeout = 0", "connections.initial_timeout must be positive"},
+        {"limit = 250", "limit = 0", "connections.limit must be positive"},
+        {"limit = 500", "limit = 0", "channels.limit must be positive"},
+        {"image_directory = /srv/jpip images", "image_directory =", "jpip.image_directory must not be empty"},
+        {"directory = /var/log/esajpip/", "directory =", "logging.directory must not be empty when file logging is enabled"},
+        {"file_enabled = true", "file_enabled = invalid", "file_enabled"}
+    };
+    for (const Case &test : cases) {
+        string changed = contents;
+        size_t position = changed.find(test.setting);
+        Check(position != string::npos, "Configuration test setting not found");
+        changed.replace(position, strlen(test.setting), test.replacement);
+        Config candidate;
+        string error;
+        bool accepted = LoadConfig(changed.c_str(), &candidate, &error);
+        if (accepted != (test.error[0] == '\0') ||
+            (!accepted && error.find(test.error) == string::npos)) {
+            cerr << "Configuration case: " << test.replacement << "; got: " << error << endl;
+            Check(false, "Unexpected configuration result");
+        }
+    }
+    // Each required key is omitted independently, rather than letting an
+    // earlier missing key hide a later one.
+    const char *settings[] = {"address = 127.0.0.1", "port = 8090",
+        "image_directory = /srv/jpip images", "chunk_size = 262144", "limit = 250",
+        "timeout = 60", "initial_timeout = 4", "limit = 500",
+        "directory = /var/log/esajpip/", "file_enabled = true", "requests = false"};
+    for (const char *setting : settings) {
+        string changed = contents;
+        size_t position = changed.find(setting);
+        Check(position != string::npos, "Required test setting not found");
+        changed.erase(position, strlen(setting));
+        Config candidate;
+        string error;
+        string key = string(setting).substr(0, string(setting).find(' '));
+        if (LoadConfig(changed.c_str(), &candidate, &error) || error.find(key) == string::npos) {
+            cerr << "Missing configuration key: " << setting << "; got: " << error << endl;
+            Check(false, "Missing setting was not diagnosed");
+        }
+    }
 }
 
 static bool RejectRequest(const string &line) {
@@ -1105,7 +1042,7 @@ static void CheckMetadataPlaceHolder() {
 }
 
 int main() {
-    CheckAppConfig();
+    CheckConfig();
     CheckInetAddress();
     CheckJHVRequests();
     CheckCacheModel();

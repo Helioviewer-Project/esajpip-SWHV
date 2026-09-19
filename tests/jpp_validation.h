@@ -248,6 +248,28 @@ Fixture MakeFixture(const string &directory) {
     return fixture;
 }
 
+int Fetch(int fd, Cache &cache, const Expected &selection, const string &target,
+          const string &first_fields = "", bool gzip = false) {
+    for (int i = 0; i < 300; ++i) {
+        int budget = i % 2 ? 1024 : 256;
+        SendRequest(fd, target + "&len=" + to_string(budget) + (i == 0 ? first_fields : ""),
+                    gzip ? "Accept-Encoding: gzip\r\n" : "");
+        Response response = ReadResponse(fd);
+        Require(response.headers.find("200 OK") != string::npos, "JPP request failed");
+        Require((response.headers.find("Content-Encoding: gzip") != string::npos) == gzip,
+                "JPP response has wrong encoding");
+        string body = gzip ? Gunzip(response.body) : response.body;
+        Require(body.size() <= static_cast<size_t>(budget + 3), "Response exceeds len");
+        size_t before = cache.Size();
+        if (cache.Read(body, &selection) == 2) {
+            Require(cache.Complete(selection), "Completed window has missing data");
+            return i + 1;
+        }
+        Require(cache.Size() > before, "Response made no progress");
+    }
+    throw runtime_error("Response did not complete");
+}
+
 void Run(uint16_t port, const Expected &expected, const string &name,
          bool gzip, bool modeled, bool context) {
     int fd = Connect(port);
@@ -265,27 +287,9 @@ void Run(uint16_t port, const Expected &expected, const string &name,
     string target = "/jpip?cid=" + cid +
             (context ? "&context=jpxl%3C0-1%3E" : "&stream=0-1") +
             "&fsiz=260,1&rsiz=260,1&roff=0,0&metareq=[*]!!";
-    int requests = 0;
-    for (; requests < 300; ++requests) {
-        int budget = requests % 2 ? 1024 : 256;
-        string request = target + "&len=" + to_string(budget);
-        if (modeled && requests == 0) request += "&model=[0]Hm:1,P0:1,[1]Hm:2,P129:2";
-        SendRequest(fd, request, gzip ? "Accept-Encoding: gzip\r\n" : "");
-        Response response = ReadResponse(fd);
-        Require(response.headers.find("200 OK") != string::npos, "JPP follow-up failed");
-        bool encoded = response.headers.find("Content-Encoding: gzip") != string::npos;
-        Require(encoded == gzip, "Unexpected response content encoding");
-        string body = encoded ? Gunzip(response.body) : response.body;
-        Require(body.size() <= static_cast<size_t>(budget + 3), "Response exceeds len budget");
-        size_t before = cache.Size();
-        unsigned reason = cache.Read(body);
-        if (reason == 2) {
-            Require(cache.Complete(), "WINDOW_DONE left missing bytes or completion flags");
-            break;
-        }
-        Require(cache.Size() > before, "Byte-limited response made no progress");
-    }
-    Require(requests > 1 && requests < 300, "Response continuation did not complete");
+    int requests = Fetch(fd, cache, expected, target,
+                         modeled ? "&model=[0]Hm:1,P0:1,[1]Hm:2,P129:2" : "", gzip);
+    Require(requests > 2, "Fixture did not exercise response continuation");
     SendRequest(fd, target + "&len=1024");
     Response repeated = ReadResponse(fd);
     Require(repeated.body.size() == 3 && cache.Read(repeated.body) == 2,
@@ -303,28 +307,6 @@ Expected Select(const Expected &expected, int stream, int first, int last) {
             selection.insert(entry);
     }
     return selection;
-}
-
-void Fetch(int fd, Cache &cache, const Expected &selection, const string &target,
-           const string &first_fields = "", bool gzip = false) {
-    for (int i = 0; i < 300; ++i) {
-        int budget = i % 2 ? 1024 : 256;
-        SendRequest(fd, target + "&len=" + to_string(budget) + (i == 0 ? first_fields : ""),
-                    gzip ? "Accept-Encoding: gzip\r\n" : "");
-        Response response = ReadResponse(fd);
-        Require(response.headers.find("200 OK") != string::npos, "Stateful JPP request failed");
-        Require((response.headers.find("Content-Encoding: gzip") != string::npos) == gzip,
-                "Stateful JPP response has wrong encoding");
-        string body = gzip ? Gunzip(response.body) : response.body;
-        Require(body.size() <= static_cast<size_t>(budget + 3), "Stateful response exceeds len");
-        size_t before = cache.Size();
-        if (cache.Read(body, &selection) == 2) {
-            Require(cache.Complete(selection), "Stateful window has missing data");
-            return;
-        }
-        Require(cache.Size() > before, "Stateful response made no progress");
-    }
-    throw runtime_error("Stateful response did not complete");
 }
 
 void Stateful(uint16_t port, const Expected &expected, const string &name) {
@@ -425,18 +407,26 @@ void Stateful(uint16_t port, const Expected &expected, const string &name) {
 
 void CheckJPPResponses(uint16_t port, const string &directory) {
     try {
+        test_case = "JPP reader self-tests";
         jpp_test::CheckReader();
         jpp_test::Fixture fixture = jpp_test::MakeFixture(directory);
         for (bool linked : {false, true}) {
             if (linked) fixture.bins[jpp_test::Key(8, 0, 0)] = fixture.linked_metadata;
             for (bool gzip : {false, true})
                 for (bool modeled : {false, true})
-                    for (bool context : {false, true})
+                    for (bool context : {false, true}) {
+                        test_case = string("JPP ") + (linked ? "linked" : "embedded") +
+                                (gzip ? "/gzip" : "/plain") +
+                                (modeled ? "/partial-model" : "/empty-model") +
+                                (context ? "/context" : "/stream");
                         jpp_test::Run(port, fixture.bins,
                                      linked ? "wire-linked.jpx" : "wire-embedded.jpx",
                                      gzip, modeled, context);
+                    }
+            test_case = string("JPP stateful/") + (linked ? "linked" : "embedded");
             jpp_test::Stateful(port, fixture.bins,
                               linked ? "wire-linked.jpx" : "wire-embedded.jpx");
         }
     } catch (const exception &error) { Fail(error.what()); }
+    test_case.clear();
 }

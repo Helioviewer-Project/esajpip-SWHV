@@ -105,8 +105,7 @@ struct PooledResponse {
         PooledResponse *self = static_cast<PooledResponse *>(owner);
         const server::ChannelWork::Result &result = work.GetResult();
         if (!result.error.empty()) {
-            if (!result.error.empty())
-                cerr << result.error << endl;
+            cerr << result.error << endl;
             self->failed = true;
             return;
         }
