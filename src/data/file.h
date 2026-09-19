@@ -87,6 +87,10 @@ namespace data {
             return size;
         }
 
+        /**
+         * Advances to one byte after the next matching byte before limit.
+         * If no match exists, advances to limit and returns false.
+         */
         bool Find(unsigned char value, uint64_t limit) {
             assert(address != MAP_FAILED);
             if (limit > size || offset > limit)

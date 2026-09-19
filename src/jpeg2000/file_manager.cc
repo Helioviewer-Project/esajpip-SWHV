@@ -466,6 +466,8 @@ namespace jpeg2000 {
             // packet data, so the first FF D9 terminates the final tile-part.
             while (file->Find(0xFF, limit)) {
                 uint64_t marker_offset = file->GetOffset() - 1;
+                if (file->GetOffset() >= limit)
+                    return false;
                 uint8_t value;
                 if (!file->Read(&value))
                     return false;

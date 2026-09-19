@@ -497,6 +497,34 @@ int main() {
           "Gzip-response channel could not be closed");
     close(compressed);
 
+    int modeled = Connect(port);
+    Check(modeled >= 0, "Could not connect for cache-model test");
+    SendRequest(modeled, "/image.jp2?cnew=http&len=3");
+    Response model_created = ReadResponse(modeled);
+    Check(model_created.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  model_created.body.size() == 3,
+          "Could not create an initially empty cache model");
+    string modeled_channel = ChannelId(model_created.headers);
+    string modeled_target =
+            "/jpip?cid=" + modeled_channel +
+            "&stream=0&model=Hm:1&fsiz=1,1&rsiz=1,1&roff=0,0&len=512";
+    SendRequest(modeled, modeled_target);
+    Response partial_model = ReadResponse(modeled);
+    Check(partial_model.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  partial_model.body.size() > 3,
+          "Partial cache model did not produce the missing data");
+    SendRequest(modeled,
+                "/jpip?cid=" + modeled_channel +
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=512");
+    Response accumulated_model = ReadResponse(modeled);
+    Check(accumulated_model.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  accumulated_model.body.size() == 3,
+          "Cache-model state did not accumulate across responses");
+    SendRequest(modeled, "/jpip?cclose=" + modeled_channel);
+    Check(ReadResponse(modeled).headers.find("HTTP/1.1 200 OK") == 0,
+          "Cache-model channel could not be closed");
+    close(modeled);
+
     int duplicate = Connect(port);
     Check(duplicate >= 0, "Could not connect for duplicate channel creation");
     SendRequest(duplicate, "/image.jp2?cnew=http-tcp,http&len=128");
