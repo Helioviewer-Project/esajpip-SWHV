@@ -25,8 +25,6 @@ public:
         Connection *connection = NULL;
         std::string first;
         std::string last;
-        const char *payload = NULL;
-        std::size_t payload_size = 0;
         std::function<void(bool)> completed;
         bool active = false;
     };

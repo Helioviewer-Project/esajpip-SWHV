@@ -205,8 +205,6 @@ bool Connection::Send(Write *write, string first, const char *payload,
     write->connection = this;
     write->first = std::move(first);
     write->last = std::move(last);
-    write->payload = payload;
-    write->payload_size = payload_size;
     write->completed = std::move(completed);
     write->active = true;
     write->request.data = write;
