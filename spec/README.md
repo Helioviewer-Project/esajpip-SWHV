@@ -35,15 +35,68 @@ on a developer machine, only when the description changes. The repository
 consumes only the committed corpus, through plain CMake/CTest.
 
 **Status.** The pinned compiler builds in the Linux container described below,
-but the model does not yet compile. The remaining incompatibilities are listed
-under "Compiler checks". No corpus exists in `tests/vectors/j2k/` yet, and
-`jpeg2000_test.cc` does not yet have the loop that reads it.
+and the model passes its ASN.1/ACN front end. Compiler code-generation defects
+still prevent the generated C from building; see "Compiler checks". No corpus
+exists in `tests/vectors/j2k/` yet, and `jpeg2000_test.cc` does not yet have the
+loop that reads it.
 
 If you are here to **run the tests**, you need nothing from this directory:
 once generated, the corpus lives in `tests/vectors/j2k/` and `ctest` uses
 it. If you are here to **change what the server accepts**, read
 "Background", then "Quick start", then edit the model and regenerate. If a
 test **just failed**, go to "When a vector fails".
+
+## Scope and development order
+
+This suite is intended to establish that esajpip accepts the JPEG 2000 source
+profile it documents and rejects malformed or unsupported structures for the
+right reason. It can provide strong evidence for the parts of T.800 and T.801
+that the server parses: boxes, marker framing, coding parameters, PLT packet
+lengths, tile-part structure, fragment tables, data references, and the
+cross-field relationships between them. The separate standard and profile
+layers also make an intentional reduction or leniency visible instead of
+silently treating current parser behaviour as the standard.
+
+It is not a complete JPEG 2000 conformance suite. In particular, it does not
+validate entropy-coded packet contents, inverse transforms, color processing,
+decoded samples, rendering, or every legal JPX organization. esajpip does not
+perform those operations. A passing corpus means that the server agrees with
+the modelled structural rules and its declared source profile; it does not mean
+that an arbitrary JPEG 2000 decoder is conformant.
+
+Treat the following as ordered gates, not as a menu of parallel improvements:
+
+1. Make the pinned asn1scc generate C that builds for the complete model. Do
+   not adapt the harness to incomplete or hand-edited generated output.
+2. Build and run the generated round-trip tests and the harness in Linux Docker
+   with AddressSanitizer and UndefinedBehaviorSanitizer enabled.
+3. Generate and review the corpus and manifest. Settle every unexpected label
+   before treating the model as an oracle.
+4. Make `jpeg2000_test` consume the manifest and verify both `OpenImage` and
+   packet indexing. This is the point at which the model becomes a release
+   test rather than executable documentation.
+5. Add `spec/COVERAGE.md`, mapping each relevant T.800/T.801 clause to its model
+   rule, accepted vectors, rejected vectors, server code, and any profile
+   decision. Do not create an empty matrix before the corpus works.
+6. Expand the highest-value production paths first: packet indexing across
+   progression orders, layers, precincts, PLT segments and tile-parts, followed
+   by complete linked-JPX graphs and their companion JP2 files.
+7. Then model additional valid-but-unsupported forms such as `Psot = 0`,
+   `LBox = 0`, XLBox, deeper association trees, Multiple Codestream boxes, and
+   more general JPX layouts. The result may be an explicit profile rejection;
+   modeling a form does not oblige the server to support it.
+8. Keep extensions to T.808 requests, JPIP channel state, JPP-stream framing,
+   hvJP2K output, and decoder interoperability as separate test layers. Reuse
+   this corpus where useful, but do not make the source-file model responsible
+   for HTTP, session, or image-decoding behaviour.
+
+Every new rule needs at least one accepted vector at or near its boundary and
+one rejected vector that violates only that rule. Each must cite the applicable
+standard clause, state whether it belongs to the standard or server-profile
+layer, and exercise `GetPacket` when rejection can occur during lazy indexing.
+Independent tools such as jpylyzer, OpenJPEG, Kakadu, or Grok are useful for
+comparison, but none replaces the cited standard plus the model as the expected
+result.
 
 ## Background you need
 
