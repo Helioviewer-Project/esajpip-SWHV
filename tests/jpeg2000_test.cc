@@ -670,7 +670,115 @@ static bool RejectDataRequest(jpeg2000::FileManager &manager,
            !server.SetRequest(*manager.GetImage(), request);
 }
 
+static vector<string> SplitTabs(const string &line) {
+    vector<string> fields;
+    size_t start = 0;
+    for (;;) {
+        size_t end = line.find('\t', start);
+        fields.push_back(line.substr(start, end - start));
+        if (end == string::npos)
+            return fields;
+        start = end + 1;
+    }
+}
+
+static bool IndexGeneratedVector(const string &directory, const string &name,
+                                 string *failure_stage) {
+    jpeg2000::FileManager manager;
+    if (!manager.Init(directory)) {
+        *failure_stage = "initialization";
+        return false;
+    }
+    if (manager.OpenImage(name) != jpeg2000::FileManager::OpenResult::OPENED) {
+        *failure_stage = "opening";
+        return false;
+    }
+
+    jpeg2000::ImageIndex *image = manager.GetImage();
+    if (image == NULL || image->GetNumCodestreams() == 0) {
+        *failure_stage = "codestream discovery";
+        return false;
+    }
+
+    for (size_t codestream = 0; codestream < image->GetNumCodestreams();
+         codestream++) {
+        data::File *file = manager.GetFile(image->GetPathName(codestream));
+        if (file == NULL) {
+            *failure_stage = "opening codestream " + to_string(codestream);
+            return false;
+        }
+
+        const jpeg2000::CodingParameters *parameters =
+                image->GetCodingParameters(codestream);
+        for (int layer = 0; layer < parameters->num_layers; layer++) {
+            for (int resolution = 0; resolution <= parameters->num_levels;
+                 resolution++) {
+                const jpeg2000::Size &precincts =
+                        parameters->resolutions[resolution].num_precincts;
+                for (int component = 0;
+                     component < parameters->num_components; component++) {
+                    for (int y = 0; y < precincts.y; y++) {
+                        for (int x = 0; x < precincts.x; x++) {
+                            data::FileSegment packet;
+                            if (!image->GetPacket(
+                                        file, codestream,
+                                        jpeg2000::Packet(
+                                                layer, resolution, component,
+                                                jpeg2000::Point(x, y)),
+                                        &packet)) {
+                                *failure_stage = "indexing codestream " +
+                                                 to_string(codestream);
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static void CheckGeneratedCorpus() {
+    const string directory = JPEG2000_VECTOR_DIRECTORY;
+    ifstream manifest(directory + "/manifest.tsv");
+    Check(static_cast<bool>(manifest),
+          "Could not open the generated JPEG 2000 manifest");
+
+    string line;
+    Check(static_cast<bool>(getline(manifest, line)) &&
+                  line == "file\tkind\tstandard\tprofile\treason\tfield\tnote\tcompanions",
+          "Invalid generated JPEG 2000 manifest header");
+
+    int vectors = 0;
+    vector<string> failures;
+    while (getline(manifest, line)) {
+        vector<string> fields = SplitTabs(line);
+        Check(fields.size() == 8,
+              ("Invalid manifest row: " + line).c_str());
+        bool expected = fields[3] == "valid";
+        Check(expected || fields[3] == "invalid",
+              ("Invalid profile label for vector " + fields[0]).c_str());
+        string failure_stage;
+        bool accepted = IndexGeneratedVector(directory, fields[0],
+                                             &failure_stage);
+        if (accepted != expected)
+            failures.push_back("Generated vector " + fields[0] + " was " +
+                               (accepted ? "accepted" : "rejected during " +
+                                failure_stage) +
+                               ", expected " +
+                               (expected ? "acceptance" : "rejection") +
+                               " (" + fields[4] + ": " + fields[6] + ")");
+        vectors++;
+    }
+    Check(vectors > 0, "Generated JPEG 2000 manifest is empty");
+    for (const string &failure : failures)
+        cerr << failure << endl;
+    Check(failures.empty(), "Generated JPEG 2000 corpus disagrees with the server");
+}
+
 int main() {
+    CheckGeneratedCorpus();
     CheckProgressionMappings();
 
     char directory_template[] = "/tmp/esajpip-jpeg2000-XXXXXX";

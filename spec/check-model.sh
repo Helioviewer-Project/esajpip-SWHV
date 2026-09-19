@@ -26,6 +26,7 @@ if [ "$#" -eq 1 ]; then
         echo "corpus directory is not empty: $corpus" >&2
         exit 2
     fi
+    corpus=$(CDPATH= cd -- "$corpus" && pwd)
 else
     corpus=$temporary/corpus
     mkdir "$corpus"

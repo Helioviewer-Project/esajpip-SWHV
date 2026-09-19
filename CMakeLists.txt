@@ -125,6 +125,8 @@ if(BUILD_TESTING)
 
     add_executable(jpeg2000_test tests/jpeg2000_test.cc)
     esajpip_configure_target(jpeg2000_test)
+    target_compile_definitions(jpeg2000_test PRIVATE
+        JPEG2000_VECTOR_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/j2k")
     target_link_libraries(jpeg2000_test PRIVATE esajpip_core)
     add_test(NAME jpeg2000 COMMAND jpeg2000_test)
 endif()

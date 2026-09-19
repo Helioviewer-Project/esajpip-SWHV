@@ -632,7 +632,6 @@ SETTER(cod_cbw,         cod_of(f, box)->spcod.cbWidthExp)
 SETTER(cod_cbh,         cod_of(f, box)->spcod.cbHeightExp)
 SETTER(cod_cbstyle,     cod_of(f, box)->spcod.cbStyle)
 SETTER(cod_transform,   cod_of(f, box)->spcod.transform)
-SETTER(cod_ppx_lowest,  cod_of(f, box)->spcod.precincts.arr[0].ppx)
 SETTER(cod_ppx_higher,  cod_of(f, box)->spcod.precincts.arr[1].ppx)
 SETTER(cod_ppy_higher,  cod_of(f, box)->spcod.precincts.arr[1].ppy)
 SETTER(sot_lsot,   tp_of(f, box)->lsot)
@@ -641,6 +640,24 @@ SETTER(sot_tpsot,  tp_of(f, box)->tpsot)
 SETTER(sot_tnsot,  tp_of(f, box)->tnsot)
 SETTER(plt_zplt,   tp_of(f, box)->rest.headers.arr[0].plt.body.zplt)
 SETTER(iplt_bits,  tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0].b0.bits)
+
+static void set_cod_ppx_lowest(Jp2Family *f, int box, asn1SccSint value) {
+    TilePart *tp = tp_of(f, box);
+    Iplt *entry;
+    cod_of(f, box)->spcod.precincts.arr[0].ppx = value;
+    if (value != 0)
+        return;
+
+    /* PPx=0 splits the 2x2 lowest-resolution image into two horizontal
+     * precincts, so the complete codestream has three packets rather than
+     * the base fixture's two. */
+    entry = &tp->rest.headers.arr[0].plt.body.entries.arr[2];
+    memset(entry, 0, sizeof *entry);
+    entry->b0.bits = 1;
+    tp->rest.headers.arr[0].plt.body.entries.nCount = 3;
+    tp->rest.data.arr[2] = 0;
+    tp->rest.data.nCount = 3;
+}
 
 typedef struct {
     const char *field;
@@ -742,6 +759,7 @@ static void rule_no_tile_part(Jp2Family *f, int box) {
 }
 static void rule_two_tile_parts(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
+    cod_of(f, box)->sgcod.layers = 2;
     cs->segments.arr[3] = cs->segments.arr[2];
     cs->segments.arr[3].tilePart.tpsot = 1;
     cs->segments.arr[2].tilePart.tnsot = 2;
@@ -781,6 +799,7 @@ static void rule_tnsot_declared_late(Jp2Family *f, int box) {
 static void rule_tile_parts_n(Jp2Family *f, int box, int n) {
     Codestream *cs = cs_of(f, box);
     int i;
+    cod_of(f, box)->sgcod.layers = n;
     for (i = 1; i < n; ++i) cs->segments.arr[2 + i] = cs->segments.arr[2];
     for (i = 0; i < n; ++i) {
         cs->segments.arr[2 + i].tilePart.tpsot = i;

@@ -160,6 +160,8 @@ DataEntryUrl ::= SEQUENCE {
 -- ===========================================================================
 -- Layer 2: esajpip served profile (JPIP_PROFILE.md, "Supported JPEG 2000
 -- sources"). Structural rules (counts, pairing) are cross-field rules.
+-- Top-level metadata superboxes that the server does not interpret are opaque
+-- here; their internal box framing remains part of the standard layer only.
 -- ===========================================================================
 
 -- .jp2: exactly one jp2c, carrying a profile codestream.
@@ -189,12 +191,12 @@ TopPayload-Profile ::= CHOICE {
     jp2c        OCTET STRING (CONTAINING Codestream-Profile),
     jP          OCTET STRING (CONTAINING OpaqueBox),
     ftyp        OCTET STRING (CONTAINING Ftyp),
-    jp2h        OCTET STRING (CONTAINING Superbox),
-    jplh        OCTET STRING (CONTAINING Superbox),
+    jp2h        OCTET STRING (CONTAINING OpaqueBox),
+    jplh        OCTET STRING (CONTAINING OpaqueBox),
     rreq        OCTET STRING (CONTAINING OpaqueBox),
     uuid        OCTET STRING (CONTAINING OpaqueBox),
     xml         OCTET STRING (CONTAINING OpaqueBox),
-    uinf        OCTET STRING (CONTAINING Superbox),
+    uinf        OCTET STRING (CONTAINING OpaqueBox),
     free        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
 }

@@ -12,7 +12,7 @@ sources").
 This directory is a **formal description of what a valid file looks like**,
 written in a machine-readable notation (ASN.1 with ACN encoding rules), plus
 a small program that turns that description into a **corpus of test files**:
-a few thousand tiny `.jp2`/`.jpx` files, each labelled "the server must
+hundreds of tiny `.jp2`/`.jpx` files, each labelled "the server must
 accept this" or "the server must reject this". `tests/jpeg2000_test.cc` then
 opens every one and checks that the server agrees.
 
@@ -31,18 +31,18 @@ The point of doing it this way rather than writing test files by hand:
   test can prove.
 
 Nothing here is part of the server build. The ASN.1 compiler runs offline,
-on a developer machine, only when the description changes. Once the corpus is
-integrated, the server tests will consume only its committed files through
-plain CMake/CTest; generated compiler code will remain outside the server
-build.
+on a developer machine, only when the description changes. The server tests
+consume only the committed corpus through plain CMake/CTest; generated compiler
+code remains outside the server build.
 
 **Status.** With the deferred-ACN compiler fixes described under "Compiler
 checks", the complete model generates C, that C builds as strict C11, and the
 sanitized harness writes 376 uniquely named vectors. All mutant expectations
 agree with the generated decoders and cross-field checks; 34 vectors are valid
 at both layers. `spec/VERSION` and `spec/asn1scc-patches/series` together define
-the reproducible compiler source. No corpus exists in `tests/vectors/j2k/` yet,
-and `jpeg2000_test.cc` does not yet consume it.
+the reproducible compiler source. The 376-vector corpus is committed under
+`tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
+the server parser and lazy packet indexer.
 
 If you are here to **run the current server tests**, you need nothing from
 this directory. If you are here to **change what the server accepts**, read
@@ -67,28 +67,24 @@ perform those operations. A passing corpus means that the server agrees with
 the modelled structural rules and its declared source profile; it does not mean
 that an arbitrary JPEG 2000 decoder is conformant.
 
-Treat the following as ordered gates, not as a menu of parallel improvements:
+The first four gates are complete. Continue in this order:
 
-1. Keep the deferred-ACN compiler regressions passing and pin their committed
-   compiler revision in `spec/VERSION`. Do not hand-edit generated output.
-2. Build the generated code as strict C11 and run the harness in Linux Docker
-   with AddressSanitizer and UndefinedBehaviorSanitizer enabled.
-3. Review the corpus and manifest. Settle every unexpected label before
-   treating the model as an oracle.
-4. Make `jpeg2000_test` consume the manifest and verify both `OpenImage` and
-   packet indexing. This is the point at which the model becomes a release
-   test rather than executable documentation.
-5. Add `spec/COVERAGE.md`, mapping each relevant T.800/T.801 clause to its model
+1. Keep the deferred-ACN compiler regressions passing and the compiler revision
+   pinned in `spec/VERSION`. Build the generated code as strict C11 and run the
+   harness in Linux Docker with AddressSanitizer and UndefinedBehaviorSanitizer
+   whenever the model changes. Do not hand-edit generated output or corpus
+   labels.
+2. Add `spec/COVERAGE.md`, mapping each relevant T.800/T.801 clause to its model
    rule, accepted vectors, rejected vectors, server code, and any profile
-   decision. Do not create an empty matrix before the corpus works.
-6. Expand the highest-value production paths first: packet indexing across
+   decision.
+3. Expand the highest-value production paths first: packet indexing across
    progression orders, layers, precincts, PLT segments and tile-parts, followed
    by complete linked-JPX graphs and their companion JP2 files.
-7. Then model additional valid-but-unsupported forms such as `Psot = 0`,
+4. Then model additional valid-but-unsupported forms such as `Psot = 0`,
    `LBox = 0`, XLBox, deeper association trees, Multiple Codestream boxes, and
    more general JPX layouts. The result may be an explicit profile rejection;
    modeling a form does not oblige the server to support it.
-8. Keep extensions to T.808 requests, JPIP channel state, JPP-stream framing,
+5. Keep extensions to T.808 requests, JPIP channel state, JPP-stream framing,
    hvJP2K output, and decoder interoperability as separate test layers. Reuse
    this corpus where useful, but do not make the source-file model responsible
    for HTTP, session, or image-decoding behaviour.
@@ -537,27 +533,31 @@ also count themselves and their neighbours:
 
 ## The test loop in `jpeg2000_test.cc`
 
-If `tests/vectors/j2k/manifest.tsv` exists, for each row: copy the file and
-its companions into the test image directory under their names, then:
+The test opens `tests/vectors/j2k/manifest.tsv` and processes every row. Corpus
+files remain in their committed directory, so linked-JPX companions resolve
+under the same names used when the harness generated them. For each row it:
 
 ```cpp
 bool expect = row.profile == "valid";
 jpeg2000::FileManager manager;
-bool accepted = OpenImage(directory, row.file, &manager);
+bool accepted = manager.Init(corpus_directory) &&
+                manager.OpenImage(row.file) == OpenResult::OPENED;
 if (accepted) {
-    data::File *file = manager.GetFile(manager.GetImage()->GetPathName(0));
-    data::FileSegment segment;
-    accepted = file != NULL && manager.GetImage()->GetPacket(
-            file, 0, jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &segment);
+    for (each codestream) {
+        data::File *file = manager.GetFile(image->GetPathName(codestream));
+        for (each packet declared by the codestream geometry)
+            accepted = file != NULL && image->GetPacket(
+                    file, codestream, packet, &segment);
+    }
 }
 Check(accepted == expect, ("vector " + row.file + ": expected " +
                            (expect ? "accept" : "reject")).c_str());
 ```
 
-For rows that are `standard=valid, profile=invalid`, also assert that the
-rejection's log line names the profile rule (origin, tile index, dimension
-limit, PLT missing, tile-part count, link structure). The trace test helpers
-already capture log output.
+The lazy packet lookup matters: some malformed packet-length tables are
+detectable only when the packet index is built, not while the file structure is
+opened. The manifest's `reason`, `field`, and `note` columns are included in a
+failure message so a disagreement points back to the model rule.
 
 The hand-built fixtures in `jpeg2000_test.cc` stay. Those that cover a
 gap in the model ("Gaps") are the only test of that behaviour; the rest
@@ -616,8 +616,8 @@ the place to add wire-level cases.
 ## Frequently asked
 
 **Why not just write the test files by hand?** `jpeg2000_test.cc` already
-contains a focused collection of hand-built cases. The corpus adds a few
-thousand systematic cases, one per field, bound, and layer, with expected
+contains a focused collection of hand-built cases. The corpus adds hundreds of
+systematic cases, one per field, bound, and layer, with expected
 outcomes derived rather than guessed. When the standard and the profile are
 both written down formally, "what should the server do with this?" stops being
 a judgement call.
