@@ -113,7 +113,8 @@ namespace jpeg2000 {
             }
         }
 
-        codestream.packet_index.Add(FileSegment(offset, length_packet));
+        if (!codestream.packet_index.Add(FileSegment(offset, length_packet)))
+            return false;
         if (!final_packet && packet_data_done && plt_done) {
             codestream.data_cursor.index++;
             if (codestream.data_cursor.index < codestream.tile_parts.size()) {

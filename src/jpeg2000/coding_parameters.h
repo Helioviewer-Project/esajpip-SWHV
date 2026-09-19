@@ -2,11 +2,11 @@
 #define _JPEG2000_CODING_PARAMETERS_H_
 
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
-#include "point.h"
-#include "trace.h"
 #include "packet.h"
+#include "point.h"
 
 namespace jpeg2000 {
     /**
@@ -190,9 +190,8 @@ namespace jpeg2000 {
                 case CPRL_PROGRESSION:
                     return GetProgressionIndexCPRL(packet.layer, packet.resolution, packet.component, packet.precinct_xy.x, packet.precinct_xy.y);
                 default:
-                    ERROR("Progression (" << progression << ") not supported");
+                    throw std::logic_error("Invalid JPEG 2000 progression order");
             }
-            return 0;
         }
 
         /**

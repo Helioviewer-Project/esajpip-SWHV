@@ -415,7 +415,8 @@ namespace jpip {
             return true;
 
         bool valid = true;
-        Query query = ParseTargetQuery(uri);
+        Query query = ParseQuery(uri.data() + question + 1,
+                                 uri.data() + uri.size());
         const string *tid = FindParameter(query, "tid");
         bool accept_model = tid == NULL || *tid == "0";
         for (const QueryParameter &parameter : query) {

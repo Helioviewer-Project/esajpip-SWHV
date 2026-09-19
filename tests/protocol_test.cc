@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <unistd.h>
@@ -11,6 +12,7 @@
 #include "config.h"
 #include "data/file.h"
 #include "data/file_segment.h"
+#include "jpeg2000/packet_index.h"
 #include "jpeg2000/place_holder.h"
 #include "jpip/cache_model.h"
 #include "jpip/databin_writer.h"
@@ -651,6 +653,16 @@ static void CheckProgressionIndexes() {
     Check(params.GetProgressionIndex(packet) == 69, "Wrong CPRL packet index");
     Check(params.GetPrecinctDataBinId(packet) == 23, "Wrong precinct data-bin ID");
 
+    params.progression = 5;
+    bool invalid_progression_rejected = false;
+    try {
+        (void) params.GetProgressionIndex(packet);
+    } catch (const logic_error &) {
+        invalid_progression_rejected = true;
+    }
+    Check(invalid_progression_rejected,
+          "An invalid progression order selected packet zero");
+
     jpeg2000::CodingParameters spatial;
     spatial.size = jpeg2000::Size(11, 9);
     spatial.num_levels = 2;
@@ -714,6 +726,30 @@ static void CheckProgressionIndexes() {
         }
     }
     Check(expected == num_packets, "CPRL packet sequence is incomplete");
+}
+
+static void CheckPacketIndexBounds() {
+    jpeg2000::PacketIndex index;
+    Check(!index.Add(data::FileSegment(63, 1)),
+          "Packet index accepted an offset reserved for segment indexes");
+    Check(!index.Add(data::FileSegment(
+                  static_cast<uint64_t>(UINT32_MAX) + 1, 1)),
+          "Packet index truncated an offset wider than its storage");
+    Check(index.Add(data::FileSegment(64, 1)) &&
+                  index.Add(data::FileSegment(65, 1)),
+          "Packet index rejected representable offsets");
+    data::FileSegment segment;
+    Check(index.Get(0, &segment) && segment == data::FileSegment(64, 1) &&
+                  index.Get(1, &segment) && segment == data::FileSegment(65, 1),
+          "Packet index returned the wrong bounded segment");
+
+    jpeg2000::PacketIndex fragmented;
+    for (uint64_t i = 0; i < jpeg2000::PacketIndex::MAX_SEGMENTS; ++i)
+        Check(fragmented.Add(data::FileSegment(64 + i * 2, 1)),
+              "Packet index rejected a supported segment count");
+    Check(!fragmented.Add(data::FileSegment(
+                  64 + jpeg2000::PacketIndex::MAX_SEGMENTS * 2, 1)),
+          "Packet index accepted more segment indexes than it can represent");
 }
 
 static void CheckResolutionSelection() {
@@ -1030,6 +1066,7 @@ int main() {
     CheckCacheModel();
     CheckWOIPackets();
     CheckProgressionIndexes();
+    CheckPacketIndexBounds();
     CheckResolutionSelection();
     CheckJPIPMessages();
     CheckDataBinCapacity();

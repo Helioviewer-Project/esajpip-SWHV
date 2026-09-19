@@ -1,7 +1,9 @@
 #ifndef _JPEG2000_PACKET_INDEX_H_
 #define _JPEG2000_PACKET_INDEX_H_
 
+#include <limits>
 #include <vector>
+
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
@@ -25,37 +27,38 @@ namespace jpeg2000 {
     public:
         enum {
             MAX_SEGMENTS = 64,
-            /**
-             * All the offsets must be greater than this value.
-             */
+            // Smaller values are reserved for indexes into aux.
             MINIMUM_OFFSET = MAX_SEGMENTS
         };
 
         /**
          * Adds a new packet segment to the index.
          * @param segment File segment associated to the packet.
-         * @return The object itself.
+         * @return Whether the segment can be represented by the index.
          */
-        PacketIndex &Add(const data::FileSegment &segment) {
-            assert(segment.offset >= MINIMUM_OFFSET);
+        bool Add(const data::FileSegment &segment) {
+            if (segment.offset < MINIMUM_OFFSET ||
+                segment.offset > std::numeric_limits<uint32_t>::max())
+                return false;
 
-            int last = aux.size() - 1;
-
-            if (last < 0) {
+            if (aux.empty()) {
                 aux.push_back(segment);
                 offsets.push_back(0);
             } else {
+                std::size_t last = aux.size() - 1;
                 if (aux[last].IsContiguousTo(segment)) {
                     offsets.back() = aux[last].offset;
-                    offsets.push_back(last);
+                    offsets.push_back(static_cast<uint32_t>(last));
                     aux[last] = segment;
                 } else {
-                    offsets.push_back(last + 1);
+                    if (aux.size() >= MAX_SEGMENTS)
+                        return false;
+                    offsets.push_back(static_cast<uint32_t>(aux.size()));
                     aux.push_back(segment);
                 }
             }
 
-            return *this;
+            return true;
         }
 
         /**
