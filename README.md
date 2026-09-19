@@ -159,9 +159,9 @@ addresses or ports use distinct names.
 The event loop and worker threads send log records through a bounded,
 nonblocking queue and never wait for log-file I/O. If logging falls behind,
 records are dropped and the next accepted record reports how many were lost.
-If the active log can no longer be written
-or rotated, file logging stops rather than silently switching to standard
-output. The server does not start if it cannot open the configured log file.
+If the active log can no longer be written or rotated, file logging stops
+rather than silently switching to standard output. The server does not start
+if it cannot open the configured log file.
 
 ## Troubleshooting
 

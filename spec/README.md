@@ -6,7 +6,8 @@ esajpip reads JPEG 2000 files (`.jp2`, `.jpx`) and serves pieces of them to
 JHelioviewer over JPIP. The code that reads those files is
 `src/jpeg2000/file_manager.cc`. It has to reject malformed input without
 crashing, and it has to accept exactly the files the project promises to
-support (`JPIP_PROFILE.md`, "Supported JPEG 2000 sources").
+support ([`JPIP_PROFILE.md`](../JPIP_PROFILE.md), "Supported JPEG 2000
+sources").
 
 This directory is a **formal description of what a valid file looks like**,
 written in a machine-readable notation (ASN.1 with ACN encoding rules), plus
@@ -23,8 +24,9 @@ The point of doing it this way rather than writing test files by hand:
 - The description exists in two layers — *what the standard allows* and
   *what esajpip supports* — so a test failure tells you which of the two
   the parser disagrees with, and cites the clause of the standard.
-- The description is the specification. `JPIP_PROFILE.md` says in prose
-  what the server accepts; `spec/*.asn1` says it in a form a test can prove.
+- The description is the specification. [`JPIP_PROFILE.md`](../JPIP_PROFILE.md)
+  says in prose what the server accepts; `spec/*.asn1` says it in a form a
+  test can prove.
 
 Nothing here is part of the server build. The ASN.1 compiler runs offline,
 on a developer machine, only when the description changes. The repository
@@ -355,7 +357,7 @@ literal; the bare-field boolean form `[present-when customPrecincts]`;
 and `IA5String` — ignore the "draft" header on `Docs/deduced-size-spec.md`);
 `--acn-v2`, the single-pass encoder that makes inserted lengths work.
 
-Three spellings to confirm when the compiler first runs; each has a
+Four spellings need confirmation when the compiler first runs; each has a
 fallback that changes no bytes:
 
 1. **`size null-terminated` on a `SEQUENCE OF`** (`Codestream.segments`,
@@ -556,21 +558,22 @@ the place to add wire-level cases.
 
 ## Frequently asked
 
-**Why not just write the test files by hand?** `jpeg2000_test.cc` does,
-for about twenty cases. The corpus has a few thousand, one per field per
-bound per layer, and their expected outcomes are derived rather than
-guessed. When the standard and the profile are both written down formally,
-"what should the server do with this?" stops being a judgement call.
+**Why not just write the test files by hand?** `jpeg2000_test.cc` already
+contains a focused collection of hand-built cases. The corpus adds a few
+thousand systematic cases, one per field, bound, and layer, with expected
+outcomes derived rather than guessed. When the standard and the profile are
+both written down formally, "what should the server do with this?" stops being
+a judgement call.
 
 **Why two layers?** So a failure says *which* rule the parser disagrees
 with. "Rejects a valid standard file" and "accepts something the profile
 excludes" are different bugs with different fixes, and layer 1 rejections
 cite the standard's table so the disagreement can be settled by reading it.
 
-**Why is asn1scc not in the build?** The generated code is only a judge,
-used once per model change to label files. The server never links it; the
-tests read the labelled files. Keeping the compiler offline keeps the
-build's dependency list (GLib, zlib) unchanged.
+**Why is asn1scc not in the build?** The generated code is only a judge, used
+once per model change to label files. The server never links it; the tests read
+the labelled files. Keeping the compiler offline avoids adding asn1scc and its
+generated code to the production build.
 
 **Why does the model have "corpus bounds"?** asn1scc's C structs embed
 every list at its maximum size. Bounds like "65,535 boxes" would make a

@@ -159,8 +159,8 @@ connections do not allocate a channel or JPEG 2000 state.
 After identification, the complete HTTP request head is limited to 4 KiB.
 `connections.timeout` limits each wait for request data, response writes, a
 busy channel, and an idle channel. Successful I/O starts the next wait; the
-setting is not an absolute channel lifetime. Values of `0` and `-1` disable
-this timeout.
+setting is not an absolute channel lifetime. Both timeout settings must be
+positive.
 
 `connections.limit` limits physical HTTP connections.
 `channels.limit` separately limits active JPIP channels. A channel
@@ -212,10 +212,11 @@ complete-head limit bound parser storage. Rejected and expired connections do
 not allocate JPEG 2000 state.
 
 For `cnew`, the loop reserves an opaque channel ID and places image opening in
-a bounded FIFO. At most two opens run concurrently, leaving pool capacity for
-established channels. For `cid` or `cclose`, the loop routes the parsed request
-to the channel without transferring the socket. Each channel serializes its
-worker items and has one active and one waiting request slot.
+a bounded FIFO. At most half of the configured worker pool opens images
+concurrently, leaving the other half available to established channels. For
+`cid` or `cclose`, the loop routes the parsed request to the channel without
+transferring the socket. Each channel serializes its worker items and has one
+active and one waiting request slot.
 
 ## Termination
 

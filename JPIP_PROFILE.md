@@ -15,9 +15,9 @@ that every field was honored.
 ## Relationship to T.808 Annex J
 
 esajpip does not implement Annex J Profile 0, Profile 1, or the Full Profile.
-Even Profile 0 requires semantics for fields such as `type`, `tid`, and `pref`;
-esajpip accepts those fields but does not interpret them. Its implemented
-subset instead draws from more than one Annex J level:
+Even Profile 0 requires complete semantics for fields such as `type`, `tid`,
+and `pref`; esajpip implements only reduced or compatibility behavior for
+them. Its implemented subset instead draws from more than one Annex J level:
 
 | Annex J area | esajpip behavior |
 | --- | --- |
@@ -166,9 +166,8 @@ expectations, not that it conforms completely to JP2 or JPX.
   data, and no packet data may follow the packet set derived from `COD`. Marker
   structure is checked while opening the source; coverage and packet bounds are
   checked lazily as packets are indexed. As a compatibility exception for
-  deployed JPEG 2000 files, zero `Iplt`
-  entries after the logical packet list are ignored; a nonzero trailing entry
-  is rejected.
+  deployed JPEG 2000 files, zero `Iplt` entries after the logical packet list
+  are ignored; a nonzero trailing entry is rejected.
 - Packet counts, packet locations, and each data-bin's cumulative byte length
   must fit the signed 32-bit JPIP state. Source files larger than `INT_MAX`
   bytes are outside the supported profile.
