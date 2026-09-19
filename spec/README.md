@@ -31,20 +31,23 @@ The point of doing it this way rather than writing test files by hand:
   test can prove.
 
 Nothing here is part of the server build. The ASN.1 compiler runs offline,
-on a developer machine, only when the description changes. The repository
-consumes only the committed corpus, through plain CMake/CTest.
+on a developer machine, only when the description changes. Once the corpus is
+integrated, the server tests will consume only its committed files through
+plain CMake/CTest; generated compiler code will remain outside the server
+build.
 
-**Status.** The pinned compiler builds in the Linux container described below,
-and the model passes its ASN.1/ACN front end. Compiler code-generation defects
-still prevent the generated C from building; see "Compiler checks". No corpus
-exists in `tests/vectors/j2k/` yet, and `jpeg2000_test.cc` does not yet have the
-loop that reads it.
+**Status.** With the deferred-ACN compiler fixes described under "Compiler
+checks", the complete model generates C, that C builds as strict C11, and the
+sanitized harness writes 376 uniquely named vectors. All mutant expectations
+agree with the generated decoders and cross-field checks; 34 vectors are valid
+at both layers. `spec/VERSION` and `spec/asn1scc-patches/series` together define
+the reproducible compiler source. No corpus exists in `tests/vectors/j2k/` yet,
+and `jpeg2000_test.cc` does not yet consume it.
 
-If you are here to **run the tests**, you need nothing from this directory:
-once generated, the corpus lives in `tests/vectors/j2k/` and `ctest` uses
-it. If you are here to **change what the server accepts**, read
+If you are here to **run the current server tests**, you need nothing from
+this directory. If you are here to **change what the server accepts**, read
 "Background", then "Quick start", then edit the model and regenerate. If a
-test **just failed**, go to "When a vector fails".
+corpus test **just failed**, go to "When a vector fails".
 
 ## Scope and development order
 
@@ -66,12 +69,12 @@ that an arbitrary JPEG 2000 decoder is conformant.
 
 Treat the following as ordered gates, not as a menu of parallel improvements:
 
-1. Make the pinned asn1scc generate C that builds for the complete model. Do
-   not adapt the harness to incomplete or hand-edited generated output.
-2. Build and run the generated round-trip tests and the harness in Linux Docker
+1. Keep the deferred-ACN compiler regressions passing and pin their committed
+   compiler revision in `spec/VERSION`. Do not hand-edit generated output.
+2. Build the generated code as strict C11 and run the harness in Linux Docker
    with AddressSanitizer and UndefinedBehaviorSanitizer enabled.
-3. Generate and review the corpus and manifest. Settle every unexpected label
-   before treating the model as an oracle.
+3. Review the corpus and manifest. Settle every unexpected label before
+   treating the model as an oracle.
 4. Make `jpeg2000_test` consume the manifest and verify both `OpenImage` and
    packet indexing. This is the point at which the model becomes a release
    test rather than executable documentation.
@@ -208,7 +211,10 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
-| `VERSION` | The exact asn1scc commit used to generate the corpus. The current baseline is commit `4434cad8bbcc436183ce4cc15721392be1466e36`, five commits after release `4.9.0.0`. |
+| `VERSION` | The exact unmodified asn1scc revision under the local patch stack. The current base is `4434cad8bbcc436183ce4cc15721392be1466e36`. |
+| `asn1scc-patches/` | Ordered, described compiler patches and their focused regressions. |
+| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository, applies the patch stack to a temporary clean tree, builds the Docker image, and strict-compiles its focused regressions. |
+| `check-model.sh` | Generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. |
 | `harness/mapping.{h,c}` | Three tiny functions ACN needs because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8). |
@@ -243,80 +249,45 @@ the decoder rejects it.
 Only needed when a model file changes. Everything runs offline. Run these
 commands from the repository root.
 
-1. Get asn1scc and check out the exact commit pinned in `spec/VERSION`, not a
-   moving branch or the nearest release tag. The compiler is built and run in
-   Linux Docker so corpus generation does not depend on the host toolchain:
+1. Get an asn1scc repository containing the commit pinned in `spec/VERSION`.
+   Its checked-out branch and working tree do not matter: the build script
+   exports the pinned commit, applies `spec/asn1scc-patches/series` to that
+   clean tree, and builds the compiler in Linux Docker:
 
    ```sh
-   git -C ~/git/asn1scc checkout "$(cat spec/VERSION)"
-   test -z "$(git -C ~/git/asn1scc status --porcelain)"
-   docker build -f "$PWD/spec/Dockerfile.asn1scc" \
-       -t esajpip-asn1scc:"$(cat spec/VERSION)" ~/git/asn1scc
+   spec/build-asn1scc.sh ~/git/asn1scc esajpip-asn1scc
    ```
 
-   The current commit belongs to the `4.9.0.0` lineage and includes later
-   upstream fixes. Advance the pin only deliberately, regenerating and
-   reviewing the corpus in the same change.
-2. Compile the model (checks the ASN.1 and ACN syntax; ~seconds):
+   The current base belongs to the `4.9.0.0` lineage and includes later
+   upstream fixes. Advance it only deliberately: rebase and verify the patch
+   stack, then regenerate and review the corpus in the same change.
+2. Run the complete generation and harness gate. Give the script an empty
+   output directory only when you want to retain the generated corpus:
 
    ```sh
-   mkdir -p /tmp/j2k-gen
-   docker run --rm \
-       -v "$PWD:/project:ro" \
-       -v /tmp/j2k-gen:/output \
-       esajpip-asn1scc:"$(cat spec/VERSION)" \
-       -c -ACN --acn-v2 --field-prefix AUTO -o /output \
-       /project/spec/j2k-headers.asn1 /project/spec/j2k-headers.acn \
-       /project/spec/j2k-codestream.asn1 /project/spec/j2k-codestream.acn \
-       /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn
+   ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh
+   mkdir /tmp/j2k-corpus
+   ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh /tmp/j2k-corpus
    ```
 
-   You should get one `.c`/`.h` per module plus `asn1crt*.{c,h}` in
-   `/tmp/j2k-gen`. Hyphens become underscores (`Jp2File-Profile` →
-   `Jp2File_Profile`). First time: read "Compiler checks" below.
-3. Run the compiler's own round-trip test (encodes and decodes every type at
-   its bounds; proves the `.acn` describes the bytes consistently):
-
-   ```sh
-   docker run --rm \
-       -v "$PWD:/project:ro" \
-       -v /tmp/j2k-gen:/output \
-       esajpip-asn1scc:"$(cat spec/VERSION)" \
-       -c -ACN --acn-v2 --field-prefix AUTO -atc -o /output \
-       /project/spec/j2k-headers.asn1 /project/spec/j2k-headers.acn \
-       /project/spec/j2k-codestream.asn1 /project/spec/j2k-codestream.acn \
-       /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn
-   cd /tmp/j2k-gen && cc -O1 -g -fsanitize=address,undefined *.c \
-       "$OLDPWD"/harness/mapping.c -o atc && ./atc
-   ```
-
-   (`$OLDPWD` is `spec/` after the `cd`; the mapping functions are needed
-   because the generated code only declares them.)
-4. Build the harness against the generated code and run it:
-
-   ```sh
-   cd spec/harness
-   GEN=$(ls /tmp/j2k-gen/[a-z]*.c | grep -v -e mainprogram -e test_case -e auto_tcs)
-   cc -O1 -g -fsanitize=address,undefined -I/tmp/j2k-gen \
-      vectors.c crossfield.c mapping.c $GEN -o vectors
-   mkdir -p ../../tests/vectors/j2k && ./vectors ../../tests/vectors/j2k
-   ```
-
-   It prints `vectors: N vectors written … (M valid at both layers)` and
+   It prints `vectors: 376 vectors written … (34 valid at both layers)` and
    exits non-zero if any mutant did not produce the label its table entry
    expects (see "What the harness generates"); each such line names the
    vector, the expected and actual labels, and the rule that fired. On the
    first run, expect a few of these — each is either a mutant that missed
    its target, a wrong expectation, or a model rule firing in an order the
    table did not anticipate; settle it before trusting the corpus.
-   Estimate from the mutant tables: N in the low thousands, M around a
-   hundred. Record the first real numbers here.
-5. Run the server tests and read "When a vector fails" for anything red:
+   The generic compiler `-atc` generator is intentionally not used for this
+   model: its large bounded, inline container types make generic exhaustive
+   values impractical, and it cannot replace the JPEG 2000 cross-field and
+   mutation checks. Small compiler regressions cover the backend mechanisms;
+   `check-model.sh` covers their composition in the real model.
+3. Run the server tests and read "When a vector fails" for anything red:
 
    ```sh
    cmake -S . -B build -DBUILD_TESTING=ON && cmake --build build && ctest --test-dir build
    ```
-6. Commit the model change, `spec/VERSION` if it changed, and
+4. Commit the model change, `spec/VERSION` if it changed, and
    `tests/vectors/j2k/` together. Never edit vector files or manifest labels
    by hand.
 
@@ -349,6 +320,11 @@ Two conventions worth knowing before you edit:
   records the server's skip policy; it does not establish that the marker is
   forbidden by every edition or extension of JPEG 2000. Unknown box types are
   valid at both layers, as required by T.800 I.8 and T.801 M.12.
+- **ACN properties are explicit on profile structures.** asn1scc does not
+  inherit field encodings through `WITH COMPONENTS` constraints. Profile
+  structures that must be encoded independently therefore repeat the base
+  structure and have their own ACN entry. This is deliberate duplication at
+  the wire-description boundary, not a second interpretation of the format.
 
 ## The test contract
 
@@ -428,29 +404,32 @@ both layers.
 
 ## Compiler checks
 
-The compiler is built at the pinned commit and run in Linux Docker. The model
-now passes the ASN.1/ACN front end. The codestream modules emit C, but two
-compiler-generation defects still prevent building the complete harness:
+The compiler is built from the exact revision in `spec/VERSION` plus the
+ordered patches in `spec/asn1scc-patches/`. Four small cases added under
+asn1scc's `v4Tests/test-cases/acn/25-DeferredRegressions/` pin the backend
+mechanisms exposed by this model:
 
-1. Passing the ACN-inserted `TBox` and `LBox` fields through a nested box type
-   reaches the backend with an unresolved parameter dependency. The model
-   keeps each selected payload in its own length-bounded `CONTAINING` region;
-   flattening it would make the superbox's deduced child list ambiguous.
-2. The generated codestream C emits duplicate encode/decode functions for
-   several profile `CONTAINING` specializations, and the generated `Iplt`
-   decoder refers to the nonexistent `Iplt_b0_more` identifier.
+1. a one-bit Boolean determinant produced inside a referenced structure and
+   consumed by an optional sibling;
+2. constrained `CONTAINING` specializations that would otherwise collide in
+   their generated C names;
+3. a length determinant crossing nested `SEQUENCE` and `CHOICE` boundaries;
+4. a mapped length determinant crossing a parameterized `CHOICE` boundary.
 
-These are compiler code-generation failures, not host-toolchain failures or
-C warnings. Keep the pinned compiler hash while resolving them: changing to a
-moving compiler would make the corpus irreproducible. The harness must be
-adapted to the generated determinant-free structs only after generated C
-builds successfully.
+The compiler now converts those cross-scope determinant relationships into
+explicit ACN parameters, reserves and patches producer fields at the scope
+that owns the value, preserves mapping functions when patching measured
+lengths, and emits initialized generated locals. Each focused model generates
+and builds as strict C11. `check-model.sh` then proves that the same machinery
+generates and runs the complete JP2/JPX model under ASan and UBSan.
 
-Optional, later: 4.9.0.0 has `post-decoding-validator <name>`, which makes
-the generated decoder call a C function after decoding. Attaching the
-`crossfield.c` rules that way would fold the third part of the validity
-rule into the decoder. Start without it; a validator failure inside `-atc`
-aborts the round-trip test rather than labelling a vector.
+These checks deliberately separate compiler responsibility from model
+responsibility. ASN.1 constraints and ACN regions validate local shape and
+lengths. `crossfield.c` handles relationships such as marker ordering, packet
+coverage, JPX link rules, and distinctions between the standard and the served
+profile. A future compiler feature such as a post-decoding validator could
+invoke some of those rules automatically, but it would not make the rules
+disappear or make generic `-atc` values representative of JPEG 2000 files.
 
 ## What the harness generates
 
@@ -612,8 +591,9 @@ each until the model does:
 
 Regenerate only when a model file changes or when moving to a newer asn1scc:
 
-1. update `spec/VERSION`;
-2. rerun Quick start steps 2–4;
+1. update `spec/VERSION` and rebase `spec/asn1scc-patches/` when the compiler
+   base changes;
+2. rerun Quick start step 2;
 3. diff `manifest.tsv` against the previous one — new or removed rows must be
    explainable by the model change; label flips are findings;
 4. commit model, `VERSION`, and corpus in one change.

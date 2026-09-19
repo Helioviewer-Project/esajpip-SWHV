@@ -19,12 +19,14 @@
 #define CF_S _Profile
 #define CF_FILE Jp2File_Profile
 #define CF_FN cf_check_profile_common_
+#define CF_COD Cod_Profile
 #define CF_MAIN_OTHER
 #define CF_TILE_PLT_ONLY     /* TileBody-Profile has the plt alternative only */
 #include "crossfield_impl.h"
 #undef CF_S
 #undef CF_FILE
 #undef CF_FN
+#undef CF_COD
 #undef CF_MAIN_OTHER
 #undef CF_TILE_PLT_ONLY
 

@@ -117,4 +117,42 @@ Com [] {
     ccom        [size deduced]
 }
 
+-- ASN.1 WITH COMPONENTS subtypes have distinct generated ACN functions.
+-- State their wire encodings explicitly; they are byte-for-byte identical to
+-- the base marker-body types above and differ only in ASN.1 constraints.
+Siz-Profile [] {
+    rsiz        [encoding pos-int, size 16, endianness big],
+    xsiz        [encoding pos-int, size 32, endianness big],
+    ysiz        [encoding pos-int, size 32, endianness big],
+    xosiz       [encoding pos-int, size 32, endianness big],
+    yosiz       [encoding pos-int, size 32, endianness big],
+    xtsiz       [encoding pos-int, size 32, endianness big],
+    ytsiz       [encoding pos-int, size 32, endianness big],
+    xtosiz      [encoding pos-int, size 32, endianness big],
+    ytosiz      [encoding pos-int, size 32, endianness big],
+    csiz        [encoding pos-int, size 16, endianness big],
+    components  [size deduced]
+}
+
+Cod-Profile [] {
+    scod        [],
+    sgcod       [],
+    spcod       []
+}
+
+Qcd-Profile [] {
+    sqcd        [encoding pos-int, size 8],
+    spqcd       [size deduced]
+}
+
+Plt-Profile [] {
+    zplt        [encoding pos-int, size 8],
+    entries     [size deduced]
+}
+
+Com-Profile [] {
+    rcom        [encoding pos-int, size 16, endianness big],
+    ccom        [size deduced]
+}
+
 END

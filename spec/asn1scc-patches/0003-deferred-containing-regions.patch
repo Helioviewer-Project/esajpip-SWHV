@@ -1,0 +1,884 @@
+Subject: [PATCH 3/3] Preserve deferred CONTAINING regions and mappings
+
+Parameterized CHOICE types can carry size determinants for alternatives that
+use CONTAINING. Deferred ACN generation discarded the containing-region
+boundary when it crossed the CHOICE reference and emitted a patched length
+without its ACN mapping function. The generated program then encoded and
+decoded against the outer stream rather than the selected alternative's
+bounded region, and mapped determinants used the unmapped length.
+
+Carry the containing-region and mapping information through deferred
+specialization, and extend the language template interface consistently. C
+and Ada apply the mapping function, Rust follows its existing mapping
+convention, and the currently stubbed Python and Scala deferred backends accept
+the same interface.
+
+Add nested and mapped CONTAINING regressions. Besides generated round trips,
+the mapped case asserts the exact encoded bytes and verifies decoding, so the
+test proves that the mapping is applied rather than merely compiling the
+generated source.
+
+diff --git a/BackendAst/DAstACNDeferred.fs b/BackendAst/DAstACNDeferred.fs
+index 2be31cfc..6946d428 100644
+--- a/BackendAst/DAstACNDeferred.fs
++++ b/BackendAst/DAstACNDeferred.fs
+@@ -137,19 +137,52 @@ let computePatchDetValueExpr
+ /// Follow the RefTypeArgumentDependency chain from a parameter upward
+ /// through intermediate boundaries until reaching the original
+ /// AcnChildDeterminant.  Returns the (InitDet, PatchDet, nBitsOpt) function names.
+-let findDetFunctionsForParam (lm: LanguageMacros) (deps: Asn1AcnAst.AcnInsertedFieldDependencies) (paramId: ReferenceToType) : DetFunctionNames option =
++let private findOriginalDeterminantForParam
++        (deps: Asn1AcnAst.AcnInsertedFieldDependencies)
++        (paramId: ReferenceToType) : Asn1AcnAst.AcnChild option =
+     let rec follow (pid: ReferenceToType) =
+         deps.acnDependencies |> List.tryPick (fun d ->
+             match d.dependencyKind with
+             | AcnDepRefTypeArgument p when p.id = pid ->
+                 match d.determinant with
+-                | Asn1AcnAst.AcnChildDeterminant ac ->
+-                    lm.lg.getDeferredDetFunctions ac.Type
++                | Asn1AcnAst.AcnChildDeterminant ac -> Some ac
+                 | Asn1AcnAst.AcnParameterDeterminant parentPrm ->
+                     follow parentPrm.id
+             | _ -> None)
+     follow paramId
+ 
++let findDetFunctionsForParam (lm: LanguageMacros) (deps: Asn1AcnAst.AcnInsertedFieldDependencies) (paramId: ReferenceToType) : DetFunctionNames option =
++    findOriginalDeterminantForParam deps paramId
++    |> Option.bind (fun determinant -> lm.lg.getDeferredDetFunctions determinant.Type)
++
++let private getDeferredMappingFunction
++        (r: Asn1AcnAst.AstRoot)
++        (lm: LanguageMacros)
++        (deps: Asn1AcnAst.AcnInsertedFieldDependencies)
++        (codec: CommonTypes.Codec)
++        (paramId: ReferenceToType) : string option * string option * UserDefinedFunction list =
++    match findOriginalDeterminantForParam deps paramId with
++    | Some determinant ->
++        match determinant.Type with
++        | Asn1AcnAst.AcnInteger integer ->
++            match integer.acnProperties.mappingFunction with
++            | Some (MappingFunction (explicitModule, functionName)) ->
++                let name = functionName.Value
++                let mappingModule =
++                    match explicitModule with
++                    | Some moduleName -> Some moduleName.Value
++                    | None -> AcnPrimitives.getMappingFunctionModule r lm (Some name)
++                let declaration =
++                    lm.acn.MappingFunctionDeclaration
++                        (DAstACN.getDeterminantTypeDefinitionBodyWithinSeq
++                            r lm (Asn1AcnAst.AcnChildDeterminant determinant))
++                        name codec
++                    |> UserMappingFunction
++                Some name, mappingModule, [declaration]
++            | None -> None, None, []
++        | _ -> None, None, []
++    | None -> None, None, []
++
+ 
+ /// Collect deferred determinant names from the original AST (before the fold).
+ /// Used by preSeqFunc to provide parent context to createAcnChild.
+@@ -604,15 +637,20 @@ let private createDeferredSequenceFunction
+ /// Find which acnParameter is the CONTAINING size determinant by checking
+ /// the dependency list for AcnDepSizeDeterminant_bit_oct_str_contain.
+ /// Returns the parameter, or None if not found.
+-let private findContainingSizeParam
++let private findContainingSizeParamInfo
+         (deps: Asn1AcnAst.AcnInsertedFieldDependencies)
+-        (o: Asn1AcnAst.ReferenceType) : AcnGenericTypes.AcnParameter option =
+-    o.resolvedType.acnParameters |> List.tryFind (fun prm ->
+-        deps.acnDependencies |> List.exists (fun d ->
+-            d.determinant.id = prm.id
+-            && (match d.dependencyKind with
+-                | Asn1AcnAst.AcnDepSizeDeterminant_bit_oct_str_contain _ -> true
+-                | _ -> false)))
++        (o: Asn1AcnAst.ReferenceType) : (AcnGenericTypes.AcnParameter * Asn1AcnAst.ReferenceType) option =
++    o.resolvedType.acnParameters |> List.tryPick (fun prm ->
++        deps.acnDependencies |> List.tryPick (fun d ->
++            if d.determinant.id <> prm.id then None
++            else
++                match d.dependencyKind with
++                | Asn1AcnAst.AcnDepSizeDeterminant_bit_oct_str_contain containing ->
++                    Some (prm, containing)
++                | _ -> None))
++
++let private findContainingSizeParam deps o =
++    findContainingSizeParamInfo deps o |> Option.map fst
+             
+ /// After boundary post-processing rewrites &name → formal param name in the
+ /// body text, the matching AcnInsertedFieldRef local variable declarations
+@@ -695,20 +733,30 @@ let private buildContainingClosureBody
+             match containingSizePrm with
+             | Some sizePrm ->
+                 let detParamName = DAstACN.getAcnDeterminantName sizePrm.id
++                let mappingFunction, mappingModule, _ =
++                    getDeferredMappingFunction ctx.r ctx.lm ctx.deps ctx.codec sizePrm.id
+                 let patchFnName =
+                     match findDetFunctionsForParam ctx.lm ctx.deps sizePrm.id with
+                     | Some (_, patchFn, _, _) -> patchFn
+                     | None -> ""
+                 match ctx.o.encodingOptions.Value.octOrBitStr with
+                 | CommonTypes.ContainedInOctString ->
+-                    ctx.lm.acn.octet_string_containing_deferred_wrapper br.funcBody detParamName patchFnName errCode.errCodeName ctx.codec
++                    ctx.lm.acn.octet_string_containing_deferred_wrapper br.funcBody detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
+                 | CommonTypes.ContainedInBitString ->
+-                    ctx.lm.acn.bit_string_containing_deferred_wrapper br.funcBody detParamName patchFnName errCode.errCodeName ctx.codec
++                    ctx.lm.acn.bit_string_containing_deferred_wrapper br.funcBody detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
+             | None ->
+                 br.funcBody  // fallback: no wrapping if size param not found
++        let mappingDeclarations =
++            containingSizePrm
++            |> Option.map (fun prm ->
++                let _, _, declarations =
++                    getDeferredMappingFunction ctx.r ctx.lm ctx.deps ctx.codec prm.id
++                declarations)
++            |> Option.defaultValue []
+         { br with
+             funcBody = wrappedBody
+             errCodes = br.errCodes @ [errCode]
++            userDefinedFunctions = br.userDefinedFunctions @ mappingDeclarations
+             localVariables = stripLocals br.localVariables }, ns2
+ 
+ 
+@@ -728,6 +776,8 @@ let private buildContainingStandaloneBody
+         | _ -> str
+     let sizePrm = ctx.o.resolvedType.acnParameters.Head
+     let detParamName = DAstACN.getAcnDeterminantName sizePrm.id
++    let mappingFunction, mappingModule, mappingDeclarations =
++        getDeferredMappingFunction ctx.r ctx.lm ctx.deps ctx.codec sizePrm.id
+     let patchFnName =
+         match findDetFunctionsForParam ctx.lm ctx.deps sizePrm.id with
+         | Some (_initFn, patchFn, _, _) -> patchFn
+@@ -735,12 +785,13 @@ let private buildContainingStandaloneBody
+     let fncBody =
+         match ctx.o.encodingOptions.Value.octOrBitStr with
+         | CommonTypes.ContainedInOctString ->
+-            ctx.lm.acn.octet_string_containing_deferred_func pp baseFncName detParamName patchFnName errCode.errCodeName ctx.codec
++            ctx.lm.acn.octet_string_containing_deferred_func pp baseFncName detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
+         | CommonTypes.ContainedInBitString ->
+-            ctx.lm.acn.bit_string_containing_deferred_func pp baseFncName detParamName patchFnName errCode.errCodeName ctx.codec
++            ctx.lm.acn.bit_string_containing_deferred_func pp baseFncName detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
+     { emptyBody ctx.lm with
+         funcBody = fncBody
+         errCodes = [errCode]
++        userDefinedFunctions = mappingDeclarations
+         bValIsUnReferenced = false
+         bBsIsUnReferenced = false }, ns1
+ 
+@@ -1194,6 +1245,35 @@ let private createDeferredReferenceFunction
+                 | true, false -> buildContainingStandaloneBody ctx specP errCode baseFncName ns1
+                 | _           -> buildNormalReferenceBody      ctx specP          baseAcnFunc stripLocals ns1
+ 
++            // A parameterized CHOICE may use one size parameter for each
++            // alternative's CONTAINING region. Exactly one alternative is
++            // encoded, so the CHOICE boundary is the containing region and
++            // must measure/limit it. The selected child's referenced type has
++            // no explicit ACN argument of its own, so it cannot do this work.
++            let bodyResult =
++                match isContainingExternalField, ctx.o.resolvedType.Kind,
++                      findContainingSizeParamInfo ctx.deps ctx.o with
++                | false, Asn1AcnAst.Asn1TypeKind.Choice _, Some (sizePrm, containing) ->
++                    let detParamName = DAstACN.getAcnDeterminantName sizePrm.id
++                    let mappingFunction, mappingModule, mappingDeclarations =
++                        getDeferredMappingFunction ctx.r ctx.lm ctx.deps ctx.codec sizePrm.id
++                    let patchFnName =
++                        match findDetFunctionsForParam ctx.lm ctx.deps sizePrm.id with
++                        | Some (_, patchFn, _, _) -> patchFn
++                        | None -> failwithf "BUG: missing PatchDet function for CONTAINING CHOICE parameter %s" sizePrm.id.AsString
++                    let wrappedBody =
++                        match containing.encodingOptions.Value.octOrBitStr with
++                        | CommonTypes.ContainedInOctString ->
++                            ctx.lm.acn.octet_string_containing_deferred_wrapper
++                                bodyResult.funcBody detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
++                        | CommonTypes.ContainedInBitString ->
++                            ctx.lm.acn.bit_string_containing_deferred_wrapper
++                                bodyResult.funcBody detParamName patchFnName mappingFunction mappingModule errCode.errCodeName ctx.codec
++                    { bodyResult with
++                        funcBody = wrappedBody
++                        userDefinedFunctions = bodyResult.userDefinedFunctions @ mappingDeclarations }
++                | _ -> bodyResult
++
+             // Step 2b: append PatchDet calls (encode only) onto the body.
+             let finalBody =
+                 let body =
+diff --git a/CommonTypes/AbstractMacros.fs b/CommonTypes/AbstractMacros.fs
+index e7367a31..c4ac142c 100644
+--- a/CommonTypes/AbstractMacros.fs
++++ b/CommonTypes/AbstractMacros.fs
+@@ -486,14 +486,14 @@ Generated by the C stg macros with the following command
+         abstract member checkAccessPath : arrsCheckPaths:seq<string> -> sUpdateStatement:string -> v:string -> sInitExpr:string -> string;
+         abstract member SizeDependency_oct_str_containing : p:string -> sFuncName:string -> sReqBytesForUperEncoding:string -> v:string -> bIsOctet:bool -> sInner:string -> sLocalVarType:string -> string;
+         abstract member octet_string_containing_ext_field_func : p:string -> sFuncName:string -> sReqBytesForUperEncoding:string -> sExtField:string -> sErrCode:string -> soInner:string option -> codec:Codec -> string;
+-        abstract member octet_string_containing_deferred_func : p:string -> sFuncName:string -> sDetParamName:string -> sPatchFuncName:string -> sErrCode:string -> codec:Codec -> string;
++        abstract member octet_string_containing_deferred_func : p:string -> sFuncName:string -> sDetParamName:string -> sPatchFuncName:string -> soMF:string option -> soMFM:string option -> sErrCode:string -> codec:Codec -> string;
+         abstract member octet_string_containing_deferred_fixed_func : p:string -> sFuncName:string -> codec:Codec -> string;
+         abstract member octet_string_containing_deferred_embedded_func : p:string -> sFuncName:string -> nMinSize:BigInteger -> nMaxSize:BigInteger -> nBits:BigInteger -> codec:Codec -> string;
+-        abstract member octet_string_containing_deferred_wrapper : sBody:string -> sDetParamName:string -> sPatchFuncName:string -> sErrCode:string -> codec:Codec -> string;
+-        abstract member bit_string_containing_deferred_func : p:string -> sFuncName:string -> sDetParamName:string -> sPatchFuncName:string -> sErrCode:string -> codec:Codec -> string;
++        abstract member octet_string_containing_deferred_wrapper : sBody:string -> sDetParamName:string -> sPatchFuncName:string -> soMF:string option -> soMFM:string option -> sErrCode:string -> codec:Codec -> string;
++        abstract member bit_string_containing_deferred_func : p:string -> sFuncName:string -> sDetParamName:string -> sPatchFuncName:string -> soMF:string option -> soMFM:string option -> sErrCode:string -> codec:Codec -> string;
+         abstract member bit_string_containing_deferred_fixed_func : p:string -> sFuncName:string -> codec:Codec -> string;
+         abstract member bit_string_containing_deferred_embedded_func : p:string -> sFuncName:string -> nMinSize:BigInteger -> nMaxSize:BigInteger -> nBits:BigInteger -> codec:Codec -> string;
+-        abstract member bit_string_containing_deferred_wrapper : sBody:string -> sDetParamName:string -> sPatchFuncName:string -> sErrCode:string -> codec:Codec -> string;
++        abstract member bit_string_containing_deferred_wrapper : sBody:string -> sDetParamName:string -> sPatchFuncName:string -> soMF:string option -> soMFM:string option -> sErrCode:string -> codec:Codec -> string;
+         abstract member bit_string_containing_ext_field_func : p:string -> sFuncName:string -> sReqBytesForUperEncoding:string -> sReqBitsForUperEncoding:string -> sExtField:string -> sErrCode:string -> codec:Codec -> string;
+         abstract member rtlModuleName : unit -> string;
+         abstract member sparkAnnotations : sTypeDefName:string -> codec:Codec -> string;
+@@ -611,4 +611,3 @@ Generated by the C stg macros with the following command
+     type IAux () =
+         abstract member PrintMakeFile : arrsFilesNoExt:seq<string> -> bWordSize4:bool -> bFpWordSize4:bool -> bAsn1sccStreaming:bool -> string;
+         abstract member emitVisualStudioSolution : unit -> string;
+-
+diff --git a/StgAda/acn_a.stg b/StgAda/acn_a.stg
+index 1f0e856d..2e3889a7 100644
+--- a/StgAda/acn_a.stg
++++ b/StgAda/acn_a.stg
+@@ -1391,7 +1391,7 @@ end if;
+    skipped. (Ada Bitstream.Size_In_Bytes is an immutable discriminant,
+    so the C trick of temporarily reducing `count` does not translate.) */
+ 
+-octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_data_start : constant adaasn1rtl.encoding.acn.AcnBitStreamPos := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+     acn_data_end : adaasn1rtl.encoding.acn.AcnBitStreamPos;
+@@ -1401,7 +1401,7 @@ begin
+     if result.Success then
+         acn_data_end := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+         acn_nCount := adaasn1rtl.encoding.acn.Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+-        <sPatchFuncName>(acn_nCount, bs, <sDetParamName>, result);
++        <sPatchFuncName>(<MFen(soMF, soMFM, acn_nCount)>, bs, <sDetParamName>, result);
+         if not result.Success then
+             result.ErrorCode := <sErrCode>;
+             return;
+@@ -1410,7 +1410,7 @@ begin
+ end;
+ >>
+ 
+-octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_expected_end : constant Natural := bs.Current_Bit_Pos + Natural(<sDetParamName>.Value) * 8;
+ begin
+@@ -1461,7 +1461,7 @@ begin
+ end;
+ >>
+ 
+-octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_data_start : constant adaasn1rtl.encoding.acn.AcnBitStreamPos := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+     acn_data_end : adaasn1rtl.encoding.acn.AcnBitStreamPos;
+@@ -1471,7 +1471,7 @@ begin
+     if result.Success then
+         acn_data_end := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+         acn_nCount := adaasn1rtl.encoding.acn.Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+-        <sPatchFuncName>(acn_nCount, bs, <sDetParamName>, result);
++        <sPatchFuncName>(<MFen(soMF, soMFM, acn_nCount)>, bs, <sDetParamName>, result);
+         if not result.Success then
+             result.ErrorCode := <sErrCode>;
+             return;
+@@ -1480,7 +1480,7 @@ begin
+ end;
+ >>
+ 
+-octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_expected_end : constant Natural := bs.Current_Bit_Pos + Natural(<sDetParamName>.Value) * 8;
+ begin
+@@ -1489,7 +1489,7 @@ begin
+ end;
+ >>
+ 
+-bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_data_start : constant adaasn1rtl.encoding.acn.AcnBitStreamPos := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+     acn_data_end : adaasn1rtl.encoding.acn.AcnBitStreamPos;
+@@ -1499,7 +1499,7 @@ begin
+     if result.Success then
+         acn_data_end := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+         acn_nCount := adaasn1rtl.encoding.acn.Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+-        <sPatchFuncName>(acn_nCount, bs, <sDetParamName>, result);
++        <sPatchFuncName>(<MFen(soMF, soMFM, acn_nCount)>, bs, <sDetParamName>, result);
+         if not result.Success then
+             result.ErrorCode := <sErrCode>;
+             return;
+@@ -1508,7 +1508,7 @@ begin
+ end;
+ >>
+ 
+-bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_expected_end : constant Natural := bs.Current_Bit_Pos + Natural(<sDetParamName>.Value);
+ begin
+@@ -1559,7 +1559,7 @@ begin
+ end;
+ >>
+ 
+-bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_data_start : constant adaasn1rtl.encoding.acn.AcnBitStreamPos := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+     acn_data_end : adaasn1rtl.encoding.acn.AcnBitStreamPos;
+@@ -1569,7 +1569,7 @@ begin
+     if result.Success then
+         acn_data_end := adaasn1rtl.encoding.acn.Acn_BitStream_GetPos(bs);
+         acn_nCount := adaasn1rtl.encoding.acn.Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+-        <sPatchFuncName>(acn_nCount, bs, <sDetParamName>, result);
++        <sPatchFuncName>(<MFen(soMF, soMFM, acn_nCount)>, bs, <sDetParamName>, result);
+         if not result.Success then
+             result.ErrorCode := <sErrCode>;
+             return;
+@@ -1578,7 +1578,7 @@ begin
+ end;
+ >>
+ 
+-bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ declare
+     acn_expected_end : constant Natural := bs.Current_Bit_Pos + Natural(<sDetParamName>.Value);
+ begin
+diff --git a/StgC/acn_c.stg b/StgC/acn_c.stg
+index 7e55d7b0..a086634b 100644
+--- a/StgC/acn_c.stg
++++ b/StgC/acn_c.stg
+@@ -1341,7 +1341,7 @@ octet_string_containing_ext_field_func_decode(p, sFuncName, sReqBytesForUperEnco
+ >>
+ 
+ /* CONTAINING with deferred patching: encode directly, PatchDet with measured distance */
+-octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+     ret = <sFuncName>(<p>, pBitStrm, pErrCode, FALSE);
+@@ -1353,7 +1353,7 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+         }
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>((asn1SccUint)acn_nCount, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if (!ret) return FALSE;
+     }
+@@ -1361,7 +1361,7 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+ >>
+ 
+ /* CONTAINING with deferred patching: limit stream view, decode directly */
+-octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     long acn_saved_count = pBitStrm->count;
+     long acn_expected_end = pBitStrm->currentByte + (long)<sDetParamName>->value;
+@@ -1422,7 +1422,7 @@ octet_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nM
+ 
+ /* CONTAINING ExternalField wrapper: wraps an inline body with save-pos/measure/PatchDet
+    Used when the contained type has ACN parameters (no standalone ACN function). */
+-octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+     <sBody>
+@@ -1434,14 +1434,14 @@ octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFunc
+         }
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>((asn1SccUint)acn_nCount, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if (!ret) return FALSE;
+     }
+ }
+ >>
+ 
+-octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     long acn_saved_count = pBitStrm->count;
+     long acn_expected_end = pBitStrm->currentByte + (long)<sDetParamName>->value;
+@@ -1454,14 +1454,14 @@ octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFunc
+ >>
+ 
+ /* BIT STRING CONTAINING with deferred patching: encode directly, PatchDet with measured bit distance */
+-bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+     ret = <sFuncName>(<p>, pBitStrm, pErrCode, FALSE);
+     if (ret) {
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>((asn1SccUint)acn_nCount, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if (!ret) return FALSE;
+     }
+@@ -1469,7 +1469,7 @@ bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFu
+ >>
+ 
+ /* BIT STRING CONTAINING with deferred patching: limit stream view (bit-granular), decode directly */
+-bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     long acn_start_bits = pBitStrm->currentByte * 8L + pBitStrm->currentBit;
+     long acn_end_bits = acn_start_bits + (long)<sDetParamName>->value;
+@@ -1526,21 +1526,21 @@ bit_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nMax
+ >>
+ 
+ /* BIT STRING CONTAINING ExternalField wrapper: wraps inline body with bit-granular measurement/limiting */
+-bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+     <sBody>
+     if (ret) {
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>((asn1SccUint)acn_nCount, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if (!ret) return FALSE;
+     }
+ }
+ >>
+ 
+-bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     long acn_start_bits = pBitStrm->currentByte * 8L + pBitStrm->currentBit;
+     long acn_end_bits = acn_start_bits + (long)<sDetParamName>->value;
+diff --git a/StgPython/acn_python.stg b/StgPython/acn_python.stg
+index dcdf7d06..0ffeaa07 100644
+--- a/StgPython/acn_python.stg
++++ b/StgPython/acn_python.stg
+@@ -1499,10 +1499,10 @@ EmitEncodingSizeConstants(sTypeDefName, nMaxBytesInACN, nMaxBitsInACN) ::= <<
+ //   ACN Containing Deferred Templates (stubs — Python not supported yet)
+ // ========================================================================
+ 
+-octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+ octet_string_containing_deferred_fixed_func_encode(p, sFuncName) ::= <<
+@@ -1517,17 +1517,17 @@ octet_string_containing_deferred_embedded_func_encode(p, sFuncName, nMinSize, nM
+ octet_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nMaxSize, nBits) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+ 
+-bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+ bit_string_containing_deferred_fixed_func_encode(p, sFuncName) ::= <<
+@@ -1542,10 +1542,10 @@ bit_string_containing_deferred_embedded_func_encode(p, sFuncName, nMinSize, nMax
+ bit_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nMaxSize, nBits) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+-bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ # TODO: ACN deferred patching not supported for Python
+ >>
+ 
+diff --git a/StgRust/acn_rust.stg b/StgRust/acn_rust.stg
+index e6333882..bd65f378 100644
+--- a/StgRust/acn_rust.stg
++++ b/StgRust/acn_rust.stg
+@@ -1483,7 +1483,7 @@ octet_string_containing_ext_field_func_decode(p, sFuncName, sReqBytesForUperEnco
+ >>
+ 
+ /* CONTAINING with deferred patching: encode directly, PatchDet with measured distance */
+-octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_data_start = acn::acn_bit_stream_get_pos(pBitStrm);
+     ret = <sFuncName>(&<p>, pBitStrm, pErrCode, false);
+@@ -1495,7 +1495,7 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+         }
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bytes(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>(acn_n_count, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if !ret { return false; }
+     }
+@@ -1503,7 +1503,7 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+ >>
+ 
+ /* CONTAINING with deferred patching: limit stream view, decode directly */
+-octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_saved_count = pBitStrm.count;
+     let acn_expected_end = pBitStrm.current_byte + <sDetParamName>.value as i64;
+@@ -1564,7 +1564,7 @@ octet_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nM
+ 
+ /* CONTAINING ExternalField wrapper: wraps an inline body with save-pos/measure/PatchDet
+    Used when the contained type has ACN parameters (no standalone ACN function). */
+-octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_data_start = acn::acn_bit_stream_get_pos(pBitStrm);
+     <sBody>
+@@ -1576,14 +1576,14 @@ octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFunc
+         }
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bytes(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>(acn_n_count, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if !ret { return false; }
+     }
+ }
+ >>
+ 
+-octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_saved_count = pBitStrm.count;
+     let acn_expected_end = pBitStrm.current_byte + <sDetParamName>.value as i64;
+@@ -1596,14 +1596,14 @@ octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFunc
+ >>
+ 
+ /* BIT STRING CONTAINING with deferred patching: encode directly, PatchDet with measured bit distance */
+-bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_data_start = acn::acn_bit_stream_get_pos(pBitStrm);
+     ret = <sFuncName>(<p>, pBitStrm, pErrCode, false);
+     if ret {
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bits(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>(acn_n_count, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if !ret { return false; }
+     }
+@@ -1611,7 +1611,7 @@ bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFu
+ >>
+ 
+ /* BIT STRING CONTAINING with deferred patching: limit stream view (bit-granular), decode directly */
+-bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_start_bits = pBitStrm.current_byte * 8 + pBitStrm.current_bit as i64;
+     let acn_end_bits = acn_start_bits + <sDetParamName>.value as i64;
+@@ -1668,21 +1668,21 @@ bit_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nMax
+ >>
+ 
+ /* BIT STRING CONTAINING ExternalField wrapper: wraps inline body with bit-granular measurement/limiting */
+-bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_data_start = acn::acn_bit_stream_get_pos(pBitStrm);
+     <sBody>
+     if ret {
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bits(acn_data_start, acn_data_end);
+-        ret = <sPatchFuncName>(acn_n_count, pBitStrm, <sDetParamName>, pErrCode);
++        ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+         *pErrCode = <sErrCode>;
+         if !ret { return false; }
+     }
+ }
+ >>
+ 
+-bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ {
+     let acn_start_bits = pBitStrm.current_byte * 8 + pBitStrm.current_bit as i64;
+     let acn_end_bits = acn_start_bits + <sDetParamName>.value as i64;
+diff --git a/StgScala/acn_scala.stg b/StgScala/acn_scala.stg
+index cdeefcd2..37f89be1 100644
+--- a/StgScala/acn_scala.stg
++++ b/StgScala/acn_scala.stg
+@@ -1136,11 +1136,11 @@ octet_string_containing_ext_field_func_decode(p, sFuncName, sReqBytesForUperEnco
+ >>
+ 
+ /* CONTAINING with deferred patching — TODO Scala implementation */
+-octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala deferred CONTAINING encode
+ >>
+ 
+-octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala deferred CONTAINING decode
+ >>
+ 
+@@ -1160,19 +1160,19 @@ octet_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nM
+ // TODO: Scala deferred CONTAINING embedded decode
+ >>
+ 
+-octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala deferred CONTAINING wrapper encode
+ >>
+ 
+-octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++octet_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala deferred CONTAINING wrapper decode
+ >>
+ 
+-bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala bit_string_containing_deferred_func
+ >>
+ 
+-bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_func_decode(p, sFuncName, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala bit_string_containing_deferred_func
+ >>
+ 
+@@ -1192,11 +1192,11 @@ bit_string_containing_deferred_embedded_func_decode(p, sFuncName, nMinSize, nMax
+ // TODO: Scala bit_string_containing_deferred_embedded_func
+ >>
+ 
+-bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala bit_string_containing_deferred_wrapper
+ >>
+ 
+-bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, sErrCode) ::= <<
++bit_string_containing_deferred_wrapper_decode(sBody, sDetParamName, sPatchFuncName, soMF, soMFM, sErrCode) ::= <<
+ // TODO: Scala bit_string_containing_deferred_wrapper
+ >>
+ 
+diff --git a/v4Tests/scripts/runDeferredAcnRegressions.sh b/v4Tests/scripts/runDeferredAcnRegressions.sh
+index 397e6765..00ad4a5e 100644
+--- a/v4Tests/scripts/runDeferredAcnRegressions.sh
++++ b/v4Tests/scripts/runDeferredAcnRegressions.sh
+@@ -19,11 +19,16 @@ run_compiler() {
+     esac
+ }
+ 
+-for number in 001 002; do
++for number in 001 002 003 004; do
+     output=$temporary/$number
+     mkdir "$output"
+     run_compiler -c -ACN --acn-v2 -atc --field-prefix AUTO \
+         -o "$output" "$cases/$number.asn1" "$cases/$number.acn"
++
++    if [ "$number" = 004 ]; then
++        cp "$cases/004_mapping.c" "$output"
++    fi
++
+     (
+         cd "$output"
+         cc -std=c11 -pedantic-errors -Wall -Wextra -Werror ./*.c -o tests
+@@ -31,4 +36,17 @@ for number in 001 002; do
+     )
+ done
+ 
++output=$temporary/004
++cc -std=c11 -pedantic-errors -Wall -Wextra -Werror \
++    -I "$output" \
++    "$output/004.c" \
++    "$output/asn1crt.c" \
++    "$output/asn1crt_encoding.c" \
++    "$output/asn1crt_encoding_acn.c" \
++    "$output/asn1crt_encoding_uper.c" \
++    "$cases/004_mapping.c" \
++    "$cases/004_wire_test.c" \
++    -o "$output/wire-test"
++"$output/wire-test"
++
+ echo "Deferred ACN regressions passed"
+diff --git a/v4Tests/test-cases/acn-v2/003.acn b/v4Tests/test-cases/acn-v2/003.acn
+new file mode 100644
+index 00000000..ac24db44
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/003.acn
+@@ -0,0 +1,37 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Document [] {
++    boxes [size deduced]
++}
++
++OuterBox [] {
++    length INTEGER [encoding pos-int, size 8],
++    kind INTEGER [encoding pos-int, size 8],
++    payload <kind, length> []
++}
++
++OuterPayload <INTEGER:kind, INTEGER:length> [] {
++    nested [present-when kind == 1, size length],
++    value [present-when kind == 4, size length]
++}
++
++Nested [] {
++    boxes [size deduced]
++}
++
++InnerBox [] {
++    length INTEGER [encoding pos-int, size 8],
++    kind INTEGER [encoding pos-int, size 8],
++    payload <kind, length> []
++}
++
++InnerPayload <INTEGER:kind, INTEGER:length> [] {
++    value [present-when kind == 2, size length],
++    other [present-when kind == 3, size length]
++}
++
++Value [] {
++    number [encoding pos-int, size 8]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/003.asn1 b/v4Tests/test-cases/acn-v2/003.asn1
+new file mode 100644
+index 00000000..9f752cb1
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/003.asn1
+@@ -0,0 +1,35 @@
++-- Length determinants cross nested SEQUENCE, CHOICE, and referenced-type
++-- boundaries in both producer and consumer directions.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Document ::= SEQUENCE {
++    boxes SEQUENCE (SIZE (1..4)) OF OuterBox
++}
++
++OuterBox ::= SEQUENCE {
++    payload OuterPayload
++}
++
++OuterPayload ::= CHOICE {
++    nested OCTET STRING (CONTAINING Nested),
++    value OCTET STRING (CONTAINING Value)
++}
++
++Nested ::= SEQUENCE {
++    boxes SEQUENCE (SIZE (1..4)) OF InnerBox
++}
++
++InnerBox ::= SEQUENCE {
++    payload InnerPayload
++}
++
++InnerPayload ::= CHOICE {
++    value OCTET STRING (CONTAINING Value),
++    other OCTET STRING (CONTAINING Value)
++}
++
++Value ::= SEQUENCE {
++    number INTEGER (0..255)
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/004.acn b/v4Tests/test-cases/acn-v2/004.acn
+new file mode 100644
+index 00000000..8e2d8ca7
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/004.acn
+@@ -0,0 +1,18 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Document [] {
++    length INTEGER [encoding pos-int, size 8, mapping-function plus],
++    kind INTEGER [encoding pos-int, size 8],
++    payload <kind, length> []
++}
++
++Payload <INTEGER:kind, INTEGER:length> [] {
++    value [present-when kind == 1, size length],
++    other [present-when kind == 2, size length]
++}
++
++Value [] {
++    number [encoding pos-int, size 8]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/004.asn1 b/v4Tests/test-cases/acn-v2/004.asn1
+new file mode 100644
+index 00000000..3c2d1388
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/004.asn1
+@@ -0,0 +1,18 @@
++-- A mapped length determinant sizes a parameterized CHOICE. Encoding must
++-- measure the selected alternative, apply the mapping, and patch the field.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Document ::= SEQUENCE {
++    payload Payload
++}
++
++Payload ::= CHOICE {
++    value OCTET STRING (CONTAINING Value),
++    other OCTET STRING (CONTAINING Value)
++}
++
++Value ::= SEQUENCE {
++    number INTEGER (0..255)
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/004_mapping.c b/v4Tests/test-cases/acn-v2/004_mapping.c
+new file mode 100644
+index 00000000..2985cbbf
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/004_mapping.c
+@@ -0,0 +1,4 @@
++#include "asn1crt.h"
++
++asn1SccUint plus_encode(asn1SccUint value) { return value + 2; }
++asn1SccUint plus_decode(asn1SccUint value) { return value - 2; }
+diff --git a/v4Tests/test-cases/acn-v2/004_wire_test.c b/v4Tests/test-cases/acn-v2/004_wire_test.c
+new file mode 100644
+index 00000000..448612c8
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/004_wire_test.c
+@@ -0,0 +1,29 @@
++#include <assert.h>
++
++#include "004.h"
++
++int main(void)
++{
++    byte encoded[Document_REQUIRED_BYTES_FOR_ACN_ENCODING] = {0};
++    BitStream stream;
++    Document input;
++    Document output;
++    int error = 0;
++
++    Document_Initialize(&input);
++    input.payload.kind = value_PRESENT;
++    input.payload.u.value.number = 42;
++
++    BitStream_Init(&stream, encoded, sizeof encoded);
++    assert(Document_ACN_Encode(&input, &stream, &error, TRUE));
++    assert(encoded[0] == 3);
++    assert(encoded[1] == 1);
++    assert(encoded[2] == 42);
++
++    Document_Initialize(&output);
++    BitStream_AttachBuffer(&stream, encoded, sizeof encoded);
++    assert(Document_ACN_Decode(&output, &stream, &error));
++    assert(Document_Equal(&input, &output));
++
++    return 0;
++}

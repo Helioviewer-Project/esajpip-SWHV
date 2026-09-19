@@ -1,0 +1,89 @@
+Subject: [PATCH 2/3] Give deferred CONTAINING specializations unique names
+
+Deferred ACN generation derives specialized function names from ASN.1 paths.
+A constrained type used through CONTAINING can consequently collide with the
+ordinary specialization for the same path, producing duplicate C function
+definitions.
+
+Use the existing _Containing_ discriminator for external-field
+specializations. Add a regression that generates, strictly compiles, and runs
+both otherwise-colliding specializations.
+
+diff --git a/BackendAst/DAstACNDeferred.fs b/BackendAst/DAstACNDeferred.fs
+index 70f55091..2be31cfc 100644
+--- a/BackendAst/DAstACNDeferred.fs
++++ b/BackendAst/DAstACNDeferred.fs
+@@ -1151,6 +1151,8 @@ let private createDeferredReferenceFunction
+             let specFuncName =
+                 let pathStr = t.id.AcnAbsPath |> Seq.skip 1 |> Seq.StrJoin "_"
+                 let candidate = ToC2(r.args.TypePrefix + pathStr) + "_ACN" + (lm.lg.codecSuffix codec)
++                let containingCandidate =
++                    candidate.Replace("_ACN" + (lm.lg.codecSuffix codec), "_Containing_ACN" + (lm.lg.codecSuffix codec))
+                 // Disambiguate: if the base type's standalone function has the
+                 // same name, insert "_D" to avoid conflicting types in generated C.
+                 // This happens when a TAS name with dashes (e.g. MyPDU-a → MyPDU_a)
+@@ -1159,7 +1161,9 @@ let private createDeferredReferenceFunction
+                 // from getBaseFuncName) gives the TAS's standalone function name.
+                 // baseAcnFunc.funcName is None when the resolved type has acnParameters
+                 // (closure conversion), so we use baseFncName instead.
+-                if baseFncName = candidate then
++                if isContainingExternalField then
++                    containingCandidate
++                elif baseFncName = candidate then
+                     candidate.Replace("_ACN" + (lm.lg.codecSuffix codec), "_D_ACN" + (lm.lg.codecSuffix codec))
+                 else candidate
+ 
+diff --git a/v4Tests/scripts/runDeferredAcnRegressions.sh b/v4Tests/scripts/runDeferredAcnRegressions.sh
+index 2c8d2218..397e6765 100644
+--- a/v4Tests/scripts/runDeferredAcnRegressions.sh
++++ b/v4Tests/scripts/runDeferredAcnRegressions.sh
+@@ -19,7 +19,7 @@ run_compiler() {
+     esac
+ }
+ 
+-for number in 001; do
++for number in 001 002; do
+     output=$temporary/$number
+     mkdir "$output"
+     run_compiler -c -ACN --acn-v2 -atc --field-prefix AUTO \
+diff --git a/v4Tests/test-cases/acn-v2/002.acn b/v4Tests/test-cases/acn-v2/002.acn
+new file mode 100644
+index 00000000..6321dc7c
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/002.acn
+@@ -0,0 +1,12 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Base [] {
++    value [encoding pos-int, size 8]
++}
++
++Wrapped [] {
++    length INTEGER [encoding pos-int, size 8],
++    body [size length]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/002.asn1 b/v4Tests/test-cases/acn-v2/002.asn1
+new file mode 100644
+index 00000000..ce774442
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/002.asn1
+@@ -0,0 +1,17 @@
++-- A constrained type inside CONTAINING needs a distinct deferred
++-- specialization even when its generated base name matches another wrapper.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Base ::= SEQUENCE {
++    value INTEGER (0..255)
++}
++
++Profile ::= Base (WITH COMPONENTS {
++    value (0..127)
++})
++
++Wrapped ::= SEQUENCE {
++    body OCTET STRING (CONTAINING Profile)
++}
++
++END

@@ -178,13 +178,13 @@ Siz-Profile ::= Siz (WITH COMPONENTS {
     }))
 })
 
-Cod-Profile ::= Cod (WITH COMPONENTS {
-    ...,
-    scod (WITH COMPONENTS {
-        ...,
-        sopMarkers (FALSE)                    -- not part of precinct data-bins
-    })
-})
+-- A distinct SEQUENCE keeps the profile's ACN encoding explicit. ASN1SCC
+-- does not inherit ACN properties through a WITH COMPONENTS subtype.
+Cod-Profile ::= SEQUENCE {
+    scod        Scod,
+    sgcod       Sgcod,
+    spcod       Spcod
+}
 Qcd-Profile ::= Qcd
 Com-Profile ::= Com
 

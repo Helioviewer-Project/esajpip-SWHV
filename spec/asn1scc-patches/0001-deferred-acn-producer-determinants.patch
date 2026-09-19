@@ -1,0 +1,489 @@
+Subject: [PATCH 1/3] Fix deferred ACN determinants produced by referenced types
+
+An ACN determinant may be declared inside a referenced type while controlling
+a sibling field outside that type. Closure conversion handled determinants
+consumed by referenced types, but not determinants produced by them. With
+--acn-v2, the generated C therefore referred to an undeclared local instead of
+passing the determinant across the reference boundary.
+
+Expose such producer determinants as deferred ACN parameters and patch them in
+the scope that owns the dependent field. Honor initializers attached to C
+backend locals, which carry the deferred state, and accept the explicit
+one-bit Boolean encodings that use the same representation as BOOL1.
+
+Add a focused regression in a separate acn-v2 test directory. It generates,
+strictly compiles, and runs a Boolean determinant produced by one referenced
+child and consumed by an optional sibling.
+
+diff --git a/BackendAst/Acn/AcnExternalField.fs b/BackendAst/Acn/AcnExternalField.fs
+index ee44c833..43102537 100644
+--- a/BackendAst/Acn/AcnExternalField.fs
++++ b/BackendAst/Acn/AcnExternalField.fs
+@@ -58,6 +58,16 @@ let getExternalField0 (lm:LanguageMacros) (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAs
+         | _ -> ()  // AcnChildDeterminant — resolves to the ACN child, which is fine
+ 
+     let baseName = AcnHelpers.getAcnDeterminantName resolvedId
++    let isExposedProducer =
++        r.args.acnDeferred
++        && (match dependency.determinant with
++            | AcnParameterDeterminant prm ->
++                let (ReferenceToType paramNodes) = prm.id
++                let boundaryPath = paramNodes |> List.rev |> List.tail |> List.rev
++                let dependentPath = dependency.asn1Type.ToScopeNodeList
++                not (boundaryPath.Length <= dependentPath.Length
++                     && List.take boundaryPath.Length dependentPath = boundaryPath)
++            | AcnChildDeterminant _ -> false)
+     // In deferred mode, when the determinant resolved to a PRM (parameter),
+     // the formal parameter is the language-specific deferred ref struct.
+     // Use the abstract macros to access the value/str_value fields so the
+@@ -65,8 +75,14 @@ let getExternalField0 (lm:LanguageMacros) (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAs
+     if r.args.acnDeferred then
+         let resolvedNodes = match resolvedId with ReferenceToType nodes -> nodes
+         let resolvedLastNode = resolvedNodes |> List.rev |> List.head
+-        match resolvedLastNode with
+-        | PRM _ ->
++        match resolvedLastNode, isExposedProducer with
++        | _, true ->
++            let pointer = lm.lg.getPointer (AccessPath.valueEmptyPath baseName)
++            match dependency.dependencyKind with
++            | Asn1AcnAst.AcnDepPresenceStr _ -> lm.acn.acn_deferred_det_access_str_ptr pointer
++            | Asn1AcnAst.AcnDepPresenceBool  -> lm.acn.acn_deferred_det_access_bool_ptr pointer
++            | _                              -> lm.acn.acn_deferred_det_access_ptr pointer
++        | PRM _, false ->
+             // Pick the access form by dependency kind.  String determinants
+             // need the Str_Value field; Boolean determinants need a Boolean
+             // expression (Ada is strictly typed and rejects Asn1UInt-as-Boolean
+@@ -75,7 +91,7 @@ let getExternalField0 (lm:LanguageMacros) (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAs
+             | Asn1AcnAst.AcnDepPresenceStr _ -> lm.acn.acn_deferred_det_access_str_ptr baseName
+             | Asn1AcnAst.AcnDepPresenceBool  -> lm.acn.acn_deferred_det_access_bool_ptr baseName
+             | _                              -> lm.acn.acn_deferred_det_access_ptr baseName
+-        | _     -> baseName
++        | _, false -> baseName
+     else
+         baseName
+ 
+diff --git a/BackendAst/Acn/AcnSequence.fs b/BackendAst/Acn/AcnSequence.fs
+index c5573a62..64b7d532 100644
+--- a/BackendAst/Acn/AcnSequence.fs
++++ b/BackendAst/Acn/AcnSequence.fs
+@@ -394,7 +394,7 @@ let private printPresenceBit
+ // patch determinants whose consumer never executed.  Threaded as plain
+ // text instead of via a synthetic AcnChild — see DAstACNDeferred for
+ // the rationale.
+-let createSequenceFunction_inline (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAst.AcnInsertedFieldDependencies) (lm:LanguageMacros) (codec:CommonTypes.Codec) (t:Asn1AcnAst.Asn1Type) (o:Asn1AcnAst.Sequence) (typeDefinition:TypeDefinitionOrReference) (isValidFunc: IsValidFunction option) (children:SeqChildInfo list) (_:DastAcnParameter list) (fallbackEpilogue:string option) (us:State)  =
++let createSequenceFunction_inline (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAst.AcnInsertedFieldDependencies) (lm:LanguageMacros) (codec:CommonTypes.Codec) (t:Asn1AcnAst.Asn1Type) (o:Asn1AcnAst.Sequence) (typeDefinition:TypeDefinitionOrReference) (isValidFunc: IsValidFunction option) (children:SeqChildInfo list) (_:DastAcnParameter list) (fallbackEpilogue:(CodegenScope -> string) option) (us:State)  =
+     (*
+         1. all Acn inserted children are declared as local variables in the encoded and decode functions (declaration step)
+         2. all Acn inserted children must be initialized appropriately in the encoding phase
+@@ -621,7 +621,7 @@ let createSequenceFunction_inline (r:Asn1AcnAst.AstRoot) (deps:Asn1AcnAst.AcnIns
+         let aux = lm.lg.generateSequenceAuxiliaries r ACN t o nestingScope p.accessPath codec
+         let fallbackStmts =
+             match codec, fallbackEpilogue with
+-            | Encode, Some code -> [code]
++            | Encode, Some makeCode -> [makeCode p]
+             | _ -> []
+         let seqContent =  (saveInitialBitStrmStatements@childrenStatements@fallbackStmts@(post_encoding_function |> Option.map fst |> Option.toList)@seqBuild@proof) |> nestChildItems lm codec
+ 
+diff --git a/BackendAst/DAstACNDeferred.fs b/BackendAst/DAstACNDeferred.fs
+index c881523e..70f55091 100644
+--- a/BackendAst/DAstACNDeferred.fs
++++ b/BackendAst/DAstACNDeferred.fs
+@@ -475,6 +475,66 @@ let private createDeferredSequenceFunction
+         // funcBody (createDeferredReferenceFunction), via its localVariables
+         // result.  Nothing to do here.
+ 
++        // Patch determinants exposed by a referenced child and consumed by a
++        // sibling in this SEQUENCE. The child reserved their wire position;
++        // this scope owns both the local AcnInsertedFieldRef and the value that
++        // determines it.
++        let producerPatchEpilogue =
++            match codec with
++            | CommonTypes.Codec.Decode -> None
++            | CommonTypes.Codec.Encode ->
++                let parentPath = t.id.ToScopeNodeList
++                let isPrefix (prefix: ScopeNode list) (full: ScopeNode list) =
++                    prefix.Length <= full.Length
++                    && List.take prefix.Length full = prefix
++                let producerLinks =
++                    deps.acnDependencies
++                    |> List.choose (fun dep ->
++                        match dep.dependencyKind, dep.determinant with
++                        | AcnDepRefTypeArgument parameter, AcnChildDeterminant determinant ->
++                            let boundaryPath = dep.asn1Type.ToScopeNodeList
++                            if boundaryPath.Length = parentPath.Length + 1
++                               && isPrefix parentPath boundaryPath then
++                                Some (boundaryPath, determinant, parameter)
++                            else None
++                        | _ -> None)
++                    |> List.distinctBy (fun (_, determinant, _) -> determinant.id)
++                match producerLinks with
++                | [] -> None
++                | _ ->
++                    Some (fun root ->
++                        producerLinks |> List.collect (fun (boundaryPath, determinant, parameter) ->
++                            let consumers =
++                                deps.acnDependencies |> List.filter (fun dep ->
++                                    dep.determinant.id = parameter.id
++                                    && isPrefix parentPath dep.asn1Type.ToScopeNodeList
++                                    && not (isPrefix boundaryPath dep.asn1Type.ToScopeNodeList)
++                                    && (match dep.dependencyKind with AcnDepRefTypeArgument _ -> false | _ -> true))
++                            consumers |> List.choose (fun dep ->
++                                match lm.lg.getDeferredDetFunctions determinant.Type with
++                                | None -> None
++                                | Some (_initFn, patchFn, nBitsOpt, uperMinOffset) ->
++                                    let preBlock, rawValueExpr = computePatchDetValueExpr lm dep parentPath root
++                                    let valueExpr =
++                                        if uperMinOffset = 0I then rawValueExpr
++                                        else lm.acn.acn_deferred_det_uper_offset_sub rawValueExpr (uperMinOffset.ToString())
++                                    let detName = DAstACN.getAcnDeterminantName parameter.id
++                                    let errCode = "ERR_ACN_DET_CONSISTENCY_MISMATCH"
++                                    let patchCall =
++                                        if patchFn.Contains("IA5String") then
++                                            match nBitsOpt with
++                                            | Some nBits -> lm.acn.acn_deferred_det_patch_value_str patchFn nBits valueExpr detName errCode codec
++                                            | None -> failwithf "BUG: IA5String PatchDet requires nChars (nBits) parameter"
++                                        else
++                                            match nBitsOpt with
++                                            | Some nBits -> lm.acn.acn_deferred_det_patch_value_with_size patchFn nBits valueExpr detName errCode codec
++                                            | None -> lm.acn.acn_deferred_det_patch_value patchFn valueExpr detName errCode codec
++                                    Some (
++                                        match preBlock with
++                                        | None -> patchCall
++                                        | Some pre -> lm.acn.acn_deferred_det_preblock_wrap pre patchCall)))
++                        |> String.concat "\n")
++
+         // Compute fallback PatchDet code for local deferred dets (encode only).
+         // When all consumers of a shared determinant are absent at runtime
+         // (e.g., present-when booleans are false, or a CHOICE branch was not
+@@ -486,7 +546,7 @@ let private createDeferredSequenceFunction
+         // The string is passed to createSequenceFunction_inline via its
+         // fallbackEpilogue parameter — appended verbatim inside the encode
+         // body's nested if(ret) chain.
+-        let fallbackEpilogue =
++        let localFallbackEpilogue =
+             match codec with
+             | CommonTypes.Codec.Encode ->
+                 let fallbackDets =
+@@ -524,10 +584,17 @@ let private createDeferredSequenceFunction
+                             | Asn1AcnAst.AcnInsertedType.AcnNullType _ ->
+                                 failwithf "BUG: AcnNullType should not appear as a deferred determinant"
+                         ) |> String.concat "\n"
+-                    Some fallbackCode
++                    Some (fun _ -> fallbackCode)
+             | CommonTypes.Codec.Decode -> None
+ 
+-        DAstACN.createSequenceFunction_inline r deps lm codec t o typeDefinition isValidFunc modifiedChildren acnPrms fallbackEpilogue us
++        let epilogue =
++            [producerPatchEpilogue; localFallbackEpilogue]
++            |> List.choose id
++            |> function
++               | [] -> None
++               | blocks -> Some (fun p -> blocks |> List.map (fun block -> block p) |> String.concat "\n")
++
++        DAstACN.createSequenceFunction_inline r deps lm codec t o typeDefinition isValidFunc modifiedChildren acnPrms epilogue us
+ 
+ 
+ // ---------------------------------------------------------------------------
+@@ -730,9 +797,13 @@ let private appendPatchDetCalls
+                     | _ ->
+                     // Find the dep inside this boundary where the determinant
+                     // is this parameter (consumer-side dependency)
++                    let boundaryPath = ctx.o.resolvedType.id.ToScopeNodeList
+                     let consumerDep =
+                         ctx.deps.acnDependencies |> List.tryFind (fun d ->
++                            let dependentPath = d.asn1Type.ToScopeNodeList
+                             d.determinant.id = prm.id
++                            && boundaryPath.Length <= dependentPath.Length
++                            && List.take boundaryPath.Length dependentPath = boundaryPath
+                             && (match d.determinant with
+                                 | Asn1AcnAst.AcnParameterDeterminant _ -> true
+                                 | _ -> false)
+@@ -752,7 +823,6 @@ let private appendPatchDetCalls
+                         match findDetFunctionsForParam ctx.lm ctx.deps prm.id with
+                         | None -> None
+                         | Some (_initFn, patchFn, nBitsOpt, uperMinOffset) ->
+-                            let boundaryPath = ctx.o.resolvedType.id.ToScopeNodeList
+                             let (preBlock, rawValueExpr) = computePatchDetValueExpr ctx.lm dep boundaryPath specP
+                             // For Integer_uPER with min > 0, UPER encodes (value - min)
+                             // but ConstSize encodes value directly, so subtract the offset.
+@@ -889,7 +959,8 @@ let private buildCallerWrapper
+         //     The local AcnInsertedFieldRef must be declared in the
+         //     caller's scope, so emit a localVariable for it.
+         let extraActualParams, declLevelLocalNames =
+-            ctx.o.acnArguments |> List.fold (fun (paramsAcc, localsAcc) arg ->
++            List.zip ctx.o.acnArguments ctx.o.resolvedType.acnParameters
++            |> List.fold (fun (paramsAcc, localsAcc) (arg, resolvedParam) ->
+                 let (AcnGenericTypes.RelativePath parts) = arg
+                 let argName = parts |> List.last |> fun sl -> sl.Value
+                 let parentParam =
+@@ -899,7 +970,44 @@ let private buildCallerWrapper
+                     let pStr = DAstACN.getAcnDeterminantName prm.id
+                     paramsAcc @ [pStr], localsAcc
+                 | None ->
+-                    let cName = ToC argName
++                    // At declaration level, use the actual determinant named
++                    // by the RefTypeArgument dependency. The formal parameter
++                    // name belongs to the referenced type; it can differ from
++                    // the caller's field name and is not the local we reserve.
++                    let argumentBoundary, determinant =
++                        ctx.deps.acnDependencies
++                        |> List.tryPick (fun dep ->
++                            if dep.asn1Type = ctx.t.id then
++                                match dep.dependencyKind with
++                                | AcnDepRefTypeArgument prm when prm.id = resolvedParam.id ->
++                                    Some (dep.asn1Type, dep.determinant)
++                                | _ -> None
++                            else None)
++                        |> Option.defaultWith (fun () ->
++                            failwithf "BUG: missing RefTypeArgument dependency for %s" resolvedParam.id.AsString)
++                    let rec resolveActualDeterminant determinant =
++                        match determinant with
++                        | AcnChildDeterminant _ -> determinant
++                        | AcnParameterDeterminant parameter ->
++                            ctx.deps.acnDependencies
++                            |> List.tryPick (fun dep ->
++                                match dep.dependencyKind with
++                                | AcnDepRefTypeArgument prm when prm.id = parameter.id ->
++                                    Some dep.determinant
++                                | _ -> None)
++                            |> Option.map resolveActualDeterminant
++                            |> Option.defaultWith (fun () ->
++                                failwithf "BUG: unresolved RefTypeArgument parameter %s" parameter.id.AsString)
++                    let actualDeterminant = resolveActualDeterminant determinant
++                    let (ReferenceToType boundaryPath) = argumentBoundary
++                    let (ReferenceToType determinantPath) = actualDeterminant.id
++                    let determinantIsInsideBoundary =
++                        boundaryPath.Length <= determinantPath.Length
++                        && List.take boundaryPath.Length determinantPath = boundaryPath
++                    let cName =
++                        match actualDeterminant, determinantIsInsideBoundary with
++                        | AcnChildDeterminant child, false -> ToC child.Name.Value
++                        | _ -> DAstACN.getAcnDeterminantName actualDeterminant.id
+                     let pStr = ctx.lm.acn.acn_deferred_det_actual_param cName ctx.codec
+                     paramsAcc @ [pStr], localsAcc @ [cName]
+             ) ([], [])
+diff --git a/FrontEndAst/AcnClosureConversion.fs b/FrontEndAst/AcnClosureConversion.fs
+index 9a54fedb..99b867f2 100644
+--- a/FrontEndAst/AcnClosureConversion.fs
++++ b/FrontEndAst/AcnClosureConversion.fs
+@@ -72,6 +72,7 @@ let private findProducerDeterminants (boundaryPath: ScopeNode list) (deps: AcnIn
+             let isSiblingPresence =
+                 (match dep.dependencyKind with AcnDepPresenceBool -> true | _ -> false)
+                 && depTypePath.Length = boundaryPath.Length
++                && detPath.Length = boundaryPath.Length
+                 && boundaryPath.Length >= 1
+                 && (List.take (boundaryPath.Length - 1) depTypePath) = (List.take (boundaryPath.Length - 1) boundaryPath)
+             if isSiblingPresence then None
+@@ -119,6 +120,9 @@ type private DepRewrite = {
+     /// The boundary path (ScopeNode list) — deps whose asn1Type is inside
+     /// this path and whose determinant matches originalDet will be rewritten.
+     boundaryPath   : ScopeNode list
++    /// Consumer parameters replace dependencies inside the referenced type.
++    /// Producer parameters only expose an inner determinant to the caller.
++    rewriteInternal : bool
+ }
+ 
+ 
+@@ -215,23 +219,20 @@ let rec private transformType (deps: AcnInsertedFieldDependencies) (t: Asn1Type)
+                     hasExtraConstrainsOrChildrenOrAcnArgs = true }
+             let t'' = { t' with Kind = Asn1TypeKind.ReferenceType rt' }
+ 
+-            // Collect dep rewrites for consumer determinants only.
+-            // For each consumer det that got a new parameter, we need to:
+-            //   (a) rewrite internal deps to point to the parameter
+-            //   (b) add a RefTypeArgumentDependency from boundary to original det
+-            // Producer dets don't need dep rewrites — the determinant is inside
+-            // the boundary and will be resolved locally.
++            // Record every new argument. Consumer determinants also rewrite
++            // dependencies inside the referenced type. Producer determinants
++            // keep their inner dependency but need the RefTypeArgument link so
++            // the caller can address and patch the exposed determinant.
+             let consumerDetIds = consumerDets |> List.map (fun d -> d.id) |> Set.ofList
+-            let newConsumerDets = newDets |> List.filter (fun d -> Set.contains d.id consumerDetIds)
+             let newRewrites =
+-                List.map2
+-                    (fun (det: AcnChild) (prm: AcnParameter) ->
++                List.zip newDets newParams
++                |> List.map
++                    (fun ((det: AcnChild), (prm: AcnParameter)) ->
+                         { DepRewrite.boundaryTypeId = t'.id
+                           originalDet = det
+                           newParam = prm
+-                          boundaryPath = boundaryPath })
+-                    newConsumerDets
+-                    (newParams |> List.take newConsumerDets.Length)
++                          boundaryPath = boundaryPath
++                          rewriteInternal = Set.contains det.id consumerDetIds })
+ 
+             t'', childRewrites @ newRewrites
+ 
+@@ -259,8 +260,10 @@ let private applyDepRewrites (deps: AcnInsertedFieldDependencies) (rewrites: Dep
+             deps.acnDependencies |> List.map (fun dep ->
+                 let matchingRewrite =
+                     rewrites |> List.tryFind (fun rw ->
++                        let dependentIsInside =
++                            isPathPrefix rw.boundaryPath (dep.asn1Type.ToScopeNodeList)
+                         dep.determinant.id = rw.originalDet.id
+-                        && isPathPrefix rw.boundaryPath (dep.asn1Type.ToScopeNodeList))
++                        && dependentIsInside = rw.rewriteInternal)
+                 match matchingRewrite with
+                 | Some rw ->
+                     { dep with determinant = AcnParameterDeterminant rw.newParam }
+diff --git a/StgC/LangGeneric_c.fs b/StgC/LangGeneric_c.fs
+index cef2c519..957598d7 100644
+--- a/StgC/LangGeneric_c.fs
++++ b/StgC/LangGeneric_c.fs
+@@ -278,9 +278,16 @@ type LangGeneric_c() =
+             | FlagLocalVariable (name,Some iv)          -> sprintf "flag %s=%s;" name iv
+             | BooleanLocalVariable (name,None)          -> sprintf "flag %s;" name
+             | BooleanLocalVariable (name,Some iv)       -> sprintf "flag %s=%s;" name iv
+-            | AcnInsertedChild(name, vartype, initVal)  -> sprintf "%s %s;" vartype name
++            | AcnInsertedChild(name, vartype, initVal)  ->
++                if String.IsNullOrWhiteSpace initVal then sprintf "%s %s;" vartype name
++                else sprintf "%s %s = %s;" vartype name initVal
+             | GenericLocalVariable lv                   ->
+-                sprintf "%s%s %s%s;" (if lv.isStatic then "static " else "") lv.varType lv.name (if lv.arrSize.IsNone then "" else "["+lv.arrSize.Value+"]")
++                sprintf "%s%s %s%s%s;"
++                    (if lv.isStatic then "static " else "")
++                    lv.varType
++                    lv.name
++                    (lv.arrSize |> Option.map (fun size -> "[" + size + "]") |> Option.defaultValue "")
++                    (lv.initExp |> Option.map (fun value -> " = " + value) |> Option.defaultValue "")
+ 
+ 
+         override this.getLongTypedefName (tdr:TypeDefinitionOrReference) : string =
+@@ -846,6 +853,13 @@ type LangGeneric_c() =
+             | Asn1AcnAst.AcnInsertedType.AcnBoolean bln ->
+                 match bln.acnProperties.encodingPattern with
+                 | None -> Some ("Acn_InitDet_BOOL1", "Acn_PatchDet_BOOL1", None, 0I)
++                | Some (AcnGenericTypes.TrueValueEncoding pattern) when pattern.Value = "1" ->
++                    Some ("Acn_InitDet_BOOL1", "Acn_PatchDet_BOOL1", None, 0I)
++                | Some (AcnGenericTypes.FalseValueEncoding pattern) when pattern.Value = "0" ->
++                    Some ("Acn_InitDet_BOOL1", "Acn_PatchDet_BOOL1", None, 0I)
++                | Some (AcnGenericTypes.TrueFalseValueEncoding (truePattern, falsePattern))
++                    when truePattern.Value = "1" && falsePattern.Value = "0" ->
++                    Some ("Acn_InitDet_BOOL1", "Acn_PatchDet_BOOL1", None, 0I)
+                 | Some _ -> None
+             | Asn1AcnAst.AcnInsertedType.AcnReferenceToEnumerated enm ->
+                 match enm.enumerated.acnEncodingClass with
+diff --git a/StgC/acn_c.stg b/StgC/acn_c.stg
+index ba795944..7e55d7b0 100644
+--- a/StgC/acn_c.stg
++++ b/StgC/acn_c.stg
+@@ -41,6 +41,7 @@ flag <sFuncName>(const <sTypeDefName><sStar> <sVarName>, BitStream* pBitStrm, in
+ <endif>
+ 
+ 	<arrsLocalVariables:{lv|<lv>}; separator="\n">
++	<arrsAcnParamNames:{name|(void)<name>;}; separator="\n">
+     <if(soIValidFuncName)>
+     *pErrCode = 0;
+ 	ret = bCheckConstraints ? <soIValidFuncName>(<sVarName>, pErrCode) : TRUE ;
+@@ -80,6 +81,7 @@ flag <sFuncName>(<sTypeDefName><sStar> <sVarName>, BitStream* pBitStrm, int* pEr
+ 	*pErrCode = 0;
+ 
+ 	<arrsLocalVariables:{lv|<lv>}; separator="\n">
++	<arrsAcnParamNames:{name|(void)<name>;}; separator="\n">
+ 
+ 	<sContent>
+ 
+diff --git a/github-test-group.sh b/github-test-group.sh
+index 2a9c9821..4eb7c8be 100755
+--- a/github-test-group.sh
++++ b/github-test-group.sh
+@@ -41,6 +41,7 @@ case "$GROUP" in
+     "$REGRESSION" -l c -ws 4 -s false -p 4 -acnv2 || exit 1
+     "$REGRESSION" -l c -ws 8 -s true -p 4 -acnv2 || exit 1
+     "$REGRESSION" -l c -ws 8 -s false -p 4 -acnv2 || exit 1
++    sh ./scripts/runDeferredAcnRegressions.sh || exit 1
+     ;;
+ 
+   ada)
+diff --git a/v4Tests/scripts/runDeferredAcnRegressions.sh b/v4Tests/scripts/runDeferredAcnRegressions.sh
+new file mode 100644
+index 00000000..2c8d2218
+--- /dev/null
++++ b/v4Tests/scripts/runDeferredAcnRegressions.sh
+@@ -0,0 +1,34 @@
++#!/bin/sh
++
++set -eu
++
++root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
++cases=$root/v4Tests/test-cases/acn-v2
++compiler=${ASN1SCC:-$root/asn1scc/bin/Debug/net10.0/asn1scc.dll}
++temporary=$(mktemp -d "${TMPDIR:-/tmp}/asn1scc-acn-v2.XXXXXX")
++
++cleanup() {
++    rm -rf "$temporary"
++}
++trap cleanup EXIT HUP INT TERM
++
++run_compiler() {
++    case $compiler in
++        *.dll) dotnet "$compiler" "$@" ;;
++        *) "$compiler" "$@" ;;
++    esac
++}
++
++for number in 001; do
++    output=$temporary/$number
++    mkdir "$output"
++    run_compiler -c -ACN --acn-v2 -atc --field-prefix AUTO \
++        -o "$output" "$cases/$number.asn1" "$cases/$number.acn"
++    (
++        cd "$output"
++        cc -std=c11 -pedantic-errors -Wall -Wextra -Werror ./*.c -o tests
++        ./tests
++    )
++done
++
++echo "Deferred ACN regressions passed"
+diff --git a/v4Tests/test-cases/acn-v2/001.acn b/v4Tests/test-cases/acn-v2/001.acn
+new file mode 100644
+index 00000000..fb0ca542
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/001.acn
+@@ -0,0 +1,18 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Chain [] {
++    first [],
++    second [present-when first.more]
++}
++
++Byte [] {
++    more BOOLEAN [true-value '1'B],
++    bits [encoding pos-int, size 7]
++}
++
++Last [] {
++    end NULL [pattern '0'B],
++    bits [encoding pos-int, size 7]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn-v2/001.asn1 b/v4Tests/test-cases/acn-v2/001.asn1
+new file mode 100644
+index 00000000..0feb3e59
+--- /dev/null
++++ b/v4Tests/test-cases/acn-v2/001.asn1
+@@ -0,0 +1,19 @@
++-- A Boolean determinant produced by a referenced child controls the presence
++-- of its sibling. The determinant must cross the reference boundary and use
++-- the one-bit deferred runtime representation.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Chain ::= SEQUENCE {
++    first   Byte,
++    second  Last OPTIONAL
++}
++
++Byte ::= SEQUENCE {
++    bits INTEGER (0..127)
++}
++
++Last ::= SEQUENCE {
++    bits INTEGER (0..127)
++}
++
++END

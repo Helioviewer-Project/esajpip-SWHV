@@ -227,6 +227,8 @@ static Regions walk(const Bytes *b) {
 
 #define OCTETS(field, src, n) \
     do { memcpy((field).arr, (src), (n)); (field).nCount = (int) (n); } while (0)
+#define FIXED_OCTETS(field, src, n) \
+    do { memcpy((field).arr, (src), (n)); } while (0)
 
 static void build_siz(Siz *s, int width, int height) {
     s->rsiz = 0;
@@ -278,8 +280,8 @@ static void build_tile_part(TilePart *tp, int levels, int with_plt) {
         TileSegment *ts = &tp->rest.headers.arr[0];
         Plt *plt;
         ts->code = MC_PLT;
-        ts->body.kind = TileBody_plt_PRESENT;
-        plt = &ts->body.u.plt.body;
+        ts->exist.plt = 1;
+        plt = &ts->plt.body;
         plt->zplt = 0;
         plt->entries.nCount = packets;
         for (i = 0; i < packets; ++i) {
@@ -295,7 +297,6 @@ static void build_tile_part(TilePart *tp, int levels, int with_plt) {
 static void build_codestream(Codestream *cs, int width, int height, int levels,
                              int custom_precincts, int with_plt) {
     MainSegment *seg;
-    INIT(Codestream)(cs);
     cs->soc = MC_SOC;
     cs->sizCode = MC_SIZ;
     build_siz(&cs->siz.body, width, height);
@@ -303,29 +304,28 @@ static void build_codestream(Codestream *cs, int width, int height, int levels,
 
     seg = &cs->segments.arr[0];
     seg->code = MC_COD;
-    seg->body.kind = MainBody_cod_PRESENT;
-    build_cod(&seg->body.u.cod.body, levels, custom_precincts);
+    seg->exist.cod = 1;
+    build_cod(&seg->cod.body, levels, custom_precincts);
 
     seg = &cs->segments.arr[1];
     seg->code = MC_QCD;
-    seg->body.kind = MainBody_qcd_PRESENT;
-    seg->body.u.qcd.body.sqcd = 0x40;          /* 2 guard bits, no quantization */
+    seg->exist.qcd = 1;
+    seg->qcd.body.sqcd = 0x40;          /* 2 guard bits, no quantization */
     {
         /* one SPqcd byte per sub-band: 3 * levels + 1 */
         int n = 3 * levels + 1, i;
-        seg->body.u.qcd.body.spqcd.nCount = n;
-        for (i = 0; i < n; ++i) seg->body.u.qcd.body.spqcd.arr[i] = 0x40;
+        seg->qcd.body.spqcd.nCount = n;
+        for (i = 0; i < n; ++i) seg->qcd.body.spqcd.arr[i] = 0x40;
     }
 
     seg = &cs->segments.arr[2];
     seg->code = MC_SOT;
-    seg->body.kind = MainBody_tilePart_PRESENT;
-    build_tile_part(&seg->body.u.tilePart, levels, with_plt);
+    seg->exist.tilePart = 1;
+    build_tile_part(&seg->tilePart, levels, with_plt);
 }
 
 static void add_opaque_box(Jp2Family *f, uint32_t type, const void *data, size_t n) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
-    b->tbox = type;
     switch (type) {
         case BT_JP:   b->payload.kind = TopPayload_jP_PRESENT;   OCTETS(b->payload.u.jP.data, data, n); break;
         default: die("add_opaque_box: unsupported type");
@@ -337,17 +337,16 @@ static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     Ftyp *ftyp;
     add_opaque_box(f, BT_JP, "\x0D\x0A\x87\x0A", 4);
     b = &f->boxes.arr[f->boxes.nCount++];
-    b->tbox = BT_FTYP;
     b->payload.kind = TopPayload_ftyp_PRESENT;
     ftyp = &b->payload.u.ftyp;
-    OCTETS(ftyp->brand, brand, 4);
+    FIXED_OCTETS(ftyp->brand, brand, 4);
     /* MinV: T.800 I.5.2 requires 0 in a JP2 file, T.801 M.8 requires 1 in a
      * JPX file. Readers shall parse the file whatever the value, and esajpip
      * ignores it, so neither layer constrains it; the base vectors carry the
      * conforming value so that a valid vector is valid to a strict reader. */
     ftyp->minor = memcmp(brand, "jpx ", 4) == 0 ? 1 : 0;
     ftyp->compat.nCount = 1;
-    OCTETS(ftyp->compat.arr[0], brand, 4);
+    FIXED_OCTETS(ftyp->compat.arr[0], brand, 4);
 }
 
 static void add_rreq(Jp2Family *f, int linked) {
@@ -367,7 +366,6 @@ static void add_rreq(Jp2Family *f, int linked) {
         0, 0                      /* NVF */
     };
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
-    b->tbox = BT_RREQ;
     b->payload.kind = TopPayload_rreq_PRESENT;
     if (linked)
         OCTETS(b->payload.u.rreq.data, linked_requirements, sizeof linked_requirements);
@@ -379,24 +377,22 @@ static void add_jp2h(Jp2Family *f, int width, int height) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     InnerBox *c;
     unsigned char ihdr[14], colr[7];
-    b->tbox = BT_JP2H;
     b->payload.kind = TopPayload_jp2h_PRESENT;
     b->payload.u.jp2h.children.nCount = 2;
     put32(ihdr, (uint32_t) height); put32(ihdr + 4, (uint32_t) width);
     put16(ihdr + 8, 1); ihdr[10] = 7; ihdr[11] = 7; ihdr[12] = 0; ihdr[13] = 0;
     c = &b->payload.u.jp2h.children.arr[0];
-    c->tbox = BT_IHDR; c->payload.kind = InnerPayload_ihdr_PRESENT;
+    c->payload.kind = InnerPayload_ihdr_PRESENT;
     OCTETS(c->payload.u.ihdr.data, ihdr, sizeof ihdr);
     colr[0] = 1; colr[1] = 0; colr[2] = 0; put32(colr + 3, 17);   /* greyscale */
     c = &b->payload.u.jp2h.children.arr[1];
-    c->tbox = BT_COLR; c->payload.kind = InnerPayload_colr_PRESENT;
+    c->payload.kind = InnerPayload_colr_PRESENT;
     OCTETS(c->payload.u.colr.data, colr, sizeof colr);
 }
 
 static Codestream *add_jp2c(Jp2Family *f, int width, int height, int levels,
                             int custom_precincts, int with_plt) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
-    b->tbox = BT_JP2C;
     b->payload.kind = TopPayload_jp2c_PRESENT;
     build_codestream(&b->payload.u.jp2c, width, height, levels, custom_precincts, with_plt);
     return &b->payload.u.jp2c;
@@ -404,7 +400,6 @@ static Codestream *add_jp2c(Jp2Family *f, int width, int height, int levels,
 
 static void add_jpch(Jp2Family *f) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
-    b->tbox = BT_JPCH;
     b->payload.kind = TopPayload_jpch_PRESENT;
     b->payload.u.jpch.children.nCount = 0;
 }
@@ -412,11 +407,9 @@ static void add_jpch(Jp2Family *f) {
 static void add_ftbl(Jp2Family *f, uint64_t off, uint32_t len, int dr) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     InnerBox *c;
-    b->tbox = BT_FTBL;
     b->payload.kind = TopPayload_ftbl_PRESENT;
     b->payload.u.ftbl.children.nCount = 1;
     c = &b->payload.u.ftbl.children.arr[0];
-    c->tbox = BT_FLST;
     c->payload.kind = InnerPayload_flst_PRESENT;
     c->payload.u.flst.nf = 1;
     c->payload.u.flst.fragments.nCount = 1;
@@ -428,13 +421,11 @@ static void add_ftbl(Jp2Family *f, uint64_t off, uint32_t len, int dr) {
 static void add_dtbl(Jp2Family *f, const char *const *urls, int n) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     int i;
-    b->tbox = BT_DTBL;
     b->payload.kind = TopPayload_dtbl_PRESENT;
     b->payload.u.dtbl.ndr = n;
     b->payload.u.dtbl.references.nCount = n;
     for (i = 0; i < n; ++i) {
         InnerBox *c = &b->payload.u.dtbl.references.arr[i];
-        c->tbox = BT_URL;
         c->payload.kind = InnerPayload_url_PRESENT;
         c->payload.u.url.vers = 0;
         c->payload.u.url.flag = 0;
@@ -457,8 +448,6 @@ typedef struct {
 
 static Jp2Family *new_family(void) {
     Jp2Family *f = xcalloc(sizeof *f);
-    INIT(Jp2Family)(f);
-    f->boxes.nCount = 0;
     return f;
 }
 
@@ -541,14 +530,14 @@ static Label label(Bytes b, cf_kind kind) {
     int err = 0;
     const char *r;
 
-    BitStream_Init(&bs, b.data, (long) b.len);
+    BitStream_AttachBuffer(&bs, b.data, (long) b.len);
     INIT(Jp2Family)(dec_family);
     if (!DEC(Jp2Family)(dec_family, &bs, &err)) l.std_reason = "decode";
     else if (!VALID(Jp2Family)(dec_family, &err)) l.std_reason = "constraint";
     else if ((r = cf_check_family(dec_family, CF_STANDARD, kind)) != NULL) l.std_reason = r;
     else l.std_ok = 1;
 
-    BitStream_Init(&bs, b.data, (long) b.len);
+    BitStream_AttachBuffer(&bs, b.data, (long) b.len);
     if (kind == CF_JP2) {
         INIT(Jp2File_Profile)(dec_jp2);
         if (!DEC(Jp2File_Profile)(dec_jp2, &bs, &err)) l.prof_reason = "decode";
@@ -614,8 +603,8 @@ static void emit(Bytes b, cf_kind kind, const char *name, const char *field,
 typedef void (*Setter)(Jp2Family *f, int box, asn1SccSint v);
 
 static Codestream *cs_of(Jp2Family *f, int box) { return &f->boxes.arr[box].payload.u.jp2c; }
-static Cod *cod_of(Jp2Family *f, int box) { return &cs_of(f, box)->segments.arr[0].body.u.cod.body; }
-static TilePart *tp_of(Jp2Family *f, int box) { return &cs_of(f, box)->segments.arr[2].body.u.tilePart; }
+static Cod *cod_of(Jp2Family *f, int box) { return &cs_of(f, box)->segments.arr[0].cod.body; }
+static TilePart *tp_of(Jp2Family *f, int box) { return &cs_of(f, box)->segments.arr[2].tilePart; }
 
 #define SETTER(id, lvalue) \
     static void set_##id(Jp2Family *f, int box, asn1SccSint v) { (void) f; (void) box; lvalue = v; }
@@ -650,8 +639,8 @@ SETTER(sot_lsot,   tp_of(f, box)->lsot)
 SETTER(sot_isot,   tp_of(f, box)->isot)
 SETTER(sot_tpsot,  tp_of(f, box)->tpsot)
 SETTER(sot_tnsot,  tp_of(f, box)->tnsot)
-SETTER(plt_zplt,   tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.zplt)
-SETTER(iplt_bits,  tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0].b0.bits)
+SETTER(plt_zplt,   tp_of(f, box)->rest.headers.arr[0].plt.body.zplt)
+SETTER(iplt_bits,  tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0].b0.bits)
 
 typedef struct {
     const char *field;
@@ -754,59 +743,61 @@ static void rule_no_tile_part(Jp2Family *f, int box) {
 static void rule_two_tile_parts(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     cs->segments.arr[3] = cs->segments.arr[2];
-    cs->segments.arr[3].body.u.tilePart.tpsot = 1;
-    cs->segments.arr[2].body.u.tilePart.tnsot = 2;
-    cs->segments.arr[3].body.u.tilePart.tnsot = 2;
+    cs->segments.arr[3].tilePart.tpsot = 1;
+    cs->segments.arr[2].tilePart.tnsot = 2;
+    cs->segments.arr[3].tilePart.tnsot = 2;
     cs->segments.nCount = 4;                              /* valid: two tile-parts */
 }
 static void rule_tnsot_inconsistent(Jp2Family *f, int box) {
     rule_two_tile_parts(f, box);
-    cs_of(f, box)->segments.arr[3].body.u.tilePart.tnsot = 3;   /* first said 2 */
+    cs_of(f, box)->segments.arr[3].tilePart.tnsot = 3;   /* first said 2 */
 }
 static void rule_two_plt_markers(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);                          /* precinct base: two packets */
     TileSegment *first = &tp->rest.headers.arr[0];
     TileSegment *second = &tp->rest.headers.arr[tp->rest.headers.nCount++];
     *second = *first;                                      /* same code/kind, one entry each */
-    first->body.u.plt.body.entries.nCount = 1;
-    second->body.u.plt.body.zplt = 1;
-    second->body.u.plt.body.entries.nCount = 1;
-    second->body.u.plt.body.entries.arr[0] = first->body.u.plt.body.entries.arr[1];
+    first->plt.body.entries.nCount = 1;
+    second->plt.body.zplt = 1;
+    second->plt.body.entries.nCount = 1;
+    second->plt.body.entries.arr[0] = first->plt.body.entries.arr[1];
 }
 static void rule_com_in_tile_header(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
     ts->code = MC_COM;
-    ts->body.kind = TileBody_com_PRESENT;
-    ts->body.u.com.body.rcom = 1;
-    ts->body.u.com.body.ccom.nCount = 2;
-    ts->body.u.com.body.ccom.arr[0] = 'o';
-    ts->body.u.com.body.ccom.arr[1] = 'k';
+    ts->exist.com = 1;
+    ts->com.body.rcom = 1;
+    ts->com.body.ccom.nCount = 2;
+    ts->com.body.ccom.arr[0] = 'o';
+    ts->com.body.ccom.arr[1] = 'k';
 }
 static void rule_tnsot_declared_late(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     rule_two_tile_parts(f, box);
-    cs->segments.arr[2].body.u.tilePart.tnsot = 0;         /* first says "unspecified" */
-    cs->segments.arr[3].body.u.tilePart.tnsot = 2;         /* second gives the count */
+    cs->segments.arr[2].tilePart.tnsot = 0;         /* first says "unspecified" */
+    cs->segments.arr[3].tilePart.tnsot = 2;         /* second gives the count */
 }
 static void rule_tile_parts_n(Jp2Family *f, int box, int n) {
     Codestream *cs = cs_of(f, box);
     int i;
     for (i = 1; i < n; ++i) cs->segments.arr[2 + i] = cs->segments.arr[2];
     for (i = 0; i < n; ++i) {
-        cs->segments.arr[2 + i].body.u.tilePart.tpsot = i;
-        cs->segments.arr[2 + i].body.u.tilePart.tnsot = n;
+        cs->segments.arr[2 + i].tilePart.tpsot = i;
+        cs->segments.arr[2 + i].tilePart.tnsot = n;
     }
     cs->segments.nCount = 2 + n;
 }
 static void rule_tile_parts_64(Jp2Family *f, int box) { rule_tile_parts_n(f, box, 64); }
 static void rule_jpx_jp2c_before_jpch(Jp2Family *f, int box) {
     TopBox *arr = f->boxes.arr;                       /* jP ftyp rreq jpch jpch jp2c jp2c */
-    TopBox jp2c = arr[5];
+    TopBox *jp2c = xcalloc(sizeof *jp2c);
     (void) box;
+    *jp2c = arr[5];
     arr[5] = arr[4];
     arr[4] = arr[3];
-    arr[3] = jp2c;                                    /* jP ftyp rreq jp2c jpch jpch jp2c */
+    arr[3] = *jp2c;                                   /* jP ftyp rreq jp2c jpch jpch jp2c */
+    free(jp2c);
 }
 static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
 static void rule_jpx_no_jpch(Jp2Family *f, int box) {
@@ -820,9 +811,9 @@ static void rule_tile_parts_65(Jp2Family *f, int box) {
     int i;
     for (i = 1; i < 65; ++i) {
         cs->segments.arr[2 + i] = cs->segments.arr[2];
-        cs->segments.arr[2 + i].body.u.tilePart.tpsot = i;
+        cs->segments.arr[2 + i].tilePart.tpsot = i;
     }
-    for (i = 0; i < 65; ++i) cs->segments.arr[2 + i].body.u.tilePart.tnsot = 65;
+    for (i = 0; i < 65; ++i) cs->segments.arr[2 + i].tilePart.tnsot = 65;
     cs->segments.nCount = 2 + 65;                         /* profile limit exceeded */
 }
 static void rule_com_segment(Jp2Family *f, int box) {
@@ -830,14 +821,15 @@ static void rule_com_segment(Jp2Family *f, int box) {
     MainSegment *seg;
     cs->segments.arr[3] = cs->segments.arr[2];
     seg = &cs->segments.arr[2];
+    memset(&seg->exist, 0, sizeof seg->exist);
     seg->code = MC_COM;
-    seg->body.kind = MainBody_com_PRESENT;
-    seg->body.u.com.body.rcom = 1;
-    OCTETS(seg->body.u.com.body.ccom, "esajpip corpus", 14);
+    seg->exist.com = 1;
+    seg->com.body.rcom = 1;
+    OCTETS(seg->com.body.ccom, "esajpip corpus", 14);
     cs->segments.nCount = 4;                              /* valid */
 }
 static void rule_iplt_five_bytes(Jp2Family *f, int box) {
-    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
+    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
     e->b0.bits = 0; e->exist.b1 = 1;
     e->b1.bits = 0; e->exist.b2 = 1;
     e->b2.bits = 0; e->exist.b3 = 1;
@@ -845,13 +837,14 @@ static void rule_iplt_five_bytes(Jp2Family *f, int box) {
     e->b4.bits = 1;                                        /* 5 bytes: profile max, valid */
 }
 static void rule_iplt_six_bytes(Jp2Family *f, int box) {
-    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
+    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
     rule_iplt_five_bytes(f, box);
+    e->b4.bits = 0;
     e->exist.b5 = 1;
-    e->b5.bits = 1;                                        /* 6 bytes: standard valid, profile invalid */
+    e->b5.bits = 1;                                        /* non-minimal 6-byte encoding of value 1 */
 }
 static void rule_trailing_zero_iplt(Jp2Family *f, int box) {
-    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body;
+    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].plt.body;
     Iplt *e = &plt->entries.arr[plt->entries.nCount++];    /* one Iplt more than packets */
     memset(e, 0, sizeof *e);
     e->b0.bits = 0;                                        /* value 0: tolerated by the server */
@@ -865,16 +858,16 @@ static void rule_tile_cod(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
     ts->code = MC_COD;
-    ts->body.kind = TileBody_cod_PRESENT;
-    ts->body.u.cod.body = *cod_of(f, box);
+    ts->exist.cod = 1;
+    ts->cod.body = *cod_of(f, box);
 }
 static void rule_tile_qcd(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
     ts->code = MC_QCD;
-    ts->body.kind = TileBody_qcd_PRESENT;
-    ts->body.u.qcd.body = cs->segments.arr[1].body.u.qcd.body;
+    ts->exist.qcd = 1;
+    ts->qcd.body = cs->segments.arr[1].qcd.body;
 }
 static void rule_tile_cod_twice(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
@@ -882,8 +875,8 @@ static void rule_tile_cod_twice(Jp2Family *f, int box) {
     for (i = 0; i < 2; ++i) {                               /* two COD in the tile header */
         TileSegment *ts = &tp->rest.headers.arr[n + i];
         ts->code = MC_COD;
-        ts->body.kind = TileBody_cod_PRESENT;
-        ts->body.u.cod.body = *cod_of(f, box);
+        ts->exist.cod = 1;
+        ts->cod.body = *cod_of(f, box);
     }
     tp->rest.headers.nCount = n + 2;
 }
@@ -892,11 +885,11 @@ static void rule_tile_cod_second_part(Jp2Family *f, int box) {
     TilePart *tp;
     TileSegment *ts;
     rule_two_tile_parts(f, box);
-    tp = &cs->segments.arr[3].body.u.tilePart;             /* COD in tile-part 1 */
+    tp = &cs->segments.arr[3].tilePart;             /* COD in tile-part 1 */
     ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
     ts->code = MC_COD;
-    ts->body.kind = TileBody_cod_PRESENT;
-    ts->body.u.cod.body = *cod_of(f, box);
+    ts->exist.cod = 1;
+    ts->cod.body = *cod_of(f, box);
 }
 static void rule_packet_count_overflow(Jp2Family *f, int box) {
     Siz *s = &cs_of(f, box)->siz.body;                     /* 2^16 x 2^16 default precincts */
@@ -904,7 +897,7 @@ static void rule_packet_count_overflow(Jp2Family *f, int box) {
     s->ysiz = s->ytsiz = 2147483647;
 }
 static void rule_iplt_too_long(Jp2Family *f, int box) {
-    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
+    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
     e->b0.bits = 2;                                        /* data holds 1 byte */
 }
 static void rule_subsampled(Jp2Family *f, int box) {
@@ -915,13 +908,14 @@ static void add_main_opaque(Jp2Family *f, int box, int code) {
     MainSegment *seg;
     cs->segments.arr[3] = cs->segments.arr[2];
     seg = &cs->segments.arr[2];
+    memset(&seg->exist, 0, sizeof seg->exist);
     seg->code = code;
     if (code == MC_COC) {
-        seg->body.kind = MainBody_coc_PRESENT;
-        OCTETS(seg->body.u.coc.body.data, "\x00\x00\x00", 3);
+        seg->exist.coc = 1;
+        OCTETS(seg->coc.body.data, "\x00\x00\x00", 3);
     } else {
-        seg->body.kind = MainBody_poc_PRESENT;
-        OCTETS(seg->body.u.poc.body.data, "\x00\x00\x00", 3);
+        seg->exist.poc = 1;
+        OCTETS(seg->poc.body.data, "\x00\x00\x00", 3);
     }
     cs->segments.nCount = 4;
 }
@@ -946,9 +940,8 @@ static void rule_jp2c_in_jpch(Jp2Family *f, int box) {
     Superbox *sb = &f->boxes.arr[3].payload.u.jpch;        /* jpx-embedded: first jpch */
     InnerBox *c = &sb->children.arr[sb->children.nCount++];
     (void) box;
-    c->tbox = BT_JP2C;                                     /* not permitted inside jpch */
-    c->payload.kind = InnerPayload_free_PRESENT;           /* any opaque alternative; code patched below */
-    OCTETS(c->payload.u.free.data, "\x00", 1);
+    c->payload.kind = InnerPayload_jp2c_PRESENT;
+    OCTETS(c->payload.u.jp2c.data, "\x00", 1);
 }
 static void rule_missing_rreq(Jp2Family *f, int box) {
     int i;
@@ -959,7 +952,6 @@ static void rule_missing_rreq(Jp2Family *f, int box) {
 static void rule_unknown_box(Jp2Family *f, int box) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     (void) box;
-    b->tbox = 1633837924u;                                /* 'abcd' */
     b->payload.kind = TopPayload_other_PRESENT;
     OCTETS(b->payload.u.other.data, "\x01", 1);
 }
@@ -1103,8 +1095,13 @@ static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name
         if (strcmp(r->kind, "LBox") == 0) cand[n++] = 7;
         if (strcmp(r->kind, "Lxxx") == 0) cand[n++] = 1;
         for (k = 0; k < n; ++k) {
-            Bytes m = bytes_dup(valid);
+            Bytes m;
             char name[256], field[64];
+            int previous;
+            for (previous = 0; previous < k; ++previous)
+                if (cand[previous] == cand[k]) break;
+            if (previous < k) continue;
+            m = bytes_dup(valid);
             if (r->len_width == 2) put16(m.data + r->len_off, (uint16_t) cand[k]);
             else put32(m.data + r->len_off, cand[k]);
             snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->len_off);
@@ -1136,6 +1133,8 @@ static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) 
             Bytes m;
             char name[256], field[64];
             if (strcmp(r->kind, patches[k].kind) != 0) continue;
+            if (r->len_width == 2 && be16(valid.data + r->start) == patches[k].value)
+                continue;
             m = bytes_dup(valid);
             if (r->len_width == 2) put16(m.data + r->start, (uint16_t) patches[k].value);
             else put32(m.data + r->start + 4, patches[k].value);
@@ -1144,52 +1143,6 @@ static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) 
             emit(m, kind, name, field, patches[k].note, NULL, X_STD);
             free(m.data);
         }
-    }
-    free(rs.r);
-}
-
-/* Remove the last payload byte of one region and shrink it and every
- * enclosing length by one: lengths stay consistent, the innermost
- * `size deduced` list or fixed body is one byte short. */
-static void emit_region_mutants(Bytes valid, cf_kind kind, const char *base_name) {
-    Regions rs = walk(&valid);
-    int i;
-    {
-        Bytes m = bytes_dup(valid);
-        char name[256];
-        m.len--;
-        snprintf(name, sizeof name, "%s-short", base_name);
-        emit(m, kind, name, "file", "last byte removed", NULL, X_STD);
-        free(m.data);
-    }
-    {
-        Bytes m = { xcalloc(valid.len + 2), valid.len + 1 };
-        char name[256];
-        memcpy(m.data, valid.data, valid.len);
-        snprintf(name, sizeof name, "%s-long", base_name);
-        emit(m, kind, name, "file", "byte appended", NULL, X_STD);
-        free(m.data);
-    }
-    for (i = 0; i < rs.n; ++i) {
-        const Region *r = &rs.r[i];
-        size_t cut = r->end - 1;
-        Bytes m;
-        char name[256], field[64];
-        int a;
-        if (r->end <= r->payload_start) continue;
-        m.len = valid.len - 1;
-        m.data = xcalloc(m.len + 1);
-        memcpy(m.data, valid.data, cut);
-        memcpy(m.data + cut, valid.data + cut + 1, valid.len - cut - 1);
-        for (a = i; a >= 0; a = rs.r[a].parent) {
-            const Region *anc = &rs.r[a];
-            if (anc->len_width == 2) put16(m.data + anc->len_off, (uint16_t) (be16(m.data + anc->len_off) - 1));
-            else put32(m.data + anc->len_off, be32(m.data + anc->len_off) - 1);
-        }
-        snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->start);
-        snprintf(name, sizeof name, "%s-region-%zx", base_name, r->start);
-        emit(m, kind, name, field, "region one byte short, lengths consistent", NULL, X_STD);
-        free(m.data);
     }
     free(rs.r);
 }
@@ -1208,7 +1161,6 @@ static void run_base(Base base, const char *companions) {
     emit_signature_mutant(valid, base.kind, base.name);
     emit_length_mutants(valid, base.kind, base.name);
     emit_code_mutants(valid, base.kind, base.name);
-    emit_region_mutants(valid, base.kind, base.name);
 
     if (base.jp2c_box >= 0) {
         int has_precincts = cod_of(base.file, base.jp2c_box)->scod.customPrecincts;
