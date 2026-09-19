@@ -152,6 +152,8 @@ expectations, not that it conforms completely to JP2 or JPX.
   region markers are preserved but do not affect packet indexing.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
+- SOP marker segments are outside the served profile because they precede the
+  packet represented by each precinct data-bin. EPH markers remain supported.
 - The Part 1 multiple component transform is accepted when the codestream has
   at least three components and the first three have equal bit depth, as
   required by T.800.

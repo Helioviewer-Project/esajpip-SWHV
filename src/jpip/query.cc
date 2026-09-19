@@ -15,7 +15,7 @@ namespace {
     }
 
     template<typename Function>
-    void ForEachParameter(const char *begin, const char *end,
+    bool ForEachParameter(const char *begin, const char *end,
                           Function function) {
         while (begin < end) {
             const char *separator = static_cast<const char *>(
@@ -25,11 +25,13 @@ namespace {
                     memchr(begin, '=', parameter_end - begin));
             const char *name_end = equals ? equals : parameter_end;
             const char *value_begin = equals ? equals + 1 : parameter_end;
-            function(begin, name_end, value_begin, parameter_end);
+            if (!function(begin, name_end, value_begin, parameter_end))
+                return false;
             if (!separator)
                 break;
             begin = separator + 1;
         }
+        return true;
     }
 
     Query ParseQuery(const char *begin, const char *end) {
@@ -41,6 +43,7 @@ namespace {
                                   const char *value_end) {
                              query.push_back({string(name_begin, name_end),
                                               string(value_begin, value_end)});
+                             return true;
                          });
         return query;
     }
@@ -67,7 +70,8 @@ namespace {
                          [&found](const char *name_begin,
                                   const char *name_end,
                                   const char *, const char *) {
-                             found |= IsRoutingParameter(name_begin, name_end);
+                             found = IsRoutingParameter(name_begin, name_end);
+                             return !found;
                          });
         return found;
     }

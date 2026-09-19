@@ -1,7 +1,6 @@
 #ifndef _JPEG2000_IMAGE_INDEX_H_
 #define _JPEG2000_IMAGE_INDEX_H_
 
-//#define SHOW_TRACES
 #include "trace.h"
 
 #include <string>
@@ -30,7 +29,7 @@ namespace jpeg2000 {
 
         struct Cursor {
             uint32_t index = 0;
-            uint32_t offset = 0;
+            uint64_t offset = 0;
         };
 
         struct Codestream {

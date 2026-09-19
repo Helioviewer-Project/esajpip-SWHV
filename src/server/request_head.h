@@ -40,13 +40,13 @@ private:
     bool malformed = false;
 
     static int ReadTarget(llhttp_t *parser, const char *data,
-                          std::size_t length);
+                          std::size_t length) noexcept;
     static int ReadHeaderName(llhttp_t *parser, const char *data,
-                              std::size_t length);
+                              std::size_t length) noexcept;
     static int ReadHeaderValue(llhttp_t *parser, const char *data,
-                               std::size_t length);
-    static int FinishHeader(llhttp_t *parser);
-    static int FinishHead(llhttp_t *parser);
+                               std::size_t length) noexcept;
+    static int FinishHeader(llhttp_t *parser) noexcept;
+    static int FinishHead(llhttp_t *parser) noexcept;
 
     void ProcessHeader();
     void CountBytes(const char *data, std::size_t length);

@@ -1,8 +1,6 @@
 #ifndef _JPIP_DATABIN_SERVER_H_
 #define _JPIP_DATABIN_SERVER_H_
 
-//#define SHOW_TRACES
-
 #include <cstdint>
 #include <string>
 #include <utility>

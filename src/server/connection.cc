@@ -85,13 +85,13 @@ void Connection::ClearDeadline() {
 }
 
 void Connection::Allocate(uv_handle_t *handle, size_t suggested_size,
-                          uv_buf_t *buffer) {
+                          uv_buf_t *buffer) noexcept {
     Connection *connection = static_cast<Connection *>(handle->data);
     *buffer = uv_buf_init(connection->incoming, sizeof connection->incoming);
 }
 
 void Connection::Read(uv_stream_t *stream, ssize_t length,
-                      const uv_buf_t *buffer) {
+                      const uv_buf_t *buffer) noexcept {
     Connection *connection = static_cast<Connection *>(stream->data);
     if (length > 0) {
         if (connection->deadline == Deadline::READ)
@@ -181,7 +181,7 @@ void Connection::Dispatch(RequestHead &&request) {
     }
 }
 
-void Connection::TimerExpired(uv_timer_t *timer) {
+void Connection::TimerExpired(uv_timer_t *timer) noexcept {
     Connection *connection = static_cast<Connection *>(timer->data);
     connection->deadline = Deadline::NONE;
     try {
@@ -235,7 +235,7 @@ bool Connection::Send(Write *write, string first, const char *payload,
     return true;
 }
 
-void Connection::WriteCompleted(uv_write_t *request, int status) {
+void Connection::WriteCompleted(uv_write_t *request, int status) noexcept {
     Write *write = static_cast<Write *>(request->data);
     write->connection->HandleWriteCompleted(write, status);
 }
@@ -287,7 +287,7 @@ void Connection::StartShutdown() {
     }
 }
 
-void Connection::ShutdownCompleted(uv_shutdown_t *request, int status) {
+void Connection::ShutdownCompleted(uv_shutdown_t *request, int status) noexcept {
     Connection *connection = static_cast<Connection *>(request->data);
     connection->shutdown_active = false;
     connection->CloseHandles();
@@ -316,7 +316,7 @@ void Connection::CloseHandles() {
     }
 }
 
-void Connection::HandleClosed(uv_handle_t *handle) {
+void Connection::HandleClosed(uv_handle_t *handle) noexcept {
     Connection *connection = static_cast<Connection *>(handle->data);
     connection->open_handles--;
     connection->NotifyClosed();

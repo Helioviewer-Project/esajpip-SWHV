@@ -137,9 +137,12 @@ namespace jpip {
                         image_index.GetCodingParameters(stream.id);
                 jpeg2000::Size resolution_size;
                 if (!req.GetResolution(coding_parameters, &new_woi,
-                                       &resolution_size))
+                                       &resolution_size)) {
+                    // A rejected response terminates the channel, so any
+                    // earlier stream updates are discarded with it.
                     return Reject(error_message,
                                   "Invalid JPIP window dimensions");
+                }
                 if (!CropWindow(&new_woi, resolution_size)) {
                     stream.empty = true;
                     stream.woi = WOI();

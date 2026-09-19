@@ -71,13 +71,13 @@ private:
     uv_shutdown_t shutdown;
 
     static void Allocate(uv_handle_t *handle, std::size_t suggested_size,
-                         uv_buf_t *buffer);
+                         uv_buf_t *buffer) noexcept;
     static void Read(uv_stream_t *stream, ssize_t length,
-                     const uv_buf_t *buffer);
-    static void TimerExpired(uv_timer_t *timer);
-    static void WriteCompleted(uv_write_t *request, int status);
-    static void ShutdownCompleted(uv_shutdown_t *request, int status);
-    static void HandleClosed(uv_handle_t *handle);
+                     const uv_buf_t *buffer) noexcept;
+    static void TimerExpired(uv_timer_t *timer) noexcept;
+    static void WriteCompleted(uv_write_t *request, int status) noexcept;
+    static void ShutdownCompleted(uv_shutdown_t *request, int status) noexcept;
+    static void HandleClosed(uv_handle_t *handle) noexcept;
 
     bool StartReading();
     void StopReading();

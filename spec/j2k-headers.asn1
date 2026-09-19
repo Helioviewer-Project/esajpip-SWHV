@@ -183,7 +183,13 @@ Siz-Profile ::= Siz (WITH COMPONENTS {
     }))
 })
 
-Cod-Profile ::= Cod                           -- see README.md, "Expected initial failures"
+Cod-Profile ::= Cod (WITH COMPONENTS {
+    ...,
+    scod (WITH COMPONENTS {
+        ...,
+        sopMarkers (FALSE)                    -- not part of precinct data-bins
+    })
+})
 Qcd-Profile ::= Qcd
 Com-Profile ::= Com
 

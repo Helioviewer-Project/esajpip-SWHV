@@ -379,7 +379,7 @@ namespace jpeg2000 {
             return false;
 
         uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
-        if (lcod != expected_length || (cs_buf & 0xF8) != 0 || progression > 4 || quality_layers == 0 ||
+        if (lcod != expected_length || (cs_buf & 0xFA) != 0 || progression > 4 || quality_layers == 0 ||
             mct > 1 || (mct != 0 && !mct_compatible) ||
             transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
             cb_width + cb_height > 8 || cb_style > 63 || transform > 1)

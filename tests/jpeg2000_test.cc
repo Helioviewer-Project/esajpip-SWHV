@@ -387,6 +387,18 @@ static vector<unsigned char> DuplicateMarker(vector<unsigned char> codestream,
     return codestream;
 }
 
+static vector<unsigned char> SetCodingStyle(vector<unsigned char> codestream,
+                                             uint8_t style) {
+    for (size_t i = 0; i + 5 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x52) {
+            codestream[i + 4] = style;
+            return codestream;
+        }
+    }
+    Check(false, "COD marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> SetTilePartNumbers(vector<unsigned char> codestream,
                                                  size_t index, uint8_t part,
                                                  uint8_t count) {
@@ -795,6 +807,8 @@ int main() {
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 64)));
     WriteFile(directory + "code-block-style-255.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 1, 1, 1, 255)));
+    WriteFile(directory + "sop-markers.jp2",
+              MakeJP2(SetCodingStyle(codestream, 2)));
     WriteFile(directory + "precinct-lowest-zero.jp2",
               MakeJP2(MakePrecinctCodestream(0x00, 0x11)));
     WriteFile(directory + "precinct-higher-ppx-zero.jp2",
@@ -1117,6 +1131,9 @@ int main() {
         Check(!OpenImage(directory, name, &reserved_code_block_style_manager),
               "Accepted a reserved code-block style bit");
     }
+    jpeg2000::FileManager sop_manager;
+    Check(!OpenImage(directory, "sop-markers.jp2", &sop_manager),
+          "Accepted SOP markers outside the served source profile");
 
     jpeg2000::FileManager lowest_zero_precinct_manager;
     Check(OpenImage(directory, "precinct-lowest-zero.jp2",

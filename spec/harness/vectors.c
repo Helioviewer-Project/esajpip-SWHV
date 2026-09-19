@@ -610,6 +610,7 @@ SETTER(siz_depth,  cs_of(f, box)->siz.body.components.arr[0].depthMinus1)
 SETTER(siz_xrsiz,  cs_of(f, box)->siz.body.components.arr[0].xrsiz)
 SETTER(siz_yrsiz,  cs_of(f, box)->siz.body.components.arr[0].yrsiz)
 SETTER(cod_reserved,    cod_of(f, box)->scod.reserved)
+SETTER(cod_sop,         cod_of(f, box)->scod.sopMarkers)
 SETTER(cod_progression, cod_of(f, box)->sgcod.progression)
 SETTER(cod_layers,      cod_of(f, box)->sgcod.layers)
 SETTER(cod_mct,         cod_of(f, box)->sgcod.mct)
@@ -660,6 +661,7 @@ static const FieldMutant field_mutants[] = {
     { "siz.component.xrsiz", set_siz_xrsiz, 0, "min-1", 0, X_STD },
     { "siz.component.yrsiz", set_siz_yrsiz, 0, "min-1", 0, X_STD },
     { "cod.scod.reserved", set_cod_reserved, 1, "reserved bit set", 0, X_STD },
+    { "cod.scod.sopMarkers", set_cod_sop, 1, "SOP markers outside served packet representation", 0, X_PROF },
     { "cod.sgcod.progression", set_cod_progression, 5, "max+1", 0, X_STD },
     { "cod.sgcod.progression", set_cod_progression, 3, "PCRL with unit sampling: valid", 0, X_VALID },
     { "cod.sgcod.layers", set_cod_layers, 0, "min-1", 0, X_STD },

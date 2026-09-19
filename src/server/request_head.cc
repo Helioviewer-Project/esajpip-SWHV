@@ -79,27 +79,27 @@ void RequestHeadParser::Reset() {
 }
 
 int RequestHeadParser::ReadTarget(llhttp_t *parser, const char *data,
-                                  size_t length) {
+                                  size_t length) noexcept {
     RequestHeadParser *self = static_cast<RequestHeadParser *>(parser->data);
     self->request.target.append(data, length);
     return HPE_OK;
 }
 
 int RequestHeadParser::ReadHeaderName(llhttp_t *parser, const char *data,
-                                      size_t length) {
+                                      size_t length) noexcept {
     RequestHeadParser *self = static_cast<RequestHeadParser *>(parser->data);
     self->header_name.append(data, length);
     return HPE_OK;
 }
 
 int RequestHeadParser::ReadHeaderValue(llhttp_t *parser, const char *data,
-                                       size_t length) {
+                                       size_t length) noexcept {
     RequestHeadParser *self = static_cast<RequestHeadParser *>(parser->data);
     self->header_value.append(data, length);
     return HPE_OK;
 }
 
-int RequestHeadParser::FinishHeader(llhttp_t *parser) {
+int RequestHeadParser::FinishHeader(llhttp_t *parser) noexcept {
     RequestHeadParser *self = static_cast<RequestHeadParser *>(parser->data);
     self->ProcessHeader();
     self->header_name.clear();
@@ -107,7 +107,7 @@ int RequestHeadParser::FinishHeader(llhttp_t *parser) {
     return HPE_OK;
 }
 
-int RequestHeadParser::FinishHead(llhttp_t *parser) {
+int RequestHeadParser::FinishHead(llhttp_t *parser) noexcept {
     RequestHeadParser *self = static_cast<RequestHeadParser *>(parser->data);
     if (llhttp_get_method(parser) != HTTP_GET ||
         llhttp_get_http_major(parser) != 1 ||
