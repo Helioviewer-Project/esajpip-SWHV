@@ -49,7 +49,9 @@ namespace jpip {
         DataBinWriter data_writer;  ///< Data-bin writer for generating the chunks
 
         enum {
-            CHUNK_RESERVE = 60 ///< Space for message headers and EOR
+            // Allows the current message header to grow to its maximum encoded
+            // size and still leaves room for the three-byte EOR message.
+            CHUNK_RESERVE = 60
         };
 
         enum class SegmentResult {

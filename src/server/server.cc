@@ -206,26 +206,28 @@ private:
     int open_handles = 0;
     bool stopping = false;
 
-    static void Listen(uv_stream_t *handle, int status) {
+    // The loop cannot safely recover partially modified global state after an
+    // allocation failure. No exception may cross libuv's C callback boundary.
+    static void Listen(uv_stream_t *handle, int status) noexcept {
         static_cast<Server *>(handle->data)->Accept(status);
     }
-    static void Signal(uv_signal_t *handle, int) {
+    static void Signal(uv_signal_t *handle, int) noexcept {
         static_cast<Server *>(handle->data)->Stop();
     }
-    static void HandleClosed(uv_handle_t *handle) {
+    static void HandleClosed(uv_handle_t *handle) noexcept {
         Server *server = static_cast<Server *>(handle->data);
         server->open_handles--;
         server->FinishStop();
     }
-    static void Reap(uv_async_t *handle) {
+    static void Reap(uv_async_t *handle) noexcept {
         static_cast<Server *>(handle->data)->ReapObjects();
     }
-    static void ChannelExpired(uv_timer_t *timer) {
+    static void ChannelExpired(uv_timer_t *timer) noexcept {
         Channel *channel = static_cast<Channel *>(timer->data);
         LOG("The channel " << channel->number << " timed out");
         channel->server->End(*channel);
     }
-    static void ChannelTimerClosed(uv_handle_t *handle) {
+    static void ChannelTimerClosed(uv_handle_t *handle) noexcept {
         Channel *channel = static_cast<Channel *>(handle->data);
         channel->timer_closed = true;
         channel->server->FinishChannel(*channel);
@@ -236,7 +238,8 @@ private:
             return;
         if (num_connections >= static_cast<unsigned int>(cfg.max_connections())) {
             uv_tcp_t *rejected = new uv_tcp_t;
-            if (uv_tcp_init(&loop, rejected) == 0) {
+            int result = uv_tcp_init(&loop, rejected);
+            if (result == 0) {
                 rejected->data = rejected;
                 (void) uv_accept(reinterpret_cast<uv_stream_t *>(&listener),
                                  reinterpret_cast<uv_stream_t *>(rejected));
@@ -246,6 +249,9 @@ private:
                          });
             } else {
                 delete rejected;
+                ERROR("A rejected connection can not be initialized: "
+                      << uv_strerror(result));
+                Stop();
             }
             return;
         }

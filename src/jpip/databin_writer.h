@@ -145,9 +145,9 @@ namespace jpip {
                                 bool last_byte = false);
 
         /**
-         * Returns the number of bytes written.
+         * Finishes the current message and returns the number of bytes written.
          */
-        ptrdiff_t GetCount() {
+        ptrdiff_t Finalize() {
             FinishMessage();
             return ptr - ini;
         }

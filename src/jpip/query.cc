@@ -14,22 +14,34 @@ namespace {
                (length == 6 && memcmp(begin, "cclose", 6) == 0);
     }
 
-    Query ParseQuery(const char *begin, const char *end) {
-        Query query;
-
+    template<typename Function>
+    void ForEachParameter(const char *begin, const char *end,
+                          Function function) {
         while (begin < end) {
-            const char *separator = static_cast<const char *>(memchr(begin, '&', end - begin));
+            const char *separator = static_cast<const char *>(
+                    memchr(begin, '&', end - begin));
             const char *parameter_end = separator ? separator : end;
-            const char *equals = static_cast<const char *>(memchr(begin, '=', parameter_end - begin));
+            const char *equals = static_cast<const char *>(
+                    memchr(begin, '=', parameter_end - begin));
             const char *name_end = equals ? equals : parameter_end;
-
-            query.push_back({string(begin, name_end),
-                             string(equals ? equals + 1 : parameter_end, parameter_end)});
-
+            const char *value_begin = equals ? equals + 1 : parameter_end;
+            function(begin, name_end, value_begin, parameter_end);
             if (!separator)
                 break;
             begin = separator + 1;
         }
+    }
+
+    Query ParseQuery(const char *begin, const char *end) {
+        Query query;
+        ForEachParameter(begin, end,
+                         [&query](const char *name_begin,
+                                  const char *name_end,
+                                  const char *value_begin,
+                                  const char *value_end) {
+                             query.push_back({string(name_begin, name_end),
+                                              string(value_begin, value_end)});
+                         });
         return query;
     }
 
@@ -50,20 +62,14 @@ namespace {
 
         const char *begin = target.data() + question + 1;
         const char *end = target.data() + target.size();
-        while (begin < end) {
-            const char *separator = static_cast<const char *>(
-                    memchr(begin, '&', end - begin));
-            const char *parameter_end = separator ? separator : end;
-            const char *equals = static_cast<const char *>(
-                    memchr(begin, '=', parameter_end - begin));
-            const char *name_end = equals ? equals : parameter_end;
-            if (IsRoutingParameter(begin, name_end))
-                return true;
-            if (!separator)
-                break;
-            begin = separator + 1;
-        }
-        return false;
+        bool found = false;
+        ForEachParameter(begin, end,
+                         [&found](const char *name_begin,
+                                  const char *name_end,
+                                  const char *, const char *) {
+                             found |= IsRoutingParameter(name_begin, name_end);
+                         });
+        return found;
     }
 
     const string *FindParameter(const Query &query, const char *name) {

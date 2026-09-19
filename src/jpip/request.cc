@@ -3,7 +3,6 @@
 #include "query.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <climits>
 
@@ -52,12 +51,12 @@ namespace jpip {
             return uri.substr(path, end - path);
         }
 
-        void MapInterval(int selected_size, int requested_size,
+        bool MapInterval(int selected_size, int requested_size,
                          int *offset, int *length) {
-            assert(selected_size > 0 && requested_size > 0);
-            assert(*offset >= 0 && *length >= 0 &&
-                   *offset <= requested_size &&
-                   *length <= requested_size - *offset);
+            if (selected_size <= 0 || requested_size <= 0 || *offset < 0 ||
+                *length < 0 || *offset > requested_size ||
+                *length > requested_size - *offset)
+                return false;
 
             uint64_t end = static_cast<uint64_t>(*offset) + *length;
             int mapped_offset = static_cast<int>(
@@ -67,6 +66,7 @@ namespace jpip {
             mapped_end = (mapped_end + requested_size - 1) / requested_size;
             *offset = mapped_offset;
             *length = static_cast<int>(mapped_end) - mapped_offset;
+            return true;
         }
 
         void SetError(string *error_message, const char *message) {
@@ -377,28 +377,31 @@ namespace jpip {
         return true;
     }
 
-    jpeg2000::Size Request::GetResolution(
-            const jpeg2000::CodingParameters *coding_parameters, WOI *woi) const {
-        jpeg2000::Size res_image_size;
+    bool Request::GetResolution(
+            const jpeg2000::CodingParameters *coding_parameters, WOI *woi,
+            jpeg2000::Size *res_image_size) const {
+        WOI mapped = *woi;
 
         if (round_direction == CLOSEST)
-            woi->resolution = coding_parameters->GetClosestResolution(resolution_size,
-                                                                       &res_image_size);
+            mapped.resolution = coding_parameters->GetClosestResolution(
+                    resolution_size, res_image_size);
         else if (round_direction == ROUNDUP)
-            woi->resolution = coding_parameters->GetRoundUpResolution(resolution_size,
-                                                                       &res_image_size);
+            mapped.resolution = coding_parameters->GetRoundUpResolution(
+                    resolution_size, res_image_size);
         else
-            woi->resolution = coding_parameters->GetRoundDownResolution(resolution_size,
-                                                                         &res_image_size);
+            mapped.resolution = coding_parameters->GetRoundDownResolution(
+                    resolution_size, res_image_size);
 
         if (resolution_size.x > 0 && resolution_size.y > 0 &&
-            resolution_size != res_image_size) {
-            MapInterval(res_image_size.x, resolution_size.x,
-                        &woi->position.x, &woi->size.x);
-            MapInterval(res_image_size.y, resolution_size.y,
-                        &woi->position.y, &woi->size.y);
+            resolution_size != *res_image_size) {
+            if (!MapInterval(res_image_size->x, resolution_size.x,
+                             &mapped.position.x, &mapped.size.x) ||
+                !MapInterval(res_image_size->y, resolution_size.y,
+                             &mapped.position.y, &mapped.size.y))
+                return false;
         }
-        return res_image_size;
+        *woi = mapped;
+        return true;
     }
 
     bool Request::ParseTarget(const string &target, string *error_message) {

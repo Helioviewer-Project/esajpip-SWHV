@@ -112,10 +112,12 @@ namespace jpip {
          * according to that level.
          * @param coding_parameters Associated coding parameters.
          * @param woi WOI to modify.
-         * @return Image size at the selected resolution.
+         * @param resolution_size Image size at the selected resolution.
+         * @return Whether the window could be mapped to that resolution.
          */
-        jpeg2000::Size GetResolution(
-                const jpeg2000::CodingParameters *coding_parameters, WOI *woi) const;
+        bool GetResolution(
+                const jpeg2000::CodingParameters *coding_parameters, WOI *woi,
+                jpeg2000::Size *resolution_size) const;
     };
 }
 

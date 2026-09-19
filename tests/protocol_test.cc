@@ -357,7 +357,10 @@ static void CheckJHVRequests() {
     jpip::WOI woi;
     woi.size = empty_resolution_request.woi_size;
     woi.position = empty_resolution_request.woi_position;
-    empty_resolution_request.GetResolution(&coding_parameters, &woi);
+    jpeg2000::Size selected_resolution;
+    Check(empty_resolution_request.GetResolution(
+                  &coding_parameters, &woi, &selected_resolution),
+          "Could not map an empty frame size");
     Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
     Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
 
@@ -802,10 +805,20 @@ static void CheckResolutionSelection() {
     jpip::WOI mapped_woi;
     mapped_woi.position = jpeg2000::Point(1, 1);
     mapped_woi.size = jpeg2000::Size(1, 1);
-    mapped_request.GetResolution(&params, &mapped_woi);
+    Check(mapped_request.GetResolution(&params, &mapped_woi, &selected),
+          "Could not map a scaled window");
     Check(mapped_woi.position == jpeg2000::Point(0, 0) &&
               mapped_woi.size == jpeg2000::Size(2, 2),
           "Window was not mapped by its floor and ceiling boundaries");
+
+    jpip::WOI invalid_mapped_woi;
+    invalid_mapped_woi.position = jpeg2000::Point(4, 0);
+    invalid_mapped_woi.size = jpeg2000::Size(0, 1);
+    jpip::WOI original_invalid_woi = invalid_mapped_woi;
+    Check(!mapped_request.GetResolution(&params, &invalid_mapped_woi,
+                                        &selected) &&
+              invalid_mapped_woi == original_invalid_woi,
+          "Accepted an invalid window-mapping interval");
 
     params.size = jpeg2000::Size(INT_MAX, INT_MAX);
     params.num_levels = 32;
@@ -819,7 +832,8 @@ static void CheckResolutionSelection() {
     jpip::WOI woi;
     woi.position = jpeg2000::Point(INT_MAX - 2, INT_MAX - 2);
     woi.size = jpeg2000::Size(1, 1);
-    request.GetResolution(&params, &woi);
+    Check(request.GetResolution(&params, &woi, &selected),
+          "Could not map a window at the decomposition limit");
     Check(woi.position == jpeg2000::Point(INT_MAX - 2, INT_MAX - 2) &&
               woi.size == jpeg2000::Size(2, 2),
           "Window scaling overflowed");
@@ -835,7 +849,7 @@ static void CheckJPIPMessages() {
     writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     const unsigned char expected[] = {0x70, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00};
-    Check(writer.GetCount() == sizeof expected, "Wrong JPIP message length");
+    Check(writer.Finalize() == sizeof expected, "Wrong JPIP message length");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "The JPIP message format changed");
 
@@ -848,7 +862,7 @@ static void CheckJPIPMessages() {
           "Rejected a canonical two-byte Bin-ID message");
     const unsigned char large_id_expected[] = {0xf1, 0x48, 0x00,
                                                 0x00, 0x00, 0x00};
-    Check(large_id_writer.GetCount() == sizeof large_id_expected,
+    Check(large_id_writer.Finalize() == sizeof large_id_expected,
           "Wrong large Bin-ID message length");
     for (size_t i = 0; i < sizeof large_id_expected; ++i)
         Check(static_cast<unsigned char>(large_id_buf[i]) ==
@@ -875,7 +889,7 @@ static void CheckDataBinCapacity() {
                        data::FileSegment(0, UINT64_MAX), true) ==
               jpip::DataBinWriter::Result::FULL,
           "Reported an oversized data-bin segment as written");
-    Check(writer.GetCount() == 0, "Left a partial data-bin message in the buffer");
+    Check(writer.Finalize() == 0, "Left a partial data-bin message in the buffer");
 
     char path[] = "/tmp/esajpip-short-read-XXXXXX";
     int fd = mkstemp(path);
@@ -916,7 +930,7 @@ static void CheckCoalescedJPIPMessages() {
     writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
     const unsigned char expected[] = {0x70, 0x06, 0x00, 0x00, 0x05, 1, 2, 3, 4, 5, 0x00, 0x02, 0x00};
-    Check(writer.GetCount() == sizeof expected, "Wrong coalesced JPIP message length");
+    Check(writer.Finalize() == sizeof expected, "Wrong coalesced JPIP message length");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "Wrong coalesced JPIP message");
 
@@ -929,7 +943,7 @@ static void CheckCoalescedJPIPMessages() {
                          data::FileSegment(100, 50), true);
     growing_writer.WriteEOR(jpip::EOR::WINDOW_DONE);
 
-    Check(growing_writer.GetCount() == 159, "Wrong growing JPIP message length");
+    Check(growing_writer.Finalize() == 159, "Wrong growing JPIP message length");
     const unsigned char growing_header[] = {0x70, 0x06, 0x00, 0x00, 0x81, 0x16};
     for (size_t i = 0; i < sizeof growing_header; ++i)
         Check(static_cast<unsigned char>(growing_buf[i]) == growing_header[i], "Wrong growing JPIP header");
@@ -948,7 +962,7 @@ static void CheckCoalescedJPIPMessages() {
               jpip::DataBinWriter::Result::FULL,
           "Coalesced a message without space for its header");
 
-    Check(tight_writer.GetCount() == 105, "Did not preserve the complete JPIP message");
+    Check(tight_writer.Finalize() == 105, "Did not preserve the complete JPIP message");
     const unsigned char tight_header[] = {0x60, 0x06, 0x00, 0x00, 0x64};
     for (size_t i = 0; i < sizeof tight_header; ++i)
         Check(static_cast<unsigned char>(tight_buf[i]) == tight_header[i],
@@ -963,7 +977,7 @@ static void CheckCoalescedJPIPMessages() {
                              data::FileSegment(100, 50), true) ==
               jpip::DataBinWriter::Result::WRITTEN,
           "Did not retry the deferred JPIP message");
-    Check(tight_writer.GetCount() == 53, "Wrong deferred JPIP message length");
+    Check(tight_writer.Finalize() == 53, "Wrong deferred JPIP message length");
     const unsigned char retry_header[] = {0x30, 0x64, 0x32};
     for (size_t i = 0; i < sizeof retry_header; ++i)
         Check(static_cast<unsigned char>(retry_buf[i]) == retry_header[i],
@@ -984,7 +998,7 @@ static void CheckCoalescedJPIPMessages() {
     const unsigned char class_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2,
                                             0x50, 0x08, 0x00, 0x03, 3, 4, 5,
                                             0x00, 0x02, 0x00};
-    Check(class_writer.GetCount() == sizeof class_expected, "Wrong mixed-class JPIP message length");
+    Check(class_writer.Finalize() == sizeof class_expected, "Wrong mixed-class JPIP message length");
     for (size_t i = 0; i < sizeof class_expected; ++i)
         Check(static_cast<unsigned char>(class_buf[i]) == class_expected[i], "Wrong mixed-class JPIP message");
 
@@ -998,7 +1012,7 @@ static void CheckCoalescedJPIPMessages() {
 
     const unsigned char stream_expected[] = {0x70, 0x06, 0x00, 0x00, 0x01, 1,
                                              0x70, 0x06, 0x01, 0x00, 0x01, 2};
-    Check(stream_writer.GetCount() == sizeof stream_expected,
+    Check(stream_writer.Finalize() == sizeof stream_expected,
           "Wrong mixed-codestream JPIP message length");
     for (size_t i = 0; i < sizeof stream_expected; ++i)
         Check(static_cast<unsigned char>(stream_buf[i]) == stream_expected[i],
@@ -1011,7 +1025,7 @@ static void CheckCoalescedJPIPMessages() {
                        data::FileSegment(0, 2), true);
 
     const unsigned char exact_expected[] = {0x70, 0x06, 0x00, 0x00, 0x02, 1, 2};
-    Check(exact_writer.GetCount() == sizeof exact_expected, "Did not fill the JPIP buffer exactly");
+    Check(exact_writer.Finalize() == sizeof exact_expected, "Did not fill the JPIP buffer exactly");
     for (size_t i = 0; i < sizeof exact_expected; ++i)
         Check(static_cast<unsigned char>(exact_buf[i]) == exact_expected[i], "Wrong exact-size JPIP message");
 }
@@ -1043,7 +1057,7 @@ static void CheckMetadataPlaceHolder() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
         0x00, 0x00, 0x00, 0x10, 'a', 's', 'o', 'c'
     };
-    Check(writer.GetCount() == sizeof expected, "Wrong metadata place-holder length");
+    Check(writer.Finalize() == sizeof expected, "Wrong metadata place-holder length");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(buf[i]) == expected[i], "Wrong metadata place-holder");
 
@@ -1053,7 +1067,7 @@ static void CheckMetadataPlaceHolder() {
     exact_writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
                                   place_holder, 0, true);
 
-    Check(exact_writer.GetCount() == sizeof expected, "Did not fill the place-holder buffer exactly");
+    Check(exact_writer.Finalize() == sizeof expected, "Did not fill the place-holder buffer exactly");
     for (size_t i = 0; i < sizeof expected; ++i)
         Check(static_cast<unsigned char>(exact_buf[i]) == expected[i], "Wrong exact-size metadata place-holder");
 
@@ -1063,7 +1077,7 @@ static void CheckMetadataPlaceHolder() {
     partial_writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0,
                                     file, place_holder, 3, true);
     const unsigned char partial_header[] = {0x70, 0x08, 0x00, 0x03, 0x19};
-    Check(partial_writer.GetCount() ==
+    Check(partial_writer.Finalize() ==
                   static_cast<ptrdiff_t>(sizeof partial_header +
                                          sizeof expected - 5 - 3),
           "Wrong partial metadata place-holder length");

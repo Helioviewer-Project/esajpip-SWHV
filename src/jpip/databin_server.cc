@@ -135,8 +135,11 @@ namespace jpip {
 
                 const CodingParameters *coding_parameters =
                         image_index.GetCodingParameters(stream.id);
-                jpeg2000::Size resolution_size =
-                        req.GetResolution(coding_parameters, &new_woi);
+                jpeg2000::Size resolution_size;
+                if (!req.GetResolution(coding_parameters, &new_woi,
+                                       &resolution_size))
+                    return Reject(error_message,
+                                  "Invalid JPIP window dimensions");
                 if (!CropWindow(&new_woi, resolution_size)) {
                     stream.empty = true;
                     stream.woi = WOI();
@@ -316,7 +319,7 @@ namespace jpip {
             }
 
             if (chunk_full) {
-                pending -= data_writer.GetCount();
+                pending -= data_writer.Finalize();
                 if (pending <= CHUNK_RESERVE + 100) {
                     if (data_writer.WriteEOR(EOR::BYTE_LIMIT_REACHED))
                         pending = 0;
@@ -326,7 +329,7 @@ namespace jpip {
             }
         }
 
-        *len = data_writer.GetCount();
+        *len = data_writer.Finalize();
         *last = pending <= 0;
         if (*last) {
             cache_model.Pack();
