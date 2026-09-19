@@ -67,7 +67,7 @@ static void CheckAppConfig() {
         "\n"
         "[jpip]\n"
         "image_directory = /srv/jpip images\n"
-        "chunk_size = 4096\n"
+        "chunk_size = 262144\n"
         "\n"
         "[listen]\n"
         "address = 127.0.0.1\n"
@@ -87,7 +87,8 @@ static void CheckAppConfig() {
     Check(config.address() == "127.0.0.1", "Wrong configured address");
     Check(config.image_directory() == "/srv/jpip images/", "Wrong configured image directory");
     Check(config.log_directory() == "/var/log/esajpip/", "Wrong configured log directory");
-    Check(config.max_chunk_size() == 4096, "Wrong configured chunk size");
+    Check(config.max_chunk_size() == 262144,
+          "Rejected the maximum configured chunk size");
     Check(config.max_connections() == 250, "Wrong configured connection limit");
     Check(config.max_channels() == 500, "Wrong configured channel limit");
     Check(config.initial_timeout() == 4, "Wrong configured initial timeout");
@@ -164,8 +165,21 @@ static void CheckAppConfig() {
         "requests = false\n";
     Config invalid_chunk;
     Check(!LoadConfig(invalid_value, &invalid_chunk, &error) &&
-              error == "jpip.chunk_size must be at least 128",
+              error == "jpip.chunk_size must be between 128 and 262144",
           "Did not report an invalid configuration value");
+
+    string excessive_chunk = contents;
+    size_t chunk_value = excessive_chunk.find("chunk_size = 262144");
+    Check(chunk_value != string::npos,
+          "Could not prepare maximum chunk-size test");
+    excessive_chunk.replace(chunk_value, strlen("chunk_size = 262144"),
+                            "chunk_size = 262145");
+    Config excessive_chunk_config;
+    Check(!LoadConfig(excessive_chunk.c_str(), &excessive_chunk_config,
+                      &error) &&
+                  error ==
+                      "jpip.chunk_size must be between 128 and 262144",
+          "Accepted an excessive chunk size");
 
     string disabled_timeout = contents;
     size_t timeout_value = disabled_timeout.find("timeout = 60");

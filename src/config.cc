@@ -6,6 +6,8 @@ using namespace std;
 
 namespace {
 
+const int MAX_CHUNK_SIZE = 256 * 1024;
+
 bool ReadInteger(GKeyFile *file, const char *group, const char *key, int *value,
                  string &error_message) {
     GError *error = NULL;
@@ -90,8 +92,8 @@ bool Config::Load(const char *file_name, string &error_message) {
         error_message = "listen.port must be between 1 and 65535";
     else if (image_directory_.empty())
         error_message = "jpip.image_directory must not be empty";
-    else if (max_chunk_size_ < 128)
-        error_message = "jpip.chunk_size must be at least 128";
+    else if (max_chunk_size_ < 128 || max_chunk_size_ > MAX_CHUNK_SIZE)
+        error_message = "jpip.chunk_size must be between 128 and 262144";
     else if (max_connections_ <= 0)
         error_message = "connections.limit must be positive";
     else if (max_channels_ <= 0)

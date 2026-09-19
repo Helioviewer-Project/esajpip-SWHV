@@ -54,7 +54,7 @@ changing it.
 | `listen.port` | `8900` | TCP port on which the server listens. The value must be from 1 through 65535. |
 | `listen.address` | empty | Local IPv4 address or hostname on which to listen. An empty value listens on all IPv4 interfaces. |
 | `jpip.image_directory` | `images` | Non-empty base directory from which requested JP2 and JPX paths are opened. Relative paths are resolved from the server's working directory. |
-| `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128. The final chunk may be smaller. |
+| `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be between 128 and 262144. The final chunk may be smaller. |
 | `connections.initial_timeout` | `3` | Positive number of seconds allowed for a new socket to provide a recognizable JPIP request. Partial input does not extend the deadline. |
 | `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. It must be positive. |
 | `connections.limit` | `128` | Maximum number of physical HTTP connections. |
@@ -125,10 +125,12 @@ response progress, channel waits, and idle channels. Each channel owns its JPEG
 `jpip.chunk_size` output buffers and retains them until the channel closes.
 These buffers form a bounded pipeline: JPEG 2000 generation can continue while
 earlier chunks are waiting for non-blocking socket writes, and pauses when all
-four buffers are occupied. At the shipped settings, the absolute buffer ceiling
-is 256 KiB per channel. Set `channels.limit` according to the largest movies and
-the memory available on the deployment host. Set `connections.limit` according
-to expected browser or proxy connection use.
+four buffers are occupied. Gzip responses also use one temporary buffer of the
+same size. At the shipped settings, this is 256,000 bytes retained per channel
+and up to 320,000 bytes while compressing. At the maximum chunk size, the
+corresponding bounds are 1 MiB and 1.25 MiB. Set `channels.limit` according to
+the largest movies and the memory available on the deployment host. Set
+`connections.limit` according to expected browser or proxy connection use.
 
 JPEG 2000 work runs in libuv's worker pool. esajpip sets
 `UV_THREADPOOL_SIZE=16` when the variable is absent. An explicit value from 2
