@@ -46,6 +46,10 @@ TopPayload <TopBoxType:tbox, INTEGER:length> [] {
     other       [present-when tbox == 1633837924, size length]
 }
 
+Association [] {
+    children    [size deduced]
+}
+
 Superbox [] {
     children    [size deduced]
 }

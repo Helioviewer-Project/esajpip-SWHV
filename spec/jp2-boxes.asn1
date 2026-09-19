@@ -14,8 +14,8 @@
 --     deduced-size specification was written for.
 --   * asn1scc forbids recursive types, so nesting is two levels: TopBox
 --     (may be a superbox) contains InnerBox (never a superbox). This covers
---     every structure the server interprets: jpch/ftbl/dtbl/asoc at the top
---     with their leaf children. Deeper asoc trees are outside the model.
+--     jpch/ftbl/dtbl and one level of asoc children in the standard model.
+--     The server preserves asoc contents without interpreting them.
 --   * jp2c carries a full Codestream (CONTAINING), so a JP2 vector exercises
 --     the codestream framing and the marker bodies in one file.
 --
@@ -75,7 +75,7 @@ TopPayload ::= CHOICE {
     jpch        OCTET STRING (CONTAINING Superbox),
     ftbl        OCTET STRING (CONTAINING Superbox),
     dtbl        OCTET STRING (CONTAINING DataReferences),
-    asoc        OCTET STRING (CONTAINING Superbox),
+    asoc        OCTET STRING (CONTAINING Association),
     jp2c        OCTET STRING (CONTAINING Codestream),
     jP          OCTET STRING (CONTAINING OpaqueBox),
     ftyp        OCTET STRING (CONTAINING Ftyp),
@@ -101,6 +101,11 @@ Ftyp ::= SEQUENCE {
 
 Superbox ::= SEQUENCE {
     children    SEQUENCE (SIZE (0..16)) OF InnerBox    -- fill the superbox (corpus bound)
+}
+
+-- T.801 M.11.11: association requires two or more boxes; 16 is a corpus bound.
+Association ::= SEQUENCE {
+    children    SEQUENCE (SIZE (2..16)) OF InnerBox
 }
 
 -- T.801 Annex M, Data Reference box: NDR then NDR url boxes.
@@ -187,7 +192,7 @@ TopPayload-Profile ::= CHOICE {
     jpch        OCTET STRING (CONTAINING Superbox),
     ftbl        OCTET STRING (CONTAINING Superbox-Profile),
     dtbl        OCTET STRING (CONTAINING DataReferences-Profile),
-    asoc        OCTET STRING (CONTAINING Superbox),
+    asoc        OCTET STRING (CONTAINING OpaqueBox),
     jp2c        OCTET STRING (CONTAINING Codestream-Profile),
     jP          OCTET STRING (CONTAINING OpaqueBox),
     ftyp        OCTET STRING (CONTAINING Ftyp),

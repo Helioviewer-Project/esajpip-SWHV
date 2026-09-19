@@ -768,6 +768,175 @@ static void CheckPLTBoundaries(const string &directory, const string &name) {
     }
 }
 
+static void CheckLinkedGraphs() {
+    const string directory = JPEG2000_VECTOR_DIRECTORY;
+    const char *names[] = {"jpx-graph-sequential.jpx", "jpx-graph-reversed.jpx",
+                           "jpx-graph-repeated.jpx"};
+    const int references[3][2] = {{1, 2}, {2, 1}, {2, 2}};
+    const char *companions[] = {"jpx-linked-frame1.jp2", "jpx-graph-frame2.jp2"};
+    const int lengths[] = {1, 127, 128, 129};
+    const int offsets[] = {0, 1, 156, 284}; // includes the second tile-part header
+    const int order[] = {2, 0, 3, 1};
+    for (int graph = 0; graph < 3; ++graph) {
+        jpeg2000::FileManager manager;
+        Check(manager.Init(directory) &&
+                      manager.OpenImage(names[graph]) == jpeg2000::FileManager::OpenResult::OPENED,
+              "Could not open the generated linked-JPX graph");
+        jpeg2000::ImageIndex *image = manager.GetImage();
+        Check(image->GetNumCodestreams() == 2, "Wrong linked codestream count");
+        for (int stream = 0; stream < 2; ++stream) {
+            int reference = references[graph][stream];
+            Check(image->GetPathName(stream) == directory + "/./" + companions[reference - 1] &&
+                          image->GetCodingParameters(stream)->GetNumPackets() ==
+                                  (reference == 1 ? 1 : 4),
+                  "Linked codestream did not follow its data-reference index");
+        }
+        // Interleave lookups, including backward ones. Repeated references
+        // share a mapped file, but each codestream has its own lazy index.
+        for (int layer : order) {
+            for (int stream = 0; stream < 2; ++stream) {
+                bool simple = references[graph][stream] == 1;
+                if (simple && layer != 0)
+                    continue;
+                data::File *file = manager.GetFile(image->GetPathName(stream));
+                const data::FileSegment &header = image->GetMainHeader(stream);
+                data::FileSegment segment;
+                Check(file != NULL && image->GetPacket(file, stream,
+                              jpeg2000::Packet(layer, 0, 0, jpeg2000::Point()), &segment) &&
+                              segment.offset == header.offset + header.length +
+                                      (simple ? 20 : 26 + offsets[layer]) &&
+                              segment.length == static_cast<uint64_t>(lengths[layer]),
+                      "Wrong packet extent in the linked-JPX graph");
+            }
+        }
+    }
+}
+
+static void CheckAssociationMetadata(const string &directory, const string &name) {
+    jpeg2000::FileManager manager;
+    Check(manager.Init(directory) &&
+                  manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
+          "Could not open the generated association fixture");
+    jpeg2000::ImageIndex *image = manager.GetImage();
+    data::File *file = manager.GetFile(image->GetPathName(0));
+    const jpeg2000::Metadata &metadata = image->GetMetadata();
+    // One label box (13 bytes), optionally followed by an XML box (15).
+    // Even the malformed child header remains part of the opaque payload.
+    uint64_t length = name == "jpx-asoc-one-child.jpx" ? 13 : 28;
+    Check(file != NULL && metadata.bins.size() == 1 &&
+                  metadata.bins[0].length == length &&
+                  metadata.bins[0].offset == file->GetSize() - length,
+          "Association contents were not preserved as one complete metadata bin");
+}
+
+// Alternate wire forms outside the current ACN determinant model. Keep their
+// expectations explicit here rather than inventing generated-model labels.
+static void CheckSourceForms(const string &directory) {
+    auto check = [&](const string &name, const vector<unsigned char> &bytes, bool expected) {
+        WriteFile(directory + name, bytes);
+        string stage;
+        bool accepted = IndexGeneratedVector(directory, name, &stage);
+        Check(accepted == expected,
+              (name + (accepted ? ": unexpectedly accepted" : ": rejected during " + stage)).c_str());
+        Check(remove((directory + name).c_str()) == 0, "Could not remove source-form fixture");
+    };
+    const vector<unsigned char> codestream = MakeCodestream();
+    // T.800 I.4: normal, to-EOF, and extended box lengths have the same
+    // payload. Exercise both JP2 and JPX readers, including exact bounds.
+    for (bool jpx : {false, true}) {
+        string extension = jpx ? ".jpx" : ".jp2";
+        vector<unsigned char> prefix = MakePreamble(jpx ? 0x6A707820 : 0x6A703220);
+        if (jpx) AppendBox(prefix, 0x6A706368, {}); // jpch
+        for (int mode : {0, 1, 2}) {
+            vector<unsigned char> bytes = prefix;
+            Append32(bytes, mode == 2 ? codestream.size() + 8 : mode);
+            Append32(bytes, 0x6A703263); // jp2c
+            if (mode == 1) Append64(bytes, codestream.size() + 16);
+            bytes.insert(bytes.end(), codestream.begin(), codestream.end());
+            check("box-form-" + to_string(mode) + extension, bytes, true);
+            if (mode != 1) continue;
+            for (uint64_t length : {uint64_t(15), uint64_t(codestream.size() + 15),
+                                    uint64_t(codestream.size() + 17), UINT64_MAX}) {
+                vector<unsigned char> bad = bytes;
+                Set32(bad, prefix.size() + 8, length >> 32);
+                Set32(bad, prefix.size() + 12, length);
+                check("bad-xlbox-" + to_string(length) + extension, bad, false);
+            }
+            bytes.resize(prefix.size() + 15); // one byte missing from XLBox
+            check("truncated-xlbox" + extension, bytes, false);
+        }
+    }
+    vector<unsigned char> header;
+    Append32(header, 1);
+    Append32(header, 0x66726565); // free, extended length
+    Append64(header, 16);
+    vector<unsigned char> nested = MakePreamble(0x6A707820);
+    AppendBox(nested, 0x6A706368, header);
+    AppendBox(nested, 0x6A703263, codestream);
+    check("nested-xlbox.jpx", nested, true);
+    Set32(header, 12, 17); // child exceeds enclosing jpch, but not the file
+    nested = MakePreamble(0x6A707820);
+    AppendBox(nested, 0x6A706368, header);
+    AppendBox(nested, 0x6A703263, codestream);
+    check("nested-xlbox-overrun.jpx", nested, false);
+
+    // T.800 I.4 permits a zero-length child only in a zero-length parent.
+    nested = MakePreamble(0x6A707820);
+    AppendBox(nested, 0x6A703263, codestream);
+    Append32(nested, 0); Append32(nested, 0x6A706368); // final jpch
+    Append32(nested, 0); Append32(nested, 0x66726565); // final free
+    check("nested-to-eof.jpx", nested, true);
+
+    // T.800 A.4.2: Psot=0 is the final tile-part and ends at EOC.
+    vector<unsigned char> open = MakeOpenEndedTilePart(codestream);
+    check("psot-zero.jp2", MakeJP2(open), true);
+    for (int missing : {1, 2}) {
+        vector<unsigned char> bad = open;
+        bad.resize(bad.size() - missing);
+        check("psot-missing-eoc-" + to_string(missing) + ".jp2", MakeJP2(bad), false);
+    }
+    open.push_back(0);
+    check("psot-after-eoc.jp2", MakeJP2(open), false);
+    check("psot-first-of-two.jp2",
+          MakeJP2(MakeOpenEndedTilePart(MakeCodestream(0, 1, 1, 1, 0, 2, 2))), false);
+    check("psot-short-plt.jp2",
+          MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream))), false);
+
+    // T.801 M.11.11 allows recursive associations. The server preserves
+    // the complete outer payload; no recursion is needed to serve it.
+    vector<unsigned char> metadata;
+    AppendBox(metadata, 0x6C626C20, {'x', 0}); // lbl
+    AppendBox(metadata, 0x786D6C20, {'<', 'x', '/', '>'}); // xml
+    for (int depth = 0; depth < 4; ++depth) {
+        vector<unsigned char> parent;
+        AppendBox(parent, 0x6C626C20, {'x', 0});
+        AppendBox(parent, 0x61736F63, metadata);
+        metadata.swap(parent);
+    }
+    nested = MakeEmbeddedJPX(codestream);
+    AppendBox(nested, 0x61736F63, metadata);
+    WriteFile(directory + "nested-associations.jpx", nested);
+    jpeg2000::FileManager manager;
+    Check(OpenImage(directory, "nested-associations.jpx", &manager),
+          "Rejected nested opaque associations");
+    const auto &bins = manager.GetImage()->GetMetadata().bins;
+    Check(bins.size() == 1 && bins[0].length == metadata.size() &&
+                  bins[0].offset == nested.size() - metadata.size(),
+          "Nested association payload was not preserved whole");
+    check("nested-associations.jpx", nested, true);
+
+    // T.801 M.11.23–24: one top-level codestream followed by a j2cx
+    // containing a second. Nested codestream storage is outside our profile.
+    vector<unsigned char> info, multiple;
+    Append32(info, 1); Append32(info, 0); // Ncs=1, Ltbl unspecified
+    AppendBox(multiple, 0x6A326369, info); // j2ci
+    AppendBox(multiple, 0x6A703263, codestream);
+    nested = MakeEmbeddedJPX(codestream);
+    AppendBox(nested, 0x6A706368, {}); // second jpch
+    AppendBox(nested, 0x6A326378, multiple); // j2cx
+    check("multiple-codestream-box.jpx", nested, false);
+}
+
 static void CheckGeneratedCorpus() {
     const string directory = JPEG2000_VECTOR_DIRECTORY;
     ifstream manifest(directory + "/manifest.tsv");
@@ -800,6 +969,8 @@ static void CheckGeneratedCorpus() {
                                " (" + fields[4] + ": " + fields[6] + ")");
         if (fields[5] == "plt.boundaries")
             CheckPLTBoundaries(directory, fields[0]);
+        if (fields[5] == "asoc.opaque")
+            CheckAssociationMetadata(directory, fields[0]);
         vectors++;
     }
     Check(vectors > 0, "Generated JPEG 2000 manifest is empty");
@@ -810,12 +981,14 @@ static void CheckGeneratedCorpus() {
 
 int main() {
     CheckGeneratedCorpus();
+    CheckLinkedGraphs();
     CheckProgressionMappings();
 
     char directory_template[] = "/tmp/esajpip-jpeg2000-XXXXXX";
     char *directory_name = mkdtemp(directory_template);
     Check(directory_name != NULL, "Could not create JPEG 2000 test directory");
     string directory = string(directory_name) + "/";
+    CheckSourceForms(directory);
 
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);

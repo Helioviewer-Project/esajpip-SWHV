@@ -333,6 +333,10 @@ jpx-embedded-rule-file.ftyp-compatibility-36.jpx	jpx	valid	valid	-	file.ftyp-com
 jpx-embedded-rule-plt.boundaries-39.jpx	jpx	valid	valid	-	plt.boundaries	T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries	-
 jpx-embedded-rule-plt.second-part-short-40.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-short	second tile-part PLT sum one byte short	-
 jpx-embedded-rule-plt.second-part-long-41.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-long	second tile-part PLT sum one byte too long	-
+jpx-asoc.jpx	jpx	valid	valid	-	asoc.opaque	T.801 M.11.11: label associated with XML; profile preserves opaque contents	-
+jpx-asoc-child-length.jpx	jpx	invalid	valid	decode	asoc.opaque	inner LBox below 8: standard invalid, profile preserves opaque contents	-
+jpx-asoc-outer-length.jpx	jpx	invalid	invalid	decode	asoc.outer-length	outer LBox exceeds file: invalid at both layers	-
+jpx-asoc-one-child.jpx	jpx	invalid	valid	decode	asoc.opaque	T.801 M.11.11 requires at least two children; profile preserves opaque contents	-
 jpx-linked.jpx	jpx	valid	valid	-	-	base	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-sig-bad.jpx	jpx	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jpx-linked-len-0-11.jpx	jpx	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -381,3 +385,11 @@ jpx-linked-rule-url.jp2-target-8.jpx	jpx	valid	invalid	url.jp2-target	url.jp2-ta
 jpx-linked-rule-jpx.mixed-sources-9.jpx	jpx	valid	invalid	jpx.mixed-sources	jpx.mixed-sources	jp2c next to ftbl: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.linked-shape-10.jpx	jpx	invalid	invalid	flst.dr-range	jpx.linked-shape	no dtbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.one-dtbl-11.jpx	jpx	invalid	invalid	jpx.one-dtbl	jpx.one-dtbl	two dtbl boxes (T.801 M.11.2)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.source-extent-12.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment starts one byte before companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.source-extent-13.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment starts one byte after companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.source-extent-14.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment omits final companion codestream byte	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.source-extent-15.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment extends past companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.missing-companion-16.jpx	jpx	valid	invalid	url.missing-companion	url.missing-companion	structurally valid JPX with unavailable companion	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
+jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
+jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

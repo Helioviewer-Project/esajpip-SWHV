@@ -37,10 +37,10 @@ code remains outside the server build.
 
 **Status.** With the deferred-ACN compiler fixes described under "Compiler
 checks", the complete model generates C, that C builds as strict C11, and the
-sanitized harness writes 382 uniquely named vectors. All mutant expectations
-agree with the generated decoders and cross-field checks; 36 vectors are valid
+sanitized harness writes 394 uniquely named vectors. All mutant expectations
+agree with the generated decoders and cross-field checks; 40 vectors are valid
 at both layers. `spec/VERSION` and `spec/asn1scc-patches/series` together define
-the reproducible compiler source. The 382-vector corpus is committed under
+the reproducible compiler source. The 394-vector corpus is committed under
 `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
 the server parser and lazy packet indexer.
 
@@ -67,8 +67,12 @@ perform those operations. A passing corpus means that the server agrees with
 the modelled structural rules and its declared source profile; it does not mean
 that an arbitrary JPEG 2000 decoder is conformant.
 
-The model, corpus integration, and coverage map are complete. Continue in this
-order:
+The model, corpus integration, and coverage map are in place. The coverage
+expansion now tests progression order independently, PLT and tile-part
+boundaries, linked-file reference graphs and fragment extents, opaque metadata,
+and alternate box encodings. The latter use explicit server fixtures where
+the current ACN model cannot express the wire form. Remaining extensions should
+follow this order when a concrete need justifies them:
 
 1. Keep the deferred-ACN compiler regressions passing and the compiler revision
    pinned in `spec/VERSION`. Build the generated code as strict C11 and run the
@@ -265,7 +269,7 @@ commands from the repository root.
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh /tmp/j2k-corpus
    ```
 
-   It prints `vectors: 382 vectors written … (36 valid at both layers)` and
+   It prints `vectors: 394 vectors written … (40 valid at both layers)` and
    exits non-zero if any mutant did not produce the label its table entry
    expects (see "What the harness generates"); each such line names the
    vector, the expected and actual labels, and the rule that fired. On the
@@ -442,6 +446,15 @@ boxes). For the linked base the harness first writes the two referenced frames
 back, and puts them into the `flst` fragments, so the vector really
 resolves; the manifest's `companions` column lists them.
 
+The profile oracle also compares decoded fragment claims with the extents
+measured from the generated companions. Four vectors shift the fragment start
+or end by one byte, and one names a missing companion. Their `standard=valid`
+label means that the JPX structure passes the standard model; it does not
+certify the referenced byte range as a valid codestream. The cross-file
+failure appears in the profile result as `flst.source-extent` or
+`url.missing-companion`. The oracle resolves only the named corpus companions,
+not arbitrary filesystem paths or network resources.
+
 From each base:
 
 1. **The base itself.**
@@ -580,15 +593,23 @@ each until the model does:
   the layer-1 marker list is extended with the applicable standard citation.
   Unknown box types are valid at both layers and are decoded as opaque boxes.
 - `Rsiz` is modelled as a 16-bit capability field because the server preserves
-  it for the client and validates packet-layout features separately; `asoc`
-  nesting is limited to one level.
-- The linked-JPX check that each `flst` fragment equals the referenced
-  file's codestream extent needs the second file; keep `MakeLinkedJPX`'s
-  test for it.
+  it for the client and validates packet-layout features separately. The
+  standard model checks one level of `asoc` children and requires at least two;
+  the profile treats its contents as opaque metadata, like the server.
+- Deeper association trees and Multiple Codestream (`j2cx`) storage are
+  exercised by explicit server fixtures, not generated-model labels.
+
+`CheckSourceForms` covers 27 cases outside or alongside the ACN model:
+normal, zero, and extended box lengths in JP2 and JPX; short, oversized, and
+truncated XLBox headers; nested box limits; final zero-length parent and child
+boxes; `Psot=0` with complete, missing, or misplaced EOC and incorrect PLT
+coverage; nested opaque associations; and excluded `j2cx` codestream storage.
+Accepted files are indexed through every declared packet. These tests do not
+claim that the generated decoder supports those alternate encodings.
 
 ## Regeneration policy
 
-Regenerate only when a model file changes or when moving to a newer asn1scc:
+Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 
 1. update `spec/VERSION` and rebase `spec/asn1scc-patches/` when the compiler
    base changes;

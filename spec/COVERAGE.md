@@ -7,10 +7,12 @@ file structures it documents and reject malformed or unsupported structures?
 
 The authoritative list of individual vectors and labels is
 `tests/vectors/j2k/manifest.tsv`. A label is written as `standard/profile`.
-For example, `valid/invalid` means that the structure is permitted by the
-cited JPEG 2000 standard but deliberately excluded from the esajpip source
-profile. Vector names below are representative. The manifest-driven test runs
-all of them.
+For example, `valid/invalid` usually means that the structure is permitted by
+the cited JPEG 2000 standard but excluded from the esajpip source profile.
+For linked-source extent and availability tests, the standard label covers
+the JPX structure only; the profile oracle additionally checks the companion
+file. A structurally valid fragment list need not reference a valid codestream.
+Vector names below are representative. The manifest-driven test runs all of them.
 
 ## Coverage map
 
@@ -37,7 +39,7 @@ all of them.
 
 ## Intentional standard/profile differences
 
-The manifest currently contains three kinds of `invalid/valid` evidence:
+The manifest currently contains four kinds of `invalid/valid` evidence:
 
 - Inner box lengths inside `jp2h` are checked by the standard model but not by
   esajpip, which preserves that metadata without interpreting it. These are the
@@ -50,14 +52,44 @@ The manifest currently contains three kinds of `invalid/valid` evidence:
   deployed AIA-derived files. The vectors are
   `jp2-rule-plt.trailing-zero-16.jp2` and
   `jpx-embedded-rule-plt.trailing-zero-16.jpx`.
+- Association contents are opaque to the server. `jpx-asoc-child-length.jpx`
+  has a malformed inner box length and `jpx-asoc-one-child.jpx` violates the
+  two-child minimum in T.801 M.11.11. The standard model rejects both; the
+  profile accepts them. The server test verifies that each complete payload
+  remains one metadata bin. `jpx-asoc.jpx` is valid at both layers, while
+  `jpx-asoc-outer-length.jpx` exceeds the file boundary and is rejected by both.
 
-`valid/invalid` vectors are standard-permitted inputs deliberately outside the
-served profile. They cover nonzero origins, multiple tiles, component
+`valid/invalid` vectors cover standard-permitted structures outside the served
+profile and linked sources that fail cross-file checks. They cover nonzero origins, multiple tiles, component
 subsampling, SOP, main or tile-header packet-layout overrides, missing PLT,
 more than 64 tile-parts, oversized packet state, remote or non-JP2 links, and
 general JPX organizations that esajpip does not serve.
 
 ## Coverage boundaries
+
+The companion oracle measures codestream extents when writing each generated
+JP2, then compares them with decoded `flst` claims. The four
+`jpx-linked-rule-flst.source-extent-*` vectors shift the start or end by one
+byte, and `jpx-linked-rule-url.missing-companion-*` names an unavailable file.
+All five pass the structural standard model but fail the profile oracle and
+server. The matching linked base is the accepted boundary case.
+
+`CheckSourceForms` adds 27 explicit server cases for alternate framing and
+container forms. It covers normal, zero, and extended box lengths, exact and
+overrunning enclosing boundaries, truncated XLBox headers, `Psot=0` endings
+and PLT coverage, recursive associations, and excluded `j2cx` storage. Every
+accepted file is packet-indexed. Nested associations are also checked for
+preservation as one complete metadata bin. These cases do not receive ASN.1
+model labels.
+
+The generated `jpx-graph-*` fixtures exercise sequential, reversed, and repeated
+data references with distinct companion JP2 files (T.801 M.11.2 and M.11.3.1).
+One companion has one packet, the other four packets across two tile-parts.
+The server test checks the resolved filenames, packet counts, and exact packet
+extents while interleaving forward and backward lookups across codestreams.
+The repeated-reference case also leaves one data-reference entry unused.
+The model checks the JPX structure; these server checks verify its resolution
+against the companion files.
 
 The generated `plt.boundaries` fixtures put packet lengths 1, 127, 128, and
 129 in separate PLT markers across two tile-parts (T.800 A.7.3 and Table A.36).
@@ -78,14 +110,11 @@ The generated corpus does not currently express these paths:
 
 - `Psot=0`, `LBox=0`, and XLBox. Existing hand-built tests cover the supported
   open-ended forms and malformed container boundaries.
-- Association (`asoc`) contents are parsed as a superbox by both model layers,
-  while esajpip exposes the entire payload as one opaque metadata bin. No
-  generated `asoc` vector currently exercises that difference.
-- The linked fragment's offset and length matching the referenced JP2
-  codestream. That needs both files and remains covered by the hand-built linked
-  JPX tests.
-- Deeper association trees, Multiple Codestream (`j2cx`) boxes, and more
-  general JPX composition structures. They remain explicit profile exclusions.
+- Deeper association trees. Explicit server tests cover opaque preservation,
+  but the standard model currently checks only one level of children.
+- Multiple Codestream (`j2cx`) boxes and more general JPX composition
+  structures. The server test checks the `j2cx` storage exclusion; full
+  composition semantics remain outside this suite.
 - Entropy-coded packet correctness, transforms, color interpretation, sample
   decoding, and rendering. esajpip does not perform those operations.
 - JPIP request semantics and JPP-stream response framing. Those belong to the

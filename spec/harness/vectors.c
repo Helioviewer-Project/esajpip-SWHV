@@ -524,6 +524,44 @@ static Jp2Family *dec_family;            /* reused decode targets */
 static Jp2File_Profile *dec_jp2;
 static JpxFile_Profile *dec_jpx;
 
+/* Extents measured from the encoded companion files, not from JPX claims.
+ * This is a corpus oracle, not a general filesystem resolver. */
+static struct {
+    const char *url;
+    uint64_t offset;
+    uint32_t length;
+} companions[3];
+static int companion_count;
+
+static const char *check_linked_extents(const JpxFile_Profile *file) {
+    const DataReferences_Profile *references = NULL;
+    int i, j, k;
+    for (i = 0; i < file->boxes.nCount; ++i)
+        if (file->boxes.arr[i].payload.kind == TopPayload_Profile_dtbl_PRESENT)
+            references = &file->boxes.arr[i].payload.u.dtbl;
+    if (references == NULL) return NULL; /* embedded JPX */
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const TopBox_Profile *box = &file->boxes.arr[i];
+        if (box->payload.kind != TopPayload_Profile_ftbl_PRESENT) continue;
+        for (k = 0; k < box->payload.u.ftbl.children.nCount; ++k) {
+            const InnerBox_Profile *child = &box->payload.u.ftbl.children.arr[k];
+            const Fragment *fragment;
+            const char *url;
+            if (child->payload.kind != InnerPayload_Profile_flst_PRESENT) continue;
+            /* Structural profile checks already required one external
+             * fragment with an in-range DR. */
+            fragment = &child->payload.u.flst.fragments.arr[0];
+            url = (const char *) references->references.arr[fragment->dr - 1].payload.u.url.loc;
+            for (j = 0; j < companion_count; ++j)
+                if (strcmp(url, companions[j].url) == 0) break;
+            if (j == companion_count) return "url.missing-companion";
+            if (fragment->off != companions[j].offset || fragment->len != companions[j].length)
+                return "flst.source-extent";
+        }
+    }
+    return NULL;
+}
+
 static Label label(Bytes b, cf_kind kind) {
     Label l = { 0, 0, NULL, NULL };
     BitStream bs;
@@ -549,6 +587,7 @@ static Label label(Bytes b, cf_kind kind) {
         if (!DEC(JpxFile_Profile)(dec_jpx, &bs, &err)) l.prof_reason = "decode";
         else if (!VALID(JpxFile_Profile)(dec_jpx, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jpx_profile(dec_jpx)) != NULL) l.prof_reason = r;
+        else if ((r = check_linked_extents(dec_jpx)) != NULL) l.prof_reason = r;
         else l.prof_ok = 1;
     }
     return l;
@@ -1110,6 +1149,27 @@ static void rule_two_dtbl(Jp2Family *f, int box) {
     f->boxes.arr[8] = f->boxes.arr[7];                    /* second top-level dtbl */
     f->boxes.nCount = 9;
 }
+static void rule_fragment_early(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off--;
+}
+static void rule_fragment_late(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off++;
+}
+static void rule_fragment_short(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len--;
+}
+static void rule_fragment_long(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len++;
+}
+static void rule_missing_companion(Jp2Family *f, int box) {
+    (void) box;
+    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc,
+           "file://./jpx-missing-frame.jp2");
+}
 
 static const RuleMutant linked_rule_mutants[] = {
     { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
@@ -1124,6 +1184,11 @@ static const RuleMutant linked_rule_mutants[] = {
     { "jpx.mixed-sources", rule_mixed_linked_embedded, "jp2c next to ftbl: profile invalid", CF_JPX, 0, X_PROF },
     { "jpx.linked-shape", rule_no_dtbl, "no dtbl", CF_JPX, 0, X_STD },
     { "jpx.one-dtbl", rule_two_dtbl, "two dtbl boxes (T.801 M.11.2)", CF_JPX, 0, X_STD },
+    { "flst.source-extent", rule_fragment_early, "fragment starts one byte before companion codestream", CF_JPX, 0, X_PROF },
+    { "flst.source-extent", rule_fragment_late, "fragment starts one byte after companion codestream", CF_JPX, 0, X_PROF },
+    { "flst.source-extent", rule_fragment_short, "fragment omits final companion codestream byte", CF_JPX, 0, X_PROF },
+    { "flst.source-extent", rule_fragment_long, "fragment extends past companion codestream", CF_JPX, 0, X_PROF },
+    { "url.missing-companion", rule_missing_companion, "structurally valid JPX with unavailable companion", CF_JPX, 0, X_PROF },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1265,6 +1330,45 @@ static void run_base(Base base, const char *companions) {
     free(base.file);
 }
 
+static void emit_associations(void) {
+    Base base = base_jpx_embedded();
+    Bytes b = encode_family(base.file, 1), mutant;
+    size_t offset = b.len;
+    TopBox *box = &base.file->boxes.arr[base.file->boxes.nCount++];
+    InnerBox *child;
+    free(b.data);
+    box->payload.kind = TopPayload_asoc_PRESENT;
+    box->payload.u.asoc.children.nCount = 2;
+    child = &box->payload.u.asoc.children.arr[0];
+    child->payload.kind = InnerPayload_lbl_PRESENT;
+    OCTETS(child->payload.u.lbl.data, "test", 5); /* includes terminating NUL */
+    child = &box->payload.u.asoc.children.arr[1];
+    child->payload.kind = InnerPayload_xml_PRESENT;
+    OCTETS(child->payload.u.xml.data, "<meta/>", 7);
+    b = encode_family(base.file, 1);
+    emit(b, CF_JPX, "jpx-asoc", "asoc.opaque",
+         "T.801 M.11.11: label associated with XML; profile preserves opaque contents", NULL, X_VALID);
+
+    mutant = bytes_dup(b);
+    put32(mutant.data + offset + 8, 7);
+    emit(mutant, CF_JPX, "jpx-asoc-child-length", "asoc.opaque",
+         "inner LBox below 8: standard invalid, profile preserves opaque contents", NULL, X_STD);
+    free(mutant.data);
+    mutant = bytes_dup(b);
+    put32(mutant.data + offset, (uint32_t) (b.len - offset + 1));
+    emit(mutant, CF_JPX, "jpx-asoc-outer-length", "asoc.outer-length",
+         "outer LBox exceeds file: invalid at both layers", NULL, X_STD);
+    free(mutant.data);
+    free(b.data);
+
+    box->payload.u.asoc.children.nCount = 1;
+    b = encode_family(base.file, 0);
+    emit(b, CF_JPX, "jpx-asoc-one-child", "asoc.opaque",
+         "T.801 M.11.11 requires at least two children; profile preserves opaque contents", NULL, X_STD);
+    free(b.data);
+    free(base.file);
+}
+
 int main(int argc, char **argv) {
     char path[1024];
     if (argc != 2) {
@@ -1289,6 +1393,7 @@ int main(int argc, char **argv) {
     run_base(base_jp2(0, 0), NULL);
     run_base(base_jp2(1, 1), NULL);
     run_base(base_jpx_embedded(), NULL);
+    emit_associations();
 
     /* Linked JPX: emit the two companion frames first, read back their
      * codestream extents, then build the JPX that references them. The
@@ -1308,12 +1413,60 @@ int main(int argc, char **argv) {
             write_file(out_dir, fname, b);
             off[i] = rs.soc_off;
             len[i] = (uint32_t) (rs.eoc_end - rs.soc_off);
+            companions[companion_count].url = urls[i];
+            companions[companion_count].offset = off[i];
+            companions[companion_count++].length = len[i];
             free(rs.r);
             free(b.data);
             free(frame.file);
         }
         run_base(base_jpx_linked(urls, off, len, 2),
                  "jpx-linked-frame1.jp2,jpx-linked-frame2.jp2");
+
+        /* T.801 M.11.2 / M.11.3.1: fragment DR indexes the reference table,
+         * independently of codestream order. Use distinguishable sources
+         * to expose swapped references and per-codestream state mixups. */
+        {
+            static const char *const graph_urls[2] = {
+                "file://./jpx-linked-frame1.jp2", "file://./jpx-graph-frame2.jp2"
+            };
+            static const char *const names[3] = {
+                "jpx-graph-sequential", "jpx-graph-reversed", "jpx-graph-repeated"
+            };
+            static const int references[3][2] = {{1, 2}, {2, 1}, {2, 2}};
+            Base frame = base_jp2(0, 0);
+            Bytes b;
+            Regions rs;
+            int graph, stream;
+            rule_plt_boundaries(frame.file, frame.jp2c_box);
+            b = encode_family(frame.file, 1);
+            rs = walk(&b);
+            write_file(out_dir, "jpx-graph-frame2.jp2", b);
+            off[1] = rs.soc_off;
+            len[1] = (uint32_t) (rs.eoc_end - rs.soc_off);
+            companions[companion_count].url = graph_urls[1];
+            companions[companion_count].offset = off[1];
+            companions[companion_count++].length = len[1];
+            free(rs.r);
+            free(b.data);
+            free(frame.file);
+            for (graph = 0; graph < 3; ++graph) {
+                Base linked = base_jpx_linked(graph_urls, off, len, 2);
+                for (stream = 0; stream < 2; ++stream) {
+                    Fragment *fragment = &linked.file->boxes.arr[5 + stream].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0];
+                    int reference = references[graph][stream];
+                    fragment->dr = reference;
+                    fragment->off = off[reference - 1];
+                    fragment->len = len[reference - 1];
+                }
+                b = encode_family(linked.file, 1);
+                emit(b, CF_JPX, names[graph], "jpx.reference-order",
+                     "T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order",
+                     "jpx-linked-frame1.jp2,jpx-graph-frame2.jp2", X_VALID);
+                free(b.data);
+                free(linked.file);
+            }
+        }
     }
 
     fclose(manifest);
