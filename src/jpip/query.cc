@@ -26,13 +26,11 @@ namespace jpip {
     }
 
     Query ParseTargetQuery(const string &target) {
-        size_t length = target.size() < MAX_URI_LENGTH
-                ? target.size() : MAX_URI_LENGTH;
         size_t question = target.find('?');
-        if (question == string::npos || question >= length)
+        if (question == string::npos)
             return Query();
         return ParseQuery(target.data() + question + 1,
-                          target.data() + length);
+                          target.data() + target.size());
     }
 
     const string *FindParameter(const Query &query, const char *name) {

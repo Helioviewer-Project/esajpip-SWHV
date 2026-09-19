@@ -54,26 +54,10 @@ void Connection::Identified() {
     SetDeadline(Deadline::READ, connection_timeout);
 }
 
-void Connection::BlockRequests(Deadline reason) {
+void Connection::BlockRequests() {
     requests_blocked = true;
     StopReading();
-    SetDeadline(reason, connection_timeout);
-}
-
-void Connection::UnblockRequests() {
-    if (IsClosing())
-        return;
-    requests_blocked = false;
-    SetDeadline(Deadline::READ, connection_timeout);
-    if (response_active)
-        return;
-    if (has_retained_request) {
-        RequestHead request = std::move(retained_request);
-        has_retained_request = false;
-        Dispatch(std::move(request));
-    }
-    if (!requests_blocked && !response_active)
-        StartReading();
+    SetDeadline(Deadline::BLOCKED, connection_timeout);
 }
 
 void Connection::StartResponse() {
@@ -83,16 +67,11 @@ void Connection::StartResponse() {
 
 void Connection::FinishResponse() {
     response_active = false;
+    requests_blocked = false;
     if (IsClosing())
         return;
-    if (has_retained_request) {
-        RequestHead request = std::move(retained_request);
-        has_retained_request = false;
-        Dispatch(std::move(request));
-    } else if (!requests_blocked) {
-        SetDeadline(Deadline::READ, connection_timeout);
-        StartReading();
-    }
+    SetDeadline(Deadline::READ, connection_timeout);
+    StartReading();
 }
 
 void Connection::SetDeadline(Deadline reason, int seconds) {
@@ -186,25 +165,19 @@ void Connection::Consume(const char *data, size_t size) {
 
         RequestHead request = parser.TakeRequest();
         Dispatch(std::move(request));
-        if ((requests_blocked ||
-             (response_active && has_retained_request)) && offset < size) {
+        if (requests_blocked || response_active) {
             StopReading();
-            retained_size = min(size - offset, sizeof retained_input);
-            copy(data + offset, data + offset + retained_size, retained_input);
+            if (offset < size) {
+                retained_size = min(size - offset, sizeof retained_input);
+                copy(data + offset, data + offset + retained_size,
+                     retained_input);
+            }
             return;
         }
     }
 }
 
 void Connection::Dispatch(RequestHead &&request) {
-    if (response_active) {
-        if (!has_retained_request) {
-            retained_request = std::move(request);
-            has_retained_request = true;
-        }
-        StopReading();
-        return;
-    }
     try {
         request_ready(*this, std::move(request));
     } catch (...) {
@@ -214,10 +187,9 @@ void Connection::Dispatch(RequestHead &&request) {
 
 void Connection::TimerExpired(uv_timer_t *timer) {
     Connection *connection = static_cast<Connection *>(timer->data);
-    Deadline reason = connection->deadline;
     connection->deadline = Deadline::NONE;
     try {
-        connection->deadline_reached(*connection, reason);
+        connection->deadline_reached(*connection);
     } catch (...) {
         connection->Abort();
     }
@@ -297,7 +269,6 @@ void Connection::CloseGracefully() {
         return;
     graceful_close = true;
     requests_blocked = true;
-    has_retained_request = false;
     retained_size = 0;
     StopReading();
     if (pending_writes == 0) {
@@ -330,7 +301,6 @@ void Connection::Abort() {
     if (IsClosing())
         return;
     requests_blocked = true;
-    has_retained_request = false;
     retained_size = 0;
     StopReading();
     ClearDeadline();

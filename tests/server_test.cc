@@ -392,7 +392,7 @@ int main() {
     Check(bad_image >= 0, "Could not connect for the bad-image test");
     SendRequest(bad_image, "/image.jpeg?cnew=http&handled");
     Response bad_image_response = ReadResponse(bad_image);
-    Check(bad_image_response.headers.find("500 Internal Server Error") !=
+    Check(bad_image_response.headers.find("404 Not Found") !=
                       string::npos &&
                   bad_image_response.headers.find(HANDLED_HEADER) !=
                       string::npos &&
@@ -402,6 +402,19 @@ int main() {
     CheckClosed(bad_image, 1000,
                 "Invalid-image response retained its connection");
     close(bad_image);
+
+    int invalid_path = Connect(port);
+    Check(invalid_path >= 0, "Could not connect for the invalid-path test");
+    SendRequest(invalid_path,
+                "/image.jp2?cnew=http&target=../image.jp2");
+    Response invalid_path_response = ReadResponse(invalid_path);
+    Check(invalid_path_response.headers.find("404 Not Found") != string::npos &&
+                  invalid_path_response.body ==
+                      "The requested image path is invalid",
+          "Invalid target path did not return 404 with an explanation");
+    CheckClosed(invalid_path, 1000,
+                "Invalid-path response retained its connection");
+    close(invalid_path);
 
     int malformed_head = Connect(port);
     Check(malformed_head >= 0,

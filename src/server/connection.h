@@ -20,14 +20,6 @@ public:
         IO_ERROR
     };
 
-    enum class Deadline {
-        NONE,
-        IDENTIFICATION,
-        READ,
-        WRITE,
-        CHANNEL_WAIT
-    };
-
     struct Write {
         uv_write_t request;
         Connection *connection = NULL;
@@ -41,10 +33,18 @@ public:
 
     typedef std::function<void(Connection &, RequestHead &&)> RequestReady;
     typedef std::function<void(Connection &, ReadFailure)> ReadFailed;
-    typedef std::function<void(Connection &, Deadline)> DeadlineReached;
+    typedef std::function<void(Connection &)> DeadlineReached;
     typedef std::function<void(Connection &)> Closed;
 
 private:
+    enum class Deadline {
+        NONE,
+        IDENTIFICATION,
+        READ,
+        WRITE,
+        BLOCKED
+    };
+
     uv_tcp_t socket;
     uv_timer_t timer;
     RequestHeadParser parser;
@@ -57,11 +57,9 @@ private:
     char incoming[4096];
     char retained_input[4096];
     std::size_t retained_size = 0;
-    RequestHead retained_request;
     Deadline deadline = Deadline::NONE;
     std::size_t pending_writes = 0;
     int open_handles = 0;
-    bool has_retained_request = false;
     bool requests_blocked = false;
     bool response_active = false;
     bool reading = false;
@@ -104,8 +102,7 @@ public:
     bool Accept(uv_stream_t *listener);
     bool Start();
     void Identified();
-    void BlockRequests(Deadline reason = Deadline::CHANNEL_WAIT);
-    void UnblockRequests();
+    void BlockRequests();
     void StartResponse();
     void FinishResponse();
     // The payload must remain valid until the completion callback runs.

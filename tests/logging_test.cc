@@ -1,5 +1,7 @@
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <cstdlib>
 #include <dirent.h>
 #include <fcntl.h>
@@ -134,6 +136,32 @@ int main() {
                   ReadFile(shutdown_log).find("message queued before shutdown") !=
                       string::npos,
           "Logger shutdown did not drain queued records");
+
+    int broken_output[2];
+    Check(pipe(broken_output) == 0,
+          "Could not create the failed-output test pipe");
+    close(broken_output[0]);
+    pid_t child = fork();
+    Check(child >= 0, "Could not fork the failed-output test");
+    if (child == 0) {
+        signal(SIGPIPE, SIG_IGN);
+        if (dup2(broken_output[1], STDOUT_FILENO) < 0)
+            _exit(2);
+        if (broken_output[1] != STDOUT_FILENO)
+            close(broken_output[1]);
+        if (!trace::Initialize(""))
+            _exit(3);
+        LOG("message to closed standard output");
+        trace::Flush();
+        bool stdout_open = fcntl(STDOUT_FILENO, F_GETFD) >= 0;
+        trace::Drain();
+        _exit(stdout_open ? 0 : 4);
+    }
+    close(broken_output[1]);
+    int child_status;
+    Check(waitpid(child, &child_status, 0) == child &&
+                  WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0,
+          "A logging failure closed standard output");
 
     unlink(backup.c_str());
     unlink(active.c_str());

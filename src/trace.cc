@@ -82,7 +82,7 @@ bool WriteAll(int fd, const char *data, size_t length) {
 }
 
 bool DisableOutput() {
-    if (output_fd >= 0)
+    if (file_output && output_fd >= 0)
         close(output_fd);
     output_fd = -1;
     file_output = false;
@@ -254,7 +254,6 @@ void Write(const string &message) {
     record.seconds = now.tv_sec;
     record.microseconds = static_cast<int32_t>(now.tv_usec);
     record.truncated = message.size() > MAX_MESSAGE;
-    record.dropped = 0;
     record.message.assign(message, 0, min(message.size(), MAX_MESSAGE));
 
     record.dropped = dropped.exchange(0, memory_order_relaxed);

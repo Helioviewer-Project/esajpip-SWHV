@@ -307,8 +307,7 @@ private:
             client.channel = &channel;
             client.waiting_request = std::move(request);
             client.waiting_head = std::move(head);
-            client.connection->BlockRequests(
-                    server::Connection::Deadline::CHANNEL_WAIT);
+            client.connection->BlockRequests();
         } else {
             SendError(client, 503, "Service Unavailable",
                       "JPIP channel is busy", &request);
@@ -371,8 +370,7 @@ private:
         channel.response_complete = false;
         channel.cleanup_complete = false;
         channel.writes = 0;
-        client.connection->BlockRequests(
-                server::Connection::Deadline::CHANNEL_WAIT);
+        client.connection->BlockRequests();
 
         if (channel.request.has.cclose) {
             channel.state = Channel::OPEN;
@@ -572,10 +570,10 @@ private:
         if (result == jpeg2000::FileManager::OpenResult::NOT_FOUND)
             Fail(channel, 404, "Not Found", "The requested image was not found");
         else if (result == jpeg2000::FileManager::OpenResult::INVALID_PATH)
-            Fail(channel, 500, "Internal Server Error",
+            Fail(channel, 404, "Not Found",
                  "The requested image path is invalid");
         else if (result == jpeg2000::FileManager::OpenResult::UNSUPPORTED)
-            Fail(channel, 500, "Internal Server Error",
+            Fail(channel, 404, "Not Found",
                  "The requested image type is not supported");
         else if (result == jpeg2000::FileManager::OpenResult::UNREADABLE)
             Fail(channel, 500, "Internal Server Error",
@@ -687,7 +685,6 @@ private:
             if (close_connection) {
                 client->connection->CloseGracefully();
             } else {
-                client->connection->UnblockRequests();
                 client->connection->FinishResponse();
             }
         }
@@ -886,7 +883,7 @@ Client::Client(Server *_server, uint64_t _id, const Config &cfg)
             [this](server::Connection &, server::Connection::ReadFailure failure) {
                 server->OnReadFailure(*this, failure);
             },
-            [this](server::Connection &, server::Connection::Deadline) {
+            [this](server::Connection &) {
                 server->OnDeadline(*this);
             },
             [this](server::Connection &) { server->OnClosed(*this); }));

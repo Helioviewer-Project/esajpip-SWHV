@@ -8,8 +8,6 @@
 
 namespace jpip {
 
-    static const std::size_t MAX_URI_LENGTH = 1023;
-
     struct QueryParameter {
         std::string name;
         std::string value;

@@ -45,10 +45,9 @@ void CheckRequestSyntax() {
     }
 }
 
-void CheckRoutingLimit() {
+void CheckLongRequestTarget() {
     const string prefix = "/image.jp2?padding=";
     const size_t route_offsets[] = {1000, 1037};
-    const bool routed[] = {true, false};
     for (size_t i = 0; i < 2; ++i) {
         string target = prefix +
                 string(route_offsets[i] - prefix.size(), 'x') + "&cnew=http";
@@ -62,9 +61,8 @@ void CheckRoutingLimit() {
         jpip::Request request;
         Check(request.ParseTarget(target),
               "Could not fully parse the routing-limit target");
-        Check(parser.HasJPIPRoute() == routed[i] &&
-                      request.has.cnew == routed[i],
-              "Initial routing and full parsing used different URI limits");
+        Check(parser.HasJPIPRoute() && request.has.cnew,
+              "A bounded request target was truncated before JPIP parsing");
     }
 }
 
@@ -128,8 +126,7 @@ struct Exchange {
                     self->failed.store(true);
                     connection.Abort();
                 },
-                [self](server::Connection &connection,
-                       server::Connection::Deadline deadline) {
+                [self](server::Connection &connection) {
                     self->failed.store(true);
                     connection.Abort();
                 },
@@ -271,11 +268,8 @@ struct FailureExchange {
                         connection.Abort();
                     }
                 },
-                [self](server::Connection &connection,
-                       server::Connection::Deadline deadline) {
-                    if (self->mode != Mode::IDENTIFICATION_TIMEOUT ||
-                        deadline !=
-                                server::Connection::Deadline::IDENTIFICATION)
+                [self](server::Connection &connection) {
+                    if (self->mode != Mode::IDENTIFICATION_TIMEOUT)
                         self->failed.store(true);
                     self->observed = true;
                     connection.CloseGracefully();
@@ -357,7 +351,7 @@ struct FailureExchange {
 int main() {
     signal(SIGPIPE, SIG_IGN);
     CheckRequestSyntax();
-    CheckRoutingLimit();
+    CheckLongRequestTarget();
 
     Exchange exchange;
     exchange.Run();
