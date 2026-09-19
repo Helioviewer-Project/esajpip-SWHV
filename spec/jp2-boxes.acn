@@ -42,7 +42,8 @@ TopPayload <INTEGER:tbox> [] {
     uuid        [present-when tbox == 1970628964],
     xml         [present-when tbox == 2020437024],
     uinf        [present-when tbox == 1969843814],
-    free        [present-when tbox == 1718773093]
+    free        [present-when tbox == 1718773093],
+    other       [present-when not (tbox == 1785750376 or tbox == 1718903404 or tbox == 1685348972 or tbox == 1634955107 or tbox == 1785737827 or tbox == 1783636000 or tbox == 1718909296 or tbox == 1785737832 or tbox == 1785752680 or tbox == 1920099697 or tbox == 1970628964 or tbox == 2020437024 or tbox == 1969843814 or tbox == 1718773093)]
 }
 
 Superbox [] {
@@ -86,7 +87,8 @@ InnerPayload <INTEGER:tbox> [] {
     res         [present-when tbox == 1919251232],
     pclr        [present-when tbox == 1885564018],
     cmap        [present-when tbox == 1668112752],
-    cdef        [present-when tbox == 1667523942]
+    cdef        [present-when tbox == 1667523942],
+    other       [present-when not (tbox == 1718383476 or tbox == 1970433056 or tbox == 1785737832 or tbox == 1785752680 or tbox == 1970628964 or tbox == 2020437024 or tbox == 1852601204 or tbox == 1818389536 or tbox == 1768449138 or tbox == 1668246642 or tbox == 1718773093 or tbox == 1651532643 or tbox == 1919251232 or tbox == 1885564018 or tbox == 1668112752 or tbox == 1667523942)]
 }
 
 FragmentList [] {

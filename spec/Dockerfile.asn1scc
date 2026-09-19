@@ -1,0 +1,13 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        default-jre-headless \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /source
+COPY . .
+RUN dotnet build asn1scc.sln -c Release --nologo
+
+ENTRYPOINT ["dotnet", "/source/asn1scc/bin/Release/net10.0/asn1scc.dll"]

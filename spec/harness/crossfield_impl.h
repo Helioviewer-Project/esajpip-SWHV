@@ -3,8 +3,7 @@
  *   CF_S          type-name suffix:  (empty) for layer-1 types, _Profile for layer-2
  *   CF_FILE       the file type:     Jp2Family, Jp2File_Profile or JpxFile_Profile
  *   CF_FN         function name to define
- *   CF_HAS_OTHER  defined when the family has the `other` CHOICE alternatives
- *
+ *   CF_MAIN_OTHER defined when MainBody has the `other` marker alternative
  * Generated-name assumptions (asn1scc C back end):
  *   SEQUENCE OF / OCTET STRING:  .nCount, .arr[]
  *   CHOICE:                      .kind, .u.<alt>, enum <Type>_<alt>_PRESENT
@@ -34,6 +33,7 @@
 #define MC_EOC 65497
 #define BT_JP   1783636000UL
 #define BT_FTYP 1718909296UL
+#define BT_RREQ 1920099697UL
 #define BT_JPCH 1785750376UL
 #define BT_FTBL 1718903404UL
 #define BT_DTBL 1685348972UL
@@ -158,8 +158,12 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                         if ((int) plt->zplt != expected_zplt++)
                             return "plt.zplt-sequence";
                         tp_plts++;
-                        for (e = 0; e < plt->entries.nCount; ++e)
-                            plt_sum += CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
+                        for (e = 0; e < plt->entries.nCount; ++e) {
+                            uint64_t length = CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
+                            if (layer == CF_STANDARD && length == 0)
+                                return "plt.zero-length";
+                            plt_sum += length;
+                        }
                     }
 #ifndef CF_TILE_PLT_ONLY
                     if (ts->body.kind == CF_K(TileBody, cod)) tp_cod++;
@@ -186,8 +190,9 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
             /* T.800 A.3: after the first SOT only tile-parts and EOC follow. */
             return "codestream.segment-after-sot";
         }
-#ifdef CF_HAS_OTHER
-        if (seg->body.kind == CF_K(MainBody, other) && (code == MC_SOC || code == MC_SIZ))
+#ifdef CF_MAIN_OTHER
+        if (seg->body.kind == CF_K(MainBody, other) &&
+            (code == MC_SOC || code == MC_SIZ))
             return "main.other-code";
 #endif
     }
@@ -223,7 +228,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
 
 const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
     int i, j, k;
-    int jp2c = 0, jpch = 0, ftbl = 0, dtbl = 0, ndr = 0;
+    int jp2c = 0, jpch = 0, ftbl = 0, dtbl = 0, rreq = 0, ndr = 0;
     const char *r;
 
     /* T.800 I.4: signature box then file type box. */
@@ -278,6 +283,9 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
                     return r;
                 break;
             case CF_K(TopPayload, jpch):
+                for (j = 0; j < b->payload.u.jpch.children.nCount; ++j)
+                    if (b->payload.u.jpch.children.arr[j].tbox == BT_JP2C)
+                        return "jpch.nested-jp2c";
                 jpch++;
                 break;
             case CF_K(TopPayload, ftbl): {
@@ -303,6 +311,11 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
     }
 
     if (kind == CF_JPX) {
+        for (i = 0; i < file->boxes.nCount; ++i)
+            if (file->boxes.arr[i].tbox == BT_RREQ) rreq++;
+        if (layer == CF_STANDARD &&
+            (rreq != 1 || file->boxes.nCount < 3 || file->boxes.arr[2].tbox != BT_RREQ))
+            return "jpx.reader-requirements";
         /* T.801 M.11.2: "A JPX file shall contain zero or one Data Reference
          * boxes, and that Data Reference box shall be at the top level of the
          * file." */

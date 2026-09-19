@@ -4,8 +4,9 @@
  *
  * Produces complete .jp2 / .jpx files plus manifest.tsv. Every vector is
  * labelled at both layers by decoding it with the generated decoders, running
- * the generated constraint checkers, and applying crossfield.c. Nothing is
- * labelled by hand.
+ * the generated constraint checkers, and applying crossfield.c. Labels are
+ * evaluated mechanically; the model, rules and mutant expectations are
+ * human-authored and checked against the cited standards.
  *
  * Structure:
  *   1. Generated-API adaptation (the only place that names generated symbols
@@ -59,7 +60,7 @@ enum {
     BT_JP = 1783636000u, BT_FTYP = 1718909296u, BT_JP2H = 1785737832u,
     BT_IHDR = 1768449138u, BT_COLR = 1668246642u, BT_JP2C = 1785737827u,
     BT_JPCH = 1785750376u, BT_FTBL = 1718903404u, BT_FLST = 1718383476u,
-    BT_DTBL = 1685348972u, BT_URL = 1970433056u
+    BT_DTBL = 1685348972u, BT_URL = 1970433056u, BT_RREQ = 1920099697u
 };
 
 /* ------------------------------------------------------------------------ */
@@ -353,6 +354,31 @@ static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     OCTETS(ftyp->compat.arr[0], brand, 4);
 }
 
+static void add_rreq(Jp2Family *f, int linked) {
+    static const unsigned char embedded_requirements[] = {
+        1, 0xE0, 0xE0, 0, 3,     /* ML, FUAM, DCM, NSF */
+        0, 1, 0x80,               /* core codestream */
+        0, 2, 0x40,               /* multiple compositing layers */
+        0, 5, 0x20,               /* unrestricted Part 1 codestream */
+        0, 0                      /* NVF */
+    };
+    static const unsigned char linked_requirements[] = {
+        1, 0xF0, 0xF0, 0, 4,     /* ML, FUAM, DCM, NSF */
+        0, 1, 0x80,
+        0, 2, 0x40,
+        0, 5, 0x20,
+        0, 15, 0x10,              /* fragments in locally accessible files */
+        0, 0                      /* NVF */
+    };
+    TopBox *b = &f->boxes.arr[f->boxes.nCount++];
+    b->tbox = BT_RREQ;
+    b->payload.kind = TopPayload_rreq_PRESENT;
+    if (linked)
+        OCTETS(b->payload.u.rreq.data, linked_requirements, sizeof linked_requirements);
+    else
+        OCTETS(b->payload.u.rreq.data, embedded_requirements, sizeof embedded_requirements);
+}
+
 static void add_jp2h(Jp2Family *f, int width, int height) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     InnerBox *c;
@@ -449,8 +475,9 @@ static Base base_jp2(int levels, int custom_precincts) {
 }
 
 static Base base_jpx_embedded(void) {
-    Base b = { "jpx-embedded", CF_JPX, new_family(), 4 };
+    Base b = { "jpx-embedded", CF_JPX, new_family(), 5 };
     add_signature_and_ftyp(b.file, "jpx ");
+    add_rreq(b.file, 0);
     add_jpch(b.file);
     add_jpch(b.file);
     add_jp2c(b.file, BASE_W, BASE_H, 0, 0, 1);
@@ -464,6 +491,7 @@ static Base base_jpx_linked(const char *const *urls, const uint64_t *off, const 
     Base b = { "jpx-linked", CF_JPX, new_family(), -1 };
     int i;
     add_signature_and_ftyp(b.file, "jpx ");
+    add_rreq(b.file, 1);
     for (i = 0; i < n; ++i) add_jpch(b.file);
     for (i = 0; i < n; ++i) add_ftbl(b.file, off[i], len[i], i + 1);
     add_dtbl(b.file, urls, n);
@@ -503,7 +531,7 @@ typedef struct {
  * generation time instead of surfacing as a puzzling server-test result. */
 typedef enum {
     X_VALID,   /* valid at both layers */
-    X_STD,     /* invalid at layer 1 (and therefore at layer 2) */
+    X_STD,     /* invalid at layer 1; layer 2 may accept an intentional leniency */
     X_PROF     /* valid at layer 1, invalid at layer 2 */
 } Expect;
 
@@ -777,19 +805,19 @@ static void rule_tile_parts_n(Jp2Family *f, int box, int n) {
 }
 static void rule_tile_parts_64(Jp2Family *f, int box) { rule_tile_parts_n(f, box, 64); }
 static void rule_jpx_jp2c_before_jpch(Jp2Family *f, int box) {
-    TopBox *arr = f->boxes.arr;                            /* jP ftyp jpch jpch jp2c jp2c */
-    TopBox jp2c = arr[4];
+    TopBox *arr = f->boxes.arr;                       /* jP ftyp rreq jpch jpch jp2c jp2c */
+    TopBox jp2c = arr[5];
     (void) box;
+    arr[5] = arr[4];
     arr[4] = arr[3];
-    arr[3] = arr[2];
-    arr[2] = jp2c;                                         /* jP ftyp jp2c jpch jpch jp2c */
+    arr[3] = jp2c;                                    /* jP ftyp rreq jp2c jpch jpch jp2c */
 }
-static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 5; }
+static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
 static void rule_jpx_no_jpch(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[2] = f->boxes.arr[4];
     f->boxes.arr[3] = f->boxes.arr[5];
-    f->boxes.nCount = 4;
+    f->boxes.arr[4] = f->boxes.arr[6];
+    f->boxes.nCount = 5;
 }
 static void rule_tile_parts_65(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
@@ -892,8 +920,13 @@ static void add_main_opaque(Jp2Family *f, int box, int code) {
     cs->segments.arr[3] = cs->segments.arr[2];
     seg = &cs->segments.arr[2];
     seg->code = code;
-    seg->body.kind = code == MC_COC ? MainBody_coc_PRESENT : MainBody_poc_PRESENT;
-    OCTETS(seg->body.u.coc.body.data, "\x00\x00\x00", 3);
+    if (code == MC_COC) {
+        seg->body.kind = MainBody_coc_PRESENT;
+        OCTETS(seg->body.u.coc.body.data, "\x00\x00\x00", 3);
+    } else {
+        seg->body.kind = MainBody_poc_PRESENT;
+        OCTETS(seg->body.u.poc.body.data, "\x00\x00\x00", 3);
+    }
     cs->segments.nCount = 4;
 }
 static void rule_main_coc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_COC); }
@@ -914,12 +947,25 @@ static void rule_ftyp_two_compat(Jp2Family *f, int box) {
     memcpy(ftyp->compat.arr[0].arr, "jpxb", 4);
 }
 static void rule_jp2c_in_jpch(Jp2Family *f, int box) {
-    Superbox *sb = &f->boxes.arr[2].payload.u.jpch;        /* jpx-embedded: first jpch */
+    Superbox *sb = &f->boxes.arr[3].payload.u.jpch;        /* jpx-embedded: first jpch */
     InnerBox *c = &sb->children.arr[sb->children.nCount++];
     (void) box;
-    c->tbox = BT_JP2C;                                     /* layer 1: no alternative; layer 2: other */
+    c->tbox = BT_JP2C;                                     /* not permitted inside jpch */
     c->payload.kind = InnerPayload_free_PRESENT;           /* any opaque alternative; code patched below */
     OCTETS(c->payload.u.free.data, "\x00", 1);
+}
+static void rule_missing_rreq(Jp2Family *f, int box) {
+    int i;
+    (void) box;
+    for (i = 3; i < f->boxes.nCount; ++i) f->boxes.arr[i - 1] = f->boxes.arr[i];
+    f->boxes.nCount--;
+}
+static void rule_unknown_box(Jp2Family *f, int box) {
+    TopBox *b = &f->boxes.arr[f->boxes.nCount++];
+    (void) box;
+    b->tbox = 1633837924u;                                /* 'abcd' */
+    b->payload.kind = TopPayload_other_PRESENT;
+    OCTETS(b->payload.u.other.data, "\x01", 1);
 }
 static void rule_missing_signature(Jp2Family *f, int box) {
     int i;
@@ -955,8 +1001,10 @@ static const RuleMutant rule_mutants[] = {
     { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
     { "tile.header-marker", rule_com_in_tile_header, "COM in the tile-part header: profile invalid", 0, 0, X_PROF },
     { "jpx.box-order", rule_jpx_jp2c_before_jpch, "jp2c before the jpch boxes: valid (counts match)", CF_JPX, 0, X_VALID },
+    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
+    { "file.unknown-box", rule_unknown_box, "unknown top-level box: valid and skipped", 0, 0, X_VALID },
     { "jpx.codestream-count", rule_jpx_missing_jp2c, "two jpch, one jp2c (T.801 M.11.6)", CF_JPX, 0, X_STD },
-    { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: valid (deployed files)", 0, 0, X_VALID },
+    { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: standard invalid, profile accepted for deployed files", 0, 0, X_STD },
     { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
     { "jpch.nested-jp2c", rule_jp2c_in_jpch, "jp2c inside a jpch superbox", CF_JPX, 0, X_STD },
     { "sot.tnsot-inconsistent", rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0, 0, X_STD },
@@ -982,24 +1030,24 @@ static const RuleMutant rule_mutants[] = {
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
-static void rule_dr_zero(Jp2Family *f, int box) { (void) box; f->boxes.arr[4].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 0; }
-static void rule_dr_out_of_range(Jp2Family *f, int box) { (void) box; f->boxes.arr[4].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 3; }
+static void rule_dr_zero(Jp2Family *f, int box) { (void) box; f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 0; }
+static void rule_dr_out_of_range(Jp2Family *f, int box) { (void) box; f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 3; }
 static void rule_two_flst(Jp2Family *f, int box) {
-    Superbox *sb = &f->boxes.arr[4].payload.u.ftbl;
+    Superbox *sb = &f->boxes.arr[5].payload.u.ftbl;
     (void) box;
     sb->children.arr[1] = sb->children.arr[0];
     sb->children.nCount = 2;
 }
-static void rule_ndr_mismatch(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.dtbl.ndr = 3; }
+static void rule_ndr_mismatch(Jp2Family *f, int box) { (void) box; f->boxes.arr[7].payload.u.dtbl.ndr = 3; }
 static void rule_url_scheme(Jp2Family *f, int box) {
     (void) box;
-    strcpy((char *) f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.loc, "http://x/frame1.jp2");
+    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc, "http://x/frame1.jp2");
 }
 static void rule_url_jpx_target(Jp2Family *f, int box) {
     (void) box;
-    strcpy((char *) f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
+    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
 }
-static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
+static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
 /* A third codestream as jp2c beside the two ftbl ones, with its own jpch so
  * that the codestream count still matches and mixing is the only violation. */
 static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
@@ -1007,14 +1055,16 @@ static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
     add_jp2c(f, BASE_W, BASE_H, 0, 0, 1);
     add_jpch(f);
 }
-static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
+static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 7; }
 static void rule_two_dtbl(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[7] = f->boxes.arr[6];                    /* second top-level dtbl */
-    f->boxes.nCount = 8;
+    f->boxes.arr[8] = f->boxes.arr[7];                    /* second top-level dtbl */
+    f->boxes.nCount = 9;
 }
 
 static const RuleMutant linked_rule_mutants[] = {
+    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
+    { "file.unknown-box", rule_unknown_box, "unknown top-level box: valid and skipped", CF_JPX, 0, X_VALID },
     { "flst.dr-external", rule_dr_zero, "DR = 0 (this file): profile invalid", CF_JPX, 0, X_PROF },
     { "flst.dr-range", rule_dr_out_of_range, "DR = ndr+1", CF_JPX, 0, X_STD },
     { "ftbl.one-flst", rule_two_flst, "two flst in one ftbl", CF_JPX, 0, X_STD },
@@ -1070,10 +1120,11 @@ static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name
     free(rs.r);
 }
 
-/* Patch marker codes and box types in place: the body stays well-formed,
- * only its selector changes. Unknown codes are standard-invalid and
- * profile-valid (the server skips them); SIZ/SOC/SOT/EOC in the wrong place
- * are invalid at both layers. */
+/* Patch marker codes in place: the body stays well-formed and only its
+ * selector changes. Unknown marker codes are standard-invalid and
+ * profile-valid (the server skips them); SIZ/SOT in the wrong place are
+ * invalid at both layers. Box-type rules use structured mutants so changing
+ * the type does not accidentally remove a different mandatory box. */
 static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) {
     Regions rs = walk(&valid);
     int i;
@@ -1083,8 +1134,6 @@ static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) 
             { "Lxxx", 65392u,      "code FF70: undefined marker" },
             { "Lxxx", 65361u,      "code FF51: SIZ out of place" },
             { "Lxxx", 65424u,      "code FF90: SOT where a segment was" },
-            { "LBox", 1633837924u, "type 'abcd': unknown box" },
-            { "LBox", 1785737827u, "type 'jp2c' on a non-codestream box" },
         };
         size_t k;
         for (k = 0; k < sizeof patches / sizeof *patches; ++k) {

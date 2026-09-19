@@ -3,7 +3,7 @@
 #include <string.h>
 #include "crossfield.h"
 
-/* Layer-1 family: Jp2Family / TopBox / Codestream / ... (no `other`). */
+/* Layer-1 family: boxes have `other`; codestream markers do not. */
 #define CF_S
 #define CF_FILE Jp2Family
 #define CF_FN cf_check_family
@@ -12,19 +12,20 @@
 #undef CF_FILE
 #undef CF_FN
 
-/* Layer-2 family: *_Profile types, which have the `other` alternatives.
+/* Layer-2 family: *_Profile types, whose codestream has the `other` marker
+ * alternative and whose box tree shares the standard layer's `other` boxes.
  * Jp2File_Profile and JpxFile_Profile share every nested type, so one
  * instantiation serves both; the two public entry points fix the kind. */
 #define CF_S _Profile
 #define CF_FILE Jp2File_Profile
 #define CF_FN cf_check_profile_common_
-#define CF_HAS_OTHER
+#define CF_MAIN_OTHER
 #define CF_TILE_PLT_ONLY     /* TileBody-Profile has the plt alternative only */
 #include "crossfield_impl.h"
 #undef CF_S
 #undef CF_FILE
 #undef CF_FN
-#undef CF_HAS_OTHER
+#undef CF_MAIN_OTHER
 #undef CF_TILE_PLT_ONLY
 
 const char *cf_check_jp2_profile(const Jp2File_Profile *file) {

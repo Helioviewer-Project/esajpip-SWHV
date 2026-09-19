@@ -5,9 +5,10 @@
  * (Jp2File_Profile, TopBox_Profile, Codestream_Profile, ...).
  *
  * Each checker returns NULL when every rule of the requested layer holds,
- * otherwise a short rule name (the same names the manifest uses). Layer-2
- * checks include the layer-1 rules; a layer-2 struct that fails a layer-1
- * rule reports that rule.
+ * otherwise a short rule name (the same names the manifest uses). The two
+ * layers share their common structural rules, while the profile adds server
+ * restrictions and explicitly omits documented standard rules that esajpip
+ * does not enforce.
  */
 #ifndef J2K_HARNESS_CROSSFIELD_H
 #define J2K_HARNESS_CROSSFIELD_H
