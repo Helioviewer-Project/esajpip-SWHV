@@ -80,7 +80,6 @@ struct Buffer {
     vector<char> data;
     server::Connection::Write write;
     bool busy = false;
-    bool final = false;
 
     Buffer(const Buffer &) = delete;
     Buffer &operator=(const Buffer &) = delete;
@@ -116,6 +115,10 @@ struct Channel {
 const string &Target(const Channel &channel) {
     return channel.request.has.target
             ? channel.request.target : channel.request.object;
+}
+
+bool UseGzip(const Channel &channel) {
+    return channel.request.has.metareq && channel.head.accepts_gzip;
 }
 
 string OptionalHeaders(const jpip::Request &request, bool cnew = false) {
@@ -277,7 +280,6 @@ private:
             client.connection->Abort();
             return;
         }
-        client.connection->Identified();
         if (head.unsupported_body) {
             SendError(client, 400, "Bad Request",
                       "HTTP request bodies are not supported", &request);
@@ -438,8 +440,7 @@ private:
         channel.state = Channel::OPEN;
         channel.work_buffer = index;
         buffer.busy = true;
-        bool gzip = channel.request.has.metareq && channel.head.accepts_gzip;
-        if (!channel.work.Begin(channel.request, gzip,
+        if (!channel.work.Begin(channel.request, UseGzip(channel),
                                 buffer.data.data(), buffer.data.size()))
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response could not be scheduled");
@@ -464,13 +465,11 @@ private:
 
     void SendChunk(Channel &channel, int index, int length, bool final) {
         Buffer &buffer = channel.buffers[index];
-        buffer.final = final;
         string first;
         if (!channel.headers_sent) {
             channel.headers_sent = true;
             channel.active->connection->StartResponse();
-            first = SuccessHeaders(channel,
-                    channel.request.has.metareq && channel.head.accepts_gzip);
+            first = SuccessHeaders(channel, UseGzip(channel));
         }
         string last;
         if (length > 0) {
@@ -485,16 +484,14 @@ private:
                     static_cast<size_t>(length), std::move(last),
                     [this, &channel, index](bool ok) {
                         Buffer &completed = channel.buffers[index];
-                        bool final_write = completed.final;
                         completed.busy = false;
-                        completed.final = false;
                         if (channel.writes > 0)
                             channel.writes--;
                         if (!ok) {
                             End(channel);
                             return;
                         }
-                        if (final_write)
+                        if (channel.generation_complete && channel.writes == 0)
                             channel.response_complete = true;
                         if (!channel.generation_complete)
                             Generate(channel);
@@ -540,8 +537,11 @@ private:
         }
         int index = channel.work_buffer;
         channel.work_buffer = -1;
-        if (index < 0)
+        if (index < 0) {
+            Fail(channel, 500, "Internal Server Error",
+                 "The JPIP response lost its output buffer");
             return;
+        }
         Buffer &buffer = channel.buffers[index];
         if (channel.state == Channel::ENDING) {
             buffer.busy = false;
@@ -567,20 +567,32 @@ private:
     }
 
     void OpenFailed(Channel &channel, jpeg2000::FileManager::OpenResult result) {
-        if (result == jpeg2000::FileManager::OpenResult::NOT_FOUND)
-            Fail(channel, 404, "Not Found", "The requested image was not found");
-        else if (result == jpeg2000::FileManager::OpenResult::INVALID_PATH)
-            Fail(channel, 404, "Not Found",
-                 "The requested image path is invalid");
-        else if (result == jpeg2000::FileManager::OpenResult::UNSUPPORTED)
-            Fail(channel, 404, "Not Found",
-                 "The requested image type is not supported");
-        else if (result == jpeg2000::FileManager::OpenResult::UNREADABLE)
-            Fail(channel, 500, "Internal Server Error",
-                 "The requested image could not be read");
-        else
-            Fail(channel, 500, "Internal Server Error",
-                 "The requested image is not a valid supported JPEG 2000 source");
+        switch (result) {
+            case jpeg2000::FileManager::OpenResult::OPENED:
+                Fail(channel, 500, "Internal Server Error",
+                     "The image-open operation returned an inconsistent result");
+                return;
+            case jpeg2000::FileManager::OpenResult::NOT_FOUND:
+                Fail(channel, 404, "Not Found",
+                     "The requested image was not found");
+                return;
+            case jpeg2000::FileManager::OpenResult::INVALID_PATH:
+                Fail(channel, 404, "Not Found",
+                     "The requested image path is invalid");
+                return;
+            case jpeg2000::FileManager::OpenResult::UNSUPPORTED:
+                Fail(channel, 404, "Not Found",
+                     "The requested image type is not supported");
+                return;
+            case jpeg2000::FileManager::OpenResult::UNREADABLE:
+                Fail(channel, 500, "Internal Server Error",
+                     "The requested image could not be read");
+                return;
+            case jpeg2000::FileManager::OpenResult::INVALID:
+                Fail(channel, 500, "Internal Server Error",
+                     "The requested image is not a valid supported JPEG 2000 source");
+                return;
+        }
     }
 
     void BeginTermination(Channel &channel) {
@@ -656,6 +668,7 @@ private:
             channel.writes != 0)
             return;
         Client *client = channel.active;
+        Client *next = NULL;
         bool close_connection = channel.head.close;
         channel.active = NULL;
         if (client) {
@@ -671,7 +684,7 @@ private:
         } else {
             channel.state = Channel::OPEN;
             if (channel.waiting) {
-                Client *next = channel.waiting;
+                next = channel.waiting;
                 channel.waiting = NULL;
                 StartRequest(channel, *next, std::move(next->waiting_request),
                              std::move(next->waiting_head));
@@ -681,7 +694,7 @@ private:
                                0);
             }
         }
-        if (client && !client->connection->IsClosing()) {
+        if (client && client != next && !client->connection->IsClosing()) {
             if (close_connection) {
                 client->connection->CloseGracefully();
             } else {

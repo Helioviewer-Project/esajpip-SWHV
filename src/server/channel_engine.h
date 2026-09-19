@@ -34,6 +34,8 @@ private:
 
     GenerateResult GeneratePlain(char *buffer, int capacity, int *length);
     GenerateResult GenerateGzip(char *buffer, int capacity, int *length);
+    bool GenerateSourceChunk(char *buffer, int capacity, int *length,
+                             bool *last);
     bool GenerateRawChunk();
     GenerateResult Fail(const char *message);
 

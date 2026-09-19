@@ -5,6 +5,7 @@
 using namespace std;
 
 namespace jpip {
+namespace {
 
     Query ParseQuery(const char *begin, const char *end) {
         Query query;
@@ -24,6 +25,8 @@ namespace jpip {
         }
         return query;
     }
+
+}
 
     Query ParseTargetQuery(const string &target) {
         size_t question = target.find('?');

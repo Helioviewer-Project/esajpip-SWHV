@@ -50,10 +50,6 @@ bool Connection::Start() {
     return StartReading();
 }
 
-void Connection::Identified() {
-    SetDeadline(Deadline::READ, connection_timeout);
-}
-
 void Connection::BlockRequests() {
     requests_blocked = true;
     StopReading();

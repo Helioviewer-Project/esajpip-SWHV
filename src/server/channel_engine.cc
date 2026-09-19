@@ -36,14 +36,26 @@ ChannelEngine::GenerateResult ChannelEngine::Fail(const char *message) {
     return GenerateResult::FAILED;
 }
 
+bool ChannelEngine::GenerateSourceChunk(char *buffer, int capacity,
+                                        int *length, bool *last) {
+    *length = capacity;
+    if (!data_server.GenerateChunk(file_manager, buffer, length, last)) {
+        error_message = "A new data chunk could not be generated";
+        return false;
+    }
+    if (*length <= 0 && !*last) {
+        error_message =
+                "No JPIP data chunk was generated before response completion";
+        return false;
+    }
+    return true;
+}
+
 ChannelEngine::GenerateResult ChannelEngine::GeneratePlain(
         char *buffer, int capacity, int *length) {
     bool last = false;
-    *length = capacity;
-    if (!data_server.GenerateChunk(file_manager, buffer, length, &last))
-        return Fail("A new data chunk could not be generated");
-    if (*length <= 0 && !last)
-        return Fail("No JPIP data chunk was generated before response completion");
+    if (!GenerateSourceChunk(buffer, capacity, length, &last))
+        return GenerateResult::FAILED;
     return last ? GenerateResult::COMPLETE : GenerateResult::MORE;
 }
 
@@ -51,17 +63,9 @@ bool ChannelEngine::GenerateRawChunk() {
     if (raw_buffer.empty())
         raw_buffer.resize(chunk_size);
 
-    int length = raw_buffer.size();
-    if (!data_server.GenerateChunk(file_manager, raw_buffer.data(), &length,
-                                   &raw_last)) {
-        error_message = "A new data chunk could not be generated";
+    int length;
+    if (!GenerateSourceChunk(raw_buffer.data(), chunk_size, &length, &raw_last))
         return false;
-    }
-    if (length <= 0 && !raw_last) {
-        error_message =
-                "No JPIP data chunk was generated before response completion";
-        return false;
-    }
     compression.next_in = reinterpret_cast<Bytef *>(raw_buffer.data());
     compression.avail_in = length;
     return true;

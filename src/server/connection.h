@@ -101,7 +101,6 @@ public:
     bool Initialize(uv_loop_t *loop);
     bool Accept(uv_stream_t *listener);
     bool Start();
-    void Identified();
     void BlockRequests();
     void StartResponse();
     void FinishResponse();

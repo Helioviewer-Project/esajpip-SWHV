@@ -1,9 +1,8 @@
 #ifndef _DATA_FILE_SEGMENT_H_
 #define _DATA_FILE_SEGMENT_H_
 
-#include <iostream>
-#include <cassert>
 #include <cstdint>
+#include <iostream>
 
 namespace data {
 
