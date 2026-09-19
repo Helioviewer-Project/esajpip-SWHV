@@ -124,6 +124,49 @@ Corpus bounds such as 32 top-level boxes, 128 PLT entries, and 4 KiB opaque
 payloads limit what the generator can allocate. They are not JPEG 2000 limits
 and do not become server limits.
 
+## Complementary JPP response coverage
+
+`tests/jpp_validation.h`, run by the live-server test, independently reads
+T.808 A.2 message headers and D.3 EOR messages. Sixteen runs combine embedded or
+linked JPX, plain or gzip responses, absent or partial cache-model claims, and
+`stream` or `context` selection. Each codestream has 130 precincts, but their
+widths, precinct sizes, and layer counts differ. Large final-precinct packets
+exercise multi-byte offsets and lengths as well as Bin-ID continuation bytes.
+Small response budgets and the server's 128-byte test chunks split packets
+across chunks and responses.
+
+The test compares every payload with its source bytes, reconstructs main-header,
+tile-header, precinct, and metadata bins, and checks offsets, completion flags,
+EOR reasons, and the absence of retransmission after the window is complete.
+Expected metadata includes independently built codestream and association
+placeholders, with a nested association preserved in a separate metadata bin.
+Partial `Hm` and `P` models seed known prefixes before transfer.
+
+Two additional stateful runs, one per source form, cover:
+
+- `len=0`, `1`, and `2`, absent `len`, and metadata-only requests;
+- partial `M0`/`M1` models, including a prefix ending inside a placeholder;
+- single-pixel precinct boundaries, an empty intersection, backward scrubbing,
+  overlapping selections, and default window offset and size;
+- cache continuity after TCP reconnection and pipelined cached requests;
+- a new channel on an existing socket, complete-bin claims, independent
+  channel caches, and continued use after closing the other channel;
+- discarding cache claims under a mismatched target ID.
+
+Each window permits only its independently selected bins. Revisiting completed
+precincts must not resend bytes, including after cache-prefix compaction.
+Reader self-tests cover header inheritance, defaults resetting between
+responses, and rejection of truncated, overflowing, reserved, misplaced, and
+incorrect-payload messages.
+
+This is a served-profile response oracle, not a general JPIP decoder. It does
+not validate entropy-coded samples or every legal extended message class.
+The separate real-data check on September 19, 2026 used 100 timestamp-ordered
+EUI FSI frames in a linked JPX. Headless JHV loaded the JPIP URL and recorded
+through SAMP, reporting completion. `ffprobe` confirmed 100 frames at
+4096 × 4096. Neither server nor JHV logs contained a serving or decoding error.
+This run does not establish the 4,014-frame or Debian gates.
+
 ## Keeping this map accurate
 
 When a model or parser rule changes:

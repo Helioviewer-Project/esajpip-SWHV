@@ -627,11 +627,27 @@ JP2/JPX box structure including the linked-JPX form that is the production
 workload. Not covered, because ACN cannot describe them: the JPIP request
 syntax (text), and the JPP response stream (its message headers are
 7-bit-group chains like `Iplt`, but the payload is sized by the *value*
-assembled from the chain, which no determinant can reference). For those the
-complementary tool is a fuzz target over `Request::Parse` and
-`server::Connection` using the existing `ESAJPIP_SANITIZE`
-build option; `tests/server_test.cc` already drives the live process and is
-the place to add wire-level cases.
+assembled from the chain, which no determinant can reference).
+
+The complementary live-server suite in `tests/server_test.cc` includes an
+independent JPP reader in `tests/jpp_validation.h`. It reconstructs data-bins
+across HTTP chunks and successive responses, then compares them byte-for-byte
+with independently assembled source payloads and metadata placeholders.
+It covers embedded and linked JPX with unequal codestream geometry, partial
+and complete cache models, association metadata, cropped and changing windows,
+`stream` and `context` selections, small `len` budgets, and gzip. Stateful runs
+check reconnection, pipelining, browser-style socket reuse, channel-cache
+isolation, and target-ID mismatches. The reader also has inheritance and
+malformed-message self-tests. See `COVERAGE.md` for the complete matrix. Run it with:
+
+```sh
+cmake --build build
+ctest --test-dir build --output-on-failure -R '^server$'
+```
+
+These synthetic packet payloads test transport, not image decoding. A real
+JHV movie remains the decoding and rendering check. `ESAJPIP_SANITIZE` can
+also be enabled for the live-server suite.
 
 ## Frequently asked
 

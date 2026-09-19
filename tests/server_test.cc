@@ -12,7 +12,10 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <stdexcept>
 #include <string>
+#include <tuple>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -290,6 +293,8 @@ void RemoveDirectory(const string &directory) {
     rmdir(directory.c_str());
 }
 
+#include "jpp_validation.h"
+
 }
 
 int main() {
@@ -338,6 +343,7 @@ int main() {
           "Could not load the server test configuration");
 
     server_pid = StartServer(config, directory + "/server");
+    CheckJPPResponses(port, directory);
 
     int unavailable = Connect(port);
     Check(unavailable >= 0, "Server did not start");
