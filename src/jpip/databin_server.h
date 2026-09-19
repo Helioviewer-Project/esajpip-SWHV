@@ -2,6 +2,7 @@
 #define _JPIP_DATABIN_SERVER_H_
 
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,8 +44,8 @@ namespace jpip {
 
         int pending;         ///< Number of pending bytes
         std::vector<Stream> streams;
+        std::deque<size_t> active_streams;
         bool has_woi;
-        size_t current_idx;  ///< Current codestream index
         size_t meta_idx;
         int meta_offset;
         size_t meta_bin_idx;
@@ -178,7 +179,6 @@ namespace jpip {
         DataBinServer() {
             pending = 0;
             has_woi = false;
-            current_idx = 0;
             meta_idx = 0;
             meta_offset = 0;
             meta_bin_idx = 0;

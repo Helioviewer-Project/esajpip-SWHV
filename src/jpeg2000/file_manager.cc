@@ -129,6 +129,26 @@ namespace jpeg2000 {
         return true;
     }
 
+    static bool ValidateMetadata(const Metadata &metadata) {
+        uint64_t bin0_length = metadata.tail.length;
+        for (const Metadata::Part &part : metadata.bin0) {
+            uint64_t placeholder_length = part.placeholder.header.length +
+                    (part.placeholder.is_jp2c ? 44 : 20);
+            if (part.data.length > INT_MAX || placeholder_length > INT_MAX ||
+                bin0_length > static_cast<uint64_t>(INT_MAX) - part.data.length ||
+                bin0_length + part.data.length >
+                        static_cast<uint64_t>(INT_MAX) - placeholder_length)
+                return false;
+            bin0_length += part.data.length + placeholder_length;
+        }
+        if (bin0_length > INT_MAX)
+            return false;
+        for (const FileSegment &bin : metadata.bins)
+            if (bin.length > INT_MAX)
+                return false;
+        return true;
+    }
+
     FileManager::OpenResult FileManager::ReadImage(
             const string &name_image_file, ImageIndex *image_index) {
         // Get file extension
@@ -142,11 +162,17 @@ namespace jpeg2000 {
         }
 
         File file;
-        if (!file.Open(name_image_file)) {
-            int error = errno;
-            return error == ENOENT || error == ENOTDIR
-                       ? OpenResult::NOT_FOUND
-                       : OpenResult::UNREADABLE;
+        File::OpenResult open_result = file.Open(name_image_file.c_str(), INT_MAX);
+        if (open_result != File::OpenResult::OPENED) {
+            if (open_result == File::OpenResult::NOT_FOUND)
+                return OpenResult::NOT_FOUND;
+            if (open_result == File::OpenResult::EMPTY ||
+                open_result == File::OpenResult::TOO_LARGE) {
+                ERROR("Unsupported JPEG 2000 source size in '"
+                      << name_image_file << "'");
+                return OpenResult::INVALID;
+            }
+            return OpenResult::UNREADABLE;
         }
 
         unsigned char signature_box[sizeof JP2_SIGNATURE_BOX];
@@ -171,8 +197,13 @@ namespace jpeg2000 {
             res = ReadJP2(&file, image_index);
         else
             res = ReadJPX(&file, image_index);
-        if (!res)
+        if (!res) {
             ERROR("Could not parse image file '" << name_image_file << "'");
+        } else if (!ValidateMetadata(image_index->GetMetadata())) {
+            ERROR("JPEG 2000 metadata exceeds the supported offset range in '"
+                  << name_image_file << "'");
+            res = false;
+        }
         return res ? OpenResult::OPENED : OpenResult::INVALID;
     }
 

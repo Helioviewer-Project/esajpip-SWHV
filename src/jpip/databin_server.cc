@@ -111,10 +111,11 @@ namespace jpip {
             streams.reserve(codestreams.size());
             for (int codestream : codestreams)
                 streams.emplace_back(codestream);
-            current_idx = 0;
         }
 
+        bool had_woi = has_woi;
         has_woi = req.HasWOI();
+        bool traversal_changed = changed || (has_woi && !had_woi);
         if (has_woi) {
             jpeg2000::Size requested_size =
                     req.has.rsiz ? req.woi_size : req.resolution_size;
@@ -128,6 +129,7 @@ namespace jpip {
                 new_woi.position = req.has.roff ? req.woi_position
                                                  : jpeg2000::Point();
                 if (!CropWindow(&new_woi, req.resolution_size)) {
+                    traversal_changed |= !stream.empty;
                     stream.empty = true;
                     stream.woi = WOI();
                     stream.bin_offsets.clear();
@@ -146,11 +148,13 @@ namespace jpip {
                                   "Invalid JPIP window dimensions");
                 }
                 if (!CropWindow(&new_woi, resolution_size)) {
+                    traversal_changed |= !stream.empty;
                     stream.empty = true;
                     stream.woi = WOI();
                     stream.bin_offsets.clear();
                     stream.bin_idx = 0;
                 } else if (stream.empty || new_woi != stream.woi) {
+                    traversal_changed = true;
                     stream.empty = false;
                     stream.woi = new_woi;
                     stream.composer.Reset(coding_parameters, stream.woi);
@@ -158,6 +162,15 @@ namespace jpip {
                     stream.bin_idx = 0;
                 }
             }
+        }
+
+        if (!has_woi) {
+            active_streams.clear();
+        } else if (traversal_changed) {
+            active_streams.clear();
+            for (size_t i = 0; i < streams.size(); ++i)
+                if (!streams[i].empty && streams[i].composer.HasPacket())
+                    active_streams.push_back(i);
         }
 
         if (req.has.model && !ApplyModel(image_index, cache_model, req))
@@ -246,18 +259,9 @@ namespace jpip {
 
     DataBinServer::SegmentResult DataBinServer::WritePackets(
             ImageIndex *image_index) {
-        while (true) {
-            size_t checked = 0;
-            while (checked < streams.size() &&
-                   (streams[current_idx].empty ||
-                    !streams[current_idx].composer.HasPacket())) {
-                current_idx = (current_idx + 1) % streams.size();
-                checked++;
-            }
-            if (checked == streams.size())
-                return SegmentResult::COMPLETE;
-
-            Stream &stream = streams[current_idx];
+        while (!active_streams.empty()) {
+            size_t stream_idx = active_streams.front();
+            Stream &stream = streams[stream_idx];
             const Packet &packet = stream.composer.GetCurrentPacket();
             const CodingParameters *coding_parameters =
                     image_index->GetCodingParameters(stream.id);
@@ -303,6 +307,8 @@ namespace jpip {
             if (result == SegmentResult::FULL)
                 return result;
 
+            active_streams.pop_front();
+
             if (segment.length > static_cast<uint64_t>(INT_MAX - bin_offset)) {
                 ERROR("Precinct data-bin exceeds the supported offset range");
                 return SegmentResult::FAILED;
@@ -320,8 +326,10 @@ namespace jpip {
                 stream.bin_idx++;
             else
                 stream.bin_idx = 0;
-            current_idx = (current_idx + 1) % streams.size();
+            if (stream.composer.HasPacket())
+                active_streams.push_back(stream_idx);
         }
+        return SegmentResult::COMPLETE;
     }
 
     bool DataBinServer::GenerateChunk(FileManager &file_manager, char *buf,

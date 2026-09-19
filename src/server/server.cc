@@ -1,5 +1,6 @@
 #include "server/server.h"
 
+#include <array>
 #include <csignal>
 #include <cstdio>
 #include <cstdint>
@@ -74,9 +75,7 @@ struct Client {
 };
 
 struct Buffer {
-    explicit Buffer(size_t size) : data(size) {}
-    Buffer(Buffer &&) = default;
-    Buffer &operator=(Buffer &&) = default;
+    Buffer() = default;
 
     vector<char> data;
     server::Connection::Write write;
@@ -97,7 +96,7 @@ struct Channel {
     uint64_t number;
     server::ChannelWork work;
     uv_timer_t timer;
-    vector<Buffer> buffers;
+    array<Buffer, RESPONSE_BUFFERS> buffers;
     Client *active = NULL;
     Client *waiting = NULL;
     jpip::Request request;
@@ -219,6 +218,21 @@ private:
         Server *server = static_cast<Server *>(handle->data);
         server->open_handles--;
         server->FinishStop();
+    }
+
+    static void CloseHandle(uv_handle_t *handle, void *) noexcept {
+        if (!uv_is_closing(handle))
+            uv_close(handle, NULL);
+    }
+
+    int InitializationFailed(int result) {
+        int close_result;
+        do {
+            uv_walk(&loop, CloseHandle, NULL);
+            uv_run(&loop, UV_RUN_NOWAIT);
+            close_result = uv_loop_close(&loop);
+        } while (close_result == UV_EBUSY);
+        return result;
     }
     static void Reap(uv_async_t *handle) noexcept {
         static_cast<Server *>(handle->data)->ReapObjects();
@@ -844,22 +858,22 @@ public:
             return result;
         result = uv_tcp_init(&loop, &listener);
         if (result != 0)
-            return result;
+            return InitializationFailed(result);
         listener.data = this;
         open_handles++;
         result = uv_tcp_bind(&listener, listen_address.GetSockAddr(), 0);
         if (result != 0)
-            return result;
+            return InitializationFailed(result);
         for (uv_signal_t &signal : stop_signals) {
             result = uv_signal_init(&loop, &signal);
             if (result != 0)
-                return result;
+                return InitializationFailed(result);
             signal.data = this;
             open_handles++;
         }
         result = uv_async_init(&loop, &reaper, Reap);
         if (result != 0)
-            return result;
+            return InitializationFailed(result);
         reaper.data = this;
         open_handles++;
         const int signal_numbers[] = {SIGINT, SIGTERM};
@@ -867,10 +881,11 @@ public:
             result = uv_signal_start(&stop_signals[i], Signal,
                                      signal_numbers[i]);
             if (result != 0)
-                return result;
+                return InitializationFailed(result);
         }
-        return uv_listen(reinterpret_cast<uv_stream_t *>(&listener),
-                         SOMAXCONN, Listen);
+        result = uv_listen(reinterpret_cast<uv_stream_t *>(&listener),
+                           SOMAXCONN, Listen);
+        return result == 0 ? 0 : InitializationFailed(result);
     }
 
     int Run() {
@@ -920,9 +935,6 @@ Channel::Channel(Server *_server, string _id, uint64_t _number,
     if (timer_initialized)
         timer.data = this;
     timer_closed = !timer_initialized;
-    buffers.reserve(RESPONSE_BUFFERS);
-    for (unsigned int i = 0; i < RESPONSE_BUFFERS; ++i)
-        buffers.emplace_back(0);
 }
 
 void WorkDone(server::ChannelWork &, void *owner) {
@@ -946,6 +958,7 @@ int RunServer(const Config &cfg, const net::InetAddress &listen_address,
     if (initialize_result != 0) {
         ERROR("The server can not be initialized: "
               << uv_strerror(initialize_result));
+        uv_library_shutdown();
         trace::Drain();
         return -1;
     }

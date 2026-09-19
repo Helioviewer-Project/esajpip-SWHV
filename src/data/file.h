@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
+#include <limits>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -19,6 +20,14 @@ namespace data {
 
     class File {
     public:
+        enum class OpenResult {
+            OPENED,
+            NOT_FOUND,
+            EMPTY,
+            TOO_LARGE,
+            FAILED
+        };
+
         File() {
             clear();
         }
@@ -28,9 +37,10 @@ namespace data {
 
         /**
          * @param file_name Path name of the file to open.
-         * @return <code>true</code> if successful.
+         * @param maximum_size Largest file size accepted.
+         * @return Detailed open result.
          */
-        bool Open(const char *file_name) {
+        OpenResult Open(const char *file_name, uint64_t maximum_size) {
             assert(address == MAP_FAILED);
 
             int fd;
@@ -38,20 +48,49 @@ namespace data {
                 int open_error = errno;
                 ERROR("Unable to open file: '" << file_name << "': " << strerror(open_error));
                 errno = open_error;
-                return false;
-            } else {
-                struct stat file_stat;
-                if (fstat(fd, &file_stat) != -1) {
-                    size = file_stat.st_size;
-                    address = (char *) mmap(0, size, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0);
-                }
-                close(fd);
-                if (address == MAP_FAILED) {
-                    Close();
-                    return false;
-                }
-                return true;
+                return open_error == ENOENT || open_error == ENOTDIR
+                        ? OpenResult::NOT_FOUND : OpenResult::FAILED;
             }
+
+            struct stat file_stat;
+            if (fstat(fd, &file_stat) == -1) {
+                int stat_error = errno;
+                close(fd);
+                ERROR("Unable to inspect file: '" << file_name << "': "
+                      << strerror(stat_error));
+                errno = stat_error;
+                return OpenResult::FAILED;
+            }
+            if (file_stat.st_size == 0) {
+                close(fd);
+                return OpenResult::EMPTY;
+            }
+            if (file_stat.st_size < 0 ||
+                static_cast<uint64_t>(file_stat.st_size) > maximum_size ||
+                static_cast<uint64_t>(file_stat.st_size) >
+                        std::numeric_limits<size_t>::max()) {
+                close(fd);
+                return OpenResult::TOO_LARGE;
+            }
+
+            size = static_cast<size_t>(file_stat.st_size);
+            address = (char *) mmap(0, size, PROT_READ, MAP_FILE | MAP_SHARED,
+                                    fd, 0);
+            int map_error = errno;
+            close(fd);
+            if (address == MAP_FAILED) {
+                ERROR("Unable to map file: '" << file_name << "': "
+                      << strerror(map_error));
+                clear();
+                errno = map_error;
+                return OpenResult::FAILED;
+            }
+            return OpenResult::OPENED;
+        }
+
+        bool Open(const char *file_name) {
+            return Open(file_name, std::numeric_limits<uint64_t>::max()) ==
+                   OpenResult::OPENED;
         }
 
         bool Open(const std::string &file_name) {

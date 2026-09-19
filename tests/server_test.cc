@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <unistd.h>
+#include <vector>
 
 #include <zlib.h>
 

@@ -1146,6 +1146,18 @@ int main() {
     jpeg2000::FileManager large_file_manager;
     Check(!OpenImage(directory, "large.jp2", &large_file_manager),
           "Accepted a file larger than the packet index can address");
+    string large_jpx = directory + "large.jpx";
+    WriteFile(large_jpx, MakeLinkedJPX("image.jp2", codestream.size()));
+    Check(truncate(large_jpx.c_str(), static_cast<off_t>(INT_MAX) + 1) == 0,
+          "Could not create a sparse large-JPX fixture");
+    Check(OpenImageResult(directory, "large.jpx") ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
+          "Accepted a linked JPX whose metadata offsets exceed the supported range");
+    string empty_file = directory + "empty.jp2";
+    WriteFile(empty_file, vector<unsigned char>());
+    Check(OpenImageResult(directory, "empty.jp2") ==
+                  jpeg2000::FileManager::OpenResult::INVALID,
+          "Did not classify an empty JPEG 2000 source as invalid");
 
     jpeg2000::FileManager default_precinct_manager;
     Check(OpenImage(directory, "default-precincts.jp2", &default_precinct_manager),
@@ -1640,6 +1652,8 @@ int main() {
     remove((directory + "short-mct.jp2").c_str());
     remove((directory + "mismatched-mct.jp2").c_str());
     remove(large_file.c_str());
+    remove(large_jpx.c_str());
+    remove(empty_file.c_str());
     remove((directory + "default-precincts.jp2").c_str());
     remove((directory + "nonzero-origin.jp2").c_str());
     response_length = sizeof response;
