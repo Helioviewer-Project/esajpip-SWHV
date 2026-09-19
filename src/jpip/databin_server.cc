@@ -91,6 +91,7 @@ namespace jpip {
         if (error_message != NULL)
             error_message->clear();
         data_writer.StartResponse();
+        header_idx = 0;
 
         vector<int> codestreams;
         if (req.has.stream || req.has.context) {
@@ -229,7 +230,8 @@ namespace jpip {
 
     DataBinServer::SegmentResult DataBinServer::WriteHeaders(
             FileManager &file_manager, ImageIndex *image_index) {
-        for (Stream &stream : streams) {
+        for (; header_idx < streams.size(); ++header_idx) {
+            Stream &stream = streams[header_idx];
             if (has_woi && stream.empty)
                 continue;
             if (stream.file == NULL) {
@@ -238,11 +240,6 @@ namespace jpip {
                 if (stream.file == NULL)
                     return SegmentResult::FAILED;
             }
-        }
-
-        for (Stream &stream : streams) {
-            if (has_woi && stream.empty)
-                continue;
             SegmentResult result = WriteSegment<DataBinClass::MAIN_HEADER>(
                     stream.file, stream.id, 0,
                     image_index->GetMainHeader(stream.id));

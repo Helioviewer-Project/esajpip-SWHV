@@ -46,6 +46,7 @@ namespace jpip {
         std::vector<Stream> streams;
         std::deque<size_t> active_streams;
         bool has_woi;
+        size_t header_idx;
         size_t meta_idx;
         int meta_offset;
         size_t meta_bin_idx;
@@ -179,6 +180,7 @@ namespace jpip {
         DataBinServer() {
             pending = 0;
             has_woi = false;
+            header_idx = 0;
             meta_idx = 0;
             meta_offset = 0;
             meta_bin_idx = 0;

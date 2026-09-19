@@ -622,6 +622,31 @@ static vector<unsigned char> MakeLinkedJPX(const string &linked_path,
     return file;
 }
 
+static vector<unsigned char> MakeLinkedMovie(const vector<string> &paths,
+                                             uint32_t codestream_length) {
+    vector<unsigned char> file = MakePreamble(0x6A707820);
+    vector<unsigned char> references;
+    Append16(references, paths.size());
+    for (size_t i = 0; i < paths.size(); ++i) {
+        AppendBox(file, 0x6A706368, vector<unsigned char>()); // jpch
+        vector<unsigned char> fragment;
+        Append16(fragment, 1);
+        Append64(fragment, JP2_CODESTREAM_OFFSET);
+        Append32(fragment, codestream_length);
+        Append16(fragment, i + 1);
+        vector<unsigned char> fragment_box;
+        AppendBox(fragment_box, 0x666C7374, fragment); // flst
+        AppendBox(file, 0x6674626C, fragment_box); // ftbl
+        vector<unsigned char> url(4, 0);
+        string location = "file://" + paths[i];
+        url.insert(url.end(), location.begin(), location.end());
+        url.push_back(0);
+        AppendBox(references, 0x75726C20, url);
+    }
+    AppendBox(file, 0x6474626C, references);
+    return file;
+}
+
 static vector<unsigned char> MakeHeaderFirstEmbeddedJPX(
         const vector<unsigned char> &first,
         const vector<unsigned char> &second) {
@@ -1680,6 +1705,52 @@ int main() {
           "Could not parse valid linked JPX");
     Check(linked_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong linked JPX codestream count");
+
+    // A partial first header must not open later frames. Temporarily hide the
+    // second frame after validation to make an eager open observable.
+    string later_frame = directory + "later.jp2";
+    WriteFile(later_frame, jp2);
+    WriteFile(directory + "lazy.jpx",
+              MakeLinkedMovie({directory + "image.jp2", later_frame},
+                              codestream.size()));
+    jpeg2000::FileManager lazy_manager;
+    Check(OpenImage(directory, "lazy.jpx", &lazy_manager),
+          "Could not open the lazy-header fixture");
+    jpip::Request lazy_request;
+    Check(lazy_request.ParseTarget(
+                  "/jpip?stream=0-1&model=M0&fsiz=1,1"),
+          "Could not parse the lazy-header request");
+    jpip::DataBinServer lazy_server;
+    Check(lazy_server.SetRequest(*lazy_manager.GetImage(), lazy_request),
+          "Could not start the lazy-header request");
+    Check(rename(later_frame.c_str(), (later_frame + ".hidden").c_str()) == 0,
+          "Could not hide the later frame");
+    char lazy_chunk[80];
+    int lazy_length = sizeof lazy_chunk;
+    bool lazy_last = false;
+    bool lazy_ok = lazy_server.GenerateChunk(lazy_manager, lazy_chunk,
+                                             &lazy_length, &lazy_last);
+    Check(rename((later_frame + ".hidden").c_str(), later_frame.c_str()) == 0,
+          "Could not restore the later frame");
+    Check(lazy_ok && !lazy_last && lazy_length > 0,
+          "A partial header opened a later frame");
+    for (int chunks = 0; !lazy_last && chunks < 100; ++chunks) {
+        lazy_length = sizeof lazy_chunk;
+        Check(lazy_server.GenerateChunk(lazy_manager, lazy_chunk,
+                                          &lazy_length, &lazy_last),
+              "Could not resume headers and packets across chunks");
+    }
+    Check(lazy_last, "The lazy-header response did not finish");
+    lazy_manager.ClearFiles();
+    Check(lazy_server.SetRequest(*lazy_manager.GetImage(), lazy_request),
+          "Could not reuse the lazy-header channel");
+    lazy_length = sizeof lazy_chunk;
+    Check(lazy_server.GenerateChunk(lazy_manager, lazy_chunk,
+                                      &lazy_length, &lazy_last) &&
+                  lazy_last && lazy_length == 3,
+          "Reused lazy-header channel did not retain its cache state");
+    remove(later_frame.c_str());
+    remove((directory + "lazy.jpx").c_str());
 
     jpeg2000::FileManager self_linked_manager;
     Check(!OpenImage(directory, "self-linked.jpx", &self_linked_manager),
