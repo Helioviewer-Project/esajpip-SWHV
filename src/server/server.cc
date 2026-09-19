@@ -27,7 +27,6 @@ using namespace std;
 namespace {
 
 const unsigned int RESPONSE_BUFFERS = 4;
-const unsigned int MAX_CONCURRENT_OPENS = 2;
 const char JPIP_HANDLED_HEADER[] =
         "JPIP-handled: tid,cid,cnew=http,stream,len,handled\r\n";
 const char COMMON_HEADERS[] =
@@ -103,7 +102,6 @@ struct Channel {
     Client *waiting = NULL;
     jpip::Request request;
     server::RequestHead head;
-    string target;
     State state = OPEN_QUEUED;
     int work_buffer = -1;
     unsigned int writes = 0;
@@ -114,6 +112,11 @@ struct Channel {
     bool timer_initialized = false;
     bool timer_closed = false;
 };
+
+const string &Target(const Channel &channel) {
+    return channel.request.has.target
+            ? channel.request.target : channel.request.object;
+}
 
 string OptionalHeaders(const jpip::Request &request, bool cnew = false) {
     string result;
@@ -167,6 +170,8 @@ string SuccessHeaders(const Channel &channel, bool gzip) {
     result += "Transfer-Encoding: chunked\r\nContent-Type: image/jpp-stream\r\n";
     if (gzip)
         result += "Content-Encoding: gzip\r\n";
+    if (channel.head.close)
+        result += "Connection: close\r\n";
     result += "\r\n";
     return result;
 }
@@ -192,6 +197,7 @@ private:
     vector<string> dead_channels;
     uint64_t next_client = 1;
     uint64_t next_channel = 1;
+    const unsigned int max_concurrent_opens;
     unsigned int active_opens = 0;
     unsigned int num_connections = 0;
     int open_handles = 0;
@@ -348,8 +354,6 @@ private:
         channels[id] = std::move(created);
         StartRequest(*channel, client, std::move(request), std::move(head));
         channel->state = Channel::OPEN_QUEUED;
-        channel->target = channel->request.has.target
-                ? channel->request.target : channel->request.object;
         open_queue.push_back(channel->id);
         StartOpens();
     }
@@ -376,7 +380,7 @@ private:
             client.connection->StartResponse();
             string response = "HTTP/1.1 200 OK\r\n" +
                     OptionalHeaders(channel.request) + COMMON_HEADERS +
-                    "Content-Length: 0\r\n\r\n";
+                    "Content-Length: 0\r\nConnection: close\r\n\r\n";
             if (!client.connection->Send(
                         &client.write, std::move(response),
                         [this, &channel](bool ok) {
@@ -399,7 +403,7 @@ private:
     }
 
     void StartOpens() {
-        while (!stopping && active_opens < MAX_CONCURRENT_OPENS &&
+        while (!stopping && active_opens < max_concurrent_opens &&
                !open_queue.empty()) {
             string id = std::move(open_queue.front());
             open_queue.pop_front();
@@ -411,7 +415,7 @@ private:
                 continue;
             channel->state = Channel::OPENING;
             active_opens++;
-            if (!channel->work.Open(channel->target)) {
+            if (!channel->work.Open(Target(*channel))) {
                 active_opens--;
                 Fail(*channel, 500, "Internal Server Error",
                      "The JPIP channel could not be scheduled");
@@ -427,19 +431,18 @@ private:
     }
 
     void Begin(Channel &channel) {
-        for (Buffer &buffer : channel.buffers)
-            if (buffer.data.empty())
-                buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
         int index = FreeBuffer(channel);
         if (index < 0)
             return;
+        Buffer &buffer = channel.buffers[index];
+        if (buffer.data.empty())
+            buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
         channel.state = Channel::OPEN;
         channel.work_buffer = index;
-        channel.buffers[index].busy = true;
+        buffer.busy = true;
         bool gzip = channel.request.has.metareq && channel.head.accepts_gzip;
         if (!channel.work.Begin(channel.request, gzip,
-                                channel.buffers[index].data.data(),
-                                channel.buffers[index].data.size()))
+                                buffer.data.data(), buffer.data.size()))
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response could not be scheduled");
     }
@@ -451,10 +454,12 @@ private:
         int index = FreeBuffer(channel);
         if (index < 0)
             return;
+        Buffer &buffer = channel.buffers[index];
+        if (buffer.data.empty())
+            buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
         channel.work_buffer = index;
-        channel.buffers[index].busy = true;
-        if (!channel.work.Generate(channel.buffers[index].data.data(),
-                                   channel.buffers[index].data.size()))
+        buffer.busy = true;
+        if (!channel.work.Generate(buffer.data.data(), buffer.data.size()))
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response could not be scheduled");
     }
@@ -523,8 +528,9 @@ private:
             else if (result.open != jpeg2000::FileManager::OpenResult::OPENED)
                 OpenFailed(channel, result.open);
             else {
-                LOG("The channel " << channel.number << " has been opened for the image '"
-                                    << channel.target << "'");
+                LOG("The channel " << channel.number
+                                    << " has been opened for the image '"
+                                    << EscapeForLog(Target(channel)) << "'");
                 Begin(channel);
             }
             return;
@@ -552,7 +558,8 @@ private:
                  result.error);
             return;
         }
-        bool final = result.generation == ChannelEngine::GenerateResult::COMPLETE;
+        bool final = result.generation ==
+                server::ChannelEngine::GenerateResult::COMPLETE;
         channel.generation_complete = final;
         SendChunk(channel, index, result.length, final);
         if (!final)
@@ -578,13 +585,17 @@ private:
                  "The requested image is not a valid supported JPEG 2000 source");
     }
 
-    void Fail(Channel &channel, int code, const char *reason,
-              const string &message) {
-        Client *client = channel.active;
+    void BeginTermination(Channel &channel) {
         channel.state = Channel::ENDING;
         CloseChannelTimer(channel);
         channel.work.CancelQueued();
         RejectWaiting(channel, "JPIP channel has ended");
+    }
+
+    void Fail(Channel &channel, int code, const char *reason,
+              const string &message) {
+        Client *client = channel.active;
+        BeginTermination(channel);
         if (client && !channel.headers_sent) {
             client->connection->StartResponse();
             if (!client->connection->Send(
@@ -615,10 +626,7 @@ private:
             FinishChannel(channel);
             return;
         }
-        channel.state = Channel::ENDING;
-        CloseChannelTimer(channel);
-        channel.work.CancelQueued();
-        RejectWaiting(channel, "JPIP channel has ended");
+        BeginTermination(channel);
         if (channel.active && channel.headers_sent)
             channel.active->connection->Abort();
         channel.response_complete = true;
@@ -805,8 +813,10 @@ private:
     }
 
 public:
-    Server(const Config &_cfg, const net::InetAddress &_listen_address)
-        : cfg(_cfg), listen_address(_listen_address) {}
+    Server(const Config &_cfg, const net::InetAddress &_listen_address,
+           unsigned int worker_threads)
+        : cfg(_cfg), listen_address(_listen_address),
+          max_concurrent_opens(worker_threads / 2) {}
 
     int Initialize() {
         int result = uv_loop_init(&loop);
@@ -903,12 +913,15 @@ void WorkDone(server::ChannelWork &, void *owner) {
 } // namespace
 
 int RunServer(const Config &cfg, const net::InetAddress &listen_address,
-              const string &log_name, const string &description) {
+              const string &log_name, const string &description,
+              unsigned int worker_threads) {
+    if (worker_threads < 2)
+        return CERR("The worker-pool size must be at least 2");
     if (!trace::Initialize(log_name))
         return -1;
     LOG(description << " started (PID = " << getpid() << ")");
 
-    Server server(cfg, listen_address);
+    Server server(cfg, listen_address, worker_threads);
     int initialize_result = server.Initialize();
     if (initialize_result != 0) {
         ERROR("The server can not be initialized: "

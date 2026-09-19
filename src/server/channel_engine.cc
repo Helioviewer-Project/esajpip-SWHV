@@ -4,6 +4,8 @@
 
 using namespace std;
 
+namespace server {
+
 ChannelEngine::ChannelEngine(int _chunk_size) : chunk_size(_chunk_size) {
     memset(&compression, 0, sizeof compression);
 }
@@ -114,4 +116,6 @@ void ChannelEngine::Finish() {
     raw_last = false;
     vector<char>().swap(raw_buffer);
     file_manager.ClearFiles();
+}
+
 }

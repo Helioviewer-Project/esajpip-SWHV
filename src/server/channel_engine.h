@@ -11,6 +11,8 @@
 #include "jpip/databin_server.h"
 #include "jpip/request.h"
 
+namespace server {
+
 class ChannelEngine {
 public:
     enum class GenerateResult {
@@ -53,5 +55,7 @@ public:
     ChannelEngine(const ChannelEngine &) = delete;
     ChannelEngine &operator=(const ChannelEngine &) = delete;
 };
+
+}
 
 #endif /* _SERVER_CHANNEL_ENGINE_H_ */

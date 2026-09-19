@@ -237,7 +237,8 @@ pid_t StartServer(const Config &config, const string &log_name) {
                                            : net::InetAddress(
                                                      config.address().c_str(),
                                                      config.port());
-        int result = RunServer(config, address, log_name, "esajpip server test");
+        int result = RunServer(config, address, log_name,
+                               "esajpip server test", 16);
         _exit(result == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
     }
     setpgid(pid, pid);
@@ -572,8 +573,11 @@ int main() {
                 "/jpip?cid=" + channel_id +
                 "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128",
                 "Connection: close\r\n");
-    Check(ReadResponse(replacement).headers.find("HTTP/1.1 200 OK") == 0,
-          "Connection close request was not served");
+    Response close_response = ReadResponse(replacement);
+    Check(close_response.headers.find("HTTP/1.1 200 OK") == 0 &&
+                  close_response.headers.find("Connection: close") !=
+                          string::npos,
+          "Connection close request was not served with a close header");
     CheckClosed(replacement, 1000,
                 "Connection close request retained its connection");
     close(replacement);
@@ -592,7 +596,8 @@ int main() {
     Response closed = ReadResponse(replacement);
     Check(closed.headers.find("HTTP/1.1 200 OK") == 0 &&
                   closed.headers.find("JPIP-tid: 0") != string::npos &&
-                  closed.headers.find(HANDLED_HEADER) != string::npos,
+                  closed.headers.find(HANDLED_HEADER) != string::npos &&
+                  closed.headers.find("Connection: close") != string::npos,
           "Channel close did not return 200 with JPIP capability headers");
     CheckClosed(replacement, 1000, "Closed channel retained its connection");
     close(replacement);

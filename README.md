@@ -127,9 +127,11 @@ the largest movies and the memory available on the deployment host. Set
 `connections.limit` according to expected browser or proxy connection use.
 
 JPEG 2000 work runs in libuv's worker pool. esajpip sets
-`UV_THREADPOOL_SIZE=16` when the variable is absent. An explicit value from 4
-through 1024 is honored; malformed or smaller values stop startup. This is an
-operational tuning variable, not an INI setting.
+`UV_THREADPOOL_SIZE=16` when the variable is absent. An explicit value from 2
+through 1024 is honored; malformed or smaller values stop startup. Up to half
+of the workers may open new images concurrently, leaving the other half
+available to established channels. This is an operational tuning variable,
+not an INI setting.
 
 See [Connections and JPIP channels](CHANNELS.md) for request examples, HTTP
 responses, connection replacement, timeouts, recovery, and server ownership.

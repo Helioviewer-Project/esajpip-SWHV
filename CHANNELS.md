@@ -96,8 +96,8 @@ channel immediately. The server waits for another connection carrying its
 `cid`, up to `connections.timeout`.
 
 If a request contains `Connection: close`, the server completes that response
-and closes the connection. The JPIP channel remains available for a later
-connection carrying its `cid`.
+with `Connection: close` and closes the connection. The JPIP channel remains
+available for a later connection carrying its `cid`.
 
 ## Close a channel
 
@@ -109,9 +109,9 @@ Host: server.example:8900
 
 ```
 
-The server replies with `200 OK` and an empty body, then closes the connection
-and releases the channel state. `cclose=*`, channel lists, and session-wide
-closure are not supported.
+The server replies with `200 OK`, `Content-Length: 0`, and
+`Connection: close`, then closes the connection and releases the channel state.
+`cclose=*`, channel lists, and session-wide closure are not supported.
 
 ## HTTP responses
 
@@ -127,9 +127,10 @@ These are all HTTP status codes emitted by the server:
 | `500 Internal Server Error` | The selected target path or file is invalid, unsupported, unreadable, or fails validation, or the server cannot generate a channel ID. The response body identifies the failure category. | The connection and channel are closed. A file failure normally requires correcting the path or source file. |
 | `503 Service Unavailable` | A request names an unknown or ended channel, both request slots for a channel are occupied, a channel wait expires, or the active-channel limit has been reached. The response body distinguishes these cases. | A routing rejection leaves an existing channel unchanged. Create a new channel after an ended or unknown-channel response. |
 
-Error responses contain a short plain-text body and `Connection: close`.
-Responses include CORS and no-cache headers. TLS and HSTS belong at the reverse
-proxy. `cnew` exposes `JPIP-cnew` and `JPIP-tid` to browser clients.
+Every response that closes its connection includes `Connection: close`. Error
+responses contain a short plain-text body. Responses include CORS and no-cache
+headers. TLS and HSTS belong at the reverse proxy. `cnew` exposes `JPIP-cnew`
+and `JPIP-tid` to browser clients.
 
 Some failures close the socket without an HTTP response:
 

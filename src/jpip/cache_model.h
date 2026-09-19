@@ -1,8 +1,8 @@
 #ifndef _JPIP_CACHE_MODEL_H_
 #define _JPIP_CACHE_MODEL_H_
 
-#include <cassert>
 #include <limits.h>
+#include <stdexcept>
 #include <vector>
 
 #include "jpip.h"
@@ -87,7 +87,7 @@ namespace jpip {
         }
 
     public:
-        int GetDataBin(int bin_class, int num_codestream, int id) {
+        int GetDataBin(DataBinClass bin_class, int num_codestream, int id) {
             switch (bin_class) {
                 case DataBinClass::META_DATA:
                     return GetMetadata(id);
@@ -97,13 +97,16 @@ namespace jpip {
                     return GetCodestream(num_codestream).tile_header;
                 case DataBinClass::PRECINCT:
                     return GetPrecinct(GetCodestream(num_codestream), id);
+                case DataBinClass::EXTENDED_PRECINCT:
+                case DataBinClass::TILE_DATA:
+                case DataBinClass::EXTENDED_TILE:
+                    throw std::logic_error("Unsupported JPIP data-bin class");
             }
-            assert(false);
-            return 0;
+            throw std::logic_error("Invalid JPIP data-bin class");
         }
 
-        int AddToDataBin(int bin_class, int num_codestream, int id, int amount,
-                         bool complete = false) {
+        int AddToDataBin(DataBinClass bin_class, int num_codestream, int id,
+                         int amount, bool complete = false) {
             switch (bin_class) {
                 case DataBinClass::META_DATA:
                     return AddToMetadata(id, amount, complete);
@@ -119,12 +122,16 @@ namespace jpip {
                     Codestream &codestream = GetCodestream(num_codestream);
                     return AddToPrecinct(codestream, id, amount, complete);
                 }
+                case DataBinClass::EXTENDED_PRECINCT:
+                case DataBinClass::TILE_DATA:
+                case DataBinClass::EXTENDED_TILE:
+                    throw std::logic_error("Unsupported JPIP data-bin class");
             }
-            assert(false);
-            return 0;
+            throw std::logic_error("Invalid JPIP data-bin class");
         }
 
-        int AugmentDataBin(int bin_class, int num_codestream, int id, int amount) {
+        int AugmentDataBin(DataBinClass bin_class, int num_codestream, int id,
+                           int amount) {
             int current = GetDataBin(bin_class, num_codestream, id);
             if (current == INT_MAX || amount <= current)
                 return current;

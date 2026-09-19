@@ -190,12 +190,7 @@ bool RequestHeadParser::HasCompleteJPIPRequestLine() {
 }
 
 bool RequestHeadParser::HasJPIPRoute() const {
-    size_t question = request.target.find('?');
-    if (question == string::npos)
-        return false;
-    jpip::Query query = jpip::ParseQuery(
-            request.target.data() + question + 1,
-            request.target.data() + request.target.size());
+    jpip::Query query = jpip::ParseTargetQuery(request.target);
     return jpip::FindParameter(query, "cnew") != NULL ||
            jpip::FindParameter(query, "cid") != NULL ||
            jpip::FindParameter(query, "cclose") != NULL;

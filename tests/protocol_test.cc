@@ -494,14 +494,14 @@ static void CheckInetAddress() {
 
 static void CheckCacheModel() {
     jpip::CacheModel model;
-    const int classes[] = {
+    const jpip::DataBinClass classes[] = {
         jpip::DataBinClass::META_DATA,
         jpip::DataBinClass::MAIN_HEADER,
         jpip::DataBinClass::TILE_HEADER,
         jpip::DataBinClass::PRECINCT
     };
 
-    for (int bin_class : classes) {
+    for (jpip::DataBinClass bin_class : classes) {
         Check(model.GetDataBin(bin_class, 2, 3) == 0, "Nonempty initial cache model");
         Check(model.AddToDataBin(bin_class, 2, 3, 17) == 17, "Wrong cache-model increment");
         Check(model.GetDataBin(bin_class, 2, 3) == 17, "Wrong cached data-bin length");
@@ -532,6 +532,14 @@ static void CheckCacheModel() {
     packed.SetFullMetadata();
     Check(packed.GetDataBin(jpip::DataBinClass::META_DATA, 0, 7) == INT_MAX,
           "Did not retain the complete metadata state");
+
+    bool rejected = false;
+    try {
+        model.GetDataBin(jpip::DataBinClass::EXTENDED_PRECINCT, 0, 0);
+    } catch (const logic_error &) {
+        rejected = true;
+    }
+    Check(rejected, "Accepted an unsupported cache-model data-bin class");
 }
 
 static void CheckWOIPackets() {

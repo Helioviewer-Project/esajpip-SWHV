@@ -30,7 +30,7 @@ static void Check(bool condition, const char *message) {
 static vector<char> GenerateEngineResponse(const string &directory,
                                            bool gzip,
                                            int output_size) {
-    ChannelEngine engine(128);
+    server::ChannelEngine engine(128);
     Check(engine.Init(directory), "Could not initialize the channel engine");
 
     jpeg2000::FileManager::OpenResult open_result;
@@ -52,17 +52,17 @@ static vector<char> GenerateEngineResponse(const string &directory,
 
     vector<char> response;
     vector<char> output(output_size);
-    ChannelEngine::GenerateResult result;
+    server::ChannelEngine::GenerateResult result;
     do {
         int length = 0;
         thread generate([&] {
             result = engine.Generate(output.data(), output.size(), &length);
         });
         generate.join();
-        Check(result != ChannelEngine::GenerateResult::FAILED,
+        Check(result != server::ChannelEngine::GenerateResult::FAILED,
               "Could not generate data on a migrated engine thread");
         response.insert(response.end(), output.begin(), output.begin() + length);
-    } while (result != ChannelEngine::GenerateResult::COMPLETE);
+    } while (result != server::ChannelEngine::GenerateResult::COMPLETE);
 
     thread finish([&] { engine.Finish(); });
     finish.join();
@@ -124,11 +124,11 @@ struct PooledResponse {
             self->response.insert(self->response.end(), self->output.begin(),
                                   self->output.begin() + result.length);
             if (result.generation ==
-                ChannelEngine::GenerateResult::MORE) {
+                server::ChannelEngine::GenerateResult::MORE) {
                 if (!work.Generate(self->output.data(), self->output.size()))
                     self->failed = true;
             } else if (result.generation ==
-                       ChannelEngine::GenerateResult::COMPLETE) {
+                       server::ChannelEngine::GenerateResult::COMPLETE) {
                 if (!work.Cleanup())
                     self->failed = true;
             } else {

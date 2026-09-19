@@ -16,6 +16,7 @@
 
 #include <uv.h>
 
+#include "jpip/request.h"
 #include "server/connection.h"
 
 using namespace std;
@@ -41,6 +42,29 @@ void CheckRequestSyntax() {
         Check(parser.Parse(head, strlen(head), &consumed) ==
                       server::RequestHeadParser::MALFORMED,
               "The HTTP parser accepted an invalid request line");
+    }
+}
+
+void CheckRoutingLimit() {
+    const string prefix = "/image.jp2?padding=";
+    const size_t route_offsets[] = {1000, 1037};
+    const bool routed[] = {true, false};
+    for (size_t i = 0; i < 2; ++i) {
+        string target = prefix +
+                string(route_offsets[i] - prefix.size(), 'x') + "&cnew=http";
+        string head = "GET " + target + " HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        server::RequestHeadParser parser;
+        size_t consumed;
+        Check(parser.Parse(head.data(), head.size(), &consumed) ==
+                      server::RequestHeadParser::COMPLETE,
+              "Could not parse the routing-limit request");
+
+        jpip::Request request;
+        Check(request.ParseTarget(target),
+              "Could not fully parse the routing-limit target");
+        Check(parser.HasJPIPRoute() == routed[i] &&
+                      request.has.cnew == routed[i],
+              "Initial routing and full parsing used different URI limits");
     }
 }
 
@@ -333,6 +357,7 @@ struct FailureExchange {
 int main() {
     signal(SIGPIPE, SIG_IGN);
     CheckRequestSyntax();
+    CheckRoutingLimit();
 
     Exchange exchange;
     exchange.Run();

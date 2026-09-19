@@ -67,7 +67,7 @@ namespace jpip {
          * @param last <code>true</code> if this is the last data of the data-bin.
          * @return Result of writing the uncached part of the segment.
          */
-        template<int BIN_CLASS>
+        template<DataBinClass BIN_CLASS>
         SegmentResult WriteSegment(data::File *file, int num_codestream, int id,
                                    const data::FileSegment &segment, int offset = 0,
                                    bool last = true) {
