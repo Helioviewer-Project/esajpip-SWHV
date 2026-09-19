@@ -118,7 +118,6 @@ void ChannelEngine::Finish() {
     }
     gzip = false;
     raw_last = false;
-    vector<char>().swap(raw_buffer);
     file_manager.ClearFiles();
 }
 

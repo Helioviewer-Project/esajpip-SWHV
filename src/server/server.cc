@@ -6,6 +6,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -237,7 +238,12 @@ private:
         if (status != 0 || stopping)
             return;
         if (num_connections >= static_cast<unsigned int>(cfg.max_connections())) {
-            uv_tcp_t *rejected = new uv_tcp_t;
+            uv_tcp_t *rejected = new (nothrow) uv_tcp_t;
+            if (!rejected) {
+                ERROR("A rejected connection can not be allocated");
+                Stop();
+                return;
+            }
             int result = uv_tcp_init(&loop, rejected);
             if (result == 0) {
                 rejected->data = rejected;
@@ -595,7 +601,7 @@ private:
                      "The requested image could not be read");
                 return;
             case jpeg2000::FileManager::OpenResult::INVALID:
-                Fail(channel, 500, "Internal Server Error",
+                Fail(channel, 404, "Not Found",
                      "The requested image is not a valid supported JPEG 2000 source");
                 return;
         }

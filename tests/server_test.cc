@@ -311,6 +311,17 @@ int main() {
         0x00, 0x01, 0xFF, 0x93, 0x00, 0xFF, 0xD9
     };
     WriteFile(directory + "/image.jp2", image, sizeof image);
+    vector<unsigned char> sop_image(image, image + sizeof image);
+    bool cod_found = false;
+    for (size_t i = 0; i + 4 < sop_image.size(); ++i) {
+        if (sop_image[i] == 0xFF && sop_image[i + 1] == 0x52) {
+            sop_image[i + 4] |= 2;
+            cod_found = true;
+            break;
+        }
+    }
+    Check(cod_found, "Could not prepare SOP source fixture");
+    WriteFile(directory + "/sop.jp2", sop_image.data(), sop_image.size());
 
     uint16_t port = ReservePort();
     string config_text =
@@ -402,6 +413,20 @@ int main() {
     CheckClosed(bad_image, 1000,
                 "Invalid-image response retained its connection");
     close(bad_image);
+
+    int unsupported_source = Connect(port);
+    Check(unsupported_source >= 0,
+          "Could not connect for unsupported-source test");
+    SendRequest(unsupported_source, "/sop.jp2?cnew=http");
+    Response unsupported_source_response = ReadResponse(unsupported_source);
+    Check(unsupported_source_response.headers.find("404 Not Found") !=
+                      string::npos &&
+                  unsupported_source_response.body ==
+                      "The requested image is not a valid supported JPEG 2000 source",
+          "A profile-excluded JPEG 2000 source did not return 404");
+    CheckClosed(unsupported_source, 1000,
+                "Unsupported-source response retained its connection");
+    close(unsupported_source);
 
     int invalid_path = Connect(port);
     Check(invalid_path >= 0, "Could not connect for the invalid-path test");

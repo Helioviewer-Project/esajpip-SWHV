@@ -148,27 +148,27 @@ namespace jpeg2000 {
 
         if (offset != NULL) {
             *offset = 0;
+            auto add_previous = [&](int previous_idx) {
+                FileSegment previous;
+                if (!packet_index.Get(previous_idx, &previous)) {
+                    ERROR("Invalid preceding packet index: " << previous_idx);
+                    return false;
+                }
+                *offset += previous.length;
+                return true;
+            };
 
             if (coding_parameters.IsLayerLastProgression()) {
-                for (int l = packet.layer; l > 0; --l) {
-                    FileSegment previous;
-                    if (!packet_index.Get(--idx, &previous)) {
-                        ERROR("Invalid preceding packet index: " << idx);
+                for (int l = packet.layer; l > 0; --l)
+                    if (!add_previous(--idx))
                         return false;
-                    }
-                    *offset += previous.length;
-                }
             } else {
                 Packet p_aux = packet;
                 for (int l = 0; l < packet.layer; ++l) {
                     p_aux.layer = l;
                     idx = coding_parameters.GetProgressionIndex(p_aux);
-                    FileSegment previous;
-                    if (!packet_index.Get(idx, &previous)) {
-                        ERROR("Invalid preceding packet index: " << idx);
+                    if (!add_previous(idx))
                         return false;
-                    }
-                    *offset += previous.length;
                 }
             }
         }

@@ -126,11 +126,15 @@ response progress, channel waits, and idle channels. Each channel owns its JPEG
 These buffers form a bounded pipeline: JPEG 2000 generation can continue while
 earlier chunks are waiting for non-blocking socket writes, and pauses when all
 four buffers are occupied. Gzip responses also use one temporary buffer of the
-same size. At the shipped settings, this is 256,000 bytes retained per channel
-and up to 320,000 bytes while compressing. At the maximum chunk size, the
-corresponding bounds are 1 MiB and 1.25 MiB. Set `channels.limit` according to
-the largest movies and the memory available on the deployment host. Set
-`connections.limit` according to expected browser or proxy connection use.
+same size, retained after its first use. At the shipped settings, this is
+256,000 bytes per plain channel and 320,000 bytes per channel that has used
+gzip. At the maximum chunk size, the corresponding bounds are 1 MiB and 1.25
+MiB. Source-file mappings remain response-scoped: completing a response closes
+and unmaps every codestream it touched, bounding file descriptors and virtual
+memory at the cost of reopening those files on the next response. Set
+`channels.limit` according to the largest movies and the memory available on
+the deployment host. Set `connections.limit` according to expected browser or
+proxy connection use.
 
 JPEG 2000 work runs in libuv's worker pool. esajpip sets
 `UV_THREADPOOL_SIZE=16` when the variable is absent. An explicit value from 2

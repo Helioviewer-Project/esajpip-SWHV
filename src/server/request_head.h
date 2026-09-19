@@ -50,7 +50,6 @@ private:
 
     void ProcessHeader();
     void CountBytes(const char *data, std::size_t length);
-    bool FindJPIPRoute() const;
     void Reset();
 
 public:

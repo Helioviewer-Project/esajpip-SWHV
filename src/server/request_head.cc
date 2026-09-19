@@ -175,7 +175,7 @@ RequestHeadParser::Result RequestHeadParser::Parse(const char *data,
     }
     CountBytes(data, *consumed);
     if (line_complete && !route_checked) {
-        route_present = FindJPIPRoute();
+        route_present = jpip::HasRoutingParameter(request.target);
         route_checked = true;
     }
 
@@ -195,12 +195,9 @@ bool RequestHeadParser::HasCompleteJPIPRequestLine() {
            llhttp_get_http_minor(&parser) == 1 && route_present;
 }
 
-bool RequestHeadParser::FindJPIPRoute() const {
-    return jpip::HasRoutingParameter(request.target);
-}
-
 bool RequestHeadParser::HasJPIPRoute() const {
-    return route_checked ? route_present : FindJPIPRoute();
+    return route_checked ? route_present
+                         : jpip::HasRoutingParameter(request.target);
 }
 
 const string &RequestHeadParser::GetTarget() const {
