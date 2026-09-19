@@ -271,13 +271,14 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
                                             uint8_t packets_per_tile_part = 1,
                                             uint8_t code_block_style = 0,
                                             const vector<unsigned char> &precinct_sizes =
-                                                    vector<unsigned char>()) {
+                                                    vector<unsigned char>(),
+                                            uint16_t components = 1) {
     uint8_t transform_levels = precinct_sizes.empty() ? 0 : precinct_sizes.size() - 1;
     vector<unsigned char> codestream;
     Append16(codestream, 0xFF4F); // SOC
 
     Append16(codestream, 0xFF51); // SIZ
-    Append16(codestream, 41);
+    Append16(codestream, 38 + 3 * components);
     Append16(codestream, 0);      // Rsiz
     Append32(codestream, image_width); // Xsiz
     Append32(codestream, 1);      // Ysiz
@@ -287,10 +288,12 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     Append32(codestream, 1);      // YTsiz
     Append32(codestream, 0);      // XTOsiz
     Append32(codestream, 0);      // YTOsiz
-    Append16(codestream, 1);      // Csiz
-    codestream.push_back(7);      // Ssiz
-    codestream.push_back(sampling); // XRsiz
-    codestream.push_back(sampling); // YRsiz
+    Append16(codestream, components); // Csiz
+    for (int component = 0; component < components; ++component) {
+        codestream.push_back(7);      // Ssiz
+        codestream.push_back(sampling); // XRsiz
+        codestream.push_back(sampling); // YRsiz
+    }
 
     Append16(codestream, 0xFF52); // COD
     Append16(codestream, 12 + precinct_sizes.size());
@@ -898,8 +901,8 @@ int main() {
     WriteFile(directory + "cprl.jp2", MakeJP2(MakeCodestream(4)));
     for (int progression = 0; progression <= 4; ++progression) {
         WriteFile(directory + "progression-" + to_string(progression) + ".jp2",
-                  MakeJP2(MakeCodestream(progression, 1, 4, 4, 0, 2, 1, 8, 0,
-                                         vector<unsigned char>{0x00, 0x11})));
+                  MakeJP2(MakeCodestream(progression, 1, 4, 4, 0, 2, 1, 16, 0,
+                                         vector<unsigned char>{0x00, 0x11}, 2)));
     }
     WriteFile(directory + "many-layers.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 10000, 40, 250)));
@@ -1155,6 +1158,17 @@ int main() {
         Check(packet.length == 1, "Wrong spatially progressive packet length");
     }
 
+    // T.800 B.12.1.1–B.12.1.5, independently enumerated for two layers,
+    // resolutions, components, and precincts. Both resolutions' precincts
+    // start at reference-grid x = 0 and 2. Each entry encodes L,R,C,P as
+    // 8*L + 4*R + 2*C + P; its position is the packet's source offset.
+    const int packet_order[5][16] = {
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, // LRCP
+        {0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15}, // RLCP
+        {0, 8, 2, 10, 1, 9, 3, 11, 4, 12, 6, 14, 5, 13, 7, 15}, // RPCL
+        {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15}, // PCRL
+        {0, 8, 4, 12, 1, 9, 5, 13, 2, 10, 6, 14, 3, 11, 7, 15}  // CPRL
+    };
     vector<char> progression_response;
     for (int progression = 0; progression <= 4; ++progression) {
         string name = "progression-" + to_string(progression) + ".jp2";
@@ -1165,17 +1179,16 @@ int main() {
         Check(progression_file != NULL,
               "Could not reopen progression-order indexing fixture");
         jpeg2000::ImageIndex *image = progression_manager.GetImage();
-        const jpeg2000::CodingParameters *parameters =
-                image->GetCodingParameters(0);
-
         jpeg2000::Packet first_packet(0, 0, 0, jpeg2000::Point());
         data::FileSegment first_segment;
         Check(image->GetPacket(progression_file, 0, first_packet, &first_segment),
               "Could not index the first packet");
         uint64_t first_plt_offset = progression_file->GetOffset();
 
-        jpeg2000::Packet later_packet(0, 1, 0, jpeg2000::Point(1, 0));
-        int later_index = parameters->GetProgressionIndex(later_packet);
+        int later = packet_order[progression][12];
+        jpeg2000::Packet later_packet(later / 8, (later / 4) % 2,
+                                     (later / 2) % 2, jpeg2000::Point(later % 2, 0));
+        int later_index = 12;
         Check(later_index > 0 &&
                       image->GetPacket(progression_file, 0, later_packet, &packet),
               "Could not index a later packet");
@@ -1185,8 +1198,10 @@ int main() {
                       packet.length == 1,
               "Returned the wrong progression-order packet");
 
-        jpeg2000::Packet earlier_packet(0, 0, 0, jpeg2000::Point(1, 0));
-        int earlier_index = parameters->GetProgressionIndex(earlier_packet);
+        int earlier = packet_order[progression][3];
+        jpeg2000::Packet earlier_packet(earlier / 8, (earlier / 4) % 2,
+                                       (earlier / 2) % 2, jpeg2000::Point(earlier % 2, 0));
+        int earlier_index = 3;
         uint64_t plt_offset = progression_file->GetOffset();
         Check(earlier_index < later_index &&
                       image->GetPacket(progression_file, 0, earlier_packet, &packet),
@@ -1194,6 +1209,16 @@ int main() {
         Check(progression_file->GetOffset() == plt_offset &&
                       packet.offset == first_segment.offset + earlier_index,
               "Rebuilt or returned the wrong earlier packet");
+
+        for (int index = 0; index < 16; ++index) {
+            int entry = packet_order[progression][index];
+            jpeg2000::Packet expected(entry / 8, (entry / 4) % 2,
+                                      (entry / 2) % 2, jpeg2000::Point(entry % 2, 0));
+            Check(image->GetPacket(progression_file, 0, expected, &packet) &&
+                          packet.offset == first_segment.offset + index &&
+                          packet.length == 1,
+                  "Packet order differs from T.800 B.12.1");
+        }
 
         jpip::Request progression_request;
         Check(progression_request.ParseTarget(

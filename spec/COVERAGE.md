@@ -59,6 +59,14 @@ general JPX organizations that esajpip does not serve.
 
 ## Coverage boundaries
 
+The hand-built progression fixtures independently check the packet order from
+T.800 B.12.1.1–B.12.1.5 for all five progressions, using two layers, two
+resolutions, two components, and two precincts per resolution. Expected source
+offsets come from explicit packet sequences rather than the server's index
+formulas. They also check lazy indexing, retrieval of earlier packets, and
+identical JPP responses across source progressions. This exercises packet
+placement, not entropy decoding.
+
 The generated corpus does not currently express these paths:
 
 - `Psot=0`, `LBox=0`, and XLBox. Existing hand-built tests cover the supported
