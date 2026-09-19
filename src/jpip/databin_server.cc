@@ -39,17 +39,61 @@ namespace jpip {
             return false;
         }
 
-        bool ApplyModel(const ImageIndex &image_index, CacheModel &cache_model,
-                        const Request &request) {
-            const vector<Request::ModelUpdate> &model = request.model;
-            for (const Request::ModelUpdate &update : model) {
+        struct ResolvedWindow {
+            WOI woi;
+            const CodingParameters *coding_parameters = NULL;
+            bool empty = true;
+        };
+
+        bool ResolveWindows(const ImageIndex &image_index,
+                            const Request &request,
+                            const vector<int> &codestreams,
+                            vector<ResolvedWindow> *resolved,
+                            string *error_message) {
+            resolved->clear();
+            if (!request.HasWOI())
+                return true;
+
+            jpeg2000::Size requested_size = request.has.rsiz
+                    ? request.woi_size : request.resolution_size;
+            if (request.resolution_size.x <= 0 ||
+                request.resolution_size.y <= 0 ||
+                requested_size.x < 0 || requested_size.y < 0)
+                return Reject(error_message, "Invalid JPIP window dimensions");
+
+            resolved->reserve(codestreams.size());
+            for (int codestream : codestreams) {
+                ResolvedWindow window;
+                window.woi.size = requested_size;
+                window.woi.position = request.has.roff
+                        ? request.woi_position : jpeg2000::Point();
+                if (!CropWindow(&window.woi, request.resolution_size)) {
+                    resolved->push_back(window);
+                    continue;
+                }
+                window.coding_parameters =
+                        image_index.GetCodingParameters(codestream);
+                jpeg2000::Size resolution_size;
+                if (!request.GetResolution(
+                            window.coding_parameters, &window.woi,
+                            &resolution_size))
+                    return Reject(error_message,
+                                  "Invalid JPIP window dimensions");
+                window.empty = !CropWindow(&window.woi, resolution_size);
+                resolved->push_back(window);
+            }
+            return true;
+        }
+
+        bool ResolveModel(const ImageIndex &image_index, const Request &request,
+                          vector<Request::ModelUpdate> *resolved) {
+            *resolved = request.model;
+            for (Request::ModelUpdate &update : *resolved) {
                 if (update.id < 0 || update.amount < 0)
                     return false;
                 if (update.bin_class == DataBinClass::META_DATA) {
                     if (static_cast<size_t>(update.id) > image_index.GetMetadata().bins.size())
                         return false;
-                    cache_model.AugmentDataBin(update.bin_class, 0, update.id,
-                                               update.amount);
                     continue;
                 }
 
@@ -57,31 +101,46 @@ namespace jpip {
                     update.bin_class != DataBinClass::TILE_HEADER &&
                     update.bin_class != DataBinClass::PRECINCT)
                     return false;
-                int first_codestream = update.first_codestream;
-                int last_codestream = update.last_codestream;
                 if (!update.has_codestream_qualifier &&
                     !request.GetUnqualifiedModelCodestream(
-                            image_index.GetNumCodestreams(), &first_codestream))
+                            image_index.GetNumCodestreams(),
+                            &update.first_codestream))
                     return false;
                 if (!update.has_codestream_qualifier)
-                    last_codestream = first_codestream;
-                else if (last_codestream == INT_MAX)
-                    last_codestream =
+                    update.last_codestream = update.first_codestream;
+                else if (update.last_codestream == INT_MAX)
+                    update.last_codestream =
                             static_cast<int>(image_index.GetNumCodestreams()) - 1;
-                if (first_codestream < 0 || last_codestream < first_codestream ||
-                    last_codestream >= static_cast<int>(image_index.GetNumCodestreams()))
+                if (update.first_codestream < 0 ||
+                    update.last_codestream < update.first_codestream ||
+                    update.last_codestream >=
+                            static_cast<int>(image_index.GetNumCodestreams()))
                     return false;
                 if (update.bin_class == DataBinClass::TILE_HEADER && update.id != 0)
                     return false;
-                for (int i = first_codestream; i <= last_codestream; ++i) {
+                for (int i = update.first_codestream;
+                     i <= update.last_codestream; ++i) {
                     if (update.bin_class == DataBinClass::PRECINCT &&
                         update.id >= image_index.GetCodingParameters(i)->GetNumPrecinctDataBins())
                         return false;
-                    cache_model.AugmentDataBin(update.bin_class, i, update.id,
-                                               update.amount);
                 }
             }
             return true;
+        }
+
+        void ApplyModel(CacheModel &cache_model,
+                        const vector<Request::ModelUpdate> &model) {
+            for (const Request::ModelUpdate &update : model) {
+                if (update.bin_class == DataBinClass::META_DATA) {
+                    cache_model.AugmentDataBin(update.bin_class, 0, update.id,
+                                               update.amount);
+                    continue;
+                }
+                for (int i = update.first_codestream;
+                     i <= update.last_codestream; ++i)
+                    cache_model.AugmentDataBin(update.bin_class, i, update.id,
+                                               update.amount);
+            }
         }
 
     }
@@ -90,8 +149,11 @@ namespace jpip {
                                    string *error_message) {
         if (error_message != NULL)
             error_message->clear();
-        data_writer.StartResponse();
-        header_idx = 0;
+
+        vector<Request::ModelUpdate> model;
+        if (req.has.model && !ResolveModel(image_index, req, &model))
+            return Reject(error_message,
+                          "JPIP cache model does not match the selected image");
 
         vector<int> codestreams;
         if (req.has.stream || req.has.context) {
@@ -102,6 +164,14 @@ namespace jpip {
         } else {
             codestreams.push_back(0);
         }
+        vector<ResolvedWindow> windows;
+        if (!ResolveWindows(image_index, req, codestreams, &windows,
+                            error_message))
+            return false;
+
+        data_writer.StartResponse();
+        header_idx = 0;
+
         bool changed = streams.size() != codestreams.size();
         for (size_t i = 0; i < codestreams.size(); ++i) {
             if (!changed && streams[i].id != codestreams[i])
@@ -118,18 +188,10 @@ namespace jpip {
         has_woi = req.HasWOI();
         bool traversal_changed = changed || (has_woi && !had_woi);
         if (has_woi) {
-            jpeg2000::Size requested_size =
-                    req.has.rsiz ? req.woi_size : req.resolution_size;
-            if (req.resolution_size.x <= 0 || req.resolution_size.y <= 0 ||
-                requested_size.x < 0 || requested_size.y < 0)
-                return Reject(error_message, "Invalid JPIP window dimensions");
-
-            for (Stream &stream : streams) {
-                WOI new_woi;
-                new_woi.size = requested_size;
-                new_woi.position = req.has.roff ? req.woi_position
-                                                 : jpeg2000::Point();
-                if (!CropWindow(&new_woi, req.resolution_size)) {
+            for (size_t i = 0; i < streams.size(); ++i) {
+                Stream &stream = streams[i];
+                const ResolvedWindow &window = windows[i];
+                if (window.empty) {
                     traversal_changed |= !stream.empty;
                     stream.empty = true;
                     stream.woi = WOI();
@@ -137,28 +199,11 @@ namespace jpip {
                     stream.bin_idx = 0;
                     continue;
                 }
-
-                const CodingParameters *coding_parameters =
-                        image_index.GetCodingParameters(stream.id);
-                jpeg2000::Size resolution_size;
-                if (!req.GetResolution(coding_parameters, &new_woi,
-                                       &resolution_size)) {
-                    // A rejected response terminates the channel, so any
-                    // earlier stream updates are discarded with it.
-                    return Reject(error_message,
-                                  "Invalid JPIP window dimensions");
-                }
-                if (!CropWindow(&new_woi, resolution_size)) {
-                    traversal_changed |= !stream.empty;
-                    stream.empty = true;
-                    stream.woi = WOI();
-                    stream.bin_offsets.clear();
-                    stream.bin_idx = 0;
-                } else if (stream.empty || new_woi != stream.woi) {
+                if (stream.empty || window.woi != stream.woi) {
                     traversal_changed = true;
                     stream.empty = false;
-                    stream.woi = new_woi;
-                    stream.composer.Reset(coding_parameters, stream.woi);
+                    stream.woi = window.woi;
+                    stream.composer.Reset(window.coding_parameters, stream.woi);
                     stream.bin_offsets.clear();
                     stream.bin_idx = 0;
                 }
@@ -174,9 +219,8 @@ namespace jpip {
                     active_streams.push_back(i);
         }
 
-        if (req.has.model && !ApplyModel(image_index, cache_model, req))
-            return Reject(error_message,
-                          "JPIP cache model does not match the selected image");
+        if (req.has.model)
+            ApplyModel(cache_model, model);
 
         pending = req.has.len ? req.length_response : INT_MAX;
         if (pending < DataBinWriter::EOR_LENGTH)
@@ -234,6 +278,11 @@ namespace jpip {
             Stream &stream = streams[header_idx];
             if (has_woi && stream.empty)
                 continue;
+            if (cache_model.GetDataBin(
+                        DataBinClass::MAIN_HEADER, stream.id, 0) == INT_MAX &&
+                cache_model.GetDataBin(
+                        DataBinClass::TILE_HEADER, stream.id, 0) == INT_MAX)
+                continue;
             if (stream.file == NULL) {
                 stream.file = file_manager.GetFile(
                         image_index->GetPathName(stream.id));
@@ -255,10 +304,16 @@ namespace jpip {
     }
 
     DataBinServer::SegmentResult DataBinServer::WritePackets(
-            ImageIndex *image_index) {
+            FileManager &file_manager, ImageIndex *image_index) {
         while (!active_streams.empty()) {
             size_t stream_idx = active_streams.front();
             Stream &stream = streams[stream_idx];
+            if (stream.file == NULL) {
+                stream.file = file_manager.GetFile(
+                        image_index->GetPathName(stream.id));
+                if (stream.file == NULL)
+                    return SegmentResult::FAILED;
+            }
             const Packet &packet = stream.composer.GetCurrentPacket();
             const CodingParameters *coding_parameters =
                     image_index->GetCodingParameters(stream.id);
@@ -350,7 +405,7 @@ namespace jpip {
             if (result == SegmentResult::COMPLETE)
                 result = WriteHeaders(file_manager, image_index);
             if (result == SegmentResult::COMPLETE && has_woi)
-                result = WritePackets(image_index);
+                result = WritePackets(file_manager, image_index);
             if (result == SegmentResult::FAILED)
                 return false;
 

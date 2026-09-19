@@ -668,6 +668,37 @@ int main() {
           "Oversized request did not end its channel");
     close(oversized_retry);
 
+    int rejected = Connect(port);
+    Check(rejected >= 0, "Could not connect for rejected-request test");
+    SendRequest(rejected,
+                "/image.jp2?cnew=http&type=jpp-stream&stream=0&"
+                "fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+    Response rejected_created = ReadResponse(rejected);
+    Check(rejected_created.headers.find("HTTP/1.1 200 OK") == 0,
+          "Rejected-request channel creation failed");
+    string rejected_channel = ChannelId(rejected_created.headers);
+    SendRequest(rejected,
+                "/jpip?cid=" + rejected_channel +
+                "&model=[1-]Hm&fsiz=1,1&rsiz=1,1&roff=0,0&len=128");
+    Response rejected_response = ReadResponse(rejected);
+    Check(rejected_response.headers.find("400 Bad Request") != string::npos &&
+                  rejected_response.body ==
+                      "JPIP cache model does not match the selected image",
+          "Invalid channel request did not return 400");
+    CheckClosed(rejected, 1000,
+                "Invalid request retained its connection");
+    close(rejected);
+
+    int rejected_retry = Connect(port);
+    Check(rejected_retry >= 0,
+          "Could not reconnect after the invalid request");
+    SendRequest(rejected_retry,
+                "/jpip?cid=" + rejected_channel + "&len=128");
+    Check(ReadResponse(rejected_retry).headers.find(
+                  "503 Service Unavailable") != string::npos,
+          "Invalid request did not end its channel");
+    close(rejected_retry);
+
     int idle = Connect(port);
     Check(idle >= 0, "Could not connect for the timeout test");
     SendRequest(idle,

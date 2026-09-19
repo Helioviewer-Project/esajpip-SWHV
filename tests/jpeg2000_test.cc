@@ -1744,10 +1744,19 @@ int main() {
     lazy_manager.ClearFiles();
     Check(lazy_server.SetRequest(*lazy_manager.GetImage(), lazy_request),
           "Could not reuse the lazy-header channel");
+    string first_frame = directory + "image.jp2";
+    Check(rename(first_frame.c_str(), (first_frame + ".hidden").c_str()) == 0,
+          "Could not hide the cached first frame");
+    Check(rename(later_frame.c_str(), (later_frame + ".hidden").c_str()) == 0,
+          "Could not hide the cached later frame");
     lazy_length = sizeof lazy_chunk;
-    Check(lazy_server.GenerateChunk(lazy_manager, lazy_chunk,
-                                      &lazy_length, &lazy_last) &&
-                  lazy_last && lazy_length == 3,
+    lazy_ok = lazy_server.GenerateChunk(lazy_manager, lazy_chunk,
+                                        &lazy_length, &lazy_last);
+    Check(rename((first_frame + ".hidden").c_str(), first_frame.c_str()) == 0,
+          "Could not restore the cached first frame");
+    Check(rename((later_frame + ".hidden").c_str(), later_frame.c_str()) == 0,
+          "Could not restore the cached later frame");
+    Check(lazy_ok && lazy_last && lazy_length == 3,
           "Reused lazy-header channel did not retain its cache state");
     remove(later_frame.c_str());
     remove((directory + "lazy.jpx").c_str());

@@ -215,7 +215,7 @@ namespace jpeg2000 {
             BETWEEN_TILE_PARTS
         };
 
-        if (file->GetSize() > INT_MAX || length < 4 ||
+        if (length < 4 ||
             length > file->GetSize() - file->GetOffset())
             return false;
 

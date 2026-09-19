@@ -59,6 +59,7 @@ string EscapeForLog(const string &text) {
 
 class Server;
 struct Channel;
+struct Exchange;
 void WorkDone(server::ChannelWork &, void *owner);
 
 struct Client {
@@ -68,10 +69,36 @@ struct Client {
     uint64_t id;
     unique_ptr<server::Connection> connection;
     server::Connection::Write write;
-    Channel *channel = NULL;
-    jpip::Request waiting_request;
-    server::RequestHead waiting_head;
+    Exchange *exchange = NULL;
     bool counted = false;
+};
+
+struct Exchange {
+    Exchange(Channel *_channel, Client *_client, jpip::Request _request,
+             server::RequestHead _head)
+        : channel(_channel), client(_client), request(std::move(_request)),
+          head(std::move(_head)) {}
+
+    ~Exchange() { Detach(); }
+
+    Client *Detach() {
+        Client *attached = client;
+        if (attached && attached->exchange == this)
+            attached->exchange = NULL;
+        client = NULL;
+        return attached;
+    }
+
+    Channel *channel;
+    Client *client;
+    jpip::Request request;
+    server::RequestHead head;
+    int work_buffer = -1;
+    unsigned int writes = 0;
+    bool headers_sent = false;
+    bool generation_complete = false;
+    bool response_complete = false;
+    bool cleanup_complete = false;
 };
 
 struct Buffer {
@@ -97,28 +124,21 @@ struct Channel {
     server::ChannelWork work;
     uv_timer_t timer;
     array<Buffer, RESPONSE_BUFFERS> buffers;
-    Client *active = NULL;
-    Client *waiting = NULL;
-    jpip::Request request;
-    server::RequestHead head;
+    unique_ptr<Exchange> waiting;
+    unique_ptr<Exchange> exchange;
     State state = OPEN_QUEUED;
-    int work_buffer = -1;
-    unsigned int writes = 0;
-    bool headers_sent = false;
-    bool generation_complete = false;
-    bool response_complete = false;
-    bool cleanup_complete = false;
     bool timer_initialized = false;
     bool timer_closed = false;
 };
 
 const string &Target(const Channel &channel) {
-    return channel.request.has.target
-            ? channel.request.target : channel.request.object;
+    return channel.exchange->request.has.target
+            ? channel.exchange->request.target : channel.exchange->request.object;
 }
 
 bool UseGzip(const Channel &channel) {
-    return channel.request.has.metareq && channel.head.accepts_gzip;
+    return channel.exchange->request.has.metareq &&
+            channel.exchange->head.accepts_gzip;
 }
 
 string OptionalHeaders(const jpip::Request &request, bool cnew = false) {
@@ -162,18 +182,18 @@ string ErrorResponse(int code, const char *reason, const string &message,
 
 string SuccessHeaders(const Channel &channel, bool gzip) {
     string result = "HTTP/1.1 200 OK\r\n";
-    if (channel.request.has.cnew) {
+    if (channel.exchange->request.has.cnew) {
         result += "JPIP-cnew: cid=" + channel.id +
                 ",path=jpip,transport=http\r\nJPIP-tid: 0\r\n";
-        result += OptionalHeaders(channel.request, true);
+        result += OptionalHeaders(channel.exchange->request, true);
     } else {
-        result += OptionalHeaders(channel.request);
+        result += OptionalHeaders(channel.exchange->request);
     }
     result += COMMON_HEADERS;
     result += "Transfer-Encoding: chunked\r\nContent-Type: image/jpp-stream\r\n";
     if (gzip)
         result += "Content-Encoding: gzip\r\n";
-    if (channel.head.close)
+    if (channel.exchange->head.close)
         result += "Connection: close\r\n";
     result += "\r\n";
     return result;
@@ -328,17 +348,21 @@ private:
             return;
         }
         Channel &channel = *found->second;
-        if (channel.active == NULL && channel.state == Channel::OPEN) {
-            StartRequest(channel, client, std::move(request), std::move(head));
-        } else if (channel.waiting == NULL) {
-            channel.waiting = &client;
-            client.channel = &channel;
-            client.waiting_request = std::move(request);
-            client.waiting_head = std::move(head);
-            client.connection->BlockRequests();
-        } else {
+        bool start = channel.exchange->client == NULL &&
+                channel.state == Channel::OPEN;
+        if (!start && channel.waiting) {
             SendError(client, 503, "Service Unavailable",
                       "JPIP channel is busy", &request);
+            return;
+        }
+        unique_ptr<Exchange> exchange = CreateExchange(
+                channel, client, std::move(request), std::move(head));
+        if (!exchange)
+            return;
+        if (start) {
+            StartRequest(channel, std::move(exchange));
+        } else {
+            channel.waiting = std::move(exchange);
         }
     }
 
@@ -378,52 +402,62 @@ private:
             return;
         }
         Channel *channel = created.get();
+        unique_ptr<Exchange> exchange = CreateExchange(
+                *channel, client, std::move(request), std::move(head));
+        if (!exchange)
+            return;
         channels[id] = std::move(created);
-        StartRequest(*channel, client, std::move(request), std::move(head));
+        StartRequest(*channel, std::move(exchange));
         channel->state = Channel::OPEN_QUEUED;
         open_queue.push_back(channel->id);
         StartOpens();
     }
 
-    void StartRequest(Channel &channel, Client &client, jpip::Request request,
-                      server::RequestHead head) {
+    unique_ptr<Exchange> CreateExchange(Channel &channel, Client &client,
+                                        jpip::Request request,
+                                        server::RequestHead head) {
+        if (client.exchange) {
+            ERROR("An HTTP connection is already attached to a JPIP exchange");
+            client.connection->Abort();
+            return unique_ptr<Exchange>();
+        }
+        unique_ptr<Exchange> exchange(new Exchange(
+                &channel, &client, std::move(request), std::move(head)));
+        client.exchange = exchange.get();
+        client.connection->BlockRequests();
+        return exchange;
+    }
+
+    void StartRequest(Channel &channel, unique_ptr<Exchange> exchange) {
         if (channel.timer_initialized)
             uv_timer_stop(&channel.timer);
-        channel.active = &client;
-        client.channel = &channel;
-        channel.request = std::move(request);
-        channel.head = std::move(head);
-        channel.headers_sent = false;
-        channel.generation_complete = false;
-        channel.response_complete = false;
-        channel.cleanup_complete = false;
-        channel.writes = 0;
-        client.connection->BlockRequests();
+        channel.exchange = std::move(exchange);
+        Client &client = *channel.exchange->client;
 
-        if (channel.request.has.cclose) {
+        if (channel.exchange->request.has.cclose) {
             channel.state = Channel::OPEN;
-            channel.cleanup_complete = true;
+            channel.exchange->cleanup_complete = true;
             client.connection->StartResponse();
             string response = "HTTP/1.1 200 OK\r\n" +
-                    OptionalHeaders(channel.request) + COMMON_HEADERS +
+                    OptionalHeaders(channel.exchange->request) + COMMON_HEADERS +
                     "Content-Length: 0\r\nConnection: close\r\n\r\n";
             if (!client.connection->Send(
                         &client.write, std::move(response),
                         [this, &channel](bool ok) {
-                            channel.response_complete = true;
-                            if (channel.active) {
+                            channel.exchange->response_complete = true;
+                            if (channel.exchange->client) {
                                 if (ok)
-                                    channel.active->connection->CloseGracefully();
+                                    channel.exchange->client->connection->CloseGracefully();
                                 else
-                                    channel.active->connection->Abort();
+                                    channel.exchange->client->connection->Abort();
                             }
                             End(channel);
                         })) {
-                channel.response_complete = true;
+                channel.exchange->response_complete = true;
                 client.connection->Abort();
                 End(channel);
             }
-        } else if (!channel.request.has.cnew) {
+        } else if (!channel.exchange->request.has.cnew) {
             Begin(channel);
         }
     }
@@ -464,16 +498,17 @@ private:
         if (buffer.data.empty())
             buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
         channel.state = Channel::OPEN;
-        channel.work_buffer = index;
+        channel.exchange->work_buffer = index;
         buffer.busy = true;
-        if (!channel.work.Begin(channel.request, UseGzip(channel),
+        if (!channel.work.Begin(channel.exchange->request, UseGzip(channel),
                                 buffer.data.data(), buffer.data.size()))
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response could not be scheduled");
     }
 
     void Generate(Channel &channel) {
-        if (channel.work.IsActive() || channel.generation_complete ||
+        if (channel.work.IsActive() ||
+            channel.exchange->generation_complete ||
             channel.state == Channel::ENDING)
             return;
         int index = FreeBuffer(channel);
@@ -482,7 +517,7 @@ private:
         Buffer &buffer = channel.buffers[index];
         if (buffer.data.empty())
             buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
-        channel.work_buffer = index;
+        channel.exchange->work_buffer = index;
         buffer.busy = true;
         if (!channel.work.Generate(buffer.data.data(), buffer.data.size()))
             Fail(channel, 500, "Internal Server Error",
@@ -492,9 +527,9 @@ private:
     void SendChunk(Channel &channel, int index, int length, bool final) {
         Buffer &buffer = channel.buffers[index];
         string first;
-        if (!channel.headers_sent) {
-            channel.headers_sent = true;
-            channel.active->connection->StartResponse();
+        if (!channel.exchange->headers_sent) {
+            channel.exchange->headers_sent = true;
+            channel.exchange->client->connection->StartResponse();
             first = SuccessHeaders(channel, UseGzip(channel));
         }
         string last;
@@ -504,36 +539,37 @@ private:
         } else if (final) {
             first += "0\r\n\r\n";
         }
-        channel.writes++;
-        if (!channel.active->connection->Send(
+        channel.exchange->writes++;
+        if (!channel.exchange->client->connection->Send(
                     &buffer.write, std::move(first), buffer.data.data(),
                     static_cast<size_t>(length), std::move(last),
                     [this, &channel, index](bool ok) {
                         Buffer &completed = channel.buffers[index];
                         completed.busy = false;
-                        if (channel.writes > 0)
-                            channel.writes--;
+                        if (channel.exchange->writes > 0)
+                            channel.exchange->writes--;
                         if (!ok) {
                             End(channel);
                             return;
                         }
-                        if (channel.generation_complete && channel.writes == 0)
-                            channel.response_complete = true;
-                        if (!channel.generation_complete)
+                        if (channel.exchange->generation_complete &&
+                            channel.exchange->writes == 0)
+                            channel.exchange->response_complete = true;
+                        if (!channel.exchange->generation_complete)
                             Generate(channel);
                         FinishChannel(channel);
                     })) {
-            channel.writes--;
+            channel.exchange->writes--;
             buffer.busy = false;
             End(channel);
         }
     }
 
     void StartCleanup(Channel &channel) {
-        if (channel.cleanup_complete || channel.work.IsActive())
+        if (channel.exchange->cleanup_complete || channel.work.IsActive())
             return;
         if (!channel.work.Cleanup()) {
-            channel.cleanup_complete = true;
+            channel.exchange->cleanup_complete = true;
             channel.state = Channel::ENDING;
         }
     }
@@ -557,12 +593,12 @@ private:
             return;
         }
         if (result.kind == server::ChannelWork::Kind::CLEANUP) {
-            channel.cleanup_complete = true;
+            channel.exchange->cleanup_complete = true;
             FinishChannel(channel);
             return;
         }
-        int index = channel.work_buffer;
-        channel.work_buffer = -1;
+        int index = channel.exchange->work_buffer;
+        channel.exchange->work_buffer = -1;
         if (index < 0) {
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response lost its output buffer");
@@ -584,7 +620,7 @@ private:
         }
         bool final = result.generation ==
                 server::ChannelEngine::GenerateResult::COMPLETE;
-        channel.generation_complete = final;
+        channel.exchange->generation_complete = final;
         SendChunk(channel, index, result.length, final);
         if (!final)
             Generate(channel);
@@ -630,25 +666,26 @@ private:
 
     void Fail(Channel &channel, int code, const char *reason,
               const string &message) {
-        Client *client = channel.active;
+        Client *client = channel.exchange->client;
         BeginTermination(channel);
-        if (client && !channel.headers_sent) {
+        if (client && !channel.exchange->headers_sent) {
             client->connection->StartResponse();
             if (!client->connection->Send(
                         &client->write,
-                        ErrorResponse(code, reason, message, &channel.request),
+                        ErrorResponse(code, reason, message,
+                                      &channel.exchange->request),
                         [this, &channel](bool) {
-                            channel.response_complete = true;
-                            if (channel.active)
-                                channel.active->connection->CloseGracefully();
+                            channel.exchange->response_complete = true;
+                            if (channel.exchange->client)
+                                channel.exchange->client->connection->CloseGracefully();
                             StartCleanup(channel);
                             FinishChannel(channel);
                         })) {
-                channel.response_complete = true;
+                channel.exchange->response_complete = true;
                 client->connection->Abort();
             }
         } else {
-            channel.response_complete = true;
+            channel.exchange->response_complete = true;
             if (client)
                 client->connection->Abort();
         }
@@ -663,9 +700,10 @@ private:
             return;
         }
         BeginTermination(channel);
-        if (channel.active && channel.headers_sent)
-            channel.active->connection->Abort();
-        channel.response_complete = true;
+        if (channel.exchange->client &&
+            !channel.exchange->client->connection->IsClosing())
+            channel.exchange->client->connection->Abort();
+        channel.exchange->response_complete = true;
         StartCleanup(channel);
         FinishChannel(channel);
     }
@@ -682,24 +720,23 @@ private:
     void RejectWaiting(Channel &channel, const char *message) {
         if (!channel.waiting)
             return;
-        Client *client = channel.waiting;
-        channel.waiting = NULL;
-        client->channel = NULL;
+        unique_ptr<Exchange> waiting = std::move(channel.waiting);
+        Client *client = waiting->Detach();
+        if (!client) {
+            ERROR("Waiting JPIP exchange has no HTTP connection");
+            return;
+        }
         SendError(*client, 503, "Service Unavailable", message,
-                  &client->waiting_request);
+                  &waiting->request);
     }
 
     void FinishChannel(Channel &channel) {
-        if (!channel.cleanup_complete || !channel.response_complete ||
-            channel.writes != 0)
+        if (!channel.exchange->cleanup_complete ||
+            !channel.exchange->response_complete ||
+            channel.exchange->writes != 0)
             return;
-        Client *client = channel.active;
-        Client *next = NULL;
-        bool close_connection = channel.head.close;
-        channel.active = NULL;
-        if (client) {
-            client->channel = NULL;
-        }
+        Client *client = channel.exchange->Detach();
+        bool close_connection = channel.exchange->head.close;
         if (channel.state == Channel::ENDING) {
             if (!channel.timer_closed)
                 return;
@@ -708,17 +745,15 @@ private:
         } else {
             channel.state = Channel::OPEN;
             if (channel.waiting) {
-                next = channel.waiting;
-                channel.waiting = NULL;
-                StartRequest(channel, *next, std::move(next->waiting_request),
-                             std::move(next->waiting_head));
+                unique_ptr<Exchange> waiting = std::move(channel.waiting);
+                StartRequest(channel, std::move(waiting));
             } else if (channel.timer_initialized) {
                 uv_timer_start(&channel.timer, ChannelExpired,
                                static_cast<uint64_t>(cfg.connection_timeout()) * 1000,
                                0);
             }
         }
-        if (client && client != next && !client->connection->IsClosing()) {
+        if (client && !client->connection->IsClosing()) {
             if (close_connection) {
                 client->connection->CloseGracefully();
             } else {
@@ -768,20 +803,21 @@ private:
     }
 
     void Deadline(Client &client) {
-        if (client.channel && client.channel->waiting == &client) {
-            Channel &channel = *client.channel;
-            channel.waiting = NULL;
-            client.channel = NULL;
+        Exchange *exchange = client.exchange;
+        Channel *channel = exchange ? exchange->channel : NULL;
+        if (exchange && channel->waiting.get() == exchange) {
+            unique_ptr<Exchange> waiting = std::move(channel->waiting);
+            waiting->Detach();
             SendError(client, 503, "Service Unavailable",
                       "JPIP channel request timed out",
-                      &client.waiting_request);
-        } else if (client.channel &&
-                   (client.channel->state == Channel::OPEN_QUEUED ||
-                    client.channel->state == Channel::OPENING)) {
-            Channel &channel = *client.channel;
+                      &waiting->request);
+        } else if (exchange &&
+                   (channel->state == Channel::OPEN_QUEUED ||
+                    channel->state == Channel::OPENING)) {
             SendError(client, 503, "Service Unavailable",
-                      "JPIP channel creation timed out", &channel.request);
-            End(channel);
+                      "JPIP channel creation timed out",
+                      &channel->exchange->request);
+            End(*channel);
         } else {
             ClientDisconnected(client);
             client.connection->Abort();
@@ -789,14 +825,14 @@ private:
     }
 
     void ClientDisconnected(Client &client) {
-        Channel *channel = client.channel;
-        if (!channel)
+        Exchange *exchange = client.exchange;
+        if (!exchange)
             return;
-        client.channel = NULL;
-        if (channel->waiting == &client) {
-            channel->waiting = NULL;
-        } else if (channel->active == &client) {
-            channel->active = NULL;
+        Channel *channel = exchange->channel;
+        if (channel->waiting.get() == exchange) {
+            channel->waiting.reset();
+        } else {
+            exchange->Detach();
             End(*channel);
         }
     }

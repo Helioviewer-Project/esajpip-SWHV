@@ -84,15 +84,17 @@ int main() {
     Check(new_messages.find("message after rollover") != string::npos,
           "Message missing after rollover");
 
-    vector<thread> producers;
-    for (int producer = 0; producer < 8; ++producer) {
-        producers.emplace_back([producer] {
-            for (int i = 0; i < 2000; ++i)
-                LOG("concurrent message " << producer << ':' << i);
-        });
+    {
+        vector<thread> producers;
+        for (int producer = 0; producer < 8; ++producer) {
+            producers.emplace_back([producer] {
+                for (int i = 0; i < 2000; ++i)
+                    LOG("concurrent message " << producer << ':' << i);
+            });
+        }
+        for (thread &producer : producers)
+            producer.join();
     }
-    for (thread &producer : producers)
-        producer.join();
     trace::Flush();
     LOG("message after queue saturation");
     trace::Flush();
