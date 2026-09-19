@@ -37,10 +37,10 @@ code remains outside the server build.
 
 **Status.** With the deferred-ACN compiler fixes described under "Compiler
 checks", the complete model generates C, that C builds as strict C11, and the
-sanitized harness writes 376 uniquely named vectors. All mutant expectations
-agree with the generated decoders and cross-field checks; 34 vectors are valid
+sanitized harness writes 382 uniquely named vectors. All mutant expectations
+agree with the generated decoders and cross-field checks; 36 vectors are valid
 at both layers. `spec/VERSION` and `spec/asn1scc-patches/series` together define
-the reproducible compiler source. The 376-vector corpus is committed under
+the reproducible compiler source. The 382-vector corpus is committed under
 `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
 the server parser and lazy packet indexer.
 
@@ -265,7 +265,7 @@ commands from the repository root.
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh /tmp/j2k-corpus
    ```
 
-   It prints `vectors: 376 vectors written … (34 valid at both layers)` and
+   It prints `vectors: 382 vectors written … (36 valid at both layers)` and
    exits non-zero if any mutant did not produce the label its table entry
    expects (see "What the harness generates"); each such line names the
    vector, the expected and actual labels, and the rule that fired. On the

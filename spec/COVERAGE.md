@@ -59,6 +59,13 @@ general JPX organizations that esajpip does not serve.
 
 ## Coverage boundaries
 
+The generated `plt.boundaries` fixtures put packet lengths 1, 127, 128, and
+129 in separate PLT markers across two tile-parts (T.800 A.7.3 and Table A.36).
+The server test checks exact lengths and offsets, including backward lookups
+after indexing the second tile-part. The `plt.second-part-short` and
+`plt.second-part-long` variants change only the final length by one byte and
+must fail during indexing. These fixtures cover both JP2 and embedded JPX.
+
 The hand-built progression fixtures independently check the packet order from
 T.800 B.12.1.1–B.12.1.5 for all five progressions, using two layers, two
 resolutions, two components, and two precincts per resolution. Expected source

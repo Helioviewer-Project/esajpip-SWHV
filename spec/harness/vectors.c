@@ -780,6 +780,45 @@ static void rule_two_plt_markers(Jp2Family *f, int box) {
     second->plt.body.entries.nCount = 1;
     second->plt.body.entries.arr[0] = first->plt.body.entries.arr[1];
 }
+static void rule_plt_boundaries(Jp2Family *f, int box) {
+    static const int lengths[4] = {1, 127, 128, 129};
+    Codestream *cs = cs_of(f, box);
+    int part, packet;
+    rule_two_tile_parts(f, box);
+    cod_of(f, box)->sgcod.layers = 4;
+    /* T.800 A.7.3 / Table A.36: complete lengths in separate PLT markers,
+     * with Zplt restarting in the second tile-part. Payload is opaque to
+     * this structural model; it is not an entropy-decoding fixture. */
+    for (part = 0; part < 2; ++part) {
+        TilePart *tp = &cs->segments.arr[2 + part].tilePart;
+        tp->rest.headers.nCount = 2;
+        tp->rest.headers.arr[1] = tp->rest.headers.arr[0];
+        tp->rest.data.nCount = 0;
+        for (packet = 0; packet < 2; ++packet) {
+            int length = lengths[2 * part + packet];
+            Plt *plt = &tp->rest.headers.arr[packet].plt.body;
+            Iplt *entry = &plt->entries.arr[0];
+            plt->zplt = packet;
+            plt->entries.nCount = 1;
+            memset(entry, 0, sizeof *entry);
+            entry->b0.bits = length < 128 ? length : length >> 7;
+            if (length >= 128) {
+                entry->exist.b1 = 1;
+                entry->b1.bits = length & 127;
+            }
+            memset(tp->rest.data.arr + tp->rest.data.nCount, 0, length);
+            tp->rest.data.nCount += length;
+        }
+    }
+}
+static void rule_plt_second_part_short(Jp2Family *f, int box) {
+    rule_plt_boundaries(f, box);
+    cs_of(f, box)->segments.arr[3].tilePart.rest.headers.arr[1].plt.body.entries.arr[0].b1.bits = 0;
+}
+static void rule_plt_second_part_long(Jp2Family *f, int box) {
+    rule_plt_boundaries(f, box);
+    cs_of(f, box)->segments.arr[3].tilePart.rest.headers.arr[1].plt.body.entries.arr[0].b1.bits = 2;
+}
 static void rule_com_in_tile_header(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
@@ -1034,6 +1073,9 @@ static const RuleMutant rule_mutants[] = {
     { "file.ftyp-compatibility", rule_ftyp_two_compat, "brand second in the compatibility list: valid", 0, 0, X_VALID },
     { "file.signature", rule_missing_signature, "no jP box (T.800 I.4)", CF_JP2, 0, X_STD },
     { "jp2.one-codestream", rule_two_jp2c, "two jp2c in .jp2", CF_JP2, 0, X_PROF },
+    { "plt.boundaries", rule_plt_boundaries, "T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries", 0, 0, X_VALID },
+    { "plt.second-part-short", rule_plt_second_part_short, "second tile-part PLT sum one byte short", 0, 0, X_STD },
+    { "plt.second-part-long", rule_plt_second_part_long, "second tile-part PLT sum one byte too long", 0, 0, X_STD },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */

@@ -742,6 +742,32 @@ static bool IndexGeneratedVector(const string &directory, const string &name,
     return true;
 }
 
+static void CheckPLTBoundaries(const string &directory, const string &name) {
+    jpeg2000::FileManager manager;
+    Check(manager.Init(directory) &&
+                  manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
+          "Could not open the generated PLT boundary fixture");
+    jpeg2000::ImageIndex *image = manager.GetImage();
+    data::File *file = manager.GetFile(image->GetPathName(0));
+    Check(file != NULL, "Could not map the generated PLT boundary fixture");
+    const data::FileSegment &header = image->GetMainHeader(0);
+    // SOT (12), two PLT markers (6 each), SOD (2). The second tile-part
+    // has two-byte packet lengths, so its header takes 28 bytes.
+    uint64_t start = header.offset + header.length + 26;
+    const int lengths[] = {1, 127, 128, 129};
+    const int offsets[] = {0, 1, 128 + 28, 256 + 28};
+    const int order[] = {2, 0, 3, 1};
+    for (int layer : order) {
+        data::FileSegment segment;
+        Check(image->GetPacket(file, 0,
+                              jpeg2000::Packet(layer, 0, 0, jpeg2000::Point()),
+                              &segment) &&
+                      segment.offset == start + offsets[layer] &&
+                      segment.length == static_cast<uint64_t>(lengths[layer]),
+              "Wrong packet extent across PLT or tile-part boundaries");
+    }
+}
+
 static void CheckGeneratedCorpus() {
     const string directory = JPEG2000_VECTOR_DIRECTORY;
     ifstream manifest(directory + "/manifest.tsv");
@@ -772,6 +798,8 @@ static void CheckGeneratedCorpus() {
                                ", expected " +
                                (expected ? "acceptance" : "rejection") +
                                " (" + fields[4] + ": " + fields[6] + ")");
+        if (fields[5] == "plt.boundaries")
+            CheckPLTBoundaries(directory, fields[0]);
         vectors++;
     }
     Check(vectors > 0, "Generated JPEG 2000 manifest is empty");

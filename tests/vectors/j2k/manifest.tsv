@@ -123,6 +123,9 @@ jp2-rule-file.ftyp-compatibility-35.jp2	jp2	invalid	invalid	file.ftyp-compatibil
 jp2-rule-file.ftyp-compatibility-36.jp2	jp2	valid	valid	-	file.ftyp-compatibility	brand second in the compatibility list: valid	-
 jp2-rule-file.signature-37.jp2	jp2	invalid	invalid	file.signature	file.signature	no jP box (T.800 I.4)	-
 jp2-rule-jp2.one-codestream-38.jp2	jp2	valid	invalid	jp2.one-codestream	jp2.one-codestream	two jp2c in .jp2	-
+jp2-rule-plt.boundaries-39.jp2	jp2	valid	valid	-	plt.boundaries	T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries	-
+jp2-rule-plt.second-part-short-40.jp2	jp2	invalid	invalid	plt.coverage	plt.second-part-short	second tile-part PLT sum one byte short	-
+jp2-rule-plt.second-part-long-41.jp2	jp2	invalid	invalid	plt.coverage	plt.second-part-long	second tile-part PLT sum one byte too long	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -327,6 +330,9 @@ jpx-embedded-rule-main.packet-layout-override-33.jpx	jpx	valid	invalid	decode	ma
 jpx-embedded-rule-file.ftyp-brand-34.jpx	jpx	invalid	invalid	file.ftyp-brand	file.ftyp-brand	ftyp brand 'abcd'	-
 jpx-embedded-rule-file.ftyp-compatibility-35.jpx	jpx	invalid	invalid	file.ftyp-compatibility	file.ftyp-compatibility	brand absent from the compatibility list	-
 jpx-embedded-rule-file.ftyp-compatibility-36.jpx	jpx	valid	valid	-	file.ftyp-compatibility	brand second in the compatibility list: valid	-
+jpx-embedded-rule-plt.boundaries-39.jpx	jpx	valid	valid	-	plt.boundaries	T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries	-
+jpx-embedded-rule-plt.second-part-short-40.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-short	second tile-part PLT sum one byte short	-
+jpx-embedded-rule-plt.second-part-long-41.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-long	second tile-part PLT sum one byte too long	-
 jpx-linked.jpx	jpx	valid	valid	-	-	base	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-sig-bad.jpx	jpx	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jpx-linked-len-0-11.jpx	jpx	invalid	invalid	decode	LBox@0x0	length patched	-
