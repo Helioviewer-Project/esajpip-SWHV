@@ -549,7 +549,8 @@ int main() {
 
     string pipelined =
             "GET /jpip?cid=" + channel_id +
-            "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128&tid=0&handled "
+            "&context=jpxl%3C0%3E&model=M0&fsiz=1,1&rsiz=1,1&roff=0,0&"
+            "len=128&tid=0&handled "
             "HTTP/1.1\r\nHost: localhost\r\n\r\n"
             "GET /jpip?cid=" + channel_id +
             "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128 "

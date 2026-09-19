@@ -336,6 +336,18 @@ static vector<unsigned char> MakePrecinctCodestream(uint8_t lowest,
                           vector<unsigned char>{lowest, higher});
 }
 
+static vector<unsigned char> MakeOpenEndedTilePart(
+        vector<unsigned char> codestream) {
+    for (size_t i = 0; i + 12 <= codestream.size(); ++i) {
+        if (codestream[i] == 0xFF && codestream[i + 1] == 0x90) {
+            Set32(codestream, i + 6, 0);
+            return codestream;
+        }
+    }
+    Check(false, "SOT marker not found in JPEG 2000 test fixture");
+    return codestream;
+}
+
 static vector<unsigned char> SetMCTComponents(
         vector<unsigned char> codestream,
         const vector<unsigned char> &depths) {
@@ -754,6 +766,8 @@ int main() {
               MakeJP2(PadFirstPLT(MakeCodestream(), 0)));
     WriteFile(directory + "nonzero-padded-plt.jp2",
               MakeJP2(PadFirstPLT(MakeCodestream(), 1)));
+    WriteFile(directory + "open-ended-tile-part.jp2",
+              MakeJP2(MakeOpenEndedTilePart(MakeCodestream())));
     WriteFile(directory + "valid-mct.jp2",
               MakeJP2(SetMCTComponents(
                   MakeCodestream(0, 1, 1, 1, 0, 1, 1, 3),
@@ -932,6 +946,11 @@ int main() {
                                         &packet),
           "Could not index valid JP2 packet");
     Check(packet.length == 1, "Wrong JP2 packet length");
+
+    jpeg2000::FileManager open_ended_tile_part_manager;
+    Check(OpenImage(directory, "open-ended-tile-part.jp2",
+                    &open_ended_tile_part_manager),
+          "Rejected a final tile-part with Psot equal to zero");
 
     jpeg2000::FileManager repeated_plt_index_manager;
     Check(!OpenImage(directory, "repeated-plt-index.jp2",
@@ -1561,6 +1580,7 @@ int main() {
     remove((directory + "repeated-plt-index.jp2").c_str());
     remove((directory + "zero-padded-plt.jp2").c_str());
     remove((directory + "nonzero-padded-plt.jp2").c_str());
+    remove((directory + "open-ended-tile-part.jp2").c_str());
     remove((directory + "valid-mct.jp2").c_str());
     remove((directory + "short-mct.jp2").c_str());
     remove((directory + "mismatched-mct.jp2").c_str());

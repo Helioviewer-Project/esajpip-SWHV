@@ -462,17 +462,22 @@ namespace jpeg2000 {
 
         if (data.length == 0) {
             data.offset = file->GetOffset();
-            bool marker_prefix = false;
-            uint8_t value = 0;
-            while (file->GetOffset() < limit && file->Read(&value)) {
-                if (marker_prefix && value == (EOC_MARKER & 0xFF)) {
+            // JPEG 2000 bit stuffing prevents an EOC marker from appearing in
+            // packet data, so the first FF D9 terminates the final tile-part.
+            while (file->Find(0xFF, limit)) {
+                uint64_t marker_offset = file->GetOffset() - 1;
+                uint8_t value;
+                if (!file->Read(&value))
+                    return false;
+                if (value == (EOC_MARKER & 0xFF)) {
                     data.length = file->GetOffset() - 2 - data.offset;
                     file->Seek(file->GetOffset() - 2);
                     return true;
                 }
-                if (marker_prefix && value == (SOT_MARKER & 0xFF))
+                if (value == (SOT_MARKER & 0xFF))
                     return false;
-                marker_prefix = value == 0xFF;
+                if (value == 0xFF)
+                    file->Seek(marker_offset + 1);
             }
             return false;
         }

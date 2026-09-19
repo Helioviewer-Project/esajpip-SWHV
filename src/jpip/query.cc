@@ -65,15 +65,12 @@ namespace {
 
         const char *begin = target.data() + question + 1;
         const char *end = target.data() + target.size();
-        bool found = false;
-        ForEachParameter(begin, end,
-                         [&found](const char *name_begin,
-                                  const char *name_end,
-                                  const char *, const char *) {
-                             found = IsRoutingParameter(name_begin, name_end);
-                             return !found;
-                         });
-        return found;
+        return !ForEachParameter(
+                begin, end,
+                [](const char *name_begin, const char *name_end,
+                   const char *, const char *) {
+                    return !IsRoutingParameter(name_begin, name_end);
+                });
     }
 
     const string *FindParameter(const Query &query, const char *name) {

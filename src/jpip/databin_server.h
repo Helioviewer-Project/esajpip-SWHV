@@ -123,11 +123,16 @@ namespace jpip {
                                        const jpeg2000::PlaceHolder &place_holder,
                                        int offset = 0, bool last = false) {
             int cached = cache_model.GetDataBin(DataBinClass::META_DATA, num_codestream, id);
-            int seg_cached = cached - offset;
+            if (cached == INT_MAX)
+                return SegmentResult::COMPLETE;
+            if (cached < offset) {
+                ERROR("Invalid cache-model offset: cached=" << cached
+                      << ", placeholder=" << offset);
+                return SegmentResult::FAILED;
+            }
 
-            if (cached != INT_MAX && seg_cached < place_holder.length()) {
-                if (seg_cached < 0)
-                    seg_cached = 0;
+            int seg_cached = cached - offset;
+            if (seg_cached < place_holder.length()) {
                 int remaining = place_holder.length() - seg_cached;
                 if (data_writer.GetFree() - CHUNK_RESERVE < remaining)
                     return SegmentResult::FULL;

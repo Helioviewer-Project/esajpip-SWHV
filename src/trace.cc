@@ -36,6 +36,7 @@ const size_t QUEUE_LIMIT = ESAJPIP_LOG_QUEUE_LIMIT;
 #endif
 
 const size_t MAX_MESSAGE = 1900;
+
 struct Record {
     int64_t seconds;
     int32_t microseconds;
