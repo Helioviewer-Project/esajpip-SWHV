@@ -16,6 +16,7 @@ namespace jpip {
     using Query = std::vector<QueryParameter>;
 
     Query ParseTargetQuery(const std::string &target);
+    bool HasRoutingParameter(const std::string &target);
     const std::string *FindParameter(const Query &query, const char *name);
     bool ParseUnsignedInteger(const char **position, uint64_t maximum, uint64_t *value);
 

@@ -196,10 +196,7 @@ bool RequestHeadParser::HasCompleteJPIPRequestLine() {
 }
 
 bool RequestHeadParser::FindJPIPRoute() const {
-    jpip::Query query = jpip::ParseTargetQuery(request.target);
-    return jpip::FindParameter(query, "cnew") != NULL ||
-           jpip::FindParameter(query, "cid") != NULL ||
-           jpip::FindParameter(query, "cclose") != NULL;
+    return jpip::HasRoutingParameter(request.target);
 }
 
 bool RequestHeadParser::HasJPIPRoute() const {

@@ -16,6 +16,7 @@
 
 #include <uv.h>
 
+#include "jpip/query.h"
 #include "jpip/request.h"
 #include "server/connection.h"
 
@@ -83,6 +84,21 @@ void CheckRouteClassification() {
                   server::RequestHeadParser::COMPLETE &&
                   !parser.HasJPIPRoute(),
           "JPIP route classification survived parser reset");
+
+    const char *not_routes[] = {
+        "/status?notcnew=http",
+        "/status?cnewer=http",
+        "/status?value=cnew",
+        "/status?x=cid",
+        "/status?close=cclose"
+    };
+    for (const char *target : not_routes)
+        Check(!jpip::HasRoutingParameter(target),
+              "A non-routing query field was classified as a JPIP route");
+    Check(jpip::HasRoutingParameter("/image.jp2?cnew") &&
+              jpip::HasRoutingParameter("/image.jp2?x=1&cid=7") &&
+              jpip::HasRoutingParameter("/image.jp2?cclose=7&x=1"),
+          "A JPIP routing field was not recognized");
 
     server::RequestHeadParser partial_parser;
     const string oversized = "GET /image.jp2?cnew=http&padding=" +

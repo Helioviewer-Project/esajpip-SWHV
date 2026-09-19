@@ -98,8 +98,8 @@ bool Config::Load(const char *file_name, string &error_message) {
         error_message = "channels.limit must be positive";
     else if (initial_timeout_ <= 0)
         error_message = "connections.initial_timeout must be positive";
-    else if (connection_timeout_ < -1)
-        error_message = "connections.timeout must be -1, 0, or positive";
+    else if (connection_timeout_ <= 0)
+        error_message = "connections.timeout must be positive";
     else if (file_logging_ && log_directory_.empty())
         error_message = "logging.directory must not be empty when file logging is enabled";
 

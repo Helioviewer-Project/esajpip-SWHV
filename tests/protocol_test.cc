@@ -167,6 +167,23 @@ static void CheckAppConfig() {
               error == "jpip.chunk_size must be at least 128",
           "Did not report an invalid configuration value");
 
+    string disabled_timeout = contents;
+    size_t timeout_value = disabled_timeout.find("timeout = 60");
+    Check(timeout_value != string::npos, "Could not prepare timeout test");
+    disabled_timeout.replace(timeout_value, strlen("timeout = 60"),
+                             "timeout = 0");
+    Config zero_timeout;
+    Check(!LoadConfig(disabled_timeout.c_str(), &zero_timeout, &error) &&
+              error == "connections.timeout must be positive",
+          "Accepted a disabled channel timeout");
+
+    disabled_timeout.replace(timeout_value, strlen("timeout = 0"),
+                             "timeout = -1");
+    Config negative_timeout;
+    Check(!LoadConfig(disabled_timeout.c_str(), &negative_timeout, &error) &&
+              error == "connections.timeout must be positive",
+          "Accepted a negative channel timeout");
+
     const char *missing_log_directory =
         "[listen]\n"
         "address = 127.0.0.1\n"

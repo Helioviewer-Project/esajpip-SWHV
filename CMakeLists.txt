@@ -29,7 +29,8 @@ function(esajpip_configure_target target)
     if(ESAJPIP_SANITIZE)
         target_compile_options(${target} PRIVATE
             -fsanitize=address,undefined
-            -fno-omit-frame-pointer)
+            -fno-omit-frame-pointer
+            -UNDEBUG)
         target_link_options(${target} PRIVATE
             -fsanitize=address,undefined)
     endif()
@@ -72,7 +73,6 @@ set(ESAJPIP_SRCS
 
 add_library(esajpip_core STATIC ${ESAJPIP_SRCS})
 esajpip_configure_target(esajpip_core)
-target_compile_options(esajpip_core PRIVATE -UNDEBUG)
 target_include_directories(esajpip_core BEFORE PUBLIC
     ${ESAJPIP_TOP})
 target_link_libraries(esajpip_core PUBLIC
@@ -93,7 +93,6 @@ endif()
 
 add_executable(esajpip ${ESAJPIP_TOP}/main.cc)
 esajpip_configure_target(esajpip)
-target_compile_options(esajpip PRIVATE -UNDEBUG)
 target_link_libraries(esajpip PRIVATE esajpip_core)
 
 install(TARGETS esajpip RUNTIME DESTINATION bin)

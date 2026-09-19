@@ -664,6 +664,22 @@ int main() {
     AppendBox(codestream_box, 0x6A703263, codestream);
     AppendBox(nested_codestream, 0x6A706368, codestream_box);
     WriteFile(directory + "nested-codestream.jpx", nested_codestream);
+    vector<unsigned char> open_ended_codestream = MakePreamble(0x6A707820);
+    AppendBox(open_ended_codestream, 0x6A706368,
+              vector<unsigned char>()); // jpch
+    Append32(open_ended_codestream, 0);
+    Append32(open_ended_codestream, 0x6A703263); // jp2c
+    open_ended_codestream.insert(open_ended_codestream.end(),
+                                 codestream.begin(), codestream.end());
+    WriteFile(directory + "open-ended-codestream.jpx",
+              open_ended_codestream);
+    vector<unsigned char> nested_open_ended = MakePreamble(0x6A707820);
+    vector<unsigned char> open_ended_header;
+    Append32(open_ended_header, 0);
+    Append32(open_ended_header, 0x66726565); // free
+    AppendBox(nested_open_ended, 0x6A706368, open_ended_header); // jpch
+    AppendBox(nested_open_ended, 0x6A703263, codestream);       // jp2c
+    WriteFile(directory + "nested-open-ended.jpx", nested_open_ended);
     Check(mkdir((directory + "nested").c_str(), 0700) == 0,
           "Could not create nested JPEG 2000 test directory");
     WriteFile(directory + "nested/relative.jpx",
@@ -881,6 +897,14 @@ int main() {
     Check(!OpenImage(directory, "nested-codestream.jpx",
                      &nested_codestream_manager),
           "Accepted a JPX codestream box outside the top level");
+    jpeg2000::FileManager open_ended_manager;
+    Check(OpenImage(directory, "open-ended-codestream.jpx",
+                    &open_ended_manager),
+          "Rejected a top-level box extending to the end of the file");
+    jpeg2000::FileManager nested_open_ended_manager;
+    Check(!OpenImage(directory, "nested-open-ended.jpx",
+                     &nested_open_ended_manager),
+          "Accepted a nested box whose length extends past its superbox");
     jpeg2000::FileManager empty_reference_manager;
     Check(!OpenImage(directory, "empty-reference.jpx",
                      &empty_reference_manager),

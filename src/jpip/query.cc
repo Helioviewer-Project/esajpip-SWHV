@@ -7,6 +7,13 @@ using namespace std;
 namespace jpip {
 namespace {
 
+    bool IsRoutingParameter(const char *begin, const char *end) {
+        size_t length = end - begin;
+        return (length == 4 && memcmp(begin, "cnew", 4) == 0) ||
+               (length == 3 && memcmp(begin, "cid", 3) == 0) ||
+               (length == 6 && memcmp(begin, "cclose", 6) == 0);
+    }
+
     Query ParseQuery(const char *begin, const char *end) {
         Query query;
 
@@ -34,6 +41,29 @@ namespace {
             return Query();
         return ParseQuery(target.data() + question + 1,
                           target.data() + target.size());
+    }
+
+    bool HasRoutingParameter(const string &target) {
+        size_t question = target.find('?');
+        if (question == string::npos)
+            return false;
+
+        const char *begin = target.data() + question + 1;
+        const char *end = target.data() + target.size();
+        while (begin < end) {
+            const char *separator = static_cast<const char *>(
+                    memchr(begin, '&', end - begin));
+            const char *parameter_end = separator ? separator : end;
+            const char *equals = static_cast<const char *>(
+                    memchr(begin, '=', parameter_end - begin));
+            const char *name_end = equals ? equals : parameter_end;
+            if (IsRoutingParameter(begin, name_end))
+                return true;
+            if (!separator)
+                break;
+            begin = separator + 1;
+        }
+        return false;
     }
 
     const string *FindParameter(const Query &query, const char *name) {

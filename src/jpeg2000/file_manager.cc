@@ -504,7 +504,10 @@ namespace jpeg2000 {
                 return false;
             *length_box = XL - 16;
         } else if (L == 0) {
-            *length_box = limit - file->GetOffset();
+            // T.800 defines LBox=0 as extending to the end of the file. The
+            // limit check below rejects this form inside an earlier-ending
+            // superbox.
+            *length_box = file->GetSize() - file->GetOffset();
         } else {
             if (L < 8)
                 return false;

@@ -686,7 +686,7 @@ private:
                 channel.waiting = NULL;
                 StartRequest(channel, *next, std::move(next->waiting_request),
                              std::move(next->waiting_head));
-            } else if (channel.timer_initialized && cfg.connection_timeout() > 0) {
+            } else if (channel.timer_initialized) {
                 uv_timer_start(&channel.timer, ChannelExpired,
                                static_cast<uint64_t>(cfg.connection_timeout()) * 1000,
                                0);

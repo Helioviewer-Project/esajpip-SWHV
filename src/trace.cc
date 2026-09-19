@@ -233,8 +233,7 @@ bool Initialize(const string &file_name) {
 }
 
 void Write(const string &message) {
-    if (!accepting.load(memory_order_acquire) ||
-        !output_enabled.load(memory_order_acquire))
+    if (!Enabled())
         return;
 
     unique_lock<mutex> lock(queue_mutex, defer_lock);
@@ -266,6 +265,11 @@ void Write(const string &message) {
     records.push_back(std::move(record));
     lock.unlock();
     queue_ready.notify_one();
+}
+
+bool Enabled() {
+    return accepting.load(memory_order_acquire) &&
+           output_enabled.load(memory_order_acquire);
 }
 
 void Flush() {

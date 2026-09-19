@@ -56,7 +56,7 @@ changing it.
 | `jpip.image_directory` | `images` | Non-empty base directory from which requested JP2 and JPX paths are opened. Relative paths are resolved from the server's working directory. |
 | `jpip.chunk_size` | `64000` | Response working-buffer size and maximum normal HTTP chunk payload, in bytes. It must be at least 128. The final chunk may be smaller. |
 | `connections.initial_timeout` | `3` | Positive number of seconds allowed for a new socket to provide a recognizable JPIP request. Partial input does not extend the deadline. |
-| `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. `0` and `-1` disable it. Values below `-1` are invalid. |
+| `connections.timeout` | `60` | Channel inactivity and socket I/O timeout in seconds. It must be positive. |
 | `connections.limit` | `128` | Maximum number of physical HTTP connections. |
 | `channels.limit` | `256` | Maximum number of active JPIP channels. This may exceed the physical-connection limit because pooled connections can serve several channels. |
 | `logging.directory` | empty | Directory for log files when file logging is enabled. It must exist and be writable. CMake fills this and enables file logging when `ESAJPIP_LOG_DIRECTORY` is set. |
