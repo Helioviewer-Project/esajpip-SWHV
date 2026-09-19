@@ -84,22 +84,18 @@ Opaque ::= SEQUENCE {
 
 MainSegment ::= SEQUENCE {
     code        MainMarkerCode,
-    body        MainBody                      -- alternative selected by code
-}
-
-MainBody ::= CHOICE {                         -- one alternative per code
-    cod         CodSegment,
-    coc         OpaqueSegment,
-    qcd         QcdSegment,
-    qcc         OpaqueSegment,
-    rgn         OpaqueSegment,
-    poc         OpaqueSegment,
-    tlm         OpaqueSegment,
-    plm         OpaqueSegment,
-    ppm         OpaqueSegment,
-    crg         OpaqueSegment,
-    com         ComSegment,
-    tilePart    TilePart
+    cod         CodSegment OPTIONAL,
+    coc         OpaqueSegment OPTIONAL,
+    qcd         QcdSegment OPTIONAL,
+    qcc         OpaqueSegment OPTIONAL,
+    rgn         OpaqueSegment OPTIONAL,
+    poc         OpaqueSegment OPTIONAL,
+    tlm         OpaqueSegment OPTIONAL,
+    plm         OpaqueSegment OPTIONAL,
+    ppm         OpaqueSegment OPTIONAL,
+    crg         OpaqueSegment OPTIONAL,
+    com         ComSegment OPTIONAL,
+    tilePart    TilePart OPTIONAL
 }
 
 -- SOT marker segment (A.4.2) with the tile-part header and data that
@@ -119,19 +115,15 @@ TilePartRest ::= SEQUENCE {
 
 TileSegment ::= SEQUENCE {
     code        TileMarkerCode,
-    body        TileBody
-}
-
-TileBody ::= CHOICE {
-    cod         CodSegment,
-    coc         OpaqueSegment,
-    qcd         QcdSegment,
-    qcc         OpaqueSegment,
-    rgn         OpaqueSegment,
-    poc         OpaqueSegment,
-    plt         PltSegment,
-    ppt         OpaqueSegment,
-    com         ComSegment
+    cod         CodSegment OPTIONAL,
+    coc         OpaqueSegment OPTIONAL,
+    qcd         QcdSegment OPTIONAL,
+    qcc         OpaqueSegment OPTIONAL,
+    rgn         OpaqueSegment OPTIONAL,
+    poc         OpaqueSegment OPTIONAL,
+    plt         PltSegment OPTIONAL,
+    ppt         OpaqueSegment OPTIONAL,
+    com         ComSegment OPTIONAL
 }
 
 -- ===========================================================================
@@ -163,21 +155,17 @@ ComSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Profile) }
 
 MainSegment-Profile ::= SEQUENCE {
     code        MainMarkerCode-Profile,
-    body        MainBody-Profile
-}
-
-MainBody-Profile ::= CHOICE {
-    cod         CodSegment-Profile,
-    qcd         QcdSegment-Profile,
-    qcc         OpaqueSegment,
-    rgn         OpaqueSegment,
-    tlm         OpaqueSegment,
-    plm         OpaqueSegment,
-    ppm         OpaqueSegment,
-    crg         OpaqueSegment,
-    com         ComSegment-Profile,
-    tilePart    TilePart-Profile,
-    other       OpaqueSegment                 -- any other code: skipped by length
+    cod         CodSegment-Profile OPTIONAL,
+    qcd         QcdSegment-Profile OPTIONAL,
+    qcc         OpaqueSegment OPTIONAL,
+    rgn         OpaqueSegment OPTIONAL,
+    tlm         OpaqueSegment OPTIONAL,
+    plm         OpaqueSegment OPTIONAL,
+    ppm         OpaqueSegment OPTIONAL,
+    crg         OpaqueSegment OPTIONAL,
+    com         ComSegment-Profile OPTIONAL,
+    tilePart    TilePart-Profile OPTIONAL,
+    other       OpaqueSegment OPTIONAL        -- any other code: skipped by length
 }
 
 TilePart-Profile ::= SEQUENCE {
@@ -195,11 +183,7 @@ TilePartRest-Profile ::= SEQUENCE {
 
 TileSegment-Profile ::= SEQUENCE {
     code        TileMarkerCode-Profile,
-    body        TileBody-Profile
-}
-
-TileBody-Profile ::= CHOICE {
-    plt         PltSegment-Profile            -- the only code TileMarkerCode-Profile admits
+    plt         PltSegment-Profile OPTIONAL   -- the only code TileMarkerCode-Profile admits
 }
 
 END

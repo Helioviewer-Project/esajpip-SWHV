@@ -212,7 +212,7 @@ commands from the repository root.
        -v "$PWD:/project:ro" \
        -v /tmp/j2k-gen:/output \
        esajpip-asn1scc:"$(cat spec/VERSION)" \
-       -c -ACN --acn-v2 -o /output \
+       -c -ACN --acn-v2 --field-prefix AUTO -o /output \
        /project/spec/j2k-headers.asn1 /project/spec/j2k-headers.acn \
        /project/spec/j2k-codestream.asn1 /project/spec/j2k-codestream.acn \
        /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn
@@ -229,7 +229,7 @@ commands from the repository root.
        -v "$PWD:/project:ro" \
        -v /tmp/j2k-gen:/output \
        esajpip-asn1scc:"$(cat spec/VERSION)" \
-       -c -ACN --acn-v2 -atc -o /output \
+       -c -ACN --acn-v2 --field-prefix AUTO -atc -o /output \
        /project/spec/j2k-headers.asn1 /project/spec/j2k-headers.acn \
        /project/spec/j2k-codestream.asn1 /project/spec/j2k-codestream.acn \
        /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn
@@ -375,26 +375,23 @@ both layers.
 
 ## Compiler checks
 
-The compiler was built at the pinned commit and run in Linux Docker. Model
-generation currently stops before C is emitted. The errors are structural,
-not platform-dependent:
+The compiler is built at the pinned commit and run in Linux Docker. The model
+now passes the ASN.1/ACN front end. The codestream modules emit C, but two
+compiler-generation defects still prevent building the complete harness:
 
-1. ACN uses `!` for boolean negation; the current `not (...)` catch-alls do
-   not parse.
-2. ASN.1 fields cannot also be ACN encoding determinants. `code`, `tbox`, and
-   the `IpltByte.more` continuation bit therefore need to become ACN-only
-   determinants, with the harness deriving their values from the selected
-   alternative or encoded bytes.
-3. ACN-inserted fields need an explicit type (`length INTEGER`, `lbox INTEGER`,
-   and `psot INTEGER`).
-4. A null-terminated `IA5String` needs `encoding ASCII`.
-5. The parameterized optional precinct structure does not compose with the
-   profile subtype as written. Representing the precinct bytes as a
-   size-deduced list and enforcing the count cross-field is the simpler fix.
+1. Passing the ACN-inserted `TBox` and `LBox` fields through a nested box type
+   reaches the backend with an unresolved parameter dependency. The model
+   keeps each selected payload in its own length-bounded `CONTAINING` region;
+   flattening it would make the superbox's deduced child list ambiguous.
+2. The generated codestream C emits duplicate encode/decode functions for
+   several profile `CONTAINING` specializations, and the generated `Iplt`
+   decoder refers to the nonexistent `Iplt_b0_more` identifier.
 
-Resolve these together rather than applying isolated syntax edits: the
-generated C layout is the API used by `harness/`, and changing determinants
-without updating that code only moves the failure from generation to build.
+These are compiler code-generation failures, not host-toolchain failures or
+C warnings. Keep the pinned compiler hash while resolving them: changing to a
+moving compiler would make the corpus irreproducible. The harness must be
+adapted to the generated determinant-free structs only after generated C
+builds successfully.
 
 Optional, later: 4.9.0.0 has `post-decoding-validator <name>`, which makes
 the generated decoder call a C function after decoding. Attaching the

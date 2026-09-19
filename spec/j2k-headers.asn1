@@ -92,26 +92,20 @@ Spcod ::= SEQUENCE {                          -- Table A.15
     cbHeightExp     INTEGER (0..8),           -- ycb - 2
     cbStyle         INTEGER (0..63),          -- Table A.19: bits 0..5 defined, 6..7 reserved
     transform       INTEGER (0..1),           -- Table A.20
-    precincts       PrecinctSizes OPTIONAL    -- present iff scod.customPrecincts
+    precincts       SEQUENCE (SIZE (0..33)) OF PrecinctSize
+                                                -- empty unless scod.customPrecincts;
+                                                -- otherwise r = 0 .. NL
 }
 
 -- Table A.21: one byte per resolution level r = 0 .. NL, lowest first.
--- "lowest" is r = 0; "higher" fills the rest of the segment and must hold
--- exactly `levels` entries (cross-field rule).
-PrecinctSizes ::= SEQUENCE {
-    lowest      PrecinctSize,                 -- r = 0 (NL LL): PPx = PPy = 0 permitted
-    higher      SEQUENCE (SIZE (0..32)) OF PrecinctSizeHigher
-}
+-- Entry 0 is the lowest resolution (NL LL), where zero is permitted. The
+-- cross-field rule requires the list to be empty when Scod bit 0 is clear,
+-- or to contain exactly levels + 1 entries otherwise.
 
 PrecinctSize ::= SEQUENCE {
     ppy         INTEGER (0..15),              -- bits 7..4
     ppx         INTEGER (0..15)               -- bits 3..0
 }
-
--- T.800 Table A.21 states, separately for PPx and for PPy, that the value
--- "may only equal zero at the resolution level corresponding to the NL LL
--- band", i.e. each exponent independently must be >= 1 for r > 0.
-PrecinctSizeHigher ::= PrecinctSize (WITH COMPONENTS { ppy (1..15), ppx (1..15) })
 
 -- ---------------------------------------------------------------------------
 -- QCD body, A.6.4: quantization default. The server only skips it, so
@@ -148,11 +142,12 @@ Iplt ::= SEQUENCE {
 }
 
 IpltByte ::= SEQUENCE {
-    more    BOOLEAN,                          -- bit 7: continuation
     bits    INTEGER (0..127)                  -- bits 6..0
 }
 
-IpltByteLast ::= IpltByte (WITH COMPONENTS { ..., more (FALSE) })
+IpltByteLast ::= SEQUENCE {
+    bits    INTEGER (0..127)                  -- preceded by a fixed zero continuation bit
+}
 
 -- ---------------------------------------------------------------------------
 -- COM body, A.9.2: comment. Opaque; kept so generated codestreams can
@@ -214,8 +209,9 @@ END
 --         xtosiz + xtsiz > xosiz  and  ytosiz + ytsiz > yosiz
 --   Siz/Cod: sgcod.mct != 0 requires csiz >= 3 and components 0..2 with the
 --         same depth and sub-sampling (A.6.1, G.2; ReadSIZMarker/ReadCODMarker)
---   Cod:  spcod.precincts present  <=>  scod.customPrecincts
---         spcod.precincts.higher has exactly spcod.levels entries
+--   Cod:  spcod.precincts is empty unless scod.customPrecincts; when set it
+--         has exactly spcod.levels + 1 entries
+--         PPx and PPy are non-zero in entries above resolution 0 (A.6.1)
 --         spcod.cbWidthExp + spcod.cbHeightExp <= 8
 --   Plt:  within a tile-part, Zplt runs 0, 1, 2, ... in segment order
 --         (A.7.3; ReadPLTMarker)

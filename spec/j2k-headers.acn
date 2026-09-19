@@ -49,7 +49,7 @@ Component [] {
 Cod [] {
     scod        [],
     sgcod       [],
-    spcod       <scod.customPrecincts> []
+    spcod       []
 }
 
 Scod [] {
@@ -65,18 +65,13 @@ Sgcod [] {
     mct             [encoding pos-int, size 8]
 }
 
-Spcod <BOOLEAN:customPrecincts> [] {
+Spcod [] {
     levels          [encoding pos-int, size 8],
     cbWidthExp      [encoding pos-int, size 8],
     cbHeightExp     [encoding pos-int, size 8],
     cbStyle         [encoding pos-int, size 8],
     transform       [encoding pos-int, size 8],
-    precincts       [present-when customPrecincts]
-}
-
-PrecinctSizes [] {
-    lowest      [],
-    higher      [size deduced]                    -- fills the COD segment
+    precincts       [size deduced]                 -- empty or r = 0 .. NL
 }
 
 PrecinctSize [] {
@@ -108,8 +103,13 @@ Iplt [] {
 }
 
 IpltByte [] {
-    more    [true-value '1'B],                    -- bit 7
+    more    BOOLEAN [true-value '1'B],            -- derived from following OPTIONAL
     bits    [encoding pos-int, size 7]            -- bits 6..0
+}
+
+IpltByteLast [] {
+    end     NULL [pattern '0'B],                  -- tenth byte must terminate
+    bits    [encoding pos-int, size 7]
 }
 
 Com [] {

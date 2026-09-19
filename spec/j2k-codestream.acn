@@ -36,32 +36,32 @@ Codestream [] {
 }
 
 SizSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 CodSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 QcdSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 PltSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 ComSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 OpaqueSegment [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
@@ -71,28 +71,24 @@ Opaque [] {
 
 MainSegment [] {
     code        [encoding pos-int, size 16, endianness big],
-    body        <code> []
-}
-
-MainBody <INTEGER:code> [] {
-    cod         [present-when code == 65362],     -- FF52
-    coc         [present-when code == 65363],     -- FF53
-    qcd         [present-when code == 65372],     -- FF5C
-    qcc         [present-when code == 65373],     -- FF5D
-    rgn         [present-when code == 65374],     -- FF5E
-    poc         [present-when code == 65375],     -- FF5F
-    tlm         [present-when code == 65365],     -- FF55
-    plm         [present-when code == 65367],     -- FF57
-    ppm         [present-when code == 65376],     -- FF60
-    crg         [present-when code == 65379],     -- FF63
-    com         [present-when code == 65380],     -- FF64
-    tilePart    [present-when code == 65424]      -- FF90
+    cod         [present-when (code == 65362)],   -- FF52
+    coc         [present-when (code == 65363)],   -- FF53
+    qcd         [present-when (code == 65372)],   -- FF5C
+    qcc         [present-when (code == 65373)],   -- FF5D
+    rgn         [present-when (code == 65374)],   -- FF5E
+    poc         [present-when (code == 65375)],   -- FF5F
+    tlm         [present-when (code == 65365)],   -- FF55
+    plm         [present-when (code == 65367)],   -- FF57
+    ppm         [present-when (code == 65376)],   -- FF60
+    crg         [present-when (code == 65379)],   -- FF63
+    com         [present-when (code == 65380)],   -- FF64
+    tilePart    [present-when (code == 65424)]    -- FF90
 }
 
 TilePart [] {
     lsot        [encoding pos-int, size 16, endianness big],
     isot        [encoding pos-int, size 16, endianness big],
-    psot        [encoding pos-int, size 32, endianness big, mapping-function psot],
+    psot        INTEGER [encoding pos-int, size 32, endianness big, mapping-function psot],
     tpsot       [encoding pos-int, size 8],
     tnsot       [encoding pos-int, size 8],
     rest        [size psot]
@@ -105,19 +101,15 @@ TilePartRest [] {
 
 TileSegment [] {
     code        [encoding pos-int, size 16, endianness big],
-    body        <code> []
-}
-
-TileBody <INTEGER:code> [] {
-    cod         [present-when code == 65362],
-    coc         [present-when code == 65363],
-    qcd         [present-when code == 65372],
-    qcc         [present-when code == 65373],
-    rgn         [present-when code == 65374],
-    poc         [present-when code == 65375],
-    plt         [present-when code == 65368],     -- FF58
-    ppt         [present-when code == 65377],     -- FF61
-    com         [present-when code == 65380]
+    cod         [present-when (code == 65362)],
+    coc         [present-when (code == 65363)],
+    qcd         [present-when (code == 65372)],
+    qcc         [present-when (code == 65373)],
+    rgn         [present-when (code == 65374)],
+    poc         [present-when (code == 65375)],
+    plt         [present-when (code == 65368)],   -- FF58
+    ppt         [present-when (code == 65377)],   -- FF61
+    com         [present-when (code == 65380)]
 }
 
 -- ---------------------------------------------------------------------------
@@ -132,53 +124,49 @@ Codestream-Profile [] {
 }
 
 SizSegment-Profile [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 CodSegment-Profile [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 QcdSegment-Profile [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 PltSegment-Profile [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 ComSegment-Profile [] {
-    length      [encoding pos-int, size 16, endianness big, mapping-function lxxx],
+    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }
 
 MainSegment-Profile [] {
     code        [encoding pos-int, size 16, endianness big],
-    body        <code> []
-}
-
-MainBody-Profile <INTEGER:code> [] {
-    cod         [present-when code == 65362],
-    qcd         [present-when code == 65372],
-    qcc         [present-when code == 65373],
-    rgn         [present-when code == 65374],
-    tlm         [present-when code == 65365],
-    plm         [present-when code == 65367],
-    ppm         [present-when code == 65376],
-    crg         [present-when code == 65379],
-    com         [present-when code == 65380],
-    tilePart    [present-when code == 65424],
-    other       [present-when not (code == 65362 or code == 65372 or code == 65373 or code == 65374 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424)]
+    cod         [present-when (code == 65362)],
+    qcd         [present-when (code == 65372)],
+    qcc         [present-when (code == 65373)],
+    rgn         [present-when (code == 65374)],
+    tlm         [present-when (code == 65365)],
+    plm         [present-when (code == 65367)],
+    ppm         [present-when (code == 65376)],
+    crg         [present-when (code == 65379)],
+    com         [present-when (code == 65380)],
+    tilePart    [present-when (code == 65424)],
+    other       [present-when code >= 65281 and code <= 65534 and !(code == 65359 or code == 65361 or code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424)]
 }
 
 TilePart-Profile [] {
     lsot        [encoding pos-int, size 16, endianness big],
     isot        [encoding pos-int, size 16, endianness big],
-    psot        [encoding pos-int, size 32, endianness big, mapping-function psot],
+    psot        INTEGER [encoding pos-int, size 32, endianness big, mapping-function psot],
     tpsot       [encoding pos-int, size 8],
     tnsot       [encoding pos-int, size 8],
     rest        [size psot]
@@ -191,11 +179,7 @@ TilePartRest-Profile [] {
 
 TileSegment-Profile [] {
     code        [encoding pos-int, size 16, endianness big],
-    body        <code> []
-}
-
-TileBody-Profile <INTEGER:code> [] {
-    plt         [present-when code == 65368]
+    plt         [present-when (code == 65368)]
 }
 
 END

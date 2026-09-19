@@ -68,26 +68,25 @@ Jp2Family ::= SEQUENCE {
 }
 
 TopBox ::= SEQUENCE {
-    tbox        TopBoxType,
-    payload     TopPayload                    -- selected by tbox; sized by LBox - 8
+    payload     TopPayload
 }
 
 TopPayload ::= CHOICE {
-    jpch        Superbox,                     -- codestream header: one per codestream
-    ftbl        Superbox,                     -- fragment table: holds one flst
-    dtbl        DataReferences,               -- data references: holds url boxes
-    asoc        Superbox,                     -- association: nlst/lbl/xml/asoc...
+    jpch        OCTET STRING (CONTAINING Superbox),
+    ftbl        OCTET STRING (CONTAINING Superbox),
+    dtbl        OCTET STRING (CONTAINING DataReferences),
+    asoc        OCTET STRING (CONTAINING Superbox),
     jp2c        OCTET STRING (CONTAINING Codestream),
-    jP          OpaqueBox,
-    ftyp        Ftyp,
-    jp2h        Superbox,
-    jplh        Superbox,
-    rreq        OpaqueBox,
-    uuid        OpaqueBox,
-    xml         OpaqueBox,
-    uinf        Superbox,
-    free        OpaqueBox,
-    other       OpaqueBox
+    jP          OCTET STRING (CONTAINING OpaqueBox),
+    ftyp        OCTET STRING (CONTAINING Ftyp),
+    jp2h        OCTET STRING (CONTAINING Superbox),
+    jplh        OCTET STRING (CONTAINING Superbox),
+    rreq        OCTET STRING (CONTAINING OpaqueBox),
+    uuid        OCTET STRING (CONTAINING OpaqueBox),
+    xml         OCTET STRING (CONTAINING OpaqueBox),
+    uinf        OCTET STRING (CONTAINING Superbox),
+    free        OCTET STRING (CONTAINING OpaqueBox),
+    other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
 -- T.800 I.5.2 / T.801 M.11, File Type box: brand, minor version, then a
@@ -115,28 +114,28 @@ OpaqueBox ::= SEQUENCE {
 }
 
 InnerBox ::= SEQUENCE {
-    tbox        InnerBoxType,
     payload     InnerPayload
 }
 
 InnerPayload ::= CHOICE {
-    flst        FragmentList,
-    url         DataEntryUrl,
-    jp2h        OpaqueBox,
-    jplh        OpaqueBox,
-    uuid        OpaqueBox,
-    xml         OpaqueBox,
-    nlst        OpaqueBox,
-    lbl         OpaqueBox,
-    ihdr        OpaqueBox,
-    colr        OpaqueBox,
-    free        OpaqueBox,
-    bpcc        OpaqueBox,
-    res         OpaqueBox,
-    pclr        OpaqueBox,
-    cmap        OpaqueBox,
-    cdef        OpaqueBox,
-    other       OpaqueBox
+    flst        OCTET STRING (CONTAINING FragmentList),
+    url         OCTET STRING (CONTAINING DataEntryUrl),
+    jp2h        OCTET STRING (CONTAINING OpaqueBox),
+    jplh        OCTET STRING (CONTAINING OpaqueBox),
+    uuid        OCTET STRING (CONTAINING OpaqueBox),
+    xml         OCTET STRING (CONTAINING OpaqueBox),
+    nlst        OCTET STRING (CONTAINING OpaqueBox),
+    lbl         OCTET STRING (CONTAINING OpaqueBox),
+    ihdr        OCTET STRING (CONTAINING OpaqueBox),
+    colr        OCTET STRING (CONTAINING OpaqueBox),
+    free        OCTET STRING (CONTAINING OpaqueBox),
+    bpcc        OCTET STRING (CONTAINING OpaqueBox),
+    res         OCTET STRING (CONTAINING OpaqueBox),
+    pclr        OCTET STRING (CONTAINING OpaqueBox),
+    cmap        OCTET STRING (CONTAINING OpaqueBox),
+    cdef        OCTET STRING (CONTAINING OpaqueBox),
+    jp2c        OCTET STRING (CONTAINING OpaqueBox),
+    other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
 -- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR u16).
@@ -179,26 +178,25 @@ JpxFile-Profile ::= SEQUENCE {
 BoxType-Profile ::= INTEGER (0..4294967295)  -- any four-cc; unlisted ones are `other`
 
 TopBox-Profile ::= SEQUENCE {
-    tbox        BoxType-Profile,
     payload     TopPayload-Profile
 }
 
 TopPayload-Profile ::= CHOICE {
-    jpch        Superbox,
-    ftbl        Superbox-Profile,
-    dtbl        DataReferences-Profile,
-    asoc        Superbox,
+    jpch        OCTET STRING (CONTAINING Superbox),
+    ftbl        OCTET STRING (CONTAINING Superbox-Profile),
+    dtbl        OCTET STRING (CONTAINING DataReferences-Profile),
+    asoc        OCTET STRING (CONTAINING Superbox),
     jp2c        OCTET STRING (CONTAINING Codestream-Profile),
-    jP          OpaqueBox,
-    ftyp        Ftyp,
-    jp2h        Superbox,
-    jplh        Superbox,
-    rreq        OpaqueBox,
-    uuid        OpaqueBox,
-    xml         OpaqueBox,
-    uinf        Superbox,
-    free        OpaqueBox,
-    other       OpaqueBox                     -- any other box: skipped
+    jP          OCTET STRING (CONTAINING OpaqueBox),
+    ftyp        OCTET STRING (CONTAINING Ftyp),
+    jp2h        OCTET STRING (CONTAINING Superbox),
+    jplh        OCTET STRING (CONTAINING Superbox),
+    rreq        OCTET STRING (CONTAINING OpaqueBox),
+    uuid        OCTET STRING (CONTAINING OpaqueBox),
+    xml         OCTET STRING (CONTAINING OpaqueBox),
+    uinf        OCTET STRING (CONTAINING Superbox),
+    free        OCTET STRING (CONTAINING OpaqueBox),
+    other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
 Superbox-Profile ::= SEQUENCE {
@@ -211,28 +209,28 @@ DataReferences-Profile ::= SEQUENCE {
 }
 
 InnerBox-Profile ::= SEQUENCE {
-    tbox        BoxType-Profile,
     payload     InnerPayload-Profile
 }
 
 InnerPayload-Profile ::= CHOICE {
-    flst        FragmentList-Profile,
-    url         DataEntryUrl-Profile,
-    jp2h        OpaqueBox,
-    jplh        OpaqueBox,
-    uuid        OpaqueBox,
-    xml         OpaqueBox,
-    nlst        OpaqueBox,
-    lbl         OpaqueBox,
-    ihdr        OpaqueBox,
-    colr        OpaqueBox,
-    free        OpaqueBox,
-    bpcc        OpaqueBox,
-    res         OpaqueBox,
-    pclr        OpaqueBox,
-    cmap        OpaqueBox,
-    cdef        OpaqueBox,
-    other       OpaqueBox                     -- any other box: skipped
+    flst        OCTET STRING (CONTAINING FragmentList-Profile),
+    url         OCTET STRING (CONTAINING DataEntryUrl-Profile),
+    jp2h        OCTET STRING (CONTAINING OpaqueBox),
+    jplh        OCTET STRING (CONTAINING OpaqueBox),
+    uuid        OCTET STRING (CONTAINING OpaqueBox),
+    xml         OCTET STRING (CONTAINING OpaqueBox),
+    nlst        OCTET STRING (CONTAINING OpaqueBox),
+    lbl         OCTET STRING (CONTAINING OpaqueBox),
+    ihdr        OCTET STRING (CONTAINING OpaqueBox),
+    colr        OCTET STRING (CONTAINING OpaqueBox),
+    free        OCTET STRING (CONTAINING OpaqueBox),
+    bpcc        OCTET STRING (CONTAINING OpaqueBox),
+    res         OCTET STRING (CONTAINING OpaqueBox),
+    pclr        OCTET STRING (CONTAINING OpaqueBox),
+    cmap        OCTET STRING (CONTAINING OpaqueBox),
+    cdef        OCTET STRING (CONTAINING OpaqueBox),
+    jp2c        OCTET STRING (CONTAINING OpaqueBox),
+    other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
 -- One fragment describing the complete codestream in the referenced file

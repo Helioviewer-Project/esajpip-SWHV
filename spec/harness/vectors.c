@@ -256,14 +256,11 @@ static void build_cod(Cod *c, int levels, int custom_precincts) {
     c->spcod.cbHeightExp = 4;
     c->spcod.cbStyle = 0;
     c->spcod.transform = 1;                    /* 5-3 reversible */
-    c->spcod.exist.precincts = custom_precincts;
+    c->spcod.precincts.nCount = custom_precincts ? levels + 1 : 0;
     if (custom_precincts) {
-        c->spcod.precincts.lowest.ppx = 15;
-        c->spcod.precincts.lowest.ppy = 15;
-        c->spcod.precincts.higher.nCount = levels;
-        for (i = 0; i < levels; ++i) {
-            c->spcod.precincts.higher.arr[i].ppx = 15;
-            c->spcod.precincts.higher.arr[i].ppy = 15;
+        for (i = 0; i <= levels; ++i) {
+            c->spcod.precincts.arr[i].ppx = 15;
+            c->spcod.precincts.arr[i].ppy = 15;
         }
     }
 }
@@ -288,7 +285,6 @@ static void build_tile_part(TilePart *tp, int levels, int with_plt) {
         for (i = 0; i < packets; ++i) {
             Iplt *e = &plt->entries.arr[i];
             memset(e, 0, sizeof *e);
-            e->b0.more = 0;
             e->b0.bits = 1;                    /* packet length 1 */
         }
     }
@@ -647,9 +643,9 @@ SETTER(cod_cbw,         cod_of(f, box)->spcod.cbWidthExp)
 SETTER(cod_cbh,         cod_of(f, box)->spcod.cbHeightExp)
 SETTER(cod_cbstyle,     cod_of(f, box)->spcod.cbStyle)
 SETTER(cod_transform,   cod_of(f, box)->spcod.transform)
-SETTER(cod_ppx_lowest,  cod_of(f, box)->spcod.precincts.lowest.ppx)
-SETTER(cod_ppx_higher,  cod_of(f, box)->spcod.precincts.higher.arr[0].ppx)
-SETTER(cod_ppy_higher,  cod_of(f, box)->spcod.precincts.higher.arr[0].ppy)
+SETTER(cod_ppx_lowest,  cod_of(f, box)->spcod.precincts.arr[0].ppx)
+SETTER(cod_ppx_higher,  cod_of(f, box)->spcod.precincts.arr[1].ppx)
+SETTER(cod_ppy_higher,  cod_of(f, box)->spcod.precincts.arr[1].ppy)
 SETTER(sot_lsot,   tp_of(f, box)->lsot)
 SETTER(sot_isot,   tp_of(f, box)->isot)
 SETTER(sot_tpsot,  tp_of(f, box)->tpsot)
@@ -750,7 +746,7 @@ static void rule_no_plt(Jp2Family *f, int box) {
 }
 static void rule_precinct_count(Jp2Family *f, int box) {
     Cod *c = cod_of(f, box);
-    c->spcod.precincts.higher.nCount = c->spcod.levels + 1;    /* one byte too many */
+    c->spcod.precincts.nCount = c->spcod.levels + 2;    /* one byte too many */
 }
 static void rule_no_tile_part(Jp2Family *f, int box) {
     cs_of(f, box)->segments.nCount = 2;
@@ -842,23 +838,23 @@ static void rule_com_segment(Jp2Family *f, int box) {
 }
 static void rule_iplt_five_bytes(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
-    e->b0.more = 1; e->b0.bits = 0; e->exist.b1 = 1;
-    e->b1.more = 1; e->b1.bits = 0; e->exist.b2 = 1;
-    e->b2.more = 1; e->b2.bits = 0; e->exist.b3 = 1;
-    e->b3.more = 1; e->b3.bits = 0; e->exist.b4 = 1;
-    e->b4.more = 0; e->b4.bits = 1;                        /* 5 bytes: profile max, valid */
+    e->b0.bits = 0; e->exist.b1 = 1;
+    e->b1.bits = 0; e->exist.b2 = 1;
+    e->b2.bits = 0; e->exist.b3 = 1;
+    e->b3.bits = 0; e->exist.b4 = 1;
+    e->b4.bits = 1;                                        /* 5 bytes: profile max, valid */
 }
 static void rule_iplt_six_bytes(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
     rule_iplt_five_bytes(f, box);
-    e->b4.more = 1; e->exist.b5 = 1;
-    e->b5.more = 0; e->b5.bits = 1;                        /* 6 bytes: standard valid, profile invalid */
+    e->exist.b5 = 1;
+    e->b5.bits = 1;                                        /* 6 bytes: standard valid, profile invalid */
 }
 static void rule_trailing_zero_iplt(Jp2Family *f, int box) {
     Plt *plt = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body;
     Iplt *e = &plt->entries.arr[plt->entries.nCount++];    /* one Iplt more than packets */
     memset(e, 0, sizeof *e);
-    e->b0.more = 0; e->b0.bits = 0;                        /* value 0: tolerated by the server */
+    e->b0.bits = 0;                                        /* value 0: tolerated by the server */
 }
 static void rule_iplt_too_short(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
@@ -909,7 +905,7 @@ static void rule_packet_count_overflow(Jp2Family *f, int box) {
 }
 static void rule_iplt_too_long(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].body.u.plt.body.entries.arr[0];
-    e->b0.more = 0; e->b0.bits = 2;                        /* data holds 1 byte */
+    e->b0.bits = 2;                                        /* data holds 1 byte */
 }
 static void rule_subsampled(Jp2Family *f, int box) {
     cs_of(f, box)->siz.body.components.arr[0].xrsiz = 2;   /* profile: one shared precinct geometry */

@@ -66,11 +66,14 @@ static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
 }
 
 static const char *CF_CAT3(cf_cod, CF_S, )(const CF_T(Cod) *c) {
-    if (c->spcod.exist.precincts != (c->scod.customPrecincts ? 1 : 0))
-        return "cod.precincts-presence";
-    if (c->spcod.exist.precincts &&
-        c->spcod.precincts.higher.nCount != c->spcod.levels)
+    int i;
+    int expected = c->scod.customPrecincts ? (int) c->spcod.levels + 1 : 0;
+    if (c->spcod.precincts.nCount != expected)
         return "cod.precincts-count";
+    for (i = 1; i < c->spcod.precincts.nCount; ++i)
+        if (c->spcod.precincts.arr[i].ppx == 0 ||
+            c->spcod.precincts.arr[i].ppy == 0)
+            return "cod.precincts-higher-zero";
     if (c->spcod.cbWidthExp + c->spcod.cbHeightExp > 8) return "cod.codeblock-area";
     return NULL;
 }
@@ -96,9 +99,8 @@ static uint64_t CF_CAT3(cf_packet_count, CF_S, )(const CF_T(Siz) *s, const CF_T(
         uint64_t w = ((uint64_t) s->xsiz + scale - 1) / scale;       /* size at r */
         uint64_t h = ((uint64_t) s->ysiz + scale - 1) / scale;
         int ppx = 15, ppy = 15;
-        if (c->spcod.exist.precincts) {
-            const CF_T(PrecinctSize) *ps = r == 0 ? &c->spcod.precincts.lowest
-                                                 : (const CF_T(PrecinctSize) *) &c->spcod.precincts.higher.arr[r - 1];
+        if (c->spcod.precincts.nCount != 0) {
+            const CF_T(PrecinctSize) *ps = &c->spcod.precincts.arr[r];
             ppx = (int) ps->ppx; ppy = (int) ps->ppy;
         }
         w = (w + ((uint64_t) 1 << ppx) - 1) >> ppx;
