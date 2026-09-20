@@ -7,8 +7,6 @@
 #include <vector>
 #include "woi.h"
 #include "jpip.h"
-#include "jpeg2000/point.h"
-#include "jpeg2000/coding_parameters.h"
 
 namespace jpip {
 
@@ -106,18 +104,6 @@ namespace jpip {
                                std::vector<int> *selected) const;
         bool GetUnqualifiedModelCodestream(std::size_t available,
                                            int *codestream) const;
-
-        /**
-         * Obtains the resolution level and modifies the given WOI to adjust it
-         * according to that level.
-         * @param coding_parameters Associated coding parameters.
-         * @param woi WOI to modify.
-         * @param resolution_size Image size at the selected resolution.
-         * @return Whether the window could be mapped to that resolution.
-         */
-        bool GetResolution(
-                const jpeg2000::CodingParameters *coding_parameters, WOI *woi,
-                jpeg2000::Size *resolution_size) const;
     };
 }
 

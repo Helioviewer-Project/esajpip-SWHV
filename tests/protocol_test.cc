@@ -298,23 +298,6 @@ static void CheckJHVRequests() {
               partial_model_request.model[0].amount == 446,
           "Wrong terminal partial metadata model");
 
-    jpip::Request empty_resolution_request;
-    Check(empty_resolution_request.ParseTarget(
-              "/jpip?fsiz=0,0&rsiz=1,1&roff=0,0"),
-          "Could not parse request with an empty frame size");
-    jpeg2000::CodingParameters coding_parameters;
-    coding_parameters.size = jpeg2000::Size(4096, 4096);
-    coding_parameters.num_levels = 5;
-    jpip::WOI woi;
-    woi.size = empty_resolution_request.woi_size;
-    woi.position = empty_resolution_request.woi_position;
-    jpeg2000::Size selected_resolution;
-    Check(empty_resolution_request.GetResolution(
-                  &coding_parameters, &woi, &selected_resolution),
-          "Could not map an empty frame size");
-    Check(woi.resolution == 0, "Wrong resolution for an empty frame size");
-    Check(woi.size == jpeg2000::Size(1, 1), "Changed region for an empty frame size");
-
     Check(RejectRequest("/jpip?model=M-1"),
           "Accepted negative metadata ID");
     Check(RejectRequest("/jpip?model=P-1"),
@@ -748,46 +731,12 @@ static void CheckResolutionSelection() {
               selected == jpeg2000::Size(100, 100),
           "Closest resolution tie did not select the larger image");
 
-    params.size = jpeg2000::Size(2, 2);
-    params.num_levels = 0;
-    jpip::Request mapped_request;
-    mapped_request.resolution_size = jpeg2000::Size(3, 3);
-    mapped_request.round_direction = jpip::Request::ROUNDDOWN;
-    jpip::WOI mapped_woi;
-    mapped_woi.position = jpeg2000::Point(1, 1);
-    mapped_woi.size = jpeg2000::Size(1, 1);
-    Check(mapped_request.GetResolution(&params, &mapped_woi, &selected),
-          "Could not map a scaled window");
-    Check(mapped_woi.position == jpeg2000::Point(0, 0) &&
-              mapped_woi.size == jpeg2000::Size(2, 2),
-          "Window was not mapped by its floor and ceiling boundaries");
-
-    jpip::WOI invalid_mapped_woi;
-    invalid_mapped_woi.position = jpeg2000::Point(4, 0);
-    invalid_mapped_woi.size = jpeg2000::Size(0, 1);
-    jpip::WOI original_invalid_woi = invalid_mapped_woi;
-    Check(!mapped_request.GetResolution(&params, &invalid_mapped_woi,
-                                        &selected) &&
-              invalid_mapped_woi == original_invalid_woi,
-          "Accepted an invalid window-mapping interval");
-
     params.size = jpeg2000::Size(INT_MAX, INT_MAX);
     params.num_levels = 32;
     Check(params.GetRoundDownResolution(jpeg2000::Size(1, 1), &selected) == 1 &&
               selected == jpeg2000::Size(1, 1),
           "Wrong resolution size at the decomposition limit");
 
-    jpip::Request request;
-    request.resolution_size = jpeg2000::Size(INT_MAX - 1, INT_MAX - 1);
-    request.round_direction = jpip::Request::CLOSEST;
-    jpip::WOI woi;
-    woi.position = jpeg2000::Point(INT_MAX - 2, INT_MAX - 2);
-    woi.size = jpeg2000::Size(1, 1);
-    Check(request.GetResolution(&params, &woi, &selected),
-          "Could not map a window at the decomposition limit");
-    Check(woi.position == jpeg2000::Point(INT_MAX - 2, INT_MAX - 2) &&
-              woi.size == jpeg2000::Size(2, 2),
-          "Window scaling overflowed");
 }
 
 static void CheckJPIPMessages() {

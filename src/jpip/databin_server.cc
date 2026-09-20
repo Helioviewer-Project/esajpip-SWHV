@@ -18,6 +18,54 @@ namespace jpip {
 
     namespace {
 
+        bool MapInterval(int selected_size, int requested_size,
+                         int *offset, int *length) {
+            if (selected_size <= 0 || requested_size <= 0 || *offset < 0 ||
+                *length < 0 || *offset > requested_size ||
+                *length > requested_size - *offset)
+                return false;
+
+            uint64_t end = static_cast<uint64_t>(*offset) + *length;
+            int mapped_offset = static_cast<int>(
+                    static_cast<uint64_t>(*offset) * selected_size /
+                    requested_size);
+            uint64_t mapped_end = end * selected_size;
+            mapped_end = (mapped_end + requested_size - 1) / requested_size;
+            *offset = mapped_offset;
+            *length = static_cast<int>(mapped_end) - mapped_offset;
+            return true;
+        }
+
+        bool MapWindow(const Request &request,
+                       const CodingParameters &coding_parameters,
+                       WOI *woi, jpeg2000::Size *resolution_size) {
+            WOI mapped = *woi;
+
+            if (request.round_direction == Request::CLOSEST)
+                mapped.resolution = coding_parameters.GetClosestResolution(
+                        request.resolution_size, resolution_size);
+            else if (request.round_direction == Request::ROUNDUP)
+                mapped.resolution = coding_parameters.GetRoundUpResolution(
+                        request.resolution_size, resolution_size);
+            else
+                mapped.resolution = coding_parameters.GetRoundDownResolution(
+                        request.resolution_size, resolution_size);
+
+            if (request.resolution_size.x > 0 &&
+                request.resolution_size.y > 0 &&
+                request.resolution_size != *resolution_size) {
+                if (!MapInterval(resolution_size->x,
+                                 request.resolution_size.x,
+                                 &mapped.position.x, &mapped.size.x) ||
+                    !MapInterval(resolution_size->y,
+                                 request.resolution_size.y,
+                                 &mapped.position.y, &mapped.size.y))
+                    return false;
+            }
+            *woi = mapped;
+            return true;
+        }
+
         bool CropWindow(WOI *woi, const jpeg2000::Size &bounds) {
             int64_t left = max<int64_t>(0, woi->position.x);
             int64_t top = max<int64_t>(0, woi->position.y);
@@ -74,9 +122,8 @@ namespace jpip {
                 window.coding_parameters =
                         image_index.GetCodingParameters(codestream);
                 jpeg2000::Size resolution_size;
-                if (!request.GetResolution(
-                            window.coding_parameters, &window.woi,
-                            &resolution_size))
+                if (!MapWindow(request, *window.coding_parameters,
+                               &window.woi, &resolution_size))
                     return Reject(error_message,
                                   "Invalid JPIP window dimensions");
                 window.empty = !CropWindow(&window.woi, resolution_size);

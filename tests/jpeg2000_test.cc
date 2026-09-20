@@ -1131,6 +1131,9 @@ int main() {
     }
     WriteFile(directory + "many-layers.jp2",
               MakeJP2(MakeCodestream(0, 1, 1, 1, 0, 10000, 40, 250)));
+    WriteFile(directory + "window-map.jp2",
+              MakeJP2(MakeCodestream(0, 1, 2, 2, 0, 1, 1, 2, 0,
+                                      vector<unsigned char>{0x00})));
     for (int progression = 0; progression <= 4; ++progression) {
         WriteFile(directory + "subsampled-" + to_string(progression) + ".jp2",
                   MakeJP2(MakeCodestream(progression, 2)));
@@ -1883,6 +1886,46 @@ int main() {
           "Could not generate a response for a window with defaults");
     Check(response_length > 0 && last,
           "Did not complete a response for a window with defaults");
+
+    jpeg2000::FileManager window_manager;
+    Check(OpenImage(directory, "window-map.jp2", &window_manager),
+          "Could not parse the window-mapping fixture");
+    jpip::Request mapped_window_request;
+    Check(mapped_window_request.ParseTarget(
+                  "/jpip?fsiz=3,1&rsiz=1,1&roff=1,0&"
+                  "model=M0,Hm,H0&cid=0"),
+          "Could not parse a scaled window request");
+    jpip::DataBinServer mapped_window_server;
+    Check(mapped_window_server.SetRequest(*window_manager.GetImage(),
+                                           mapped_window_request),
+          "Rejected a scaled window request");
+    char mapped_window_response[4096];
+    int mapped_window_length = sizeof mapped_window_response;
+    Check(mapped_window_server.GenerateChunk(
+                  window_manager, mapped_window_response,
+                  &mapped_window_length, &last) && last,
+          "Could not generate a scaled window response");
+
+    jpip::Request full_window_request;
+    Check(full_window_request.ParseTarget(
+                  "/jpip?fsiz=2,1&rsiz=2,1&roff=0,0&"
+                  "model=M0,Hm,H0&cid=0"),
+          "Could not parse the equivalent full window request");
+    jpip::DataBinServer full_window_server;
+    Check(full_window_server.SetRequest(*window_manager.GetImage(),
+                                        full_window_request),
+          "Rejected the equivalent full window request");
+    char full_window_response[4096];
+    int full_window_length = sizeof full_window_response;
+    Check(full_window_server.GenerateChunk(
+                  window_manager, full_window_response,
+                  &full_window_length, &last) && last,
+          "Could not generate the equivalent full window response");
+    Check(mapped_window_length == full_window_length &&
+                  equal(mapped_window_response,
+                        mapped_window_response + mapped_window_length,
+                        full_window_response),
+          "Scaled window boundaries selected the wrong precincts");
 
     for (int response_limit = 0; response_limit < jpip::DataBinWriter::EOR_LENGTH;
          response_limit++) {
