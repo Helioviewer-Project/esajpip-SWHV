@@ -1,10 +1,10 @@
 # Connections and JPIP channels
 
 This document explains how a client creates, uses, replaces, and closes an
-esajpip channel over HTTP. It also describes how the server admits connections,
-owns channel state, and releases resources. For the complete list of supported
-JPIP fields and JPEG 2000 source restrictions, see
-[JPIP_PROFILE.md](JPIP_PROFILE.md).
+esajpip channel over HTTP, and when the server accepts a connection, holds
+channel state, and releases it. The [README](README.md#concepts) defines the
+recurring terms; [JPIP_PROFILE.md](JPIP_PROFILE.md) lists the supported JPIP
+fields and JPEG 2000 source restrictions.
 
 ## Connection model
 
@@ -40,9 +40,9 @@ Host: server.example:8900
 
 ```
 
-The `cnew` value is a comma-separated list of acceptable transports. The server
-selects `http`, so the list must contain `http`; JHelioviewer sends
-`cnew=http`.
+The `cnew` value is a comma-separated list of the transports the client
+accepts. The server implements only `http`, so the list must contain it;
+JHelioviewer sends `cnew=http`.
 
 It may instead be supplied through `target`:
 
@@ -123,20 +123,21 @@ These are all HTTP status codes emitted by the server:
 | `400 Bad Request` | The HTTP request head, body framing, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and any referenced channel are closed. The rejected request does not modify the channel cache before termination. |
 | `404 Not Found` | A `cnew` request names a target that is missing, has an invalid client-supplied path, uses an unsupported file type, or is not accepted by the supported JPEG 2000 source profile. | No usable channel is created; the connection is closed. Correct the requested target or repository source. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and any channel identified by the request target are closed. |
-| `501 Not Implemented` | A valid `cnew` request offers no supported transport. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
+| `501 Not Implemented` | A valid `cnew` request lists no transport the server implements. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
 | `500 Internal Server Error` | The selected source is unreadable, or the server encounters another internal failure such as being unable to generate a channel ID. The response body identifies the failure category. | The connection and channel are closed. An unreadable source normally requires correcting repository access or storage. |
-| `503 Service Unavailable` | A request names an unknown or ended channel, both request slots for a channel are occupied, a channel wait expires, or the active-channel limit has been reached. The response body distinguishes these cases. | A routing rejection leaves an existing channel unchanged. Create a new channel after an ended or unknown-channel response. |
+| `503 Service Unavailable` | A request names an unknown or ended channel, both request slots for a channel are occupied, a channel wait expires, or the active-channel limit has been reached. The response body distinguishes these cases. | A routing rejection leaves any existing channel unchanged. After an ended or unknown-channel response, create a new channel. |
 
 Every response that closes its connection includes `Connection: close`. Error
 responses contain a short plain-text body. Responses include CORS and no-cache
-headers. TLS and HSTS belong at the reverse proxy. `cnew` exposes `JPIP-cnew`
-and `JPIP-tid` to browser clients.
+headers, and `cnew` exposes `JPIP-cnew` and `JPIP-tid` to browser clients. TLS
+and the rest of the deployment boundary are covered in the
+[README](README.md#reverse-proxy-and-security).
 
 Some failures close the socket without an HTTP response:
 
 - The initial bytes are not a recognizable HTTP/1.1 JPIP `GET` request.
 - The initial request does not arrive before `connections.initial_timeout`.
-- The physical-connection limit has been reached.
+- The connection limit, `connections.limit`, has been reached.
 - The socket fails while a request or response is in progress.
 - The server process exits.
 

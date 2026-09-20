@@ -2,17 +2,14 @@
 
 ## 2.0-rc1 - Unreleased
 
-Version 2.0 is a rearchitecture of the original server. The 1.x design used a
-parent and serving child, passed accepted sockets between them, created a
-detached thread for each client, and tied a JPIP channel closely to one TCP
-connection.
-
-The 2.0 server is one foreground process. A libuv event loop owns connections,
-HTTP parsing, channel routing, deadlines, signals, and non-blocking writes. A
-bounded worker pool performs JPEG 2000 work; each channel retains private image,
-cache, and traversal state and is processed by only one worker at a time. This
-keeps JPEG 2000 state isolated while allowing HTTP connections to be pooled or
-replaced independently of JPIP channels.
+Version 2.0 rearchitects the server. Where 1.x used a parent and a serving
+child, passed accepted sockets between them, created a detached thread per
+client, and tied a JPIP channel to one TCP connection, 2.0 is a single
+foreground process: a libuv event loop owns connections, HTTP parsing, channel
+routing, deadlines, signals, and non-blocking writes, and a bounded worker pool
+does the JPEG 2000 work. Each channel keeps private image, cache, and traversal
+state and is handled by one worker at a time, which isolates JPEG 2000 state
+while letting HTTP connections be pooled or replaced independently of channels.
 
 ### Changed
 

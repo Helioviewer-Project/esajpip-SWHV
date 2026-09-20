@@ -1,34 +1,33 @@
 # JPIP support profile
 
 esajpip implements the part of JPIP needed to serve JP2 and JPX imagery to
-JHelioviewer. It is not a complete implementation of
+JHelioviewer. This document defines the wire behavior and the source-file
+structures it supports, in the terminology of Annex J of
 [ITU-T T.808 (12/2022) / ISO/IEC 15444-9:2023](https://www.itu.int/rec/T-REC-T.808-202212-I/en).
-The profile terminology below follows Annex J of ITU-T T.808 (12/2022), the
-common text published as ISO/IEC 15444-9:2023.
 
-This document defines the wire behavior and source-file structures that the
-server supports. It is the implementation profile for esajpip, not a claim of
-conformance to one of the profiles in T.808 Annex J. Unknown request fields may
-be ignored for compatibility, so an accepted request does not by itself prove
-that every field was honored.
+esajpip claims no Annex J profile. Its subset draws on several of them, and it
+ignores unknown request fields for compatibility, so an accepted request does
+not by itself prove that every field was honored.
+
+The [README](README.md#concepts) defines the terms used throughout: codestream,
+target, window, JPIP channel, and JPP stream.
 
 ## Relationship to T.808 Annex J
 
-esajpip does not implement Annex J Profile 0, Profile 1, or the Full Profile.
 Even Profile 0 requires complete semantics for fields such as `type`, `tid`,
-and `pref`; esajpip implements only reduced or compatibility behavior for
-them. Its implemented subset instead draws from more than one Annex J level:
+and `pref`, for which esajpip implements only reduced or compatibility
+behavior. Its subset instead draws from more than one Annex J level:
 
 | Annex J area | esajpip behavior |
 | --- | --- |
-| Profile level | Some Profile 0 fields are supported, additive explicit cache-model descriptors from Profile 1 are supported in reduced form, and reduced `stream` and `context` selection comes from the Full Profile. No numbered profile is claimed. |
+| Profile level | Some Profile 0 fields are supported, additive explicit cache-model descriptors from Profile 1 are supported in reduced form, and reduced `stream` and `context` selection comes from the Full Profile. |
 | Return-data variant P | JPP-stream data is returned. JPT-stream and complete-file return types are not implemented. |
-| Cache variants N and S | Additive explicit byte-count cache descriptors provide part of N behavior. A reduced S channel model lets `cnew`, `cid`, and `cclose` maintain a persistent cache for one target. Neither formal variant is claimed: the complete N grammar, session grouping, several channels in one session, and concurrent channel requests are not implemented. |
+| Cache variants N and S | Additive explicit byte-count cache descriptors provide part of N behavior. A reduced S channel model lets `cnew`, `cid`, and `cclose` maintain a persistent cache for one target. Neither variant is complete: the full N grammar, session grouping, several channels in one session, and concurrent channel requests are missing. |
 | Incremental codestream variant C | Main-header, tile-header, and precinct data-bins are delivered incrementally, but the `meta:incr` preference behavior required by the formal variant is not implemented. |
 | Metadata variant M | JP2 and JPX box contents are delivered in metadata data-bins and `metareq` is recognized in reduced form, but the standard metadata-request grammar and `meta:orig` preference behavior are not implemented. |
 
 The labels **Supported** and **Reduced** below describe this implementation,
-not formal Annex J conformance.
+not Annex J conformance.
 
 ## Wire profile
 
