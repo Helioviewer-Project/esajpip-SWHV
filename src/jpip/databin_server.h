@@ -98,6 +98,8 @@ namespace jpip {
                 return SegmentResult::FAILED;
             if (seg_cached == INT_MAX)
                 return SegmentResult::COMPLETE;
+            if (static_cast<uint64_t>(seg_cached) == segment.length && !last)
+                return SegmentResult::COMPLETE;
 
             if (static_cast<uint64_t>(seg_cached) <= segment.length) {
 

@@ -17,6 +17,7 @@ struct Bin {
 class Cache {
     const Expected &expected;
     map<Key, Bin> bins;
+    size_t empty_nonfinal_precinct_messages = 0;
 
     static unsigned Byte(const string &body, size_t &position) {
         Require(position < body.size(), "Truncated JPP message");
@@ -47,6 +48,10 @@ public:
         size_t result = 0;
         for (const auto &entry : bins) result += entry.second.bytes.size();
         return result;
+    }
+
+    size_t EmptyNonfinalPrecinctMessages() const {
+        return empty_nonfinal_precinct_messages;
     }
 
     bool Complete(const Expected &selection) const {
@@ -81,6 +86,8 @@ public:
             uint64_t offset = Integer(body, position);
             uint64_t length = Integer(body, position);
             Require((cls & 1) == 0, "Unexpected extended data-bin class");
+            if (cls == 0 && length == 0 && !(first & 16))
+                ++empty_nonfinal_precinct_messages;
             Key key(cls, stream, id);
             auto source = expected.find(key);
             Require(source != expected.end(), "Unexpected data-bin identifier");
@@ -281,15 +288,18 @@ void Run(uint16_t port, const Expected &expected, const string &name,
     Cache cache(expected);
     Require(cache.Read(created.body) == 4, "Initial tiny budget did not produce byte-limit EOR");
     if (modeled) {
-        cache.Seed(Key(6, 0, 0), 1); cache.Seed(Key(0, 0, 0), 1);
+        cache.Seed(Key(6, 0, 0), 1); cache.Seed(Key(0, 0, 0), 4);
         cache.Seed(Key(6, 1, 0), 2); cache.Seed(Key(0, 1, 129), 2);
     }
     string target = "/jpip?cid=" + cid +
             (context ? "&context=jpxl%3C0-1%3E" : "&stream=0-1") +
             "&fsiz=260,1&rsiz=260,1&roff=0,0&metareq=[*]!!";
     int requests = Fetch(fd, cache, expected, target,
-                         modeled ? "&model=[0]Hm:1,P0:1,[1]Hm:2,P129:2" : "", gzip);
+                         modeled ? "&model=[0]Hm:1,P0:4,[1]Hm:2,P129:2" : "", gzip);
     Require(requests > 2, "Fixture did not exercise response continuation");
+    if (modeled)
+        Require(cache.EmptyNonfinalPrecinctMessages() == 0,
+                "Cached packet boundary emitted an empty non-final precinct message");
     SendRequest(fd, target + "&len=1024");
     Response repeated = ReadResponse(fd);
     Require(repeated.body.size() == 3 && cache.Read(repeated.body) == 2,
