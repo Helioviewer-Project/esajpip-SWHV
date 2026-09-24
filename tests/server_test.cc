@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 #include <chrono>
@@ -252,7 +253,8 @@ string ReadLogs(const string &directory) {
     return contents;
 }
 
-pid_t StartServer(const Config &config, const string &log_name) {
+pid_t StartServer(const Config &config, const string &log_name,
+                  unsigned int worker_threads = 16) {
     pid_t pid = fork();
     Check(pid >= 0, "Could not create the test server");
     if (pid == 0) {
@@ -263,7 +265,7 @@ pid_t StartServer(const Config &config, const string &log_name) {
                                                      config.address().c_str(),
                                                      config.port());
         int result = RunServer(config, address, log_name,
-                               "esajpip server test", 16);
+                               "esajpip server test", worker_threads);
         _exit(result == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
     }
     setpgid(pid, pid);
@@ -782,6 +784,55 @@ int main() {
     status = WaitForServer(channel_limit_server);
     Check(WIFEXITED(status) && WEXITSTATUS(status) == 0,
           "SIGINT did not stop the channel-limit server cleanly");
+
+    string blocked_image = directory + "/blocked.jp2";
+    Check(mkfifo(blocked_image.c_str(), 0600) == 0,
+          "Could not create the blocking image FIFO");
+    uint16_t open_timeout_port = ReservePort();
+    string open_timeout_text =
+            "[listen]\nport = " + to_string(open_timeout_port) +
+            "\naddress = 127.0.0.1\n"
+            "[jpip]\nimage_directory = " + directory + "\nchunk_size = 128\n"
+            "[connections]\ninitial_timeout = 1\ntimeout = 1\nlimit = 2\n"
+            "[channels]\nlimit = 2\n"
+            "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
+    WriteFile(directory + "/open-timeout.ini", open_timeout_text.data(),
+              open_timeout_text.size());
+    Config open_timeout_config;
+    Check(open_timeout_config.Load((directory + "/open-timeout.ini").c_str(),
+                                   error),
+          "Could not load the image-open timeout configuration");
+    pid_t open_timeout_server = StartServer(
+            open_timeout_config, directory + "/server-open-timeout", 2);
+    int opening = Connect(open_timeout_port);
+    Check(opening >= 0, "Image-open timeout server did not start");
+    SendRequest(opening, "/blocked.jp2?cnew=http&len=128");
+    this_thread::sleep_for(chrono::milliseconds(50));
+    int queued = Connect(open_timeout_port);
+    Check(queued >= 0, "Could not queue a second image-open request");
+    SendRequest(queued, "/image.jp2?cnew=http&len=128");
+
+    Response opening_timeout = ReadResponse(opening);
+    Check(opening_timeout.headers.find("503 Service Unavailable") != string::npos &&
+                  opening_timeout.body == "JPIP channel creation timed out",
+          "Blocked image open did not return its timeout response");
+    Response queued_timeout = ReadResponse(queued);
+    Check(queued_timeout.headers.find("503 Service Unavailable") != string::npos &&
+                  queued_timeout.body == "JPIP channel creation timed out",
+          "Queued image open did not return its timeout response");
+    CheckClosed(opening, 1000, "Blocked image-open connection stayed open");
+    CheckClosed(queued, 1000, "Queued image-open connection stayed open");
+    close(opening);
+    close(queued);
+
+    int fifo_writer = open(blocked_image.c_str(), O_WRONLY | O_NONBLOCK);
+    Check(fifo_writer >= 0, "Blocked image open was not executing");
+    close(fifo_writer);
+    Check(kill(open_timeout_server, SIGINT) == 0,
+          "Could not stop the image-open timeout server");
+    status = WaitForServer(open_timeout_server);
+    Check(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "Image-open timeout server did not stop cleanly");
 
     pid_t failing_server = StartServer(config, directory + "/missing/server");
     status = WaitForServer(failing_server);

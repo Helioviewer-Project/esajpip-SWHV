@@ -814,10 +814,8 @@ private:
         } else if (exchange &&
                    (channel->state == Channel::OPEN_QUEUED ||
                     channel->state == Channel::OPENING)) {
-            SendError(client, 503, "Service Unavailable",
-                      "JPIP channel creation timed out",
-                      &channel->exchange->request);
-            End(*channel);
+            Fail(*channel, 503, "Service Unavailable",
+                 "JPIP channel creation timed out");
         } else {
             ClientDisconnected(client);
             client.connection->Abort();
