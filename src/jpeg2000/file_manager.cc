@@ -609,7 +609,6 @@ namespace jpeg2000 {
         int num_flst = 0;
         uint16_t num_data_references = 0;
         bool has_data_reference_box = false;
-        vector<ImageIndex::Codestream> codestreams;
         size_t num_codestream_headers = 0;
         size_t num_codestreams = 0;
         size_t ftbl_codestream = 0;
@@ -648,8 +647,8 @@ namespace jpeg2000 {
                     if (containers.size() != 1)
                         return false;
                     size_t codestream_id = num_codestreams++;
-                    codestreams.emplace_back(image_index->path_name);
-                    ImageIndex::Codestream &codestream = codestreams.back();
+                    image_index->codestreams.emplace_back(image_index->path_name);
+                    ImageIndex::Codestream &codestream = image_index->codestreams.back();
                     if (!ReadCodestream(file, length_box, codestream))
                         return false;
                     if (!codestream.parameters.FillPrecinctCounts())
@@ -736,44 +735,32 @@ namespace jpeg2000 {
             return false;
 
         // This profile supports embedded or linked codestreams, not a mixture.
-        if (!codestreams.empty() && !links.empty())
+        if (!image_index->codestreams.empty() && !links.empty())
             return false;
 
-        bool sequential_references = links.size() == references.size();
-        for (size_t i = 0; i < links.size(); ++i) {
-            if (links[i].reference == 0 || links[i].reference > references.size())
+        for (const Link &link : links)
+            if (link.reference == 0 || link.reference > references.size())
                 return false;
-            if (links[i].reference != i + 1)
-                sequential_references = false;
-        }
-        vector<string> paths;
-        if (sequential_references)
-            paths = std::move(references);
-        else {
-            paths.reserve(links.size());
-            for (const Link &link : links)
-                paths.push_back(references[link.reference - 1]);
-        }
 
         // Resolve the linked codestreams.
-        if (paths.empty()) {
-            if (codestreams.size() != num_codestreams)
+        if (links.empty()) {
+            if (image_index->codestreams.size() != num_codestreams)
                 return false;
-            image_index->codestreams = std::move(codestreams);
             return true;
         }
 
-        if (paths.size() != num_codestreams)
+        if (links.size() != num_codestreams)
             return false;
-        image_index->codestreams.reserve(paths.size());
-        for (size_t i = 0; i < paths.size(); ++i) {
-            if (paths[i].size() < 4 ||
-                paths[i].compare(paths[i].size() - 4, 4, ".jp2") != 0) {
-                ERROR("Unsupported linked codestream file '" << paths[i] << "'");
+        image_index->codestreams.reserve(links.size());
+        for (const Link &link : links) {
+            const string &path = references[link.reference - 1];
+            if (path.size() < 4 ||
+                path.compare(path.size() - 4, 4, ".jp2") != 0) {
+                ERROR("Unsupported linked codestream file '" << path << "'");
                 return false;
             }
-            ImageIndex linked_image(paths[i]);
-            if (ReadImage(paths[i], &linked_image) != OpenResult::OPENED)
+            ImageIndex linked_image(path);
+            if (ReadImage(path, &linked_image) != OpenResult::OPENED)
                 return false;
 
             if (linked_image.codestreams.empty() ||
@@ -784,11 +771,10 @@ namespace jpeg2000 {
                     codestream.tile_parts.back().data;
             uint64_t codestream_length =
                     last_packet_data.offset + last_packet_data.length + 2 - codestream.header.offset;
-            if (links[i].fragment != FileSegment(codestream.header.offset,
-                                                  codestream_length))
+            if (link.fragment != FileSegment(codestream.header.offset,
+                                             codestream_length))
                 return false;
 
-            codestream.path = std::move(paths[i]);
             image_index->codestreams.push_back(
                     std::move(codestream));
         }
