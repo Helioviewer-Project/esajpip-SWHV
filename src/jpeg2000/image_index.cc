@@ -59,6 +59,8 @@ namespace jpeg2000 {
 
     bool ImageIndex::GetOffsetPacket(File *file, Codestream &codestream,
                                      uint64_t length_packet) {
+        if (length_packet == 0)
+            return false;
         if (codestream.data_cursor.index >= codestream.tile_parts.size())
             return false;
         const TilePart &tile_part = codestream.tile_parts[codestream.data_cursor.index];

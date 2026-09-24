@@ -483,10 +483,14 @@ static vector<unsigned char> InsertBeforeFirstSOT(
     return codestream;
 }
 
-static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream) {
-    for (size_t i = 0; i + 7 <= codestream.size(); ++i) {
+static vector<unsigned char> ShortenFirstPLT(vector<unsigned char> codestream,
+                                             size_t entry = 1) {
+    for (size_t i = 0; i + 6 <= codestream.size(); ++i) {
         if (codestream[i] == 0xFF && codestream[i + 1] == 0x58) {
-            codestream[i + 6] = 0;
+            uint16_t lplt = (codestream[i + 2] << 8) | codestream[i + 3];
+            Check(lplt >= 4 + entry && i + 2 + lplt <= codestream.size(),
+                  "PLT entry not found in JPEG 2000 test fixture");
+            codestream[i + 5 + entry] = 0;
             return codestream;
         }
     }
@@ -1000,7 +1004,7 @@ static void CheckSourceForms(const string &directory) {
     check("psot-first-of-two.jp2",
           MakeJP2(MakeOpenEndedTilePart(MakeCodestream(0, 1, 1, 1, 0, 2, 2))), false);
     check("psot-short-plt.jp2",
-          MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream))), false);
+          MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream), 0)), false);
 
     // T.801 M.11.11 allows recursive associations. The server preserves
     // the complete outer payload; no recursion is needed to serve it.
@@ -1179,6 +1183,11 @@ int main() {
               MakeJP2(PadFirstPLT(MakeCodestream(), 0)));
     WriteFile(directory + "nonzero-padded-plt.jp2",
               MakeJP2(PadFirstPLT(MakeCodestream(), 1)));
+    vector<unsigned char> zero_logical_packet =
+            MakeOpenEndedTilePart(ShortenFirstPLT(MakeCodestream(), 0));
+    zero_logical_packet.erase(zero_logical_packet.end() - 3);
+    WriteFile(directory + "zero-logical-plt.jp2",
+              MakeJP2(zero_logical_packet));
     WriteFile(directory + "open-ended-tile-part.jp2",
               MakeJP2(MakeOpenEndedTilePart(MakeCodestream())));
     WriteFile(directory + "valid-mct.jp2",
@@ -1436,6 +1445,17 @@ int main() {
           "Rejected deployed zero PLT padding");
     Check(packet.length == 1, "Wrong packet before zero PLT padding");
 
+    jpeg2000::FileManager zero_logical_manager;
+    Check(OpenImage(directory, "zero-logical-plt.jp2",
+                    &zero_logical_manager),
+          "Rejected the lazy-indexed zero packet during parsing");
+    data::File *zero_logical_file =
+            zero_logical_manager.GetFile(directory + "zero-logical-plt.jp2");
+    Check(zero_logical_file != NULL &&
+              !zero_logical_manager.GetImage()->GetPacket(
+                  zero_logical_file, 0,
+                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+          "Accepted a zero-length logical packet");
 
     jpeg2000::FileManager nonzero_padding_manager;
     Check(OpenImage(directory, "nonzero-padded-plt.jp2",

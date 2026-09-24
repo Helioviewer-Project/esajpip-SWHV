@@ -165,6 +165,11 @@ response-write progress, a busy-channel wait, and channel idle time; write
 callbacks restart only the write-progress wait. Both timeout settings must be
 positive.
 
+For `cnew`, one deadline covers the full queue and image-open time. Once the
+image opens, a fresh interval covers generation of the first response chunk.
+If that interval expires before response headers are sent, the server returns
+`503` and ends the channel.
+
 `connections.limit` limits physical HTTP connections.
 `channels.limit` separately limits active JPIP channels. A channel
 can have one active request and at most one waiting request. A connection may

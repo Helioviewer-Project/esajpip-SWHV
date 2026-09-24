@@ -205,6 +205,8 @@ END
 --     the first tile-part of the tile (A.6.1, A.6.4).
 --   The chosen CHOICE alternative matches `code` (automatic: present-when).
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
+--   Where a single unsubsampled tile uses COD without packet-layout overrides
+--     and every tile-part has PLT, nonzero Iplt count matches the packet count.
 --
 -- Profile only:
 --   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51) — the server
@@ -215,4 +217,6 @@ END
 --     layer 2.)
 --   1..64 tile-parts in total (single tile, so per tile == total).
 --   Every tile-part header holds at least one PLT segment (ReadSODMarker).
+--   Each COD-derived packet has a nonzero Iplt; only zero entries after the
+--     final packet are accepted as deployed-file padding.
 --   Whole codestream <= INT_MAX bytes.

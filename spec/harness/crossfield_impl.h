@@ -129,6 +129,8 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     int i, j;
     int cod_before = 0, qcd_before = 0, tile_parts = 0, plts = 0;
     int seen_tile = 0, expect_tpsot = 0, tnsot = 0;
+    int all_parts_have_plt = 1, packet_layout_override = 0, plt_padding = 0;
+    uint64_t plt_packets = 0;
     const CF_COD *main_cod = NULL;
     const char *r;
 
@@ -173,17 +175,25 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                         tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e) {
                             uint64_t length = CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
-                            if (layer == CF_STANDARD && length == 0)
-                                return "plt.zero-length";
+                            if (length == 0) {
+                                if (layer == CF_STANDARD) return "plt.zero-length";
+                                plt_padding = 1;
+                            } else {
+                                if (plt_padding) return "plt.padding-position";
+                                plt_packets++;
+                            }
                             plt_sum += length;
                         }
                     }
 #ifndef CF_TILE_PLT_ONLY
+                    if (ts->exist.cod || ts->exist.coc || ts->exist.poc)
+                        packet_layout_override = 1;
                     if (ts->exist.cod) tp_cod++;
                     if (ts->exist.qcd) tp_qcd++;
 #endif
                 }
                 plts += tp_plts;
+                if (tp_plts == 0) all_parts_have_plt = 0;
                 if (tp_plts > 0 && plt_sum != (uint64_t) tp->rest.data.nCount)
                     return "plt.coverage";
 #ifndef CF_TILE_PLT_ONLY
@@ -202,6 +212,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
               seg->exist.tlm || seg->exist.plm || seg->exist.ppm ||
               seg->exist.crg || seg->exist.com))
             return "main.marker-code";
+        if (seg->exist.coc || seg->exist.poc) packet_layout_override = 1;
 #endif
         if (!seen_tile) {
             if (code == MC_COD) { cod_before++; main_cod = &seg->cod.body; }
@@ -238,10 +249,29 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     if (layer >= CF_PROFILE) {
         if (tile_parts > 64) return "codestream.tile-part-limit";
         if (plts == 0) return "codestream.no-plt";
-        /* FillPrecinctCounts: the packet count must fit the int JPIP state. */
-        if (main_cod != NULL &&
-            CF_CAT3(cf_packet_count, CF_S, )(&cs->siz.body, main_cod) == 0)
+    }
+    if (layer == CF_STANDARD) {
+        const CF_T(Siz) *s = &cs->siz.body;
+        if (!all_parts_have_plt || packet_layout_override ||
+            s->xosiz != 0 || s->yosiz != 0 ||
+            s->xtosiz != 0 || s->ytosiz != 0 ||
+            s->xtsiz < s->xsiz || s->ytsiz < s->ysiz)
+            return NULL;
+        for (i = 0; i < s->components.nCount; ++i)
+            if (s->components.arr[i].xrsiz != 1 ||
+                s->components.arr[i].yrsiz != 1)
+                return NULL;
+    }
+    if (main_cod != NULL && plts > 0) {
+        uint64_t packets = CF_CAT3(cf_packet_count, CF_S, )(&cs->siz.body, main_cod);
+        /* A zero result is the profile's signed JPIP packet-count overflow. */
+        if (packets == 0 && layer >= CF_PROFILE)
             return "codestream.packet-count";
+        if (packets != 0) {
+            if (layer >= CF_PROFILE && plt_padding && plt_packets < packets)
+                return "plt.zero-length";
+            if (plt_packets != packets) return "plt.packet-count";
+        }
     }
     return NULL;
 }

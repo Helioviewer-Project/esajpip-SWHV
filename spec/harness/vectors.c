@@ -935,6 +935,7 @@ static void rule_jpx_no_jpch(Jp2Family *f, int box) {
 static void rule_tile_parts_65(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     int i;
+    cod_of(f, box)->sgcod.layers = 65;
     for (i = 1; i < 65; ++i) {
         cs->segments.arr[2 + i] = cs->segments.arr[2];
         cs->segments.arr[2 + i].tilePart.tpsot = i;
@@ -974,6 +975,29 @@ static void rule_trailing_zero_iplt(Jp2Family *f, int box) {
     Iplt *e = &plt->entries.arr[plt->entries.nCount++];    /* one Iplt more than packets */
     memset(e, 0, sizeof *e);
     e->b0.bits = 0;                                        /* value 0: tolerated by the server */
+}
+static void rule_merged_plt_packets(Jp2Family *f, int box) {
+    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].plt.body;
+    plt->entries.arr[0].b0.bits = 2;                       /* two packets, one length */
+    plt->entries.nCount = 1;
+}
+static void rule_middle_zero_iplt(Jp2Family *f, int box) {
+    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].plt.body;
+    plt->entries.arr[2] = plt->entries.arr[1];
+    memset(&plt->entries.arr[1], 0, sizeof plt->entries.arr[1]);
+    plt->entries.nCount = 3;                              /* 1, 0, 1 for two packets */
+}
+static void rule_zero_logical_iplt(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    tp->rest.headers.arr[0].plt.body.entries.arr[0].b0.bits = 0;
+    tp->rest.data.nCount = 0;                              /* zero length covers all data */
+}
+static void rule_extra_nonzero_iplt(Jp2Family *f, int box) {
+    TilePart *tp = tp_of(f, box);
+    Plt *plt = &tp->rest.headers.arr[0].plt.body;
+    plt->entries.arr[1] = plt->entries.arr[0];
+    plt->entries.nCount = 2;
+    tp->rest.data.arr[tp->rest.data.nCount++] = 0;
 }
 static void rule_iplt_too_short(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
@@ -1144,6 +1168,10 @@ static const RuleMutant rule_mutants[] = {
     { "plt.boundaries", rule_plt_boundaries, "T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries", 0, 0, X_VALID },
     { "plt.second-part-short", rule_plt_second_part_short, "second tile-part PLT sum one byte short", 0, 0, X_STD },
     { "plt.second-part-long", rule_plt_second_part_long, "second tile-part PLT sum one byte too long", 0, 0, X_STD },
+    { "plt.packet-count", rule_merged_plt_packets, "two packet lengths merged into one entry with unchanged data", 0, 1, X_STD },
+    { "plt.padding-position", rule_middle_zero_iplt, "zero Iplt between two logical packets", 0, 1, X_STD },
+    { "plt.zero-length", rule_zero_logical_iplt, "zero Iplt for the only logical packet", 0, 0, X_STD },
+    { "plt.packet-count", rule_extra_nonzero_iplt, "nonzero Iplt beyond the only logical packet", 0, 0, X_STD },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */

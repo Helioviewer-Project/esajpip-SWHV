@@ -397,8 +397,9 @@ Two things that look unusual are intentional. An `Iplt` written in more
 packet lengths by value, not by byte count (`plt.iplt-five-bytes`,
 `plt.iplt-six-bytes`). A zero-valued `Iplt` entry after the last packet is
 standard-invalid but profile-valid because the server accepts it in deployed
-files (`plt.trailing-zero`); a non-zero trailing entry fails the sum rule at
-both layers.
+files (`plt.trailing-zero`). The model counts nonzero entries against the
+COD-derived packet set and rejects a zero entry within that set or a nonzero
+entry after it, even when the PLT lengths still cover the tile-part data.
 
 ## Compiler checks
 

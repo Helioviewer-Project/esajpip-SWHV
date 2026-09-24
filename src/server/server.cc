@@ -588,6 +588,9 @@ private:
                 LOG("The channel " << channel.number
                                     << " has been opened for the image '"
                                     << EscapeForLog(Target(channel)) << "'");
+                // Opening has its own timeout; start a full interval for the
+                // first response chunk.
+                channel.exchange->client->connection->BlockRequests();
                 Begin(channel);
             }
             return;
@@ -816,6 +819,10 @@ private:
                     channel->state == Channel::OPENING)) {
             Fail(*channel, 503, "Service Unavailable",
                  "JPIP channel creation timed out");
+        } else if (exchange && channel->state == Channel::OPEN &&
+                   !exchange->headers_sent) {
+            Fail(*channel, 503, "Service Unavailable",
+                 "JPIP response generation timed out");
         } else {
             ClientDisconnected(client);
             client.connection->Abort();
