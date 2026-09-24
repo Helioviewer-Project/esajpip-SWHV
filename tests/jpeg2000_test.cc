@@ -877,6 +877,58 @@ static void CheckAssociationMetadata(const string &directory, const string &name
           "Association contents were not preserved as one complete metadata bin");
 }
 
+static void CheckFragmentTableMetadata(const string &directory,
+                                       const vector<unsigned char> &codestream) {
+    for (bool nested_associations : {false, true}) {
+        vector<unsigned char> file = MakePreamble(0x6A707820); // jpx
+        vector<unsigned char> header;
+        if (nested_associations)
+            AppendBox(header, 0x61736F63, {'j'}); // asoc inside jpch
+        AppendBox(file, 0x6A706368, header); // jpch
+
+        vector<unsigned char> fragment;
+        Append16(fragment, 1);
+        Append64(fragment, JP2_CODESTREAM_OFFSET);
+        Append32(fragment, codestream.size());
+        Append16(fragment, 1);
+        vector<unsigned char> table;
+        AppendBox(table, 0x666C7374, fragment); // flst
+        AppendBox(table, 0x66726565, {'f'}); // free after flst
+        if (nested_associations)
+            AppendBox(table, 0x61736F63, {'f'}); // asoc inside ftbl
+        size_t table_start = file.size();
+        AppendBox(file, 0x6674626C, table); // ftbl
+        size_t table_end = file.size();
+
+        vector<unsigned char> url(4, 0);
+        const string location = "file://image.jp2";
+        url.insert(url.end(), location.begin(), location.end());
+        url.push_back(0);
+        vector<unsigned char> references;
+        Append16(references, 1);
+        AppendBox(references, 0x75726C20, url); // url
+        if (nested_associations)
+            AppendBox(references, 0x61736F63, {'d'}); // asoc inside dtbl
+        AppendBox(file, 0x6474626C, references); // dtbl
+
+        const char *name = nested_associations ? "jpx-nested-associations.jpx"
+                                               : "jpx-ftbl-extra.jpx";
+        WriteFile(directory + name, file);
+        jpeg2000::FileManager manager;
+        Check(OpenImage(directory, name, &manager),
+              "Could not parse JPX with extra superbox children");
+        const jpeg2000::Metadata &metadata = manager.GetImage()->GetMetadata();
+        Check(metadata.bins.empty() && metadata.bin0.size() == 1,
+              "Nested JPX boxes escaped into separate metadata bins");
+        const jpeg2000::Metadata::Part &part = metadata.bin0[0];
+        Check(part.data == data::FileSegment(0, table_start) &&
+                      part.placeholder.header == data::FileSegment(table_start, 8) &&
+                      part.placeholder.id == 0 && part.placeholder.is_jp2c &&
+                      metadata.tail == data::FileSegment(table_end, file.size() - table_end),
+              "Fragment-table contents leaked into metadata bin zero");
+    }
+}
+
 // Alternate wire forms outside the current ACN determinant model. Keep their
 // expectations explicit here rather than inventing generated-model labels.
 static void CheckSourceForms(const string &directory) {
@@ -1041,6 +1093,7 @@ int main() {
     vector<unsigned char> codestream = MakeCodestream();
     vector<unsigned char> jp2 = MakeJP2(codestream);
     WriteFile(directory + "image.jp2", jp2);
+    CheckFragmentTableMetadata(directory, codestream);
     WriteFile(directory + "wrong-brand.jp2",
               MakeEmbeddedJPX(codestream));
     vector<unsigned char> nested_codestream = MakePreamble(0x6A707820);

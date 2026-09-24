@@ -617,8 +617,12 @@ namespace jpeg2000 {
 
         while (true) {
             while (containers.size() > 1 && file->GetOffset() == containers.back().end) {
-                if (containers.back().type == FTBL_BOX_ID && num_flst != 1)
-                    return false;
+                if (containers.back().type == FTBL_BOX_ID) {
+                    if (num_flst != 1)
+                        return false;
+                    // The placeholder replaces the whole fragment table.
+                    meta_start = containers.back().end;
+                }
                 containers.pop_back();
             }
             if (file->GetOffset() == file->GetSize())
@@ -662,6 +666,8 @@ namespace jpeg2000 {
                 }
                 case ASOC_BOX_ID: TRACE("ASOC box...");
                     file->Seek(length_box, SEEK_CUR);
+                    if (containers.size() != 1)
+                        break;
                     image_index->meta_data.bins.emplace_back(box_start + header_length,
                                                              length_box);
                     image_index->meta_data.bin0.emplace_back(
@@ -695,7 +701,6 @@ namespace jpeg2000 {
                             ftbl_prefix,
                             PlaceHolder(ftbl_codestream, true, ftbl_header));
                     links.push_back({data_reference, fragment});
-                    meta_start = file->GetOffset();
                     break;
                 }
                 case DBTL_BOX_ID: TRACE("DBTL box...");
