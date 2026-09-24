@@ -94,9 +94,6 @@ void Connection::Read(uv_stream_t *stream, ssize_t length,
                       const uv_buf_t *buffer) noexcept {
     Connection *connection = static_cast<Connection *>(stream->data);
     if (length > 0) {
-        if (connection->deadline == Deadline::READ)
-            connection->SetDeadline(Deadline::READ,
-                                    connection->connection_timeout);
         connection->Consume(buffer->base, static_cast<size_t>(length));
     } else if (length == UV_EOF) {
         connection->ReportReadFailure(ReadFailure::CLOSED);

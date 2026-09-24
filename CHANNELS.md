@@ -158,9 +158,11 @@ sending a few bytes does not extend `connections.initial_timeout`. Rejected
 connections do not allocate a channel or JPEG 2000 state.
 
 After identification, the complete HTTP request head is limited to 4 KiB.
-`connections.timeout` limits each wait for request data, response writes, a
-busy channel, and an idle channel. Successful I/O starts the next wait; the
-setting is not an absolute channel lifetime. Both timeout settings must be
+`connections.timeout` sets an absolute deadline to complete that head. After a
+response, it also bounds the wait for the next request, including its head.
+Incoming bytes do not restart either deadline. The same setting limits
+response-write progress, a busy-channel wait, and channel idle time; write
+callbacks restart only the write-progress wait. Both timeout settings must be
 positive.
 
 `connections.limit` limits physical HTTP connections.

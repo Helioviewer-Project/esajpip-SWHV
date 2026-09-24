@@ -255,7 +255,8 @@ struct Exchange {
 struct FailureExchange {
     enum class Mode {
         TOO_LARGE,
-        IDENTIFICATION_TIMEOUT
+        IDENTIFICATION_TIMEOUT,
+        REQUEST_HEAD_TIMEOUT
     };
 
     uv_loop_t loop;
@@ -268,6 +269,7 @@ struct FailureExchange {
     atomic<bool> failed{false};
     bool closed = false;
     bool observed = false;
+    chrono::milliseconds elapsed{0};
 
     explicit FailureExchange(Mode _mode) : mode(_mode) {
     }
@@ -312,7 +314,11 @@ struct FailureExchange {
                     }
                 },
                 [self](server::Connection &connection) {
-                    if (self->mode != Mode::IDENTIFICATION_TIMEOUT)
+                    if (self->mode == Mode::TOO_LARGE ||
+                        (self->mode == Mode::REQUEST_HEAD_TIMEOUT &&
+                         (!connection.HasJPIPRoute() ||
+                          connection.GetRequestTarget() !=
+                                  "/partial?cnew=http")))
                         self->failed.store(true);
                     self->observed = true;
                     connection.CloseGracefully();
@@ -367,18 +373,33 @@ struct FailureExchange {
                 close(fd);
                 return;
             }
-            string request = mode == Mode::TOO_LARGE
-                    ? "GET /" + string(2050, 'a')
-                    : "GET /partial";
+            string request;
+            if (mode == Mode::TOO_LARGE)
+                request = "GET /" + string(2050, 'a');
+            else if (mode == Mode::IDENTIFICATION_TIMEOUT)
+                request = "GET /partial";
+            else
+                request = "GET /partial?cnew=http HTTP/1.1\r\nHost: l";
+            chrono::steady_clock::time_point start = chrono::steady_clock::now();
             if (write(fd, request.data(), request.size()) !=
                 static_cast<ssize_t>(request.size()))
                 failed.store(true);
+            if (mode == Mode::REQUEST_HEAD_TIMEOUT) {
+                this_thread::sleep_for(chrono::milliseconds(750));
+                if (write(fd, "o", 1) != 1)
+                    failed.store(true);
+                this_thread::sleep_for(chrono::milliseconds(750));
+                if (write(fd, "c", 1) != 1)
+                    failed.store(true);
+            }
             char buffer[256];
             ssize_t received;
             while ((received = read(fd, buffer, sizeof buffer)) > 0)
                 response.append(buffer, received);
             if (received < 0)
                 failed.store(true);
+            elapsed = chrono::duration_cast<chrono::milliseconds>(
+                    chrono::steady_clock::now() - start);
             close(fd);
         });
 
@@ -421,5 +442,13 @@ int main() {
           "The identification deadline was not enforced");
     Check(timeout.response.empty(),
           "The identification timeout unexpectedly wrote a response");
+
+    FailureExchange trickle(FailureExchange::Mode::REQUEST_HEAD_TIMEOUT);
+    trickle.Run();
+    Check(!trickle.failed.load() && trickle.observed && trickle.closed &&
+                  trickle.response.empty() &&
+                  trickle.elapsed >= chrono::milliseconds(1700) &&
+                  trickle.elapsed < chrono::milliseconds(3000),
+          "Incoming header bytes extended the request-head deadline");
     return EXIT_SUCCESS;
 }
