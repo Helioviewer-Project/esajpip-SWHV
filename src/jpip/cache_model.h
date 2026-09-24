@@ -40,17 +40,11 @@ namespace jpip {
             return codestreams[num_codestream];
         }
 
-        int GetMetadata(int id) {
+        int AddToMetadata(int id, int amount, bool complete = false) {
             if (full_meta)
                 return INT_MAX;
             if (id >= static_cast<int>(meta_data.size()))
                 meta_data.resize(id + 1, 0);
-            return meta_data[id];
-        }
-
-        int AddToMetadata(int id, int amount, bool complete = false) {
-            if (GetMetadata(id) == INT_MAX)
-                return INT_MAX;
             return AddAmount(meta_data[id], amount, complete);
         }
 
@@ -63,9 +57,12 @@ namespace jpip {
             return &codestream.precincts[index];
         }
 
-        static int GetPrecinct(Codestream &codestream, int id) {
-            int *slot = Slot(codestream, id);
-            return slot == NULL ? INT_MAX : *slot;
+        static int GetPrecinct(const Codestream &codestream, int id) {
+            if (id < codestream.min_precinct)
+                return INT_MAX;
+            size_t index = static_cast<size_t>(id - codestream.min_precinct);
+            return index < codestream.precincts.size()
+                    ? codestream.precincts[index] : 0;
         }
 
         static int AddToPrecinct(Codestream &codestream, int id, int amount,
@@ -87,16 +84,22 @@ namespace jpip {
         }
 
     public:
-        int GetDataBin(DataBinClass bin_class, int num_codestream, int id) {
+        int GetDataBin(DataBinClass bin_class, int num_codestream, int id) const {
+            const Codestream *codestream =
+                    static_cast<size_t>(num_codestream) < codestreams.size()
+                    ? &codestreams[num_codestream] : NULL;
             switch (bin_class) {
                 case DataBinClass::META_DATA:
-                    return GetMetadata(id);
+                    if (full_meta)
+                        return INT_MAX;
+                    return static_cast<size_t>(id) < meta_data.size()
+                            ? meta_data[id] : 0;
                 case DataBinClass::MAIN_HEADER:
-                    return GetCodestream(num_codestream).header;
+                    return codestream == NULL ? 0 : codestream->header;
                 case DataBinClass::TILE_HEADER:
-                    return GetCodestream(num_codestream).tile_header;
+                    return codestream == NULL ? 0 : codestream->tile_header;
                 case DataBinClass::PRECINCT:
-                    return GetPrecinct(GetCodestream(num_codestream), id);
+                    return codestream == NULL ? 0 : GetPrecinct(*codestream, id);
                 case DataBinClass::EXTENDED_PRECINCT:
                 case DataBinClass::TILE_DATA:
                 case DataBinClass::EXTENDED_TILE:

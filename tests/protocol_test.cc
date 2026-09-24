@@ -450,6 +450,7 @@ static void CheckInetAddress() {
 
 static void CheckCacheModel() {
     jpip::CacheModel model;
+    const jpip::CacheModel &read_only = model;
     const jpip::DataBinClass classes[] = {
         jpip::DataBinClass::META_DATA,
         jpip::DataBinClass::MAIN_HEADER,
@@ -458,9 +459,9 @@ static void CheckCacheModel() {
     };
 
     for (jpip::DataBinClass bin_class : classes) {
-        Check(model.GetDataBin(bin_class, 2, 3) == 0, "Nonempty initial cache model");
+        Check(read_only.GetDataBin(bin_class, 2, 3) == 0, "Nonempty initial cache model");
         Check(model.AddToDataBin(bin_class, 2, 3, 17) == 17, "Wrong cache-model increment");
-        Check(model.GetDataBin(bin_class, 2, 3) == 17, "Wrong cached data-bin length");
+        Check(read_only.GetDataBin(bin_class, 2, 3) == 17, "Wrong cached data-bin length");
         Check(model.AddToDataBin(bin_class, 2, 3, INT_MAX - 18) == INT_MAX - 1,
               "Wrong large cache-model increment");
         Check(model.AddToDataBin(bin_class, 2, 3, 2) == INT_MAX,
@@ -483,10 +484,13 @@ static void CheckCacheModel() {
     jpip::CacheModel packed;
     packed.AddToDataBin(jpip::DataBinClass::PRECINCT, 0, 0, 0, true);
     packed.Pack();
-    Check(packed.GetDataBin(jpip::DataBinClass::PRECINCT, 0, 0) == INT_MAX,
+    const jpip::CacheModel &read_only_packed = packed;
+    Check(read_only_packed.GetDataBin(jpip::DataBinClass::PRECINCT, 0, 0) == INT_MAX,
           "Forgot a packed complete precinct");
+    Check(read_only_packed.GetDataBin(jpip::DataBinClass::PRECINCT, 0, 1) == 0,
+          "Absent precinct after packed prefix is complete");
     packed.SetFullMetadata();
-    Check(packed.GetDataBin(jpip::DataBinClass::META_DATA, 0, 7) == INT_MAX,
+    Check(read_only_packed.GetDataBin(jpip::DataBinClass::META_DATA, 0, 7) == INT_MAX,
           "Did not retain the complete metadata state");
 
     bool rejected = false;
