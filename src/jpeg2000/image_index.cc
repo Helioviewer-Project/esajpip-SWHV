@@ -61,7 +61,7 @@ namespace jpeg2000 {
                                      uint64_t length_packet) {
         if (codestream.data_cursor.index >= codestream.tile_parts.size())
             return false;
-        TilePart &tile_part = codestream.tile_parts[codestream.data_cursor.index];
+        const TilePart &tile_part = codestream.tile_parts[codestream.data_cursor.index];
         const FileSegment &segment = tile_part.data;
 
         uint64_t offset = codestream.data_cursor.offset;
@@ -71,54 +71,51 @@ namespace jpeg2000 {
 
         uint64_t next_offset = offset + length_packet;
         bool packet_data_done = next_offset == segment.offset + segment.length;
-        bool plt_done = codestream.plt_cursor.index == tile_part.plt.size();
-        if (plt_done && !packet_data_done)
-            return false;
-
+        const bool plt_done = codestream.plt_cursor.index == tile_part.plt.size();
         bool final_packet = codestream.packet_index.Size() + 1 ==
                             codestream.parameters.GetNumPackets();
-        if (!final_packet && packet_data_done && !plt_done)
-            return false;
-
-        codestream.data_cursor.offset = next_offset;
         if (final_packet) {
             if (!packet_data_done)
                 return false;
+        } else if (plt_done != packet_data_done) {
+            return false;
+        }
 
+        codestream.data_cursor.offset = next_offset;
+        if (final_packet) {
             // Some deployed JPEG 2000 files contain zero PLT entries
             // after the logical packet list. T.800 defines one Iplt value per
             // packet, so accept only those zero entries and never expose them
-            // as additional packets.
-            for (;;) {
-                while (!plt_done) {
+            // as additional packets. Later tile-parts must have no data.
+            while (codestream.data_cursor.index < codestream.tile_parts.size()) {
+                const TilePart &current =
+                        codestream.tile_parts[codestream.data_cursor.index];
+                while (codestream.plt_cursor.index < current.plt.size()) {
                     uint64_t padding = 0;
                     if (!GetPLTLength(file, codestream, &padding) || padding != 0)
                         return false;
-                    plt_done = codestream.plt_cursor.index ==
-                               codestream.tile_parts[
-                                       codestream.data_cursor.index].plt.size();
                 }
 
                 codestream.data_cursor.index++;
-                if (codestream.data_cursor.index == codestream.tile_parts.size())
-                    break;
-                TilePart &next =
-                        codestream.tile_parts[codestream.data_cursor.index];
-                if (next.data.length != 0)
-                    return false;
-                codestream.data_cursor.offset = next.data.offset;
-                codestream.plt_cursor.index = 0;
-                codestream.plt_cursor.offset = next.plt[0].offset;
-                plt_done = false;
+                if (codestream.data_cursor.index < codestream.tile_parts.size()) {
+                    const TilePart &next =
+                            codestream.tile_parts[codestream.data_cursor.index];
+                    if (next.data.length != 0)
+                        return false;
+                    codestream.data_cursor.offset = next.data.offset;
+                    codestream.plt_cursor.index = 0;
+                    codestream.plt_cursor.offset = next.plt[0].offset;
+                }
             }
+            return codestream.packet_index.Add(FileSegment(offset, length_packet));
         }
 
         if (!codestream.packet_index.Add(FileSegment(offset, length_packet)))
             return false;
-        if (!final_packet && packet_data_done && plt_done) {
+        if (packet_data_done) {
             codestream.data_cursor.index++;
             if (codestream.data_cursor.index < codestream.tile_parts.size()) {
-                TilePart &next =
+                const TilePart &next =
                         codestream.tile_parts[codestream.data_cursor.index];
                 codestream.data_cursor.offset = next.data.offset;
                 codestream.plt_cursor.index = 0;
