@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <glib.h>
+
 #include "trace.h"
 
 namespace data {
@@ -43,11 +45,10 @@ namespace data {
         OpenResult Open(const char *file_name, uint64_t maximum_size) {
             assert(address == MAP_FAILED);
 
-            int fd;
-            if ((fd = open(file_name, O_RDONLY)) == -1) {
+            int fd = open(file_name, O_RDONLY);
+            if (fd == -1) {
                 int open_error = errno;
-                ERROR("Unable to open file: '" << file_name << "': " << strerror(open_error));
-                errno = open_error;
+                ERROR("Unable to open file: '" << file_name << "': " << g_strerror(open_error));
                 return open_error == ENOENT || open_error == ENOTDIR
                         ? OpenResult::NOT_FOUND : OpenResult::FAILED;
             }
@@ -57,8 +58,7 @@ namespace data {
                 int stat_error = errno;
                 close(fd);
                 ERROR("Unable to inspect file: '" << file_name << "': "
-                      << strerror(stat_error));
-                errno = stat_error;
+                      << g_strerror(stat_error));
                 return OpenResult::FAILED;
             }
             if (file_stat.st_size == 0) {
@@ -73,18 +73,19 @@ namespace data {
                 return OpenResult::TOO_LARGE;
             }
 
-            size = static_cast<size_t>(file_stat.st_size);
-            address = (char *) mmap(0, size, PROT_READ, MAP_FILE | MAP_SHARED,
-                                    fd, 0);
-            int map_error = errno;
-            close(fd);
-            if (address == MAP_FAILED) {
+            size_t file_size = static_cast<size_t>(file_stat.st_size);
+            void *mapped_address = mmap(0, file_size, PROT_READ,
+                                        MAP_FILE | MAP_SHARED, fd, 0);
+            if (mapped_address == MAP_FAILED) {
+                int map_error = errno;
+                close(fd);
                 ERROR("Unable to map file: '" << file_name << "': "
-                      << strerror(map_error));
-                clear();
-                errno = map_error;
+                      << g_strerror(map_error));
                 return OpenResult::FAILED;
             }
+            close(fd);
+            address = static_cast<char *>(mapped_address);
+            size = file_size;
             return OpenResult::OPENED;
         }
 
