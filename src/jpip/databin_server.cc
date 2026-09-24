@@ -66,13 +66,16 @@ namespace jpip {
             return true;
         }
 
-        bool CropWindow(WOI *woi, const jpeg2000::Size &bounds) {
+        bool CropWindow(WOI *woi, const jpeg2000::Size &bounds,
+                        bool extend_to_edge = false) {
             int64_t left = max<int64_t>(0, woi->position.x);
             int64_t top = max<int64_t>(0, woi->position.y);
-            int64_t right = min<int64_t>(bounds.x,
-                                         (int64_t) woi->position.x + woi->size.x);
-            int64_t bottom = min<int64_t>(bounds.y,
-                                          (int64_t) woi->position.y + woi->size.y);
+            int64_t right = extend_to_edge ? bounds.x :
+                    min<int64_t>(bounds.x,
+                                 (int64_t) woi->position.x + woi->size.x);
+            int64_t bottom = extend_to_edge ? bounds.y :
+                    min<int64_t>(bounds.y,
+                                 (int64_t) woi->position.y + woi->size.y);
             if (right <= left || bottom <= top)
                 return false;
 
@@ -115,7 +118,8 @@ namespace jpip {
                 window.woi.size = requested_size;
                 window.woi.position = request.has.roff
                         ? request.woi_position : jpeg2000::Point();
-                if (!CropWindow(&window.woi, request.resolution_size)) {
+                if (!CropWindow(&window.woi, request.resolution_size,
+                                !request.has.rsiz)) {
                     resolved->push_back(window);
                     continue;
                 }

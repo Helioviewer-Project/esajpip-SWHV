@@ -2023,6 +2023,31 @@ int main() {
                         mapped_window_response + mapped_window_length,
                         full_window_response),
           "Scaled window boundaries selected the wrong precincts");
+    Check(full_window_length > jpip::DataBinWriter::EOR_LENGTH,
+          "Full window fixture selected no precincts");
+
+    for (const char *query : {
+                 "/jpip?fsiz=2,1&roff=-1,0&model=M0,Hm,H0&cid=0",
+                 "/jpip?fsiz=2,1&roff=-2147483648,0&model=M0,Hm,H0&cid=0"}) {
+        jpip::Request default_region_request;
+        Check(default_region_request.ParseTarget(query),
+              "Could not parse a negative offset with default region");
+        jpip::DataBinServer default_region_server;
+        Check(default_region_server.SetRequest(*window_manager.GetImage(),
+                                               default_region_request),
+              "Rejected a negative offset with default region");
+        char default_region_response[4096];
+        int default_region_length = sizeof default_region_response;
+        Check(default_region_server.GenerateChunk(
+                      window_manager, default_region_response,
+                      &default_region_length, &last) && last,
+              "Could not generate a default-region response");
+        Check(default_region_length == full_window_length &&
+                      equal(default_region_response,
+                            default_region_response + default_region_length,
+                            full_window_response),
+              "Default region with negative offset did not reach the image edge");
+    }
 
     for (int response_limit = 0; response_limit < jpip::DataBinWriter::EOR_LENGTH;
          response_limit++) {

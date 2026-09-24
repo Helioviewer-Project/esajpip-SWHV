@@ -970,6 +970,29 @@ static void rule_iplt_six_bytes(Jp2Family *f, int box) {
     e->exist.b5 = 1;
     e->b5.bits = 1;                                        /* non-minimal 6-byte encoding of value 1 */
 }
+static void set_iplt_ten_bytes(Iplt *e, uint8_t first,
+                               uint8_t middle, uint8_t last) {
+    memset(e, 0, sizeof *e);
+    e->b0.bits = first;
+    e->exist.b1 = 1; e->b1.bits = middle;
+    e->exist.b2 = 1; e->b2.bits = middle;
+    e->exist.b3 = 1; e->b3.bits = middle;
+    e->exist.b4 = 1; e->b4.bits = middle;
+    e->exist.b5 = 1; e->b5.bits = middle;
+    e->exist.b6 = 1; e->b6.bits = middle;
+    e->exist.b7 = 1; e->b7.bits = middle;
+    e->exist.b8 = 1; e->b8.bits = middle;
+    e->exist.b9 = 1; e->b9.bits = last;
+}
+static void rule_iplt_value_overflow(Jp2Family *f, int box) {
+    Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
+    set_iplt_ten_bytes(e, 2, 0, 1);                       /* 2^64 + 1 wraps to 1 */
+}
+static void rule_iplt_sum_overflow(Jp2Family *f, int box) {
+    Plt *plt = &tp_of(f, box)->rest.headers.arr[0].plt.body;
+    set_iplt_ten_bytes(&plt->entries.arr[0], 1, 127, 127); /* UINT64_MAX */
+    plt->entries.arr[1].b0.bits = 3;                      /* wrapped sum equals data length 2 */
+}
 static void rule_trailing_zero_iplt(Jp2Family *f, int box) {
     Plt *plt = &tp_of(f, box)->rest.headers.arr[0].plt.body;
     Iplt *e = &plt->entries.arr[plt->entries.nCount++];    /* one Iplt more than packets */
@@ -1149,6 +1172,7 @@ static const RuleMutant rule_mutants[] = {
     { "codestream.tile-part-limit", rule_tile_parts_65, "65 tile-parts: profile invalid", 0, 0, X_PROF },
     { "main.com", rule_com_segment, "COM segment: valid", 0, 0, X_VALID },
     { "plt.iplt-five-bytes", rule_iplt_five_bytes, "5-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
+    { "plt.value-overflow", rule_iplt_value_overflow, "Iplt value 2^64+1 wraps to data length 1", 0, 0, X_STD },
     { "plt.sum-exceeds-data", rule_iplt_too_long, "packet length beyond tile-part data", 0, 0, X_STD },
     { "plt.sum-short", rule_iplt_too_short, "tile-part byte no PLT entry covers", 0, 0, X_STD },
     { "tile.header-coding-default", rule_tile_cod, "COD in the first tile-part: profile invalid", 0, 0, X_PROF },
@@ -1157,6 +1181,7 @@ static const RuleMutant rule_mutants[] = {
     { "tile.cod-first-part", rule_tile_cod_second_part, "COD in the second tile-part", 0, 0, X_STD },
     { "codestream.packet-count", rule_packet_count_overflow, "2^32 packets: profile invalid", 0, 0, X_PROF },
     { "plt.iplt-six-bytes", rule_iplt_six_bytes, "6-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
+    { "plt.sum-overflow", rule_iplt_sum_overflow, "Iplt lengths UINT64_MAX+3 wrap to data length 2", 0, 1, X_STD },
     { "siz.component-sampling", rule_subsampled, "2:1 sampling: profile invalid", 0, 0, X_PROF },
     { "main.packet-layout-override", rule_main_coc, "COC in the main header: profile invalid", 0, 0, X_PROF },
     { "main.packet-layout-override", rule_main_poc, "POC in the main header: profile invalid", 0, 0, X_PROF },

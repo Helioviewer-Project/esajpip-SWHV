@@ -89,14 +89,18 @@ static const char *CF_CAT3(cf_cod, CF_S, )(const CF_COD *c, cf_layer layer) {
     return NULL;
 }
 
-/* Value of one Iplt entry (7-bit groups, MSB first). */
-static uint64_t CF_CAT3(cf_iplt_value, CF_S, )(const Iplt *e) {
+/* Decode one Iplt entry (7-bit groups, MSB first). */
+static int CF_CAT3(cf_iplt_value, CF_S, )(const Iplt *e, uint64_t *value) {
     uint64_t v = e->b0.bits;
-#define CF_IPLT_STEP(n) if (e->exist.b##n) v = (v << 7) | (uint64_t) e->b##n.bits
+#define CF_IPLT_STEP(n) if (e->exist.b##n) { \
+        if (v > (UINT64_MAX >> 7)) return 0; \
+        v = (v << 7) | (uint64_t) e->b##n.bits; \
+    }
     CF_IPLT_STEP(1); CF_IPLT_STEP(2); CF_IPLT_STEP(3); CF_IPLT_STEP(4);
     CF_IPLT_STEP(5); CF_IPLT_STEP(6); CF_IPLT_STEP(7); CF_IPLT_STEP(8); CF_IPLT_STEP(9);
 #undef CF_IPLT_STEP
-    return v;
+    *value = v;
+    return 1;
 }
 
 /* Total packets = sum over resolutions of precinct counts, times csiz and
@@ -174,7 +178,12 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                             return "plt.zplt-sequence";
                         tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e) {
-                            uint64_t length = CF_CAT3(cf_iplt_value, CF_S, )(&plt->entries.arr[e]);
+                            uint64_t length;
+                            if (!CF_CAT3(cf_iplt_value, CF_S, )(
+                                    &plt->entries.arr[e], &length))
+                                return "plt.value-overflow";
+                            if (length > (uint64_t) tp->rest.data.nCount - plt_sum)
+                                return "plt.coverage";
                             if (length == 0) {
                                 if (layer == CF_STANDARD) return "plt.zero-length";
                                 plt_padding = 1;
