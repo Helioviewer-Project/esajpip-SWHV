@@ -97,7 +97,7 @@ namespace data {
             return Open(file_name.c_str());
         }
 
-        bool Seek(uint64_t _offset, int origin = SEEK_SET) {
+        void Seek(uint64_t _offset, int origin = SEEK_SET) {
             assert(address != MAP_FAILED);
 
             size_t new_offset;
@@ -106,7 +106,6 @@ namespace data {
             else // SEEK_CUR
                 new_offset = offset + _offset;
             offset = std::min(new_offset, size);
-            return true;
         }
 
         void Close() {

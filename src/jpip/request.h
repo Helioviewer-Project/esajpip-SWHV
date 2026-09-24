@@ -26,7 +26,6 @@ namespace jpip {
         std::vector<CodestreamSelection> codestream_selections;
         uint64_t first_requested_codestream = 0;
 
-        bool ParseURI(const std::string &uri, std::string *error_message);
         bool ParseStream(const std::string &value);
         void AddContext(int first, int last);
 
@@ -36,7 +35,7 @@ namespace jpip {
         std::string channel;
         bool accepts_http = false;
 
-        bool ParseTarget(const std::string &target,
+        bool ParseTarget(const std::string &uri,
                          std::string *error_message = NULL);
 
         struct Parameters {

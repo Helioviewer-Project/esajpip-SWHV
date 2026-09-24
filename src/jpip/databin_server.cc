@@ -148,14 +148,13 @@ namespace jpip {
                     update.bin_class != DataBinClass::TILE_HEADER &&
                     update.bin_class != DataBinClass::PRECINCT)
                     return false;
-                if (!update.has_codestream_qualifier &&
-                    !request.GetUnqualifiedModelCodestream(
-                            image_index.GetNumCodestreams(),
-                            &update.first_codestream))
-                    return false;
-                if (!update.has_codestream_qualifier)
+                if (!update.has_codestream_qualifier) {
+                    if (!request.GetUnqualifiedModelCodestream(
+                                image_index.GetNumCodestreams(),
+                                &update.first_codestream))
+                        return false;
                     update.last_codestream = update.first_codestream;
-                else if (update.last_codestream == INT_MAX)
+                } else if (update.last_codestream == INT_MAX)
                     update.last_codestream =
                             static_cast<int>(image_index.GetNumCodestreams()) - 1;
                 if (update.first_codestream < 0 ||

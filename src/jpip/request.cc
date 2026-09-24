@@ -359,13 +359,9 @@ namespace jpip {
         return true;
     }
 
-    bool Request::ParseTarget(const string &target, string *error_message) {
+    bool Request::ParseTarget(const string &uri, string *error_message) {
         if (error_message != NULL)
             error_message->clear();
-        return ParseURI(target, error_message);
-    }
-
-    bool Request::ParseURI(const string &uri, string *error_message) {
         size_t question = uri.find('?');
         object = GetObject(uri, question);
 
