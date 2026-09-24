@@ -562,6 +562,32 @@ static const char *check_linked_extents(const JpxFile_Profile *file) {
     return NULL;
 }
 
+/* The generated CONTAINING decoder temporarily trusts LBox as its stream
+ * size. Check physical box boundaries first so a malformed LBox cannot make
+ * an opaque unknown box read beyond the input buffer. Profile metadata boxes
+ * are opaque where their internal framing is not interpreted by the server. */
+static int box_bounds_ok(const Bytes *b, size_t start, size_t end, int profile, int top) {
+    while (start < end) {
+        uint32_t length, type;
+        size_t box_end, child_start;
+        int children;
+        if (end - start < 8) return 0;
+        length = be32(b->data + start);
+        type = be32(b->data + start + 4);
+        if (length < 8 || length > end - start) return 0;
+        box_end = start + length;
+        children = top && (profile ? (type == BT_JPCH || type == BT_FTBL || type == BT_DTBL)
+                                   : is_superbox(type));
+        if (children) {
+            child_start = start + 8 + (type == BT_DTBL ? 2 : 0);
+            if (child_start > box_end || !box_bounds_ok(b, child_start, box_end, profile, 0))
+                return 0;
+        }
+        start = box_end;
+    }
+    return 1;
+}
+
 static Label label(Bytes b, cf_kind kind) {
     Label l = { 0, 0, NULL, NULL };
     BitStream bs;
@@ -570,7 +596,8 @@ static Label label(Bytes b, cf_kind kind) {
 
     BitStream_AttachBuffer(&bs, b.data, (long) b.len);
     INIT(Jp2Family)(dec_family);
-    if (!DEC(Jp2Family)(dec_family, &bs, &err)) l.std_reason = "decode";
+    if (!box_bounds_ok(&b, 0, b.len, 0, 1) ||
+        !DEC(Jp2Family)(dec_family, &bs, &err)) l.std_reason = "decode";
     else if (!VALID(Jp2Family)(dec_family, &err)) l.std_reason = "constraint";
     else if ((r = cf_check_family(dec_family, CF_STANDARD, kind)) != NULL) l.std_reason = r;
     else l.std_ok = 1;
@@ -578,13 +605,15 @@ static Label label(Bytes b, cf_kind kind) {
     BitStream_AttachBuffer(&bs, b.data, (long) b.len);
     if (kind == CF_JP2) {
         INIT(Jp2File_Profile)(dec_jp2);
-        if (!DEC(Jp2File_Profile)(dec_jp2, &bs, &err)) l.prof_reason = "decode";
+        if (!box_bounds_ok(&b, 0, b.len, 1, 1) ||
+            !DEC(Jp2File_Profile)(dec_jp2, &bs, &err)) l.prof_reason = "decode";
         else if (!VALID(Jp2File_Profile)(dec_jp2, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jp2_profile(dec_jp2)) != NULL) l.prof_reason = r;
         else l.prof_ok = 1;
     } else {
         INIT(JpxFile_Profile)(dec_jpx);
-        if (!DEC(JpxFile_Profile)(dec_jpx, &bs, &err)) l.prof_reason = "decode";
+        if (!box_bounds_ok(&b, 0, b.len, 1, 1) ||
+            !DEC(JpxFile_Profile)(dec_jpx, &bs, &err)) l.prof_reason = "decode";
         else if (!VALID(JpxFile_Profile)(dec_jpx, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jpx_profile(dec_jpx)) != NULL) l.prof_reason = r;
         else if ((r = check_linked_extents(dec_jpx)) != NULL) l.prof_reason = r;
@@ -1330,6 +1359,62 @@ static void run_base(Base base, const char *companions) {
     free(base.file);
 }
 
+/* The encoder uses `abcd` as the canonical other type. Patch its TBox on
+ * the wire to exercise the decoder's full unknown-type fallback. */
+static void patch_other_type(Bytes *b, int nested, uint32_t previous, uint32_t type) {
+    Regions rs = walk(b);
+    int i, found = 0;
+    for (i = 0; i < rs.n; ++i) {
+        const Region *r = &rs.r[i];
+        if (strcmp(r->kind, "LBox") != 0 || (r->parent >= 0) != nested ||
+            be32(b->data + r->start + 4) != previous)
+            continue;
+        put32(b->data + r->start + 4, type);
+        found++;
+    }
+    free(rs.r);
+    if (found != 1) die("expected one target unknown box");
+}
+
+static void emit_unknown_box_types(void) {
+    Base base = base_jp2(0, 0);
+    Bytes b;
+    Superbox *superbox;
+    InnerBox *child;
+
+    rule_unknown_box(base.file, -1);
+    b = encode_family(base.file, 1);
+    patch_other_type(&b, 0, 1633837924u, be32((const unsigned char *) "wxyz"));
+    emit(b, CF_JP2, "jp2-unknown-top-wxyz", "file.unknown-box",
+         "unlisted top-level box type: valid and skipped", NULL, X_VALID);
+    patch_other_type(&b, 0, be32((const unsigned char *) "wxyz"), 0xF0E1D2C3u);
+    emit(b, CF_JP2, "jp2-unknown-top-binary", "file.unknown-box",
+         "unlisted non-ASCII box type: valid and skipped", NULL, X_VALID);
+    free(b.data);
+    free(base.file);
+
+    base = base_jpx_embedded();
+    rule_unknown_box(base.file, -1);
+    b = encode_family(base.file, 1);
+    patch_other_type(&b, 0, 1633837924u, be32((const unsigned char *) "wxyz"));
+    emit(b, CF_JPX, "jpx-unknown-top-wxyz", "file.unknown-box",
+         "unlisted top-level box type: valid and skipped", NULL, X_VALID);
+    free(b.data);
+    free(base.file);
+
+    base = base_jpx_embedded();
+    superbox = &base.file->boxes.arr[3].payload.u.jpch;
+    child = &superbox->children.arr[superbox->children.nCount++];
+    child->payload.kind = InnerPayload_other_PRESENT;
+    OCTETS(child->payload.u.other.data, "\x01", 1);
+    b = encode_family(base.file, 1);
+    patch_other_type(&b, 1, 1633837924u, be32((const unsigned char *) "wxyz"));
+    emit(b, CF_JPX, "jpx-unknown-inner-wxyz", "file.unknown-box",
+         "unlisted box inside jpch: valid and skipped", NULL, X_VALID);
+    free(b.data);
+    free(base.file);
+}
+
 static void emit_associations(void) {
     Base base = base_jpx_embedded();
     Bytes b = encode_family(base.file, 1), mutant;
@@ -1393,6 +1478,7 @@ int main(int argc, char **argv) {
     run_base(base_jp2(0, 0), NULL);
     run_base(base_jp2(1, 1), NULL);
     run_base(base_jpx_embedded(), NULL);
+    emit_unknown_box_types();
     emit_associations();
 
     /* Linked JPX: emit the two companion frames first, read back their

@@ -333,6 +333,10 @@ jpx-embedded-rule-file.ftyp-compatibility-36.jpx	jpx	valid	valid	-	file.ftyp-com
 jpx-embedded-rule-plt.boundaries-39.jpx	jpx	valid	valid	-	plt.boundaries	T.800 A.7.3: lengths 1,127,128,129 across PLT and tile-part boundaries	-
 jpx-embedded-rule-plt.second-part-short-40.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-short	second tile-part PLT sum one byte short	-
 jpx-embedded-rule-plt.second-part-long-41.jpx	jpx	invalid	invalid	plt.coverage	plt.second-part-long	second tile-part PLT sum one byte too long	-
+jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
+jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
+jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
+jpx-unknown-inner-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted box inside jpch: valid and skipped	-
 jpx-asoc.jpx	jpx	valid	valid	-	asoc.opaque	T.801 M.11.11: label associated with XML; profile preserves opaque contents	-
 jpx-asoc-child-length.jpx	jpx	invalid	valid	decode	asoc.opaque	inner LBox below 8: standard invalid, profile preserves opaque contents	-
 jpx-asoc-outer-length.jpx	jpx	invalid	invalid	decode	asoc.outer-length	outer LBox exceeds file: invalid at both layers	-

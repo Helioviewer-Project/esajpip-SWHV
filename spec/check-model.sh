@@ -19,6 +19,16 @@ if [ "$#" -gt 1 ]; then
 fi
 
 mkdir "$generated" "$regressions"
+
+# The decode-only box-type mapping must preserve every modeled TBox value.
+known_types=$(sed -n '/^[[:space:]]*other[[:space:]]/!s/.*present-when tbox == \([0-9][0-9]*\),.*/\1/p' \
+    "$repo/spec/jp2-boxes.acn" | sort -u)
+mapped_types=$(sed -n 's/^[[:space:]]*case \([0-9][0-9]*\)u:.*/\1/p' \
+    "$repo/spec/harness/mapping.c" | sort -u)
+if [ "$known_types" != "$mapped_types" ]; then
+    echo "box-type mapping differs from the ACN choice types" >&2
+    exit 1
+fi
 if [ "$#" -eq 1 ]; then
     corpus=$1
     mkdir -p "$corpus"

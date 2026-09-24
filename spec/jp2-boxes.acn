@@ -3,8 +3,10 @@
 -- Bit-level encoding for jp2-boxes.asn1 (T.800 Annex I box syntax).
 -- Unsigned big-endian throughout.
 --
--- Inserted determinant and mapping function (harness/mapping.c):
+-- Inserted determinants and mapping functions (harness/mapping.c):
 --   lbox : wire = payload bytes + 8   (LBox counts LBox and TBox)
+--   boxtype : keep listed TBox values; decode all others as 'abcd' so
+--             the opaque `other` branch handles every unknown type
 -- The payload of every box is a CONTAINING region sized by LBox; superbox
 -- children and opaque data use `size deduced` inside it. The whole file is
 -- the top-level region for Jp2Family.boxes.
@@ -24,7 +26,7 @@ Jp2Family [] {
 
 TopBox [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    topType     TopBoxType [encoding pos-int, size 32, endianness big],
+    topType     TopBoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <topType, lbox> []
 }
 
@@ -71,7 +73,7 @@ Ftyp [] {
 
 InnerBox [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    innerType   InnerBoxType [encoding pos-int, size 32, endianness big],
+    innerType   InnerBoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <innerType, lbox> []
 }
 
@@ -127,7 +129,7 @@ JpxFile-Profile [] {
 
 TopBox-Profile [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    profileTopType BoxType-Profile [encoding pos-int, size 32, endianness big],
+    profileTopType BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <profileTopType, lbox> []
 }
 
@@ -171,7 +173,7 @@ DataEntryUrl-Profile [] {
 
 InnerBox-Profile [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    profileInnerType BoxType-Profile [encoding pos-int, size 32, endianness big],
+    profileInnerType BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <profileInnerType, lbox> []
 }
 

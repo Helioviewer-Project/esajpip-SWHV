@@ -1,14 +1,14 @@
-/* mapping.h — ACN mapping functions for the inserted length determinants.
+/* mapping.h — ACN mapping functions for box types and length determinants.
  *
- * asn1scc calls a mapping function on a determinant's value: the encode
- * direction maps the model value (payload byte count) to the wire value,
- * the decode direction maps the wire value back. The exact prototype names
- * are dictated by the generated header for the module that references
- * them; check it and adjust MAPPING_ENCODE_NAME / MAPPING_DECODE_NAME.
+ * The length mappings convert between model payload counts and wire
+ * lengths in both directions. The box-type mapping is decode-only and routes
+ * unlisted TBox values to the opaque `other` choice. The generated code
+ * dictates the prototype names; check it when upgrading asn1scc.
  *
  *   lxxx : Lxxx counts its own two bytes         wire = n + 2
  *   psot : Psot counts from the SOT marker code  wire = n + 12
  *   lbox : LBox counts LBox and TBox             wire = n + 8
+ *   boxtype : unknown wire type to opaque `other` on decode only
  */
 #ifndef J2K_HARNESS_MAPPING_H
 #define J2K_HARNESS_MAPPING_H
@@ -28,5 +28,6 @@ asn1SccSint MAPPING_ENCODE_NAME(psot)(asn1SccSint n);
 asn1SccSint MAPPING_DECODE_NAME(psot)(asn1SccSint n);
 asn1SccSint MAPPING_ENCODE_NAME(lbox)(asn1SccSint n);
 asn1SccSint MAPPING_DECODE_NAME(lbox)(asn1SccSint n);
+asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type);
 
 #endif

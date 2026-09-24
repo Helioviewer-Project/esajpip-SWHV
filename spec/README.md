@@ -532,8 +532,8 @@ one thing to touch when regenerating with a newer asn1scc. The server and
 
 ### Mapping functions
 
-Three, in `harness/mapping.c`, each in both directions, because ACN's
-length determinants count payload bytes while the standard's length fields
+`harness/mapping.c` provides three length mappings in both directions.
+ACN's length determinants count payload bytes, while the wire length fields
 also count themselves and their neighbours:
 
 | Name | Where | Encode (model → wire) | Decode (wire → model) |
@@ -541,6 +541,19 @@ also count themselves and their neighbours:
 | `lxxx` | every marker segment | `n + 2` | `n − 2` |
 | `psot` | SOT | `n + 12` | `n − 12` |
 | `lbox` | every box | `n + 8` | `n − 8` |
+
+`boxtype` is decode-only. It preserves every box type listed in the ACN
+choices and maps every other 32-bit TBox value to `'abcd'`, which selects the
+opaque `other` alternative. The model uses the normalized type for validity
+checks; the server retains the original bytes. The model encoder writes
+`'abcd'` for `other`, so the corpus generator patches encoded TBox values to
+exercise other unknown types. `check-model.sh` verifies that the mapping's
+known-type list matches the ACN choices.
+
+Before decoding, the corpus harness checks physical LBox boundaries. The
+generated `CONTAINING` decoder uses LBox as a temporary stream size, which
+can otherwise read beyond the buffer for malformed lengths. The check
+follows the standard and profile's different superbox interpretations.
 
 ## The test loop in `jpeg2000_test.cc`
 
