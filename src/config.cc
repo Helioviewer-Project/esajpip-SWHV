@@ -109,7 +109,7 @@ bool Config::Load(const char *file_name, string &error_message) {
     if (!error_message.empty())
         return false;
 
-    if (!image_directory_.empty() && image_directory_.back() != '/')
+    if (image_directory_.back() != '/')
         image_directory_ += '/';
     if (!log_directory_.empty() && log_directory_.back() != '/')
         log_directory_ += '/';

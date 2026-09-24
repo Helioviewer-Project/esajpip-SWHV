@@ -736,7 +736,7 @@ static vector<string> SplitTabs(const string &line) {
 static bool IndexGeneratedVector(const string &directory, const string &name,
                                  string *failure_stage) {
     jpeg2000::FileManager manager;
-    if (!manager.Init(directory)) {
+    if (!manager.Init(directory + "/")) {
         *failure_stage = "initialization";
         return false;
     }
@@ -792,7 +792,7 @@ static bool IndexGeneratedVector(const string &directory, const string &name,
 
 static void CheckPLTBoundaries(const string &directory, const string &name) {
     jpeg2000::FileManager manager;
-    Check(manager.Init(directory) &&
+    Check(manager.Init(directory + "/") &&
                   manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
           "Could not open the generated PLT boundary fixture");
     jpeg2000::ImageIndex *image = manager.GetImage();
@@ -827,7 +827,7 @@ static void CheckLinkedGraphs() {
     const int order[] = {2, 0, 3, 1};
     for (int graph = 0; graph < 3; ++graph) {
         jpeg2000::FileManager manager;
-        Check(manager.Init(directory) &&
+        Check(manager.Init(directory + "/") &&
                       manager.OpenImage(names[graph]) == jpeg2000::FileManager::OpenResult::OPENED,
               "Could not open the generated linked-JPX graph");
         jpeg2000::ImageIndex *image = manager.GetImage();
@@ -862,7 +862,7 @@ static void CheckLinkedGraphs() {
 
 static void CheckAssociationMetadata(const string &directory, const string &name) {
     jpeg2000::FileManager manager;
-    Check(manager.Init(directory) &&
+    Check(manager.Init(directory + "/") &&
                   manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
           "Could not open the generated association fixture");
     jpeg2000::ImageIndex *image = manager.GetImage();

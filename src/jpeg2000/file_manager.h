@@ -70,15 +70,13 @@ namespace jpeg2000 {
     public:
         /**
          * Initializes the object.
-         * @param root_dir Root directory of the image repository.
+         * @param root_dir Root directory of the image repository, ending in '/'.
          * @return <code>true</code> if successful
          */
         bool Init(const std::string &root_dir) {
             if (root_dir.empty())
                 return false;
             root_dir_ = root_dir;
-            if (root_dir_.back() != '/')
-                root_dir_ += '/';
             return true;
         }
 
