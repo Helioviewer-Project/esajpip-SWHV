@@ -5,6 +5,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <uv.h>
@@ -666,6 +668,28 @@ static vector<unsigned char> MakeMixedJPX(
     AppendBox(file, 0x6A703263, codestream);              // jp2c 0
     AppendLinkedCodestream(file, linked_path, codestream.size()); // ftbl 1
     return file;
+}
+
+static void RemoveDirectory(const string &directory) {
+    DIR *files = opendir(directory.c_str());
+    Check(files != NULL, "Could not list JPEG 2000 test directory");
+    for (dirent *entry = readdir(files); entry != NULL; entry = readdir(files)) {
+        string name = entry->d_name;
+        if (name == "." || name == "..")
+            continue;
+        string path = directory + "/" + name;
+        struct stat info;
+        Check(lstat(path.c_str(), &info) == 0,
+              "Could not inspect JPEG 2000 test fixture");
+        if (S_ISDIR(info.st_mode))
+            RemoveDirectory(path);
+        else
+            Check(unlink(path.c_str()) == 0,
+                  "Could not remove JPEG 2000 test fixture");
+    }
+    Check(closedir(files) == 0, "Could not close JPEG 2000 test directory");
+    Check(rmdir(directory.c_str()) == 0,
+          "Could not remove JPEG 2000 test directory");
 }
 
 static void WriteFile(const string &path, const vector<unsigned char> &data) {
@@ -2071,63 +2095,14 @@ int main() {
           "Rejected valid missing-file request state");
     manager.ClearFiles();
 
-    remove((directory + "image.jp2").c_str());
-    remove((directory + "wrong-brand.jp2").c_str());
-    remove((directory + "nested-codestream.jpx").c_str());
-    remove((directory + "empty-reference.jpx").c_str());
-    remove((directory + "nested/relative.jpx").c_str());
-    rmdir((directory + "nested").c_str());
-    remove((directory + "pcrl.jp2").c_str());
-    remove((directory + "cprl.jp2").c_str());
-    for (int progression = 0; progression <= 4; ++progression) {
-        remove((directory + "progression-" + to_string(progression) +
-                ".jp2").c_str());
-        remove((directory + "subsampled-" + to_string(progression) + ".jp2").c_str());
-    }
-    remove((directory + "many-layers.jp2").c_str());
-    remove((directory + "multi-tile.jp2").c_str());
-    remove((directory + "bad-tile-index.jp2").c_str());
-    remove((directory + "64-tile-parts.jp2").c_str());
-    remove((directory + "65-tile-parts.jp2").c_str());
-    remove((directory + "late-cod.jp2").c_str());
-    remove((directory + "late-qcd.jp2").c_str());
-    remove((directory + "tile-cod.jp2").c_str());
-    remove((directory + "tile-qcd.jp2").c_str());
-    remove((directory + "tile-com.jp2").c_str());
-    remove((directory + "main-coc.jp2").c_str());
-    remove((directory + "main-poc.jp2").c_str());
-    remove((directory + "short-plt.jp2").c_str());
-    remove((directory + "extra-tile-part-packet.jp2").c_str());
-    remove((directory + "extra-plt-entry.jp2").c_str());
-    remove((directory + "multiple-plt.jp2").c_str());
-    remove((directory + "repeated-plt-index.jp2").c_str());
-    remove((directory + "zero-padded-plt.jp2").c_str());
-    remove((directory + "nonzero-padded-plt.jp2").c_str());
-    remove((directory + "open-ended-tile-part.jp2").c_str());
-    remove((directory + "valid-mct.jp2").c_str());
-    remove((directory + "short-mct.jp2").c_str());
-    remove((directory + "mismatched-mct.jp2").c_str());
-    remove(large_file.c_str());
-    remove(large_jpx.c_str());
-    remove(empty_file.c_str());
-    remove((directory + "default-precincts.jp2").c_str());
-    remove((directory + "nonzero-origin.jp2").c_str());
+    Check(remove((directory + "image.jp2").c_str()) == 0,
+          "Could not remove source for missing-file test");
     response_length = sizeof response;
     Check(!missing_file_server.GenerateChunk(manager, response, &response_length, &last),
           "Generated a response after its source file disappeared");
 
-    remove((directory + "embedded.jpx").c_str());
-    remove((directory + "embedded-two.jpx").c_str());
-    remove((directory + "header-first-embedded.jpx").c_str());
-    remove((directory + "mixed.jpx").c_str());
-    remove((directory + "linked.jpx").c_str());
-    remove((directory + "outside-linked.jpx").c_str());
-    remove(outside_file.c_str());
-    remove((directory + "bad-plt.jp2").c_str());
-    remove((directory + "truncated.jp2").c_str());
-    remove((directory + "truncated-linked.jpx").c_str());
-    remove((directory + "bad-reference.jpx").c_str());
-    remove((directory + "bad-fragment.jpx").c_str());
-    rmdir(directory_name);
+    Check(remove(outside_file.c_str()) == 0,
+          "Could not remove outside linked fixture");
+    RemoveDirectory(directory_name);
     return EXIT_SUCCESS;
 }
