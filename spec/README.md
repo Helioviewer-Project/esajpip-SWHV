@@ -37,10 +37,9 @@ code remains outside the server build.
 
 **Status.** With the deferred-ACN compiler fixes described under "Compiler
 checks", the complete model generates C, that C builds as strict C11, and the
-sanitized harness writes 394 uniquely named vectors. All mutant expectations
-agree with the generated decoders and cross-field checks; 40 vectors are valid
-at both layers. `spec/VERSION` and `spec/asn1scc-patches/series` together define
-the reproducible compiler source. The 394-vector corpus is committed under
+sanitized harness writes the corpus with unique names and no label mismatches.
+`spec/VERSION` and `spec/asn1scc-patches/series` together define the
+reproducible compiler source. The corpus is committed under
 `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
 the server parser and lazy packet indexer.
 
@@ -270,9 +269,9 @@ commands from the repository root.
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh /tmp/j2k-corpus
    ```
 
-   It prints `vectors: 394 vectors written … (40 valid at both layers)` and
-   exits non-zero if any mutant did not produce the label its table entry
-   expects (see "What the harness generates"); each such line names the
+   It reports how many vectors were written and how many are valid at both
+   layers. It exits non-zero if any mutant did not produce the label its
+   table entry expects (see "What the harness generates"); each such line names the
    vector, the expected and actual labels, and the rule that fired. On the
    first run, expect a few of these — each is either a mutant that missed
    its target, a wrong expectation, or a model rule firing in an order the
@@ -405,7 +404,7 @@ both layers.
 
 The compiler is built from the exact revision in `spec/VERSION` plus the
 ordered patches in `spec/asn1scc-patches/`. Four small cases added under
-asn1scc's `v4Tests/test-cases/acn/25-DeferredRegressions/` pin the backend
+asn1scc's `v4Tests/test-cases/acn-v2/` pin the backend
 mechanisms exposed by this model:
 
 1. a one-bit Boolean determinant produced inside a referenced structure and
@@ -545,31 +544,23 @@ also count themselves and their neighbours:
 
 ## The test loop in `jpeg2000_test.cc`
 
-The test opens `tests/vectors/j2k/manifest.tsv` and processes every row. Corpus
-files remain in their committed directory, so linked-JPX companions resolve
-under the same names used when the harness generated them. For each row it:
+`CheckGeneratedCorpus()` reads every row of
+`tests/vectors/j2k/manifest.tsv`. Corpus files remain in their committed
+directory, so linked-JPX companions resolve under the same names used when
+the harness generated them.
 
-```cpp
-bool expect = row.profile == "valid";
-jpeg2000::FileManager manager;
-bool accepted = manager.Init(corpus_directory) &&
-                manager.OpenImage(row.file) == OpenResult::OPENED;
-if (accepted) {
-    for (each codestream) {
-        data::File *file = manager.GetFile(image->GetPathName(codestream));
-        for (each packet declared by the codestream geometry)
-            accepted = file != NULL && image->GetPacket(
-                    file, codestream, packet, &segment);
-    }
-}
-Check(accepted == expect, ("vector " + row.file + ": expected " +
-                           (expect ? "accept" : "reject")).c_str());
-```
+For each row, it compares the `profile` label with
+`IndexGeneratedVector()`, which opens the file and attempts to index every
+packet in every codestream. The loop collects profile mismatches, recording
+whether each vector was unexpectedly accepted or where it was rejected, along
+with the manifest's `reason` and `note` fields. After the loop, it prints
+the collected mismatches and fails if any occurred. The `field` column
+selects extra PLT-boundary and association-metadata checks for the applicable
+rows.
 
 The lazy packet lookup matters: some malformed packet-length tables are
 detectable only when the packet index is built, not while the file structure is
-opened. The manifest's `reason`, `field`, and `note` columns are included in a
-failure message so a disagreement points back to the model rule.
+opened.
 
 The hand-built fixtures in `jpeg2000_test.cc` stay. Those that cover a
 gap in the model ("Gaps") are the only test of that behaviour; the rest

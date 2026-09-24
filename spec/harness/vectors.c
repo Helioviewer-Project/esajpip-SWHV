@@ -1056,7 +1056,7 @@ static void rule_missing_signature(Jp2Family *f, int box) {
     int i;
     (void) box;
     for (i = 1; i < f->boxes.nCount; ++i) f->boxes.arr[i - 1] = f->boxes.arr[i];
-    f->boxes.nCount--;                                    /* standard invalid; server accepts */
+    f->boxes.nCount--;
 }
 static void rule_two_jp2c(Jp2Family *f, int box) {
     f->boxes.arr[f->boxes.nCount] = f->boxes.arr[box];

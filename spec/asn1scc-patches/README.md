@@ -35,7 +35,7 @@ The complete stack is checked in three layers:
   strict C11, runs their generated tests, and checks the mapped-length wire
   value; and
 - esajpip's complete JP2/JPX model generates, compiles as strict C11, and runs
-  its 376-vector harness under AddressSanitizer and UndefinedBehaviorSanitizer
+  its corpus harness under AddressSanitizer and UndefinedBehaviorSanitizer
   without label mismatches.
 
 The complete ASN1SCC solution build checks that all backend interfaces remain
