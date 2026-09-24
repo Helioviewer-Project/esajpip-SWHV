@@ -1,9 +1,15 @@
-# ASN1SCC patches
+# ASN1SCC patches (reference)
 
-These patches fix deferred ACN (`--acn-v2`) generation in ASN1SCC. They are
-kept here both as a reproducible compiler input and as a reviewable series that
-can be submitted upstream. The series applies to the exact unmodified revision
-in [`../VERSION`](../VERSION).
+These patches are the former local fix for deferred ACN (`--acn-v2`)
+generation in ASN1SCC. They apply, in [`series`](series) order, to the exact
+unmodified ASN1SCC commit
+`4434cad8bbcc436183ce4cc15721392be1466e36`. All three patches still
+apply to that commit.
+
+They are retained as a reference. [`../VERSION`](../VERSION) now pins the
+upstream compiler fix for [issue #415](https://github.com/esa/asn1scc/issues/415),
+and [`../build-asn1scc.sh`](../build-asn1scc.sh) builds that upstream revision
+without applying this series.
 
 Each patch contains one fix and the regression that demonstrates it:
 
@@ -16,29 +22,7 @@ Each patch contains one fix and the regression that demonstrates it:
    parameterized choices. Its mapped-length regression checks the exact wire
    bytes as well as the generated round trip.
 
-The regressions live in `v4Tests/test-cases/acn-v2`, outside the legacy ACN
-test-case discovery tree, and are invoked by the C CI group. The compiler-side
-changes update every affected backend interface. The executable regressions
-currently exercise generated C, which is the backend used by esajpip.
-
-[`../build-asn1scc.sh`](../build-asn1scc.sh) exports the pinned revision from a
-local ASN1SCC repository, applies the series to that clean tree, builds it in
-Docker, and runs the focused regressions. It never modifies the supplied
-repository or depends on its working-tree state.
-
-## Verification
-
-The complete stack is checked in three layers:
-
-- `build-asn1scc.sh` builds the ASN1SCC solution in the Linux compiler image;
-- the same script generates all four focused regressions, compiles them as
-  strict C11, runs their generated tests, and checks the mapped-length wire
-  value; and
-- esajpip's complete JP2/JPX model generates, compiles as strict C11, and runs
-  its corpus harness under AddressSanitizer and UndefinedBehaviorSanitizer
-  without label mismatches.
-
-The complete ASN1SCC solution build checks that all backend interfaces remain
-consistent. Runtime behavior is proven for C only. Upstream review may still
-request equivalent executable coverage for another backend, but that is not
-claimed by this series.
+The patches add four focused C regressions under
+`v4Tests/test-cases/acn-v2/`. The former build workflow compiled them as
+strict C11 and checked the mapped-length wire value. The current build runs
+the upstream ACN v2 regressions and wire checks instead.

@@ -1148,6 +1148,7 @@ typedef struct {
     Expect expect;
 } RuleMutant;
 
+/* Both rule tables use array positions in fixture names; append new entries. */
 static const RuleMutant rule_mutants[] = {
     { "codestream.one-cod-before-sot", rule_second_cod, "two COD in main header", 0, 0, X_STD },
     { "codestream.one-qcd-before-sot", rule_second_qcd, "two QCD in main header", 0, 0, X_STD },
@@ -1172,7 +1173,6 @@ static const RuleMutant rule_mutants[] = {
     { "codestream.tile-part-limit", rule_tile_parts_65, "65 tile-parts: profile invalid", 0, 0, X_PROF },
     { "main.com", rule_com_segment, "COM segment: valid", 0, 0, X_VALID },
     { "plt.iplt-five-bytes", rule_iplt_five_bytes, "5-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
-    { "plt.value-overflow", rule_iplt_value_overflow, "Iplt value 2^64+1 wraps to data length 1", 0, 0, X_STD },
     { "plt.sum-exceeds-data", rule_iplt_too_long, "packet length beyond tile-part data", 0, 0, X_STD },
     { "plt.sum-short", rule_iplt_too_short, "tile-part byte no PLT entry covers", 0, 0, X_STD },
     { "tile.header-coding-default", rule_tile_cod, "COD in the first tile-part: profile invalid", 0, 0, X_PROF },
@@ -1181,7 +1181,6 @@ static const RuleMutant rule_mutants[] = {
     { "tile.cod-first-part", rule_tile_cod_second_part, "COD in the second tile-part", 0, 0, X_STD },
     { "codestream.packet-count", rule_packet_count_overflow, "2^32 packets: profile invalid", 0, 0, X_PROF },
     { "plt.iplt-six-bytes", rule_iplt_six_bytes, "6-byte Iplt encoding value 1: valid", 0, 0, X_VALID },
-    { "plt.sum-overflow", rule_iplt_sum_overflow, "Iplt lengths UINT64_MAX+3 wrap to data length 2", 0, 1, X_STD },
     { "siz.component-sampling", rule_subsampled, "2:1 sampling: profile invalid", 0, 0, X_PROF },
     { "main.packet-layout-override", rule_main_coc, "COC in the main header: profile invalid", 0, 0, X_PROF },
     { "main.packet-layout-override", rule_main_poc, "POC in the main header: profile invalid", 0, 0, X_PROF },
@@ -1197,6 +1196,8 @@ static const RuleMutant rule_mutants[] = {
     { "plt.padding-position", rule_middle_zero_iplt, "zero Iplt between two logical packets", 0, 1, X_STD },
     { "plt.zero-length", rule_zero_logical_iplt, "zero Iplt for the only logical packet", 0, 0, X_STD },
     { "plt.packet-count", rule_extra_nonzero_iplt, "nonzero Iplt beyond the only logical packet", 0, 0, X_STD },
+    { "plt.value-overflow", rule_iplt_value_overflow, "Iplt value 2^64+1 wraps to data length 1", 0, 0, X_STD },
+    { "plt.sum-overflow", rule_iplt_sum_overflow, "Iplt lengths UINT64_MAX+3 wrap to data length 2", 0, 1, X_STD },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */

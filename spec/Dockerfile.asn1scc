@@ -5,6 +5,7 @@ RUN apt-get update \
         default-jre-headless \
         gcc \
         libc6-dev \
+        make \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /source

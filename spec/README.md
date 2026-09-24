@@ -35,11 +35,10 @@ on a developer machine, only when the description changes. The server tests
 consume only the committed corpus through plain CMake/CTest; generated compiler
 code remains outside the server build.
 
-**Status.** With the deferred-ACN compiler fixes described under "Compiler
-checks", the complete model generates C, that C builds as strict C11, and the
-sanitized harness writes the corpus with unique names and no label mismatches.
-`spec/VERSION` and `spec/asn1scc-patches/series` together define the
-reproducible compiler source. The corpus is committed under
+**Status.** With the upstream compiler revision pinned here, the complete model
+generates C, that C builds as strict C11, and the sanitized harness writes the
+corpus with unique names and no label mismatches.
+`spec/VERSION` pins the upstream compiler source. The corpus is committed under
 `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every manifest row against
 the server parser and lazy packet indexer.
 
@@ -209,9 +208,9 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
-| `VERSION` | The exact unmodified asn1scc revision under the local patch stack. The current base is `4434cad8bbcc436183ce4cc15721392be1466e36`. |
-| `asn1scc-patches/` | Ordered, described compiler patches and their focused regressions. |
-| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository, applies the patch stack to a temporary clean tree, builds the Docker image, and strict-compiles its focused regressions. |
+| `VERSION` | The exact upstream asn1scc revision used to generate the corpus. |
+| `asn1scc-patches/` | Reference archive of the former local compiler fixes. Its README records the original base commit; the current build does not apply these patches. |
+| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, builds the Docker image, and runs upstream ACN v2 regressions. |
 | `check-model.sh` | Generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
@@ -245,37 +244,35 @@ the decoder rejects it.
 
 ## Quick start (regenerating the corpus)
 
-Only needed when a model file changes. Everything runs offline. Run these
-commands from the repository root.
+Run this workflow when a model or harness changes, or when updating the
+compiler pin. Everything runs offline. Run these commands from the repository
+root.
 
 1. Get an asn1scc repository containing the commit pinned in `spec/VERSION`.
    Its checked-out branch and working tree do not matter: the build script
-   exports the pinned commit, applies `spec/asn1scc-patches/series` to that
-   clean tree, and builds the compiler in Linux Docker:
+   exports that upstream commit to a clean tree, builds the compiler in Linux
+   Docker, and runs the relevant upstream regressions:
 
    ```sh
    spec/build-asn1scc.sh ~/git/asn1scc esajpip-asn1scc
    ```
 
-   The current base belongs to the `4.9.0.0` lineage and includes later
-   upstream fixes. Advance it only deliberately: rebase and verify the patch
-   stack, then regenerate and review the corpus in the same change.
-2. Run the complete generation and harness gate. Give the script an empty
-   output directory only when you want to retain the generated corpus:
+   Advance the pin only deliberately, then regenerate and review the corpus
+   in the same change.
+2. Run the complete generation and harness gate:
 
    ```sh
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh
-   mkdir /tmp/j2k-corpus
-   ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh /tmp/j2k-corpus
    ```
 
+   To retain the generated corpus, pass an empty output directory.
    It reports how many vectors were written and how many are valid at both
    layers. It exits non-zero if any mutant did not produce the label its
    table entry expects (see "What the harness generates"); each such line names the
    vector, the expected and actual labels, and the rule that fired. On the
-   first run, expect a few of these — each is either a mutant that missed
-   its target, a wrong expectation, or a model rule firing in an order the
-   table did not anticipate; settle it before trusting the corpus.
+   first run after an intentional model change, investigate any mismatch
+   before trusting the corpus.
+
    The generic compiler `-atc` generator is intentionally not used for this
    model: its large bounded, inline container types make generic exhaustive
    values impractical, and it cannot replace the JPEG 2000 cross-field and
@@ -284,9 +281,9 @@ commands from the repository root.
 3. Run the server tests and read "When a vector fails" for anything red:
 
    ```sh
-   cmake -S . -B build -DBUILD_TESTING=ON && cmake --build build && ctest --test-dir build
+   ./tests/run.sh
    ```
-4. Commit the model change, `spec/VERSION` if it changed, and
+4. Commit the changed model or harness, `spec/VERSION` if it changed, and
    `tests/vectors/j2k/` together. Never edit vector files or manifest labels
    by hand.
 
@@ -403,9 +400,9 @@ entry after it, even when the PLT lengths still cover the tile-part data.
 
 ## Compiler checks
 
-The compiler is built from the exact revision in `spec/VERSION` plus the
-ordered patches in `spec/asn1scc-patches/`. Four small cases added under
-asn1scc's `v4Tests/test-cases/acn-v2/` pin the backend
+The compiler is built from the exact upstream revision in `spec/VERSION`.
+Issue [#415](https://github.com/esa/asn1scc/issues/415) added cases under
+asn1scc's `v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/` for the backend
 mechanisms exposed by this model:
 
 1. a one-bit Boolean determinant produced inside a referenced structure and
@@ -415,12 +412,12 @@ mechanisms exposed by this model:
 3. a length determinant crossing nested `SEQUENCE` and `CHOICE` boundaries;
 4. a mapped length determinant crossing a parameterized `CHOICE` boundary.
 
-The compiler now converts those cross-scope determinant relationships into
+The compiler converts those cross-scope determinant relationships into
 explicit ACN parameters, reserves and patches producer fields at the scope
-that owns the value, preserves mapping functions when patching measured
-lengths, and emits initialized generated locals. Each focused model generates
-and builds as strict C11. `check-model.sh` then proves that the same machinery
-generates and runs the complete JP2/JPX model under ASan and UBSan.
+that owns the value, and preserves mapping functions when patching measured
+lengths. `build-asn1scc.sh` runs the upstream C cases and byte-exact wire
+checks. `check-model.sh` then generates and runs the complete JP2/JPX model
+under strict C11, ASan and UBSan.
 
 These checks deliberately separate compiler responsibility from model
 responsibility. ASN.1 constraints and ACN regions validate local shape and
@@ -476,9 +473,11 @@ From each base:
    split over two PLT segments, a COM in the main header, and `jp2c` boxes
    ahead of the `jpch` boxes. The deployed trailing-zero PLT form is generated
    as a deliberate `standard=invalid, profile=valid` case. Names look like
-   `jp2-rule-codestream.no-plt-4` (the number
-   is the mutant's index in its table, so it shifts when a mutant is
-   inserted before it).
+   `jp2-rule-codestream.no-plt-4` (the number is the mutant's index in its
+   table). Append new rule mutants to preserve all existing fixture names;
+   inserting, removing, or reordering entries renumbers later fixtures.
+   Changes to the model or compiler can still change existing fixture bytes
+   or labels and require separate review.
 4. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
    `n + 1`, and below its minimum. Names: `jp2-len-<offset>-<value>`.
 5. **Code mutants**: each marker code is patched to `FF70` (undefined),
@@ -616,12 +615,13 @@ claim that the generated decoder supports those alternate encodings.
 
 Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 
-1. update `spec/VERSION` and rebase `spec/asn1scc-patches/` when the compiler
-   base changes;
+1. update `spec/VERSION` when the upstream compiler revision changes and run
+   its regressions;
 2. rerun Quick start step 2;
 3. diff `manifest.tsv` against the previous one — new or removed rows must be
-   explainable by the model change; label flips are findings;
-4. commit model, `VERSION`, and corpus in one change.
+   explainable by the model, harness, or compiler change; label flips are
+   findings;
+4. commit the changed inputs, `VERSION`, and corpus together.
 
 Never edit vector files or manifest labels by hand.
 
