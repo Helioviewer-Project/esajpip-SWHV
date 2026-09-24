@@ -148,8 +148,10 @@ namespace jpip {
             if (seg_cached == INT_MAX)
                 return SegmentResult::COMPLETE;
 
-            if (seg_cached < place_holder.length()) {
-                int remaining = place_holder.length() - seg_cached;
+            // ValidateMetadata bounds the place-holder length to INT_MAX.
+            int length = static_cast<int>(place_holder.length());
+            if (seg_cached < length) {
+                int remaining = length - seg_cached;
                 if (data_writer.GetFree() - CHUNK_RESERVE < remaining)
                     return SegmentResult::FULL;
 
@@ -162,7 +164,7 @@ namespace jpip {
                     return SegmentResult::FAILED;
 
                 cache_model.AddToDataBin(DataBinClass::META_DATA, num_codestream, id,
-                                         place_holder.length() - seg_cached, last);
+                                         remaining, last);
             }
             return SegmentResult::COMPLETE;
         }

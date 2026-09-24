@@ -132,8 +132,7 @@ namespace jpeg2000 {
     static bool ValidateMetadata(const Metadata &metadata) {
         uint64_t bin0_length = metadata.tail.length;
         for (const Metadata::Part &part : metadata.bin0) {
-            uint64_t placeholder_length = part.placeholder.header.length +
-                    (part.placeholder.is_jp2c ? 44 : 20);
+            uint64_t placeholder_length = part.placeholder.length();
             if (part.data.length > INT_MAX || placeholder_length > INT_MAX ||
                 bin0_length > static_cast<uint64_t>(INT_MAX) - part.data.length ||
                 bin0_length + part.data.length >

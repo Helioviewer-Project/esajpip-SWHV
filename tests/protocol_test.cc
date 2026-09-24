@@ -946,6 +946,10 @@ static void CheckMetadataPlaceHolder() {
     jpip::DataBinWriter writer;
     jpeg2000::PlaceHolder place_holder(7, false,
                                        data::FileSegment(0, sizeof header));
+    jpeg2000::PlaceHolder large_place_holder(
+            7, true, data::FileSegment(0, INT_MAX));
+    Check(large_place_holder.length() == static_cast<uint64_t>(INT_MAX) + 44,
+          "Truncated large place-holder length");
     writer.SetBuffer(buf, sizeof buf);
     writer.WritePlaceHolder(jpip::DataBinClass::META_DATA, 0, 0, 0, file,
                             place_holder, 0, true);

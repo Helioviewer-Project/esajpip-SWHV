@@ -298,7 +298,8 @@ namespace jpip {
                                       placeholder_offset);
             if (result != SegmentResult::COMPLETE)
                 return result;
-            meta_offset = placeholder_offset + part.placeholder.length();
+            meta_offset = placeholder_offset +
+                    static_cast<int>(part.placeholder.length());
             meta_idx++;
         }
 

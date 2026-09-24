@@ -178,8 +178,8 @@ namespace jpip {
             uint64_t bin_offset, File &file, const PlaceHolder &place_holder,
             uint64_t skip, bool last_byte) {
         unsigned char encoded[60];
-        if (place_holder.length() > static_cast<int>(sizeof encoded) ||
-            skip > static_cast<uint64_t>(place_holder.length()))
+        const uint64_t placeholder_length = place_holder.length();
+        if (placeholder_length > sizeof encoded || skip > placeholder_length)
             return Result::FAILED;
 
         unsigned char *out = encoded;
@@ -187,7 +187,7 @@ namespace jpip {
             for (size_t i = size; i > 0; --i)
                 *out++ = (value >> (8 * (i - 1))) & 0xFF;
         };
-        write_value(place_holder.length(), 4); // LBox
+        write_value(placeholder_length, 4); // LBox
         write_value(0x70686c64, 4);            // TBox
         write_value(place_holder.is_jp2c ? 4 : 1, 4); // Flags
         write_value(place_holder.is_jp2c ? 0 : place_holder.id, 8); // OrigID
@@ -203,15 +203,15 @@ namespace jpip {
             write_value(place_holder.id, 8);   // CSID
         }
 
-        uint64_t length = place_holder.length() - skip;
+        const uint64_t remaining = placeholder_length - skip;
         Result result = BeginMessage(databin_class, codestream_idx, bin_id,
-                                     bin_offset + skip, length, last_byte);
+                                     bin_offset + skip, remaining, last_byte);
         if (result != Result::WRITTEN)
             return result;
 
-        memcpy(ptr, encoded + skip, length);
-        ptr += length;
-        msg_len += length;
+        memcpy(ptr, encoded + skip, remaining);
+        ptr += remaining;
+        msg_len += remaining;
         msg_last = last_byte;
         return Result::WRITTEN;
     }

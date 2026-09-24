@@ -1,6 +1,8 @@
 #ifndef _JPEG2000_PLACE_HOLDER_H_
 #define _JPEG2000_PLACE_HOLDER_H_
 
+#include <cstdint>
+
 #include "data/file_segment.h"
 
 namespace jpeg2000 {
@@ -37,7 +39,7 @@ namespace jpeg2000 {
         /**
          * Returns the length of the place-holder.
          */
-        int length() const {
+        uint64_t length() const {
             return ((is_jp2c ? 44 : 20) + header.length);
         }
 
