@@ -4,7 +4,8 @@
 #
 # The compiler is the pinned build from spec/build-asn1scc.sh. By default it
 # runs in its Docker image, as spec/check-model.sh does. Set ASN1SCC to run
-# it directly, for example:
+# a copy of that build (with spec/asn1scc-patches applied) directly, for
+# example:
 #   ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"
 
 set -eu

@@ -1,3 +1,1 @@
-0001-deferred-acn-producer-determinants.patch
-0002-deferred-containing-names.patch
-0003-deferred-containing-regions.patch
+deferred-determinant-uninit.patch

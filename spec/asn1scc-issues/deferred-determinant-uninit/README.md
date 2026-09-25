@@ -93,7 +93,9 @@ variable initialized (`let mut Msg_a_more: bool = false;`).
 
 ## Fix
 
-`fix.patch` (applies to 161cc246):
+[`../../asn1scc-patches/deferred-determinant-uninit.patch`](../../asn1scc-patches/deferred-determinant-uninit.patch)
+(applies to 161cc246; `spec/build-asn1scc.sh` applies it until upstream
+has the fix):
 
 - `StgC/acn_c.stg`: the three C copy templates emit the copy only when the
   decode succeeded, `if (ret) { ... }`, as the surrounding C templates do.

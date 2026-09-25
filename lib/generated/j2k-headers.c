@@ -1814,7 +1814,9 @@ flag Iplt_b0_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b0_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b0_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B0_MORE;
-	Iplt_b0_more->value = (asn1SccUint)Iplt_b0_more_tmp;
+	if (ret) {
+	    Iplt_b0_more->value = (asn1SccUint)Iplt_b0_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1841,7 +1843,9 @@ flag Iplt_b1_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b1_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b1_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B1_MORE;
-	Iplt_b1_more->value = (asn1SccUint)Iplt_b1_more_tmp;
+	if (ret) {
+	    Iplt_b1_more->value = (asn1SccUint)Iplt_b1_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1868,7 +1872,9 @@ flag Iplt_b2_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b2_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b2_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B2_MORE;
-	Iplt_b2_more->value = (asn1SccUint)Iplt_b2_more_tmp;
+	if (ret) {
+	    Iplt_b2_more->value = (asn1SccUint)Iplt_b2_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1895,7 +1901,9 @@ flag Iplt_b3_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b3_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b3_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B3_MORE;
-	Iplt_b3_more->value = (asn1SccUint)Iplt_b3_more_tmp;
+	if (ret) {
+	    Iplt_b3_more->value = (asn1SccUint)Iplt_b3_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1922,7 +1930,9 @@ flag Iplt_b4_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b4_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b4_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B4_MORE;
-	Iplt_b4_more->value = (asn1SccUint)Iplt_b4_more_tmp;
+	if (ret) {
+	    Iplt_b4_more->value = (asn1SccUint)Iplt_b4_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1949,7 +1959,9 @@ flag Iplt_b5_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b5_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b5_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B5_MORE;
-	Iplt_b5_more->value = (asn1SccUint)Iplt_b5_more_tmp;
+	if (ret) {
+	    Iplt_b5_more->value = (asn1SccUint)Iplt_b5_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -1976,7 +1988,9 @@ flag Iplt_b6_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b6_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b6_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B6_MORE;
-	Iplt_b6_more->value = (asn1SccUint)Iplt_b6_more_tmp;
+	if (ret) {
+	    Iplt_b6_more->value = (asn1SccUint)Iplt_b6_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -2003,7 +2017,9 @@ flag Iplt_b7_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b7_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b7_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B7_MORE;
-	Iplt_b7_more->value = (asn1SccUint)Iplt_b7_more_tmp;
+	if (ret) {
+	    Iplt_b7_more->value = (asn1SccUint)Iplt_b7_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
@@ -2030,7 +2046,9 @@ flag Iplt_b8_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
 	/*Decode Iplt_b8_more */
 	ret = BitStream_ReadBit(pBitStrm, (&(Iplt_b8_more_tmp)));
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IPLT_B8_MORE;
-	Iplt_b8_more->value = (asn1SccUint)Iplt_b8_more_tmp;
+	if (ret) {
+	    Iplt_b8_more->value = (asn1SccUint)Iplt_b8_more_tmp;
+	}
 	if (ret) {
 	    /*Decode bits */
 	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->bits)), 7);
