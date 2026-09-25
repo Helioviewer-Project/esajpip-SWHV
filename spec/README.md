@@ -208,7 +208,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `transcode/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT. Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. |
+| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `transcode/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus. |
 | `asn1scc-patches/` | Reference archive of the former local compiler fixes. Its README records the original base commit; the current build does not apply these patches. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, builds the Docker image, and runs upstream ACN v2 regressions. |
@@ -303,7 +303,12 @@ Two conventions worth knowing before you edit:
   entries). asn1scc allocates every list at its maximum inside the struct,
   so standard-sized bounds would make a `Jp2Family` gigabytes large. A file
   that exceeds a corpus bound is not standard-invalid; the harness never
-  generates one.
+  generates one. The bodies with a corpus bound (`Qcd`, `Plt`, `Com`) are
+  instances of parameterized types (`QcdBody`, `PltBody`, `ComBody`); the
+  `-Std` instances (`Qcd-Std`, `Plt-Std`, `Com-Std`) carry the standard's
+  bounds for the reader/writer, which decodes one segment at a time. A
+  `WITH COMPONENTS` subtype cannot do this: asn1scc keeps the base type's
+  allocation for it.
 - **Layer 2 normally narrows layer 1.** A `*-Profile` type is either a `WITH
   COMPONENTS` subtype (ranges narrowed) or, where framing has to be repeated
   with profile bodies inside `CONTAINING`, a copy with profile types
@@ -526,6 +531,20 @@ Struct sizes: the generated `Jp2Family` is tens of MB (asn1scc allocates
 every corpus bound inline); the harness allocates its few instances on the
 heap. If your compiler reports larger sizes, lower the corpus bounds in the
 `.asn1` files (they are marked) rather than the harness.
+
+The reader/writer types in `jpeg2000-io.asn1` use the standard's bounds and
+are decoded one at a time. Their sizes with asn1scc 4.9.3.0 on a 64-bit
+target:
+
+| Type | Bytes |
+| --- | ---: |
+| `PltSegment-Std` (65,532 `Iplt` entries) | 5,766,832 |
+| `SizSegment-Std` (16,384 components) | 524,376 |
+| `ComSegment-Std` (65,531 bytes) | 65,544 |
+| `CodSegment-Std` | 616 |
+| `QcdSegment-Std` (194 bytes) | 208 |
+| `SotSegment` | 40 |
+| `BoxHeader` | 32 |
 
 The harness is the one place that depends on the generated API, so it is the
 one thing to touch when regenerating with a newer asn1scc. The server and

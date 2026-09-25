@@ -28,6 +28,14 @@
 -- STRING at its maximum inline, so standard-sized bounds would make the
 -- generated file structs gigabytes large. A vector exceeding a corpus bound
 -- is not a standard-invalid file; the harness never generates one.
+--
+-- Bodies with a corpus bound are parameterized types with two instances:
+-- the plain name (Qcd, Plt, Com) carries the corpus bound and is what the
+-- whole-file model uses; the -Std instance carries the standard's bound and
+-- is what the reader/writer (jpeg2000-io.asn1) decodes one segment at a
+-- time. A WITH COMPONENTS subtype would not do: asn1scc keeps the base
+-- type's allocation, while each instance of a parameterized type gets its
+-- own.
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -112,19 +120,25 @@ PrecinctSize ::= SEQUENCE {
 -- the model keeps the guard byte and treats the rest as opaque.
 -- ---------------------------------------------------------------------------
 
-Qcd ::= SEQUENCE {
+QcdBody {INTEGER:minSpqcd, INTEGER:maxSpqcd} ::= SEQUENCE {
     sqcd        INTEGER (0..255),             -- Sqcd: guard bits and quantization style
-    spqcd       OCTET STRING (SIZE (0..1024))  -- fills the segment (corpus bound; standard 65530)
+    spqcd       OCTET STRING (SIZE (minSpqcd..maxSpqcd))  -- fills the segment
 }
+
+Qcd ::= QcdBody {0, 1024}                     -- corpus bound
+Qcd-Std ::= QcdBody {1, 194}                  -- Table A.27: Lqcd 4 to 197
 
 -- ---------------------------------------------------------------------------
 -- PLT body, A.7.3: packet lengths, tile-part header (Lplt = 3 + entries)
 -- ---------------------------------------------------------------------------
 
-Plt ::= SEQUENCE {
+PltBody {INTEGER:maxEntries} ::= SEQUENCE {
     zplt        INTEGER (0..255),             -- index of this PLT segment
-    entries     SEQUENCE (SIZE (1..128)) OF Iplt   -- fills the segment (corpus bound; standard 65532)
+    entries     SEQUENCE (SIZE (1..maxEntries)) OF Iplt   -- fills the segment
 }
+
+Plt ::= PltBody {128}                         -- corpus bound
+Plt-Std ::= PltBody {65532}                   -- Table A.37: Lplt 4 to 65 535, entries >= 1 byte
 
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
 -- byte follows. T.800 does not bound the byte count; ten bytes cover 64 bits.
@@ -154,10 +168,13 @@ IpltByteLast ::= SEQUENCE {
 -- carry a segment the server merely skips.
 -- ---------------------------------------------------------------------------
 
-Com ::= SEQUENCE {
+ComBody {INTEGER:minCcom, INTEGER:maxCcom} ::= SEQUENCE {
     rcom        INTEGER (0..1),               -- 0 binary, 1 Latin-1
-    ccom        OCTET STRING (SIZE (0..4096))  -- fills the segment (corpus bound; standard 65531)
+    ccom        OCTET STRING (SIZE (minCcom..maxCcom))  -- fills the segment
 }
+
+Com ::= ComBody {0, 4096}                     -- corpus bound
+Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65 535
 
 -- ===========================================================================
 -- Layer 2: esajpip served profile (JPIP_PROFILE.md)

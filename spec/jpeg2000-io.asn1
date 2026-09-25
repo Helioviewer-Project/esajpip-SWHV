@@ -16,13 +16,21 @@
 -- `size deduced` cannot sit inside a CHOICE alternative.) The generated
 -- code checks the values; the walker turns them into extents.
 --
--- Marker segments with a body are decoded whole with the Lxxx wrappers of
--- j2k-codestream.asn1 (SizSegment, CodSegment, QcdSegment, PltSegment,
--- ComSegment). SegmentLength reads only Lxxx, to skip any other segment.
+-- Marker segments with a body are decoded whole, Lxxx included, by the
+-- *Segment-Std wrappers below. They carry the bodies of j2k-headers.asn1 at
+-- the standard's bounds (Qcd-Std, Plt-Std, Com-Std; Siz and Cod have no
+-- corpus bound), which one segment at a time can afford. SegmentLength
+-- reads only Lxxx, to skip any other segment.
+--
+-- Struct sizes (asn1scc 4.9.3.0, C, 64-bit): see README.md, "Struct sizes".
 
 JPEG2000-IO DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
 EXPORTS ALL;
+
+IMPORTS
+    Siz, Cod, Qcd-Std, Plt-Std, Com-Std
+        FROM J2K-Headers;
 
 -- ---------------------------------------------------------------------------
 -- Box header, T.800 I.4: LBox, TBox, and XLBox when LBox = 1
@@ -45,6 +53,14 @@ MarkerCode ::= INTEGER (65281..65534)
 
 -- Lxxx of any marker segment. It counts its own two bytes.
 SegmentLength ::= INTEGER (2..65535)
+
+-- Marker segments after their code: Lxxx (ACN-inserted, counts itself: +2,
+-- mapping function lxxx) and the body it sizes.
+SizSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Siz) }       -- Lsiz 41 to 49 190
+CodSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Cod) }       -- Lcod 12 to 45
+QcdSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Std) }   -- Lqcd 4 to 197
+PltSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Std) }   -- Lplt 4 to 65 535
+ComSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Std) }   -- Lcom 5 to 65 535
 
 -- SOT marker segment after the FF90 code, A.4.2 (Table A.5).
 SotSegment ::= SEQUENCE {

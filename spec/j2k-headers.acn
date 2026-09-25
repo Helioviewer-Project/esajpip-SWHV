@@ -79,12 +79,34 @@ PrecinctSize [] {
     ppx         [encoding pos-int, size 4]        -- bits 3..0
 }
 
+-- Parameterized bodies: the encoding is stated on the template and repeated
+-- on every instance (asn1scc generates each instance separately).
+QcdBody [] {
+    sqcd        [encoding pos-int, size 8],
+    spqcd       [size deduced]
+}
+
 Qcd [] {
     sqcd        [encoding pos-int, size 8],
     spqcd       [size deduced]
 }
 
+Qcd-Std [] {
+    sqcd        [encoding pos-int, size 8],
+    spqcd       [size deduced]
+}
+
+PltBody [] {
+    zplt        [encoding pos-int, size 8],
+    entries     [size deduced]
+}
+
 Plt [] {
+    zplt        [encoding pos-int, size 8],
+    entries     [size deduced]
+}
+
+Plt-Std [] {
     zplt        [encoding pos-int, size 8],
     entries     [size deduced]
 }
@@ -112,7 +134,17 @@ IpltByteLast [] {
     bits    [encoding pos-int, size 7]
 }
 
+ComBody [] {
+    rcom        [encoding pos-int, size 16, endianness big],
+    ccom        [size deduced]
+}
+
 Com [] {
+    rcom        [encoding pos-int, size 16, endianness big],
+    ccom        [size deduced]
+}
+
+Com-Std [] {
     rcom        [encoding pos-int, size 16, endianness big],
     ccom        [size deduced]
 }
