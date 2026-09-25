@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(esajpip LANGUAGES CXX)
+project(esajpip LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
@@ -18,6 +18,9 @@ endif()
 
 function(esajpip_configure_target target)
     set_target_properties(${target} PROPERTIES
+        C_EXTENSIONS OFF
+        C_STANDARD 11
+        C_STANDARD_REQUIRED YES
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
@@ -52,6 +55,9 @@ else()
     set(ESAJPIP_FILE_LOGGING false)
 endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
+
+# The JPEG 2000 reader/writer (lib/), built as a static library.
+add_subdirectory(lib)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS

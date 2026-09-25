@@ -1,6 +1,6 @@
 -- jpeg2000-io.asn1
 --
--- Header types for the JPEG 2000 reader/writer (transcode/, hv_transcode).
+-- Header types for the JPEG 2000 reader/writer (lib/, used by hv_transcode).
 -- Unlike the whole-file model (j2k-codestream.asn1, jp2-boxes.asn1), these
 -- types are decoded and encoded one at a time by a hand-written walker that
 -- steps from header to header. A payload (box contents, tile-part data) is
