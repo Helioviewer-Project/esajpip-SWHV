@@ -62,7 +62,19 @@ namespace jpeg2000 {
 #define POC_MARKER 0xFF5F
 #define SOT_MARKER 0xFF90
 #define PLT_MARKER 0xFF58
+#define COM_MARKER 0xFF64
 #define SOD_MARKER 0xFF93
+
+// Marker segment lengths (Lxxx counts itself) and COM registration values,
+// T.800 Tables A.9, A.12, A.27, A.37, A.43 and A.44.
+#define LSIZ_MIN 41
+#define LCOD_MIN 12
+#define LQCD_MIN 4
+#define LQCD_MAX 197
+#define LPLT_MIN 4
+#define LCOM_MIN 5
+#define RCOM_BINARY 0
+#define RCOM_LATIN 1
 
 #define JP2C_BOX_ID 0x6A703263
 #define FILE_TYPE_BOX_ID 0x66747970
@@ -126,6 +138,31 @@ namespace jpeg2000 {
             static_cast<uint64_t>(length) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(length - 2, SEEK_CUR);
+        return true;
+    }
+
+    // QCD, T.800 A.6.4. The quantization values themselves are skipped;
+    // packet indexing does not depend on them.
+    static bool ReadQCDMarker(File *file, uint64_t limit) {
+        uint16_t length = 0;
+        if (file->GetOffset() > limit || !file->ReadReverse(&length) ||
+            length < LQCD_MIN || length > LQCD_MAX ||
+            static_cast<uint64_t>(length) - 2 > limit - file->GetOffset())
+            return false;
+        file->Seek(length - 2, SEEK_CUR);
+        return true;
+    }
+
+    // COM, T.800 A.9.2. Other Rcom values are reserved (Table A.44). The
+    // comment itself is skipped.
+    static bool ReadCOMMarker(File *file, uint64_t limit) {
+        uint16_t length = 0;
+        uint16_t rcom = 0;
+        if (file->GetOffset() > limit || !file->ReadReverse(&length) || length < LCOM_MIN ||
+            static_cast<uint64_t>(length) - 2 > limit - file->GetOffset() ||
+            !file->ReadReverse(&rcom) || (rcom != RCOM_BINARY && rcom != RCOM_LATIN))
+            return false;
+        file->Seek(length - 4, SEEK_CUR);
         return true;
     }
 
@@ -287,9 +324,14 @@ namespace jpeg2000 {
 
                 case QCD_MARKER:
                     if (phase != MAIN_HEADER || qcd ||
-                        !SkipMarker(file, marker_limit))
+                        !ReadQCDMarker(file, marker_limit))
                         return false;
                     qcd = true;
+                    break;
+
+                case COM_MARKER:
+                    if (phase == TILE_HEADER || !ReadCOMMarker(file, marker_limit))
+                        return false;
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");
@@ -340,7 +382,7 @@ namespace jpeg2000 {
     static bool ReadSIZMarker(File *file, uint64_t limit,
                               CodingParameters *params, bool *mct_compatible) {
         uint16_t lsiz = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < 41 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < LSIZ_MIN ||
             static_cast<uint64_t>(lsiz) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(2, SEEK_CUR); // Rsiz
@@ -399,7 +441,7 @@ namespace jpeg2000 {
         uint8_t cb_height = 0;
         uint8_t cb_style = 0;
         uint8_t transform = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < 12 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < LCOD_MIN ||
             static_cast<uint64_t>(lcod) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&cs_buf) || !file->ReadReverse(&progression) ||
             !file->ReadReverse(&quality_layers) || !file->ReadReverse(&mct) ||
@@ -408,7 +450,7 @@ namespace jpeg2000 {
             !file->ReadReverse(&transform))
             return false;
 
-        uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
+        uint16_t expected_length = LCOD_MIN + ((cs_buf & 1) ? transform_levels + 1 : 0);
         if (lcod != expected_length || (cs_buf & 0xFA) != 0 || progression > 4 || quality_layers == 0 ||
             mct > 1 || (mct != 0 && !mct_compatible) ||
             transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
@@ -474,7 +516,7 @@ namespace jpeg2000 {
 
         uint16_t lplt = 0;
         uint8_t zplt = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < 4 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < LPLT_MIN ||
             static_cast<uint64_t>(lplt) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&zplt) || zplt != plt.size())
             return false;

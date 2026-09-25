@@ -59,7 +59,8 @@ while letting HTTP connections be pooled or replaced independently of channels.
   codestream bounds, and linked-JPX references. Invalid or unsupported sources
   are rejected instead of failing later or producing inconsistent JPP data.
   Deployed trailing zero PLT entries remain accepted as padding; nonzero extras
-  are rejected.
+  are rejected. QCD and COM lengths and the COM registration value are checked
+  against T.800 (Lqcd 4 to 197, Lcom at least 5, Rcom 0 or 1).
 - Preserve separate coding parameters for embedded JPX codestreams, use the
   standard default precinct size, and number codestreams by physical box order.
 - Bound client-controlled request values before allocation, including cache

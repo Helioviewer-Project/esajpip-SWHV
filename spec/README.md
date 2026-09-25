@@ -303,10 +303,11 @@ Two conventions worth knowing before you edit:
   entries). asn1scc allocates every list at its maximum inside the struct,
   so standard-sized bounds would make a `Jp2Family` gigabytes large. A file
   that exceeds a corpus bound is not standard-invalid; the harness never
-  generates one. The bodies with a corpus bound (`Qcd`, `Plt`, `Com`) are
-  instances of parameterized types (`QcdBody`, `PltBody`, `ComBody`); the
-  `-Std` instances (`Qcd-Std`, `Plt-Std`, `Com-Std`) carry the standard's
-  bounds for the reader/writer, which decodes one segment at a time. A
+  generates one. The bodies with a corpus bound (`Plt`, `Com`) are
+  instances of parameterized types (`PltBody`, `ComBody`); the `-Std`
+  instances (`Plt-Std`, `Com-Std`) carry the standard's bounds for the
+  reader/writer, which decodes one segment at a time. `Qcd` and `Qcd-Std`
+  both use the standard's bound (Lqcd 4 to 197). A
   `WITH COMPONENTS` subtype cannot do this: asn1scc keeps the base type's
   allocation for it.
 - **Layer 2 normally narrows layer 1.** A `*-Profile` type is either a `WITH

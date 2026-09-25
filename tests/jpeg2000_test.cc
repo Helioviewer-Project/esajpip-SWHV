@@ -309,9 +309,11 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     codestream.push_back(1);      // reversible transform
     codestream.insert(codestream.end(), precinct_sizes.begin(), precinct_sizes.end());
 
-    Append16(codestream, 0xFF5C); // QCD
-    Append16(codestream, 3);
-    codestream.push_back(0);
+    Append16(codestream, 0xFF5C); // QCD, no quantization
+    Append16(codestream, 4 + 3 * transform_levels); // Lqcd, T.800 Table A.27
+    codestream.push_back(0);      // Sqcd
+    for (int band = 0; band < 3 * transform_levels + 1; ++band)
+        codestream.push_back(0);  // SPqcd: one byte per sub-band
 
     for (int tile_part = 0; tile_part < tile_parts; ++tile_part) {
         Append16(codestream, 0xFF90); // SOT
@@ -1129,13 +1131,32 @@ int main() {
               MakeLinkedJPX("", codestream.size()));
     vector<unsigned char> marker_after_tile_part = codestream;
     marker_after_tile_part.insert(marker_after_tile_part.end() - 2,
-                                  {0xFF, 0x5C, 0x00, 0x03, 0x00});
+                                  {0xFF, 0x5C, 0x00, 0x04, 0x00, 0x00});
     WriteFile(directory + "marker-after-tile-part.jp2",
               MakeJP2(marker_after_tile_part));
     WriteFile(directory + "duplicate-cod.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF52)));
     WriteFile(directory + "duplicate-qcd.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF5C)));
+    // T.800 Table A.27: Lqcd 4 to 197.
+    for (uint16_t lqcd : {3, 198}) {
+        vector<unsigned char> bad = codestream;
+        size_t qcd = 0;
+        while (bad[qcd] != 0xFF || bad[qcd + 1] != 0x5C) ++qcd;
+        size_t body = qcd + 4, old_length = (bad[qcd + 2] << 8) | bad[qcd + 3];
+        bad.erase(bad.begin() + body, bad.begin() + qcd + 2 + old_length);
+        bad.insert(bad.begin() + body, lqcd - 2, 0);
+        bad[qcd + 2] = lqcd >> 8;
+        bad[qcd + 3] = lqcd & 0xFF;
+        WriteFile(directory + "qcd-length-" + to_string(lqcd) + ".jp2", MakeJP2(bad));
+    }
+    // T.800 Tables A.43 and A.44: Lcom 5 to 65 535, Rcom 0 or 1.
+    WriteFile(directory + "main-com.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 5, 0, 1, 'x'})));
+    WriteFile(directory + "com-length-4.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 4, 0, 1})));
+    WriteFile(directory + "com-rcom-2.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 5, 0, 2, 'x'})));
     WriteFile(directory + "main-coc.jp2",
               MakeJP2(InsertBeforeFirstSOT(
                   codestream,
@@ -1163,7 +1184,7 @@ int main() {
     WriteFile(directory + "tile-com.jp2",
               MakeJP2(InsertMarkerInTilePart(
                   InsertBeforeFirstSOT(codestream,
-                                       {0xFF, 0x64, 0, 4, 0, 1}),
+                                       {0xFF, 0x64, 0, 5, 0, 1, 'x'}),
                   0xFF64, 0)));
     WriteFile(directory + "short-plt.jp2",
               MakeJP2(ShortenFirstPLT(
@@ -1309,6 +1330,16 @@ int main() {
         jpeg2000::FileManager duplicate_marker_manager;
         Check(!OpenImage(directory, name, &duplicate_marker_manager),
               "Accepted a repeated main-header COD or QCD marker");
+    }
+
+    jpeg2000::FileManager main_com_manager;
+    Check(OpenImage(directory, "main-com.jp2", &main_com_manager),
+          "Rejected a main-header COM marker");
+    for (const char *name : {"qcd-length-3.jp2", "qcd-length-198.jp2",
+                             "com-length-4.jp2", "com-rcom-2.jp2"}) {
+        jpeg2000::FileManager marker_length_manager;
+        Check(!OpenImage(directory, name, &marker_length_manager),
+              "Accepted a QCD or COM marker outside T.800's ranges");
     }
 
     for (const char *name : {"main-coc.jp2", "main-poc.jp2"}) {

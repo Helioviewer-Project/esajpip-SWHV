@@ -208,7 +208,8 @@ Fixture MakeFixture(const string &directory) {
         header.append("\x01\x00\x00\x02\x00\x00\x00\x00\x00\x01\x01", 11);
         header[header.size() - 8] = layers;
         header.back() = 1 + stream; // 2- or 4-pixel precincts
-        Number(header, 0xFF5C, 2); Number(header, 3, 2); header.push_back(0);
+        Number(header, 0xFF5C, 2); Number(header, 4, 2); // Lqcd >= 4 (T.800 Table A.27)
+        header.push_back(0); header.push_back(0);
         fixture.bins[Key(6, stream, 0)] = header;
         fixture.bins[Key(2, stream, 0)] = "";
         string data, lengths;

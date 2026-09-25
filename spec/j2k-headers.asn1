@@ -30,10 +30,11 @@
 -- is not a standard-invalid file; the harness never generates one.
 --
 -- Bodies with a corpus bound are parameterized types with two instances:
--- the plain name (Qcd, Plt, Com) carries the corpus bound and is what the
+-- the plain name (Plt, Com) carries the corpus bound and is what the
 -- whole-file model uses; the -Std instance carries the standard's bound and
 -- is what the reader/writer (jpeg2000-io.asn1) decodes one segment at a
--- time. A WITH COMPONENTS subtype would not do: asn1scc keeps the base
+-- time. QCD is small enough for the standard's bound in both (Qcd and
+-- Qcd-Std are the same instance). A WITH COMPONENTS subtype would not do: asn1scc keeps the base
 -- type's allocation, while each instance of a parameterized type gets its
 -- own.
 
@@ -125,7 +126,7 @@ QcdBody {INTEGER:minSpqcd, INTEGER:maxSpqcd} ::= SEQUENCE {
     spqcd       OCTET STRING (SIZE (minSpqcd..maxSpqcd))  -- fills the segment
 }
 
-Qcd ::= QcdBody {1, 1024}                     -- corpus bound; Lqcd >= 4 (Table A.27)
+Qcd ::= QcdBody {1, 194}                      -- Table A.27: Lqcd 4 to 197
 Qcd-Std ::= QcdBody {1, 194}                  -- Table A.27: Lqcd 4 to 197
 
 -- ---------------------------------------------------------------------------

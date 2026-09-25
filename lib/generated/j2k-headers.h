@@ -439,7 +439,7 @@ typedef asn1SccUint Qcd_sqcd;
 
 typedef struct {
     int nCount;
-    byte arr[1024];
+    byte arr[194];
 } Qcd_spqcd;
 
 typedef struct {
