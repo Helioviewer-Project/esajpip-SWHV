@@ -1,0 +1,65 @@
+/* hv_writer.h: writes JPEG 2000 headers with the encoders generated from
+ * spec/jpeg2000-io.asn1, into a buffer that grows as needed.
+ *
+ * Marker segment lengths (Lxxx) come from the generated encoders. The
+ * lengths that cover data the generated code never sees, Psot and LBox or
+ * XLBox, are filled in when the tile-part or box ends. */
+#ifndef HV_WRITER_H
+#define HV_WRITER_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "jpeg2000-io.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+    uint8_t *data;
+    size_t size, capacity;
+    const char *error;      /* the first error; later writes do nothing */
+} hv_out;
+
+void hv_out_init(hv_out *out);
+void hv_out_free(hv_out *out);
+
+/* Every write returns 0, or -1 with out->error set. */
+
+/* Bytes the writer does not interpret: packet data, box payloads. */
+int hv_write_bytes(hv_out *out, const void *bytes, size_t size);
+
+/* A marker without a segment: SOC, SOD, EOC. */
+int hv_write_marker(hv_out *out, uint16_t code);
+
+/* Any marker segment from its code and body; Lxxx is added. */
+int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size);
+
+/* SIZ, COD, QCD and COM from their decoded form, code included. */
+int hv_write_siz(hv_out *out, const SizSegment_Std *siz);
+int hv_write_cod(hv_out *out, const CodSegment_Std *cod);
+int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd);
+int hv_write_com(hv_out *out, const ComSegment_Std *com);
+
+/* PLT segments listing `count` packet lengths, Zplt from 0. Each segment
+ * holds as many whole entries as fit in Lplt = 65 535, which is how Kakadu
+ * splits them. Zero lengths are rejected (T.800 A.7.3). */
+int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count);
+
+/* SOT with Psot left to hv_end_tile_part, which sets it to the bytes
+ * written since *start. */
+int hv_begin_tile_part(hv_out *out, uint16_t isot, uint8_t tpsot, uint8_t tnsot,
+                       size_t *start);
+int hv_end_tile_part(hv_out *out, size_t start);
+
+/* A box header whose length hv_end_box fills in: LBox, or XLBox when the
+ * box was begun `extended` (needed above 4 GiB - 1). */
+int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start);
+int hv_end_box(hv_out *out, size_t start);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

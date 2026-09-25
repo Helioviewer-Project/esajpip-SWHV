@@ -11,8 +11,9 @@ payload starts and ends.
 | File | Role |
 | --- | --- |
 | `hv_reader.h` / `.c` | Steps through a file in memory: boxes (T.800 I.4) and codestream items (Annex A). Checks framing and decodes marker segments with the generated code. Never copies a payload. |
+| `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends, and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65 535). |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
-| `hv_walk.c` | `hv_walk [-v] [-p] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries. |
+| `hv_walk.c` | `hv_walk [-v] [-p] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: only the types in `../spec/jpeg2000-io.asn1` and what they use. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`). |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`. |

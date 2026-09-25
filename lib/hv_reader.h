@@ -68,6 +68,13 @@ typedef struct {
     size_t start, end;
     SotSegment sot;         /* the current tile-part's SOT (tile-part items) */
     uint32_t plt_padding;   /* HV_TILE_DATA: trailing zero PLT entries accepted */
+    /* The decoded body of a SIZ, COD, QCD, PLT or COM segment, NULL
+     * otherwise. Valid until the next hv_codestream_next call. */
+    const SizSegment_Std *siz;
+    const CodSegment_Std *cod;
+    const QcdSegment_Std *qcd;
+    const PltSegment_Std *plt;
+    const ComSegment_Std *com;
 } hv_item;
 
 /* hv_codestream_open flags. */
@@ -86,7 +93,10 @@ typedef struct {
     size_t siz_end;         /* just past the SIZ segment */
     SizSegment_Std *siz;    /* decoded SIZ (large, allocated) */
     CodSegment_Std cod;     /* decoded main-header COD */
-    PltSegment_Std *plt;    /* scratch for PLT bodies (large, allocated) */
+    CodSegment_Std tile_cod;/* decoded tile-part COD */
+    QcdSegment_Std qcd;     /* last decoded QCD */
+    ComSegment_Std *com;    /* last decoded COM (64 KiB, allocated) */
+    PltSegment_Std *plt;    /* last decoded PLT (large, allocated) */
     uint32_t tiles;         /* tiles Isot can address: min(grid, 65 535) */
     int cods, qcds, tile_parts;
     uint16_t *parts;        /* tile-parts seen, per tile */
@@ -114,6 +124,10 @@ void hv_codestream_close(hv_codestream *cs);
 
 /* Decoded main-header SIZ and COD; COD is valid once the first tile-part
  * has been reported. */
+/* The value of one PLT entry (7-bit groups, most significant first);
+ * saturates at UINT64_MAX. */
+uint64_t hv_iplt_value(const Iplt *entry);
+
 const Siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
 

@@ -189,8 +189,7 @@ static const char *check_cod(const Cod *c, const Siz *s) {
     return NULL;
 }
 
-/* One Iplt value: 7-bit groups, most significant first; saturates. */
-static uint64_t iplt_value(const Iplt *p) {
+uint64_t hv_iplt_value(const Iplt *p) {
     const IpltByte *more[8] = {&p->b1, &p->b2, &p->b3, &p->b4, &p->b5, &p->b6, &p->b7, &p->b8};
     const int present[9] = {p->exist.b1, p->exist.b2, p->exist.b3, p->exist.b4,
                             p->exist.b5, p->exist.b6, p->exist.b7, p->exist.b8, p->exist.b9};
@@ -241,10 +240,12 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
 
 void hv_codestream_close(hv_codestream *cs) {
     free(cs->siz);
+    free(cs->com);
     free(cs->plt);
     free(cs->parts);
     free(cs->tnsot);
     cs->siz = NULL;
+    cs->com = NULL;
     cs->plt = NULL;
     cs->parts = NULL;
     cs->tnsot = NULL;
@@ -320,6 +321,14 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     return 1;
 }
 
+static int decode_com(hv_codestream *cs, size_t pos, size_t len) {
+    if (cs->com == NULL && (cs->com = malloc(sizeof *cs->com)) == NULL)
+        return fail(cs, "out of memory", pos);
+    if (DECODE(ComSegment_Std, cs->com, cs->buf, pos + 2, len) != 0)
+        return fail(cs, "invalid COM", pos);
+    return 0;
+}
+
 static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *item) {
     size_t pos = cs->pos, len = end - pos - 2;
     const char *error;
@@ -332,21 +341,20 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(&cs->cod.body, &cs->siz->body)) != NULL)
             return fail(cs, error, pos);
+        item->cod = &cs->cod;
         break;
-    case QCD: {
-        QcdSegment_Std qcd;
+    case QCD:
         if (++cs->qcds > 1)
             return fail(cs, "second QCD in the main header", pos);
-        if (DECODE(QcdSegment_Std, &qcd, cs->buf, pos + 2, len) != 0)
+        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid QCD", pos);
+        item->qcd = &cs->qcd;
         break;
-    }
-    case COM: {
-        static ComSegment_Std com;    /* 64 KiB: not on the stack */
-        if (DECODE(ComSegment_Std, &com, cs->buf, pos + 2, len) != 0)
-            return fail(cs, "invalid COM", pos);
+    case COM:
+        if (decode_com(cs, pos, len) != 0)
+            return -1;
+        item->com = cs->com;
         break;
-    }
     case COC: case QCC: case RGN: case POC: case TLM: case PLM: case PPM: case CRG:
         break;                        /* bodies not modelled: skipped by length */
     case SOC: case SIZ: case SOD: case SOP: case EPH:
@@ -369,24 +377,22 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     const char *error;
 
     switch (code) {
-    case COD: {
-        CodSegment_Std cod;
+    case COD:
         if (cs->sot.tpsot != 0 || cs->tp_cod++)
             return fail(cs, "COD only once, in the first tile-part of a tile", pos);
-        if (DECODE(CodSegment_Std, &cod, cs->buf, pos + 2, len) != 0)
+        if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid COD", pos);
-        if ((error = check_cod(&cod.body, &cs->siz->body)) != NULL)
+        if ((error = check_cod(&cs->tile_cod.body, &cs->siz->body)) != NULL)
             return fail(cs, error, pos);
+        item->cod = &cs->tile_cod;
         break;
-    }
-    case QCD: {
-        QcdSegment_Std qcd;
+    case QCD:
         if (cs->sot.tpsot != 0 || cs->tp_qcd++)
             return fail(cs, "QCD only once, in the first tile-part of a tile", pos);
-        if (DECODE(QcdSegment_Std, &qcd, cs->buf, pos + 2, len) != 0)
+        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid QCD", pos);
+        item->qcd = &cs->qcd;
         break;
-    }
     case PLT: {
         int i;
         if (cs->plt == NULL && (cs->plt = malloc(sizeof *cs->plt)) == NULL)
@@ -396,7 +402,7 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         if (cs->plt->body.zplt != (asn1SccUint)cs->plts++)
             return fail(cs, "PLT: Zplt out of order", pos);
         for (i = 0; i < cs->plt->body.entries.nCount; i++) {
-            uint64_t v = iplt_value(&cs->plt->body.entries.arr[i]);
+            uint64_t v = hv_iplt_value(&cs->plt->body.entries.arr[i]);
             if (v == 0) {           /* a packet has at least one byte */
                 if (!(cs->flags & HV_ACCEPT_PLT_PADDING))
                     return fail(cs, "PLT: zero packet length", pos);
@@ -407,14 +413,14 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
                 return fail(cs, "PLT: zero packet length before a nonzero one", pos);
             cs->plt_sum = v > UINT64_MAX - cs->plt_sum ? UINT64_MAX : cs->plt_sum + v;
         }
+        item->plt = cs->plt;
         break;
     }
-    case COM: {
-        static ComSegment_Std com;
-        if (DECODE(ComSegment_Std, &com, cs->buf, pos + 2, len) != 0)
-            return fail(cs, "invalid COM", pos);
+    case COM:
+        if (decode_com(cs, pos, len) != 0)
+            return -1;
+        item->com = cs->com;
         break;
-    }
     case COC: case QCC: case RGN: case POC: case PPT:
         break;
     case SOT: case EOC:
@@ -438,6 +444,12 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     size_t end;
     uint32_t t;
 
+    item->siz = NULL;
+    item->cod = NULL;
+    item->qcd = NULL;
+    item->plt = NULL;
+    item->com = NULL;
+    item->plt_padding = 0;
     switch (cs->state) {
     case ST_DONE:
         return cs->error ? -1 : 0;
@@ -447,6 +459,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
         item->code = SIZ;
         item->start = cs->pos;
         item->end = cs->siz_end;
+        item->siz = cs->siz;
         cs->pos = item->end;
         cs->state = ST_MAIN;
         return 1;
