@@ -1,0 +1,5 @@
+Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+    First ::= SEQUENCE { bits INTEGER (0..127) }
+    Last ::= SEQUENCE { bits INTEGER (0..127) }
+    Msg ::= SEQUENCE { a First, b Last OPTIONAL }
+END
