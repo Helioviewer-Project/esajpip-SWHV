@@ -310,15 +310,48 @@ static int floorlog2(uint64_t n) {
     return r;
 }
 
-/* Tag-tree bases: bands without code-blocks get none. */
-static size_t tree_bases(const hv_tables *t, size_t *base) {
-    size_t b, total = 0;
-    for (b = 0; b < t->nbands; b++) {
-        base[b] = total;
-        if (t->band_start[b + 1] > t->band_start[b])
-            total += tree_size(t->band_w[b], t->band_h[b]);
+/* Tag-tree bases, one per (precinct, band) at precinct * 3 + band, in
+ * precinct number order; bands without code-blocks get none. */
+#define NO_TREE SIZE_MAX
+
+static size_t tree_bases(const hv_geometry *g, size_t *base) {
+    size_t nres = (size_t)g->ncomps * (g->levels + 1), ri, total = 0;
+    uint64_t i, n;
+    int b;
+    for (ri = 0; ri < nres; ri++) {
+        const hv_resolution *res = &g->res[ri];
+        n = (uint64_t)(res->pw * res->ph);
+        for (i = 0; i < n; i++) {
+            size_t *slot = &base[(res->first_precinct + i) * 3];
+            int64_t px, py;
+            hv_precinct_cell(res, i, &px, &py);
+            for (b = 0; b < 3; b++) {
+                hv_block_rect rect = b < res->nbands ? hv_precinct_blocks(res, b, px, py)
+                                                     : (hv_block_rect){0, 0, 0, 0};
+                slot[b] = NO_TREE;
+                if (rect.w * rect.h > 0) {
+                    slot[b] = total;
+                    total += tree_size((int)rect.w, (int)rect.h);
+                }
+            }
+        }
     }
     return total;
+}
+
+/* A packet's precinct: its resolution, number and grid cell. */
+typedef struct {
+    const hv_resolution *res;
+    uint64_t number;
+    int64_t px, py;
+} precinct_ref;
+
+static precinct_ref packet_precinct(const hv_geometry *g, const hv_packet *pk) {
+    precinct_ref p;
+    p.res = &g->res[pk->resolution];
+    p.number = p.res->first_precinct + pk->precinct;
+    hv_precinct_cell(p.res, pk->precinct, &p.px, &p.py);
+    return p;
 }
 
 /* ------------------------------------------------------------------------
@@ -360,12 +393,54 @@ static void context_free(context *c) {
     free(c);
 }
 
-int hv_read_packets(const uint8_t *data, size_t size, const int64_t *tile_part_ends,
-                    size_t nparts, int zero_psot, int sop, int eph,
-                    const hv_tables *t, hv_blocks *bl, char *error, size_t error_size) {
+/* Allocates the tag trees of every (precinct, band) with code-blocks and
+ * sets them up, with leaf values from `bl` when writing (the encoder knows
+ * every value in advance) or unknown when reading. */
+static void trees_setup(context *c, const hv_geometry *g, const hv_blocks *bl, int write) {
+    size_t nres = (size_t)g->ncomps * (g->levels + 1), ri, nodes;
+    uint64_t i, n;
+    int b;
+
+    c->base = allocate(&c->f, (size_t)g->nprecincts * 3, sizeof *c->base);
+    nodes = tree_bases(g, c->base);
+    trees_alloc(&c->f, &c->incl, nodes);
+    trees_alloc(&c->f, &c->zbp, nodes);
+    for (ri = 0; ri < nres; ri++) {
+        const hv_resolution *res = &g->res[ri];
+        n = (uint64_t)(res->pw * res->ph);
+        for (i = 0; i < n; i++) {
+            const size_t *slot = &c->base[(res->first_precinct + i) * 3];
+            int64_t px, py, cx, cy;
+            hv_precinct_cell(res, i, &px, &py);
+            for (b = 0; b < res->nbands; b++) {
+                hv_block_rect rect = hv_precinct_blocks(res, b, px, py);
+                size_t leaf = slot[b];
+                if (leaf == NO_TREE)
+                    continue;
+                tree_init(&c->incl, leaf, (int)rect.w, (int)rect.h);
+                tree_init(&c->zbp, leaf, (int)rect.w, (int)rect.h);
+                if (!write)
+                    continue;
+                for (cy = rect.cy0; cy < rect.cy0 + rect.h; cy++)
+                    for (cx = rect.cx0; cx < rect.cx0 + rect.w; cx++, leaf++) {
+                        size_t blk = (size_t)hv_block_number(&res->band[b], cx, cy);
+                        c->incl.value[leaf] = bl->incl[blk] >= 0 ? bl->incl[blk] : bl->nlayers;
+                        c->zbp.value[leaf] = bl->zbp[blk] >= 0 ? bl->zbp[blk] : 0;
+                    }
+                tree_propagate(&c->incl, slot[b], tree_size((int)rect.w, (int)rect.h));
+                tree_propagate(&c->zbp, slot[b], tree_size((int)rect.w, (int)rect.h));
+            }
+        }
+    }
+}
+
+int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
+                    const uint8_t *data, size_t size, const int64_t *tile_part_ends,
+                    size_t nparts, int zero_psot, int sop, int eph, hv_blocks *bl,
+                    char *error, size_t error_size) {
     context *const c = context_new(error, error_size);
     reader rd;
-    size_t pkt, part = 0, pos = 0, b, k, nodes;
+    size_t pkt, part = 0, pos = 0, k;
     int nlayers = bl->nlayers;
 
     if (c == NULL)
@@ -378,23 +453,16 @@ int hv_read_packets(const uint8_t *data, size_t size, const int64_t *tile_part_e
     rd.size = size;
     rd.f = &c->f;
 
-    c->base = allocate(&c->f, t->nbands, sizeof *c->base);
     c->lblock = allocate(&c->f, bl->nblocks, sizeof *c->lblock);
     c->contrib = allocate(&c->f, bl->nblocks, sizeof *c->contrib);
-    nodes = tree_bases(t, c->base);
-    trees_alloc(&c->f, &c->incl, nodes);
-    trees_alloc(&c->f, &c->zbp, nodes);
-    for (b = 0; b < t->nbands; b++)
-        if (t->band_start[b + 1] > t->band_start[b]) {
-            tree_init(&c->incl, c->base[b], t->band_w[b], t->band_h[b]);
-            tree_init(&c->zbp, c->base[b], t->band_w[b], t->band_h[b]);
-        }
+    trees_setup(c, g, bl, 0);
     for (k = 0; k < bl->nblocks; k++)
         c->lblock[k] = 3;
 
-    for (pkt = 0; pkt < t->npackets; pkt++) {
-        int32_t prc = t->order_prc[pkt], l = t->order_layer[pkt];
-        int ncontrib = 0, i;
+    for (pkt = 0; pkt < npackets; pkt++) {
+        precinct_ref p = packet_precinct(g, &packets[pkt]);
+        int32_t l = packets[pkt].layer;
+        int ncontrib = 0, i, b;
         /* For Psot = 0, another SOT can only be identified at a packet
          * boundary. */
         if (zero_psot && pos + 1 < size && data[pos] == 0xFF && data[pos + 1] == 0x90)
@@ -411,31 +479,35 @@ int hv_read_packets(const uint8_t *data, size_t size, const int64_t *tile_part_e
         rd.buf = 0;
         rd.ct = 0;
         if (read_bit(&rd)) {
-            for (b = (size_t)t->prc_band_start[prc]; b < (size_t)t->prc_band_start[prc + 1]; b++) {
-                int32_t first = t->band_start[b], last = t->band_start[b + 1], j;
-                for (j = first; j < last; j++) {
-                    size_t leaf = (size_t)(j - first), at;
-                    int32_t blk = t->blk_ids[j];
-                    int n;
-                    int64_t len_bits;
-                    if (bl->incl[blk] < 0) {
-                        if (!tree_decode(&c->incl, &rd, c->base[b] + leaf, l + 1))
+            for (b = 0; b < p.res->nbands; b++) {
+                hv_block_rect rect = hv_precinct_blocks(p.res, b, p.px, p.py);
+                size_t leaf = c->base[p.number * 3 + b];
+                int64_t cx, cy;
+                if (leaf == NO_TREE)
+                    continue;
+                for (cy = rect.cy0; cy < rect.cy0 + rect.h; cy++)
+                    for (cx = rect.cx0; cx < rect.cx0 + rect.w; cx++, leaf++) {
+                        size_t blk = (size_t)hv_block_number(&p.res->band[b], cx, cy), at;
+                        int n;
+                        int64_t len_bits;
+                        if (bl->incl[blk] < 0) {
+                            if (!tree_decode(&c->incl, &rd, leaf, l + 1))
+                                continue;
+                            tree_decode(&c->zbp, &rd, leaf, INF);
+                            bl->zbp[blk] = c->zbp.value[leaf];
+                            bl->incl[blk] = l;
+                        } else if (!read_bit(&rd)) {
                             continue;
-                        tree_decode(&c->zbp, &rd, c->base[b] + leaf, INF);
-                        bl->zbp[blk] = c->zbp.value[c->base[b] + leaf];
-                        bl->incl[blk] = l;
-                    } else if (!read_bit(&rd)) {
-                        continue;
+                        }
+                        n = read_npasses(&rd);
+                        while (read_bit(&rd))
+                            c->lblock[blk]++;
+                        len_bits = c->lblock[blk] + floorlog2((uint64_t)n);
+                        at = blk * nlayers + l;
+                        bl->npasses[at] = n;
+                        bl->length[at] = read_bits(&rd, len_bits);
+                        c->contrib[ncontrib++] = (int32_t)blk;
                     }
-                    n = read_npasses(&rd);
-                    while (read_bit(&rd))
-                        c->lblock[blk]++;
-                    len_bits = c->lblock[blk] + floorlog2((uint64_t)n);
-                    at = (size_t)blk * nlayers + l;
-                    bl->npasses[at] = n;
-                    bl->length[at] = read_bits(&rd, len_bits);
-                    c->contrib[ncontrib++] = blk;
-                }
             }
         }
         pos = read_align(&rd);
@@ -464,11 +536,12 @@ int hv_read_packets(const uint8_t *data, size_t size, const int64_t *tile_part_e
     return 0;
 }
 
-int hv_write_packets(const uint8_t *data, const hv_tables *t, const hv_blocks *bl,
-                     uint8_t **out, size_t *out_size, uint64_t *packet_lengths,
-                     char *error, size_t error_size) {
+int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
+                     const uint8_t *data, const hv_blocks *bl, uint8_t **out,
+                     size_t *out_size, uint64_t *packet_lengths, char *error,
+                     size_t error_size) {
     context *const c = context_new(error, error_size);
-    size_t pkt, b, k, nodes;
+    size_t pkt, k;
     int nlayers = bl->nlayers;
 
     if (c == NULL)
@@ -478,72 +551,58 @@ int hv_write_packets(const uint8_t *data, const hv_tables *t, const hv_blocks *b
         return -1;
     }
 
-    c->base = allocate(&c->f, t->nbands, sizeof *c->base);
     c->lblock = allocate(&c->f, bl->nblocks, sizeof *c->lblock);
     c->contrib = allocate(&c->f, bl->nblocks, sizeof *c->contrib);
-    nodes = tree_bases(t, c->base);
-    trees_alloc(&c->f, &c->incl, nodes);
-    trees_alloc(&c->f, &c->zbp, nodes);
-    for (b = 0; b < t->nbands; b++) {
-        int32_t first = t->band_start[b], last = t->band_start[b + 1], j;
-        if (last <= first)
-            continue;
-        tree_init(&c->incl, c->base[b], t->band_w[b], t->band_h[b]);
-        tree_init(&c->zbp, c->base[b], t->band_w[b], t->band_h[b]);
-        for (j = first; j < last; j++) {
-            size_t leaf = (size_t)(j - first);
-            int32_t blk = t->blk_ids[j];
-            c->incl.value[c->base[b] + leaf] = bl->incl[blk] >= 0 ? bl->incl[blk] : nlayers;
-            c->zbp.value[c->base[b] + leaf] = bl->zbp[blk] >= 0 ? bl->zbp[blk] : 0;
-        }
-        k = tree_size(t->band_w[b], t->band_h[b]);
-        tree_propagate(&c->incl, c->base[b], k);
-        tree_propagate(&c->zbp, c->base[b], k);
-    }
+    trees_setup(c, g, bl, 1);
     for (k = 0; k < bl->nblocks; k++)
         c->lblock[k] = 3;
 
-    for (pkt = 0; pkt < t->npackets; pkt++) {
-        int32_t prc = t->order_prc[pkt], l = t->order_layer[pkt];
+    for (pkt = 0; pkt < npackets; pkt++) {
+        precinct_ref p = packet_precinct(g, &packets[pkt]);
+        int32_t l = packets[pkt].layer;
         size_t start = c->wr.size;
-        int ncontrib = 0, i;
+        int ncontrib = 0, i, b;
         /* Like Kakadu, never use the one-bit empty packet; always write the
          * inclusion bits, even when no code-block contributes. */
         put_bit(&c->wr, 1);
-        for (b = (size_t)t->prc_band_start[prc]; b < (size_t)t->prc_band_start[prc + 1]; b++) {
-            int32_t first = t->band_start[b], last = t->band_start[b + 1], j;
-            for (j = first; j < last; j++) {
-                size_t leaf = (size_t)(j - first), at;
-                int32_t blk = t->blk_ids[j];
-                int n, log_n, need, inc, m;
-                at = (size_t)blk * nlayers + l;
-                if (bl->incl[blk] < 0 || bl->incl[blk] > l) {
-                    tree_encode(&c->incl, &c->wr, c->base[b] + leaf, l + 1);
-                    continue;
+        for (b = 0; b < p.res->nbands; b++) {
+            hv_block_rect rect = hv_precinct_blocks(p.res, b, p.px, p.py);
+            size_t leaf = c->base[p.number * 3 + b];
+            int64_t cx, cy;
+            if (leaf == NO_TREE)
+                continue;
+            for (cy = rect.cy0; cy < rect.cy0 + rect.h; cy++)
+                for (cx = rect.cx0; cx < rect.cx0 + rect.w; cx++, leaf++) {
+                    size_t blk = (size_t)hv_block_number(&p.res->band[b], cx, cy);
+                    size_t at = blk * nlayers + l;
+                    int n, log_n, need, inc, m;
+                    if (bl->incl[blk] < 0 || bl->incl[blk] > l) {
+                        tree_encode(&c->incl, &c->wr, leaf, l + 1);
+                        continue;
+                    }
+                    if (bl->incl[blk] == l) {
+                        tree_encode(&c->incl, &c->wr, leaf, l + 1);
+                        tree_encode(&c->zbp, &c->wr, leaf, INF);
+                    } else {
+                        put_bit(&c->wr, bl->npasses[at] ? 1 : 0);
+                    }
+                    if (!bl->npasses[at])
+                        continue;
+                    n = bl->npasses[at];
+                    write_npasses(&c->wr, n);
+                    log_n = floorlog2((uint64_t)n);
+                    need = (floorlog2((uint64_t)bl->length[at]) + 1) - log_n;
+                    inc = need - (int)c->lblock[blk];
+                    if (inc < 0)
+                        inc = 0;
+                    /* Unary Lblock increment: inc one bits followed by a zero. */
+                    for (m = 0; m < inc; m++)
+                        put_bit(&c->wr, 1);
+                    put_bit(&c->wr, 0);
+                    c->lblock[blk] += inc;
+                    put_bits(&c->wr, (uint64_t)bl->length[at], (int)c->lblock[blk] + log_n);
+                    c->contrib[ncontrib++] = (int32_t)blk;
                 }
-                if (bl->incl[blk] == l) {
-                    tree_encode(&c->incl, &c->wr, c->base[b] + leaf, l + 1);
-                    tree_encode(&c->zbp, &c->wr, c->base[b] + leaf, INF);
-                } else {
-                    put_bit(&c->wr, bl->npasses[at] ? 1 : 0);
-                }
-                if (!bl->npasses[at])
-                    continue;
-                n = bl->npasses[at];
-                write_npasses(&c->wr, n);
-                log_n = floorlog2((uint64_t)n);
-                need = (floorlog2((uint64_t)bl->length[at]) + 1) - log_n;
-                inc = need - (int)c->lblock[blk];
-                if (inc < 0)
-                    inc = 0;
-                /* Unary Lblock increment: inc one bits followed by a zero. */
-                for (m = 0; m < inc; m++)
-                    put_bit(&c->wr, 1);
-                put_bit(&c->wr, 0);
-                c->lblock[blk] += inc;
-                put_bits(&c->wr, (uint64_t)bl->length[at], (int)c->lblock[blk] + log_n);
-                c->contrib[ncontrib++] = blk;
-            }
         }
         flush_header(&c->wr);
         for (i = 0; i < ncontrib; i++) {

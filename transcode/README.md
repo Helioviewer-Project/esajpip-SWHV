@@ -8,7 +8,8 @@
 it rewrites the codestream in RPCL order with the given precincts and PLT
 markers, without recompressing it: every code-block keeps its coding passes,
 bytes and zero bit-planes, and only the packet headers change. It reads and
-writes headers with `jpeg2000_io` (`../lib/`).
+writes headers, and lays out precincts and packets, with `jpeg2000_io`
+(`../lib/`: `hv_reader`, `hv_writer`, `hv_geometry`).
 
 ## Usage
 
@@ -55,8 +56,8 @@ declarations), so the two can differ for XML that lxml would rewrite.
 | File | Role |
 | --- | --- |
 | `hv_transcode.c` | The command: options, mapping, boxes, `-x`, output file. |
-| `transcode.h` / `.c` | `hv_transcode_codestream`: precinct geometry, progression order and the new codestream (`_geometry`, `_packet_order`, `_flatten`, `transcode_codestream`). |
-| `tier2.h` / `.c` | Packet headers: `hv_read_packets` and `hv_write_packets` (`read_packets`, `write_packets`). |
+| `transcode.h` / `.c` | `hv_transcode_codestream` (`transcode_codestream`): reads the codestream, lays out the tile twice with `hv_geometry` (input and new precincts), checks hvJP2K's limits and the code-block partition, and writes the new codestream. |
+| `tier2.h` / `.c` | Packet headers on an `hv_geometry` and its packet order: `hv_read_packets` and `hv_write_packets` (`read_packets`, `write_packets`). |
 | `fuzz_transcode.c` | libFuzzer target: an accepted input's output must transcode to itself. |
 
 ## Build and test
