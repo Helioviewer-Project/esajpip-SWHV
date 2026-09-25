@@ -20,7 +20,9 @@
 
 #include "hv_writer.h"
 
-/* Precinct width and height exponents: 1 to 15 (2 to 32 768 samples). */
+/* Transcodes the codestream in buf[start, end) and appends the result to
+ * out. Precinct width and height exponents: 1 to 15 (2 to 32 768 samples).
+ * 0, or -1 with a message in error; on failure out keeps its size. */
 int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
                             hv_out *out, char *error, size_t error_size);
 
