@@ -496,8 +496,12 @@ static int decode_header(const precinct_ref *p, int l, const uint8_t *buf, size_
 }
 
 int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
-                    const uint8_t *buf, const hv_span *parts, size_t nparts, int zero_psot,
-                    int sop, int eph, hv_codeblocks *cb, char *error, size_t error_size) {
+                    const hv_tile_data *tile, int sop, int eph, hv_codeblocks *cb,
+                    char *error, size_t error_size) {
+    const uint8_t *buf = tile->buf;
+    const hv_span *parts = tile->parts;
+    size_t nparts = tile->nparts;
+    int zero_psot = tile->zero_psot;
     pass_state s;
     size_t pkt, part = 0, pos = nparts ? parts[0].start : 0, rest, i;
     int status = 0, nomem = 0;

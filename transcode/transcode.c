@@ -124,157 +124,158 @@ static CodSegment_Std new_cod(const CodSegment_Std *in, int ppx, int ppy) {
     return cod;
 }
 
-int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
-                            hv_out *out, char *error, size_t error_size) {
-    errors e = {error, error_size};
-    size_t out_start = out->size, nparts = 0, parts_cap = 0, old_count = 0, new_count = 0;
+/* One transcode: the input as read, both layouts of its tile, and the
+ * code-blocks' contributions. */
+typedef struct {
+    errors e;
+    const uint8_t *buf;
     hv_codestream cs;
-    hv_item item;
-    hv_span *parts = NULL;
-    hv_geometry old_g, new_g;
-    hv_packet *old_packets = NULL, *new_packets = NULL;
+    hv_span *parts;             /* the tile-parts' data */
+    size_t nparts, parts_cap;
+    int zero_psot;
+    CodSegment_Std cod;         /* the new COD */
+    hv_geometry in, out;        /* the input's and the new layout */
+    hv_packet *in_packets, *out_packets;
+    size_t in_count, out_count;
     hv_codeblocks cb;
-    CodSegment_Std cod;
-    uint64_t *lengths = NULL;
-    size_t tp_start;
-    int zero_psot = 0, status;
-    const Siz *siz;
+    uint64_t *lengths;          /* of the new packets */
+} transcode;
 
-    error[0] = 0;
-    memset(&cs, 0, sizeof cs);
-    memset(&old_g, 0, sizeof old_g);
-    memset(&new_g, 0, sizeof new_g);
-    memset(&cb, 0, sizeof cb);
-    memset(&cod, 0, sizeof cod);
-    if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15) {
-        status = fail(&e, "precinct dimensions must be powers of 2 from 2 to 32768");
-        goto done;
-    }
+static void transcode_free(transcode *t) {
+    hv_codestream_close(&t->cs);
+    hv_geometry_free(&t->in);
+    hv_geometry_free(&t->out);
+    hv_codeblocks_free(&t->cb);
+    free(t->parts);
+    free(t->in_packets);
+    free(t->out_packets);
+    free(t->lengths);
+}
 
-    /* Read the codestream. The main header is written as it is read, with
-     * the new COD in place of the old one and without TLM and PLM, which
-     * transcoding makes stale; the other segments are copied. The input's
-     * PLT is not used, so its padding is accepted. */
-    status = hv_codestream_open(&cs, buf, start, end, HV_ACCEPT_PLT_PADDING);
+/* Reads the codestream in buf[start, end) with hv_reader. The main header
+ * is written as it is read, with the new COD in place of the old one and
+ * without TLM and PLM, which transcoding makes stale; its other segments
+ * are copied. The tile-parts' data is recorded where it is. The input's
+ * PLT is not used, so its padding is accepted. */
+static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int ppy,
+                           hv_out *out) {
+    hv_item item;
+    int status = hv_codestream_open(&t->cs, t->buf, start, end, HV_ACCEPT_PLT_PADDING);
+
     if (status == 0 && hv_write_marker(out, SOC) != 0)
-        status = fail(&e, "%s", out->error);
-    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1) {
+        return fail(&t->e, "%s", out->error);
+    while (status == 0 && (status = hv_codestream_next(&t->cs, &item)) == 1) {
         status = 0;
         switch (item.kind) {
         case HV_SEGMENT:
             if (item.code == COC || item.code == POC || item.code == PPM || item.code == RGN)
-                status = fail(&e, "unsupported main header marker 0x%04X", item.code);
-            else if (item.code == COD) {
-                cod = new_cod(item.cod, ppx, ppy);
-                if (hv_write_cod(out, &cod) != 0)
-                    status = fail(&e, "%s", out->error);
+                return fail(&t->e, "unsupported main header marker 0x%04X", item.code);
+            if (item.code == COD) {
+                t->cod = new_cod(item.cod, ppx, ppy);
+                if (hv_write_cod(out, &t->cod) != 0)
+                    return fail(&t->e, "%s", out->error);
             } else if (item.code != TLM && item.code != PLM &&
-                       hv_write_bytes(out, buf + item.start, item.end - item.start) != 0)
-                status = fail(&e, "%s", out->error);
+                       hv_write_bytes(out, t->buf + item.start, item.end - item.start) != 0) {
+                return fail(&t->e, "%s", out->error);
+            }
             break;
         case HV_TILE_SEGMENT:
             if (item.code != PLT && item.code != COM)
-                status = fail(&e, "unsupported tile-part marker 0x%04X", item.code);
+                return fail(&t->e, "unsupported tile-part marker 0x%04X", item.code);
             break;
         case HV_TILE_PART:
-            zero_psot |= item.sot.psot == 0;
+            t->zero_psot |= item.sot.psot == 0;
             break;
         case HV_TILE_DATA:
-            if (grow(&parts, &parts_cap, nparts + 1, sizeof *parts) != 0) {
-                status = fail(&e, "out of memory");
-                break;
-            }
-            parts[nparts].start = item.start;
-            parts[nparts++].end = item.end;
+            if (grow(&t->parts, &t->parts_cap, t->nparts + 1, sizeof *t->parts) != 0)
+                return fail(&t->e, "out of memory");
+            t->parts[t->nparts].start = item.start;
+            t->parts[t->nparts++].end = item.end;
             break;
         case HV_END:
-            break;
+            return 0;
         }
-        if (item.kind == HV_END)
-            break;
     }
-    if (status < 0) {
-        if (error[0] == 0)
-            fail(&e, "%s", cs.error);
-        goto done;
-    }
-    siz = hv_codestream_siz(&cs);
-    if (cs.tiles != 1) {
-        status = fail(&e, "only single-tile codestreams are supported");
-        goto done;
-    }
-    if (hv_codestream_cod(&cs)->spcod.cbStyle & 0x05) {
-        status = fail(&e, "code-block styles with bypass or termall are not supported");
-        goto done;
-    }
+    return status < 0 ? fail(&t->e, "%s", t->cs.error) : 0;
+}
 
-    /* Decode the packet headers with the input's precincts and order. */
-    {
-        size_t data = 0, i;
-        for (i = 0; i < nparts; i++)
-            data += parts[i].end - parts[i].start;
-        if ((status = hv_geometry_init(&old_g, siz, hv_codestream_cod(&cs), 0, error,
-                                       error_size)) != 0 ||
-            (status = check_limits(&old_g, (int64_t)data, &e)) != 0 ||
-            (status = hv_geometry_packets(&old_g, &old_packets, &old_count, error,
-                                          error_size)) != 0)
-            goto done;
-    }
-    if (hv_codeblocks_init(&cb, (size_t)old_g.nblocks) != 0) {
-        status = fail(&e, "out of memory");
-        goto done;
-    }
-    if ((status = hv_read_packets(&old_g, old_packets, old_count, buf, parts, nparts,
-                                  zero_psot, hv_codestream_cod(&cs)->scod.sopMarkers,
-                                  hv_codestream_cod(&cs)->scod.ephMarkers, &cb, error,
-                                  error_size)) != 0)
-        goto done;
+/* Lays out the tile with the input's precincts and order and decodes its
+ * packet headers. */
+static int read_packets(transcode *t) {
+    const Cod *cod = hv_codestream_cod(&t->cs);
+    hv_tile_data tile = {t->buf, t->parts, t->nparts, t->zero_psot};
+    size_t data = 0, i;
 
-    /* Lay out the new precincts. Code-block numbers are the same in both
-     * geometries while the code-block partition is. */
-    if ((status = hv_geometry_init(&new_g, siz, &cod.body, 0, error, error_size)) != 0 ||
-        (status = check_limits(&new_g, -1, &e)) != 0)
-        goto done;
-    if (!same_partition(&old_g, &new_g)) {
-        status = fail(&e, "%dx%d precincts change the code-block partition", 1 << ppx,
-                      1 << ppy);
-        goto done;
-    }
-    if ((status = hv_geometry_packets(&new_g, &new_packets, &new_count, error,
-                                      error_size)) != 0)
-        goto done;
-    if ((lengths = malloc((new_count + 1) * sizeof *lengths)) == NULL) {
-        status = fail(&e, "out of memory");
-        goto done;
-    }
+    if (t->cs.tiles != 1)
+        return fail(&t->e, "only single-tile codestreams are supported");
+    if (cod->spcod.cbStyle & 0x05)
+        return fail(&t->e, "code-block styles with bypass or termall are not supported");
+    for (i = 0; i < t->nparts; i++)
+        data += t->parts[i].end - t->parts[i].start;
+    if (hv_geometry_init(&t->in, hv_codestream_siz(&t->cs), cod, 0, t->e.error,
+                         t->e.error_size) != 0 ||
+        check_limits(&t->in, (int64_t)data, &t->e) != 0 ||
+        hv_geometry_packets(&t->in, &t->in_packets, &t->in_count, t->e.error,
+                            t->e.error_size) != 0)
+        return -1;
+    if (hv_codeblocks_init(&t->cb, (size_t)t->in.nblocks) != 0)
+        return fail(&t->e, "out of memory");
+    return hv_read_packets(&t->in, t->in_packets, t->in_count, &tile, cod->scod.sopMarkers,
+                           cod->scod.ephMarkers, &t->cb, t->e.error, t->e.error_size);
+}
 
-    /* One tile-part: the PLT needs the packet lengths, so the packets are
-     * encoded twice, first for their lengths, then into the output. */
-    if ((status = hv_write_packets(&new_g, new_packets, new_count, buf, &cb, NULL, lengths,
-                                   error, error_size)) != 0)
-        goto done;
+/* Lays out the tile with the new COD and writes it as one tile-part. Code-
+ * block numbers are the same in both layouts while the code-block
+ * partition is. The PLT needs the packet lengths, so the packets are
+ * encoded twice, first for their lengths, then into the output. */
+static int write_tile(transcode *t, int ppx, int ppy, hv_out *out) {
+    size_t tp_start;
+
+    if (hv_geometry_init(&t->out, hv_codestream_siz(&t->cs), &t->cod.body, 0, t->e.error,
+                         t->e.error_size) != 0 ||
+        check_limits(&t->out, -1, &t->e) != 0)
+        return -1;
+    if (!same_partition(&t->in, &t->out))
+        return fail(&t->e, "%dx%d precincts change the code-block partition", 1 << ppx,
+                    1 << ppy);
+    if (hv_geometry_packets(&t->out, &t->out_packets, &t->out_count, t->e.error,
+                            t->e.error_size) != 0)
+        return -1;
+    if ((t->lengths = malloc((t->out_count + 1) * sizeof *t->lengths)) == NULL)
+        return fail(&t->e, "out of memory");
+    if (hv_write_packets(&t->out, t->out_packets, t->out_count, t->buf, &t->cb, NULL,
+                         t->lengths, t->e.error, t->e.error_size) != 0)
+        return -1;
     if (hv_begin_tile_part(out, 0, 0, 1, &tp_start) != 0 ||
-        hv_write_plt(out, lengths, new_count) != 0 ||
-        hv_write_marker(out, SOD) != 0) {
-        status = fail(&e, "%s", out->error);
-        goto done;
-    }
-    if ((status = hv_write_packets(&new_g, new_packets, new_count, buf, &cb, out, lengths,
-                                   error, error_size)) != 0)
-        goto done;
+        hv_write_plt(out, t->lengths, t->out_count) != 0 ||
+        hv_write_marker(out, SOD) != 0)
+        return fail(&t->e, "%s", out->error);
+    if (hv_write_packets(&t->out, t->out_packets, t->out_count, t->buf, &t->cb, out,
+                         t->lengths, t->e.error, t->e.error_size) != 0)
+        return -1;
     if (hv_end_tile_part(out, tp_start) != 0 || hv_write_marker(out, EOC) != 0)
-        status = fail(&e, "%s", out->error);
+        return fail(&t->e, "%s", out->error);
+    return 0;
+}
 
-done:
-    if (status != 0 && out->size > out_start)
+int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
+                            hv_out *out, char *error, size_t error_size) {
+    size_t out_start = out->size;
+    transcode t;
+    int status;
+
+    memset(&t, 0, sizeof t);
+    t.e.error = error;
+    t.e.error_size = error_size;
+    t.buf = buf;
+    error[0] = 0;
+    if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15)
+        status = fail(&t.e, "precinct dimensions must be powers of 2 from 2 to 32768");
+    else if ((status = read_codestream(&t, start, end, ppx, ppy, out)) == 0 &&
+             (status = read_packets(&t)) == 0)
+        status = write_tile(&t, ppx, ppy, out);
+    if (status != 0)
         out->size = out_start;  /* nothing of a failed transcode */
-    hv_codestream_close(&cs);
-    hv_geometry_free(&old_g);
-    hv_geometry_free(&new_g);
-    hv_codeblocks_free(&cb);
-    free(parts);
-    free(old_packets);
-    free(new_packets);
-    free(lengths);
-    return status < 0 ? -1 : 0;
+    transcode_free(&t);
+    return status;
 }

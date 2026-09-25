@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The largest box LBox can state; tests lower it to exercise XLBox. */
+#ifndef HV_LBOX_MAX
+#define HV_LBOX_MAX UINT32_MAX
+#endif
+
 static int fail(hv_out *out, const char *error) {
     if (out->error == NULL)
         out->error = error;
@@ -291,9 +296,17 @@ int hv_end_box(hv_out *out, size_t start) {
         return -1;
     if (h.exist.xlbox) {
         h.xlbox = length;
+    } else if (length > HV_LBOX_MAX) {
+        /* The box outgrew LBox: move its payload up 8 bytes to make room
+         * for XLBox (I.4). */
+        if (reserve(out, 8) != 0)
+            return -1;
+        memmove(out->data + start + 16, out->data + start + 8, length - 8);
+        out->size += 8;
+        h.lbox = 1;
+        h.xlbox = length + 8;
+        h.exist.xlbox = TRUE;
     } else {
-        if (length > UINT32_MAX)
-            return fail(out, "box longer than LBox can state; begin it extended");
         h.lbox = length;
     }
     return ENCODE(BoxHeader, &h, out, start, h.exist.xlbox ? 16 : 8, &written);

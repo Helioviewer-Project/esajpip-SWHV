@@ -60,7 +60,7 @@ declarations), so the two can differ for XML that lxml would rewrite.
 
 | File | Role |
 | --- | --- |
-| `hv_transcode.c` | The command: options, mapping, boxes, `-x`, output file. |
+| `hv_transcode.c` | The command: options, mapping, boxes (the codestream is transcoded straight into its `jp2c` box), `-x`, output file. |
 | `transcode.h` / `.c` | `hv_transcode_codestream` (`transcode_codestream`): reads the codestream and writes its main header with the new COD, lays out the tile twice with `hv_geometry` (input and new precincts), checks hvJP2K's limits and the code-block partition, and writes the tile as one tile-part. |
 | `tier2.h` / `.c` | Packets (T.800 B.9, B.10) on an `hv_geometry` and its packet order. `hv_read_packets` decodes the headers in place, tile-part by tile-part, and records each code-block's contributions per layer; `hv_write_packets` encodes them, either for the lengths only (for the PLT) or into the output, copying the code-block bytes from the input. |
 | `fuzz_transcode.c` | libFuzzer target: an accepted input's output must transcode to itself. |

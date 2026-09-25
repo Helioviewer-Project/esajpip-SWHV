@@ -21,6 +21,14 @@ typedef struct {
     size_t start, end;
 } hv_span;
 
+/* A tile's data: its tile-parts, in order, in buf. */
+typedef struct {
+    const uint8_t *buf;
+    const hv_span *parts;
+    size_t nparts;
+    int zero_psot;              /* the last tile-part has Psot = 0 */
+} hv_tile_data;
+
 /* A code-block's contribution to one layer (B.10.6, B.10.7). */
 typedef struct {
     size_t offset;              /* its bytes: buf[offset, offset + length) */
@@ -49,14 +57,13 @@ typedef struct {
 int hv_codeblocks_init(hv_codeblocks *cb, size_t nblocks);
 void hv_codeblocks_free(hv_codeblocks *cb);
 
-/* Decodes the packet headers of a tile whose data is in the tile-parts
- * parts[0 .. nparts) of buf, and records every contribution in cb. A
- * packet may not span tile-parts. zero_psot: the last tile-part had
- * Psot = 0. sop/eph: Scod bits 1 and 2 (SOP and EPH markers may be
- * present; they are skipped). Returns 0, or -1 with a message in error. */
+/* Decodes the packet headers of a tile and records every contribution in
+ * cb. A packet may not span tile-parts. sop/eph: Scod bits 1 and 2 (SOP
+ * and EPH markers may be present; they are skipped). Returns 0, or -1 with
+ * a message in error. */
 int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
-                    const uint8_t *buf, const hv_span *parts, size_t nparts, int zero_psot,
-                    int sop, int eph, hv_codeblocks *cb, char *error, size_t error_size);
+                    const hv_tile_data *tile, int sop, int eph, hv_codeblocks *cb,
+                    char *error, size_t error_size);
 
 /* Encodes `packets` from the contributions in cb and sets lengths[k] to
  * the length of packet k. With out, also appends the packets to it, with

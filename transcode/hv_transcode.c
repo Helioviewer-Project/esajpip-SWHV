@@ -19,7 +19,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -209,16 +208,11 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
         if (box.type == JP2C && !done_jp2c) {
-            hv_out cs;
-            hv_out_init(&cs);
-            status = hv_transcode_codestream(buf, box.payload, box.end, ppx, ppy, &cs, error,
-                                             error_size);
-            if (status == 0 &&
-                (hv_begin_box(out, JP2C, cs.size > UINT32_MAX - 8, &start) != 0 ||
-                 hv_write_bytes(out, cs.data, cs.size) != 0 || hv_end_box(out, start) != 0))
-                status = -1;
-            hv_out_free(&cs);
-            if (status != 0)
+            /* The transcoded codestream goes straight into its box. */
+            if (hv_begin_box(out, JP2C, 0, &start) != 0 ||
+                hv_transcode_codestream(buf, box.payload, box.end, ppx, ppy, out, error,
+                                        error_size) != 0 ||
+                hv_end_box(out, start) != 0)
                 return -1;
             done_jp2c = 1;
             continue;
@@ -230,7 +224,7 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
                          box.start);
                 return -1;
             }
-            if (hv_begin_box(out, XML, x1 - x0 > UINT32_MAX - 8, &start) != 0 ||
+            if (hv_begin_box(out, XML, 0, &start) != 0 ||
                 hv_write_bytes(out, buf + box.payload + x0, x1 - x0) != 0 ||
                 hv_end_box(out, start) != 0)
                 return -1;
@@ -242,7 +236,7 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
         /* LBox = 0 becomes an explicit length: the box may no longer be
          * the last one. */
         if (box.to_end) {
-            if (hv_begin_box(out, box.type, box.end - box.payload > UINT32_MAX - 8, &start) != 0 ||
+            if (hv_begin_box(out, box.type, 0, &start) != 0 ||
                 hv_write_bytes(out, buf + box.payload, box.end - box.payload) != 0 ||
                 hv_end_box(out, start) != 0)
                 return -1;

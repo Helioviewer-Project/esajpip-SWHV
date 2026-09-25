@@ -53,8 +53,9 @@ int hv_begin_tile_part(hv_out *out, uint16_t isot, uint8_t tpsot, uint8_t tnsot,
                        size_t *start);
 int hv_end_tile_part(hv_out *out, size_t start);
 
-/* A box header whose length hv_end_box fills in: LBox, or XLBox when the
- * box was begun `extended` (needed above 4 GiB - 1). */
+/* A box header whose length hv_end_box fills in. Begun `extended`, the
+ * box has LBox = 1 and XLBox; otherwise LBox, which hv_end_box switches to
+ * XLBox, moving the payload, if the box outgrew it (above 4 GiB - 1). */
 int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start);
 int hv_end_box(hv_out *out, size_t start);
 
