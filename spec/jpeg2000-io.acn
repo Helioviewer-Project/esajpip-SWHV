@@ -1,0 +1,27 @@
+-- jpeg2000-io.acn
+--
+-- Bit-level encoding for jpeg2000-io.asn1. Unsigned big-endian throughout
+-- (T.800 A.1.3, I.4). No ACN-inserted fields: every length is an ASN.1
+-- field that the walker reads.
+
+JPEG2000-IO DEFINITIONS ::= BEGIN
+
+BoxHeader [] {
+    lbox        [encoding pos-int, size 32, endianness big],
+    tbox        [encoding pos-int, size 32, endianness big],
+    xlbox       [encoding pos-int, size 64, endianness big, present-when (lbox == 1)]
+}
+
+MarkerCode [encoding pos-int, size 16, endianness big]
+
+SegmentLength [encoding pos-int, size 16, endianness big]
+
+SotSegment [] {
+    lsot        [encoding pos-int, size 16, endianness big],
+    isot        [encoding pos-int, size 16, endianness big],
+    psot        [encoding pos-int, size 32, endianness big],
+    tpsot       [encoding pos-int, size 8],
+    tnsot       [encoding pos-int, size 8]
+}
+
+END

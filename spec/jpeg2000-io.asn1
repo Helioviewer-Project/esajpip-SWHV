@@ -1,0 +1,75 @@
+-- jpeg2000-io.asn1
+--
+-- Header types for the JPEG 2000 reader/writer (transcode/, hv_transcode).
+-- Unlike the whole-file model (j2k-codestream.asn1, jp2-boxes.asn1), these
+-- types are decoded and encoded one at a time by a hand-written walker that
+-- steps from header to header. A payload (box contents, tile-part data) is
+-- never an ASN.1 value: asn1scc gives every OCTET STRING an inline array of
+-- its maximum size, clears it on initialization and copies into it on
+-- decode. The walker records where a payload starts and how long it is.
+--
+-- The lengths that decide how far a payload runs (LBox, XLBox, Psot) are
+-- ASN.1 fields here, not ACN determinants. That is what lets this module
+-- state the forms the whole-file model cannot: LBox = 0 and Psot = 0 ("to
+-- the end"), and LBox = 1 with XLBox. (ACN selects a CHOICE alternative
+-- only by `field == value`, so there is no "otherwise" alternative, and
+-- `size deduced` cannot sit inside a CHOICE alternative.) The generated
+-- code checks the values; the walker turns them into extents.
+--
+-- Marker segments with a body are decoded whole with the Lxxx wrappers of
+-- j2k-codestream.asn1 (SizSegment, CodSegment, QcdSegment, PltSegment,
+-- ComSegment). SegmentLength reads only Lxxx, to skip any other segment.
+
+JPEG2000-IO DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+EXPORTS ALL;
+
+-- ---------------------------------------------------------------------------
+-- Box header, T.800 I.4: LBox, TBox, and XLBox when LBox = 1
+-- ---------------------------------------------------------------------------
+
+BoxHeader ::= SEQUENCE {
+    lbox        INTEGER (0..1 | 8..4294967295),   -- 0: the box runs to the end of the file
+                                                  -- 1: the length is in xlbox
+                                                  -- otherwise: box length, header included
+    tbox        INTEGER (0..4294967295),          -- box type, four bytes big-endian
+    xlbox       INTEGER (16..18446744073709551615) OPTIONAL   -- present iff lbox = 1
+}
+
+-- ---------------------------------------------------------------------------
+-- Codestream markers, T.800 A.1.1
+-- ---------------------------------------------------------------------------
+
+-- 0xFF followed by 0x01..0xFE (the range the profile layer also uses).
+MarkerCode ::= INTEGER (65281..65534)
+
+-- Lxxx of any marker segment. It counts its own two bytes.
+SegmentLength ::= INTEGER (2..65535)
+
+-- SOT marker segment after the FF90 code, A.4.2 (Table A.5).
+SotSegment ::= SEQUENCE {
+    lsot        INTEGER (10..10),
+    isot        INTEGER (0..65534),               -- tile index
+    psot        INTEGER (0 | 14..4294967295),     -- tile-part length from the SOT code;
+                                                  -- 0: runs to the EOC (last tile-part only).
+                                                  -- 14 = SOT segment 12 + SOD 2
+    tpsot       INTEGER (0..254),                 -- tile-part index (255 reserved)
+    tnsot       INTEGER (0..255)                  -- number of tile-parts; 0 = not specified
+}
+
+END
+
+-- ===========================================================================
+-- Rules the walker applies (ASN.1 cannot state them per type)
+-- ===========================================================================
+--
+-- BoxHeader:
+--   payload = lbox - 8 when lbox >= 8, xlbox - 16 when lbox = 1, and the rest
+--     of the file when lbox = 0; the box must fit inside its parent.
+--   lbox = 0 only for the last box of the file (I.4).
+-- SotSegment:
+--   the tile-part runs psot bytes from the SOT code, or up to the EOC that
+--     ends the codestream when psot = 0; psot = 0 only on the last tile-part
+--     (A.4.2).
+--   The tile-part rules of j2k-codestream.asn1 (tpsot order, tnsot, COD/QCD
+--     placement) apply unchanged.

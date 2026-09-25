@@ -49,7 +49,8 @@ docker run --rm \
     -c -ACN --acn-v2 --field-prefix AUTO -o /output \
     /project/spec/j2k-headers.asn1 /project/spec/j2k-headers.acn \
     /project/spec/j2k-codestream.asn1 /project/spec/j2k-codestream.acn \
-    /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn
+    /project/spec/jp2-boxes.asn1 /project/spec/jp2-boxes.acn \
+    /project/spec/jpeg2000-io.asn1 /project/spec/jpeg2000-io.acn
 
 docker run --rm --entrypoint sh \
     -v "$repo:/project:ro" \
@@ -69,6 +70,7 @@ docker run --rm --entrypoint sh \
             /generated/j2k-headers.c \
             /generated/j2k-codestream.c \
             /generated/jp2-boxes.c \
+            /generated/jpeg2000-io.c \
             -o /tmp/vectors
         /tmp/vectors /corpus
     '
