@@ -27,7 +27,10 @@ cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
 cmake --build build --target hv_walk
 ```
 
-After a model change in `../spec/`, run `lib/generate.sh`.
+After a model change in `../spec/`, run `lib/generate.sh`. It needs the
+compiler that `../spec/build-asn1scc.sh` builds: the pinned revision with the
+local patches in `../spec/asn1scc-patches/`. The unpatched compiler generates
+a PLT decoder that reads an uninitialized flag on truncated input.
 
 ## What the reader checks
 

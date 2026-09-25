@@ -58,6 +58,8 @@ configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
 # The JPEG 2000 reader/writer (lib/), built as a static library.
 add_subdirectory(lib)
+# hv_transcode (transcode/), on that library.
+add_subdirectory(transcode)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS
