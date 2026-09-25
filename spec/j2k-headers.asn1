@@ -125,7 +125,7 @@ QcdBody {INTEGER:minSpqcd, INTEGER:maxSpqcd} ::= SEQUENCE {
     spqcd       OCTET STRING (SIZE (minSpqcd..maxSpqcd))  -- fills the segment
 }
 
-Qcd ::= QcdBody {0, 1024}                     -- corpus bound
+Qcd ::= QcdBody {1, 1024}                     -- corpus bound; Lqcd >= 4 (Table A.27)
 Qcd-Std ::= QcdBody {1, 194}                  -- Table A.27: Lqcd 4 to 197
 
 -- ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ ComBody {INTEGER:minCcom, INTEGER:maxCcom} ::= SEQUENCE {
     ccom        OCTET STRING (SIZE (minCcom..maxCcom))  -- fills the segment
 }
 
-Com ::= ComBody {0, 4096}                     -- corpus bound
+Com ::= ComBody {1, 4096}                     -- corpus bound; Lcom >= 5 (Table A.43)
 Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65 535
 
 -- ===========================================================================
