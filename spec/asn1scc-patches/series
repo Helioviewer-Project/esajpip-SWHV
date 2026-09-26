@@ -1,4 +1,5 @@
-deferred-determinant-uninit.patch
-deferred-sequence-of-arguments.patch
-deferred-sibling-consumers.patch
-icdpdus-reference-init.patch
+0001-deferred-determinant-uninit.patch
+0002-deferred-sequence-of-arguments.patch
+0003-deferred-sibling-consumers.patch
+0004-icdpdus-reference-init.patch
+0005-deferred-fixed-size-determinant.patch

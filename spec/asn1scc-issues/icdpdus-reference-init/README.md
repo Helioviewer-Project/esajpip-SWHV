@@ -57,7 +57,7 @@ not. `DAstConstruction.fs` then prunes by the recorded calls.
 
 ## Fix
 
-[`../../asn1scc-patches/icdpdus-reference-init.patch`](../../asn1scc-patches/icdpdus-reference-init.patch)
+[`../../asn1scc-patches/0004-icdpdus-reference-init.patch`](../../asn1scc-patches/0004-icdpdus-reference-init.patch)
 (after the three deferred-determinant patches in `series`): record the call
 for every reference, before the `isComplexType` match. Recording a call
 only makes more functions generated, and only with `-icdPdus`, the one user
@@ -84,7 +84,7 @@ The upstream `regression` tool does not use `-icdPdus`.
 The complete unmodified `161cc246` compiler still generates a call to
 `Mask_Initialize` without its definition, so `run.sh` fails to link. The
 same failure remains with the first three patches. Adding
-`icdpdus-reference-init.patch` makes `run.sh` print
+`0004-icdpdus-reference-init.patch` makes `run.sh` print
 `Rec initialized, valid=1`, and the dedicated `runIcdPdusTests.sh`
 regression passes. `spec/check-model.sh` also confirms that the committed
 reader code in `lib/generated/` matches the fully patched compiler.

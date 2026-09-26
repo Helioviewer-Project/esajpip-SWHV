@@ -6,23 +6,23 @@
 bug still present in that pinned upstream revision. When updating `VERSION`,
 retest each bug against the new revision and remove any patch it supersedes.
 
-Applied now:
+Applied now, in `series` order:
 
-- `deferred-determinant-uninit.patch`: with `--acn-v2`, the C decoder copied
+- `0001-deferred-determinant-uninit.patch`: with `--acn-v2`, the C decoder copied
   a deferred determinant's temporary even when decoding it failed, reading an
   uninitialized value at end of stream. The three C copy templates in
   `StgC/acn_c.stg` now copy only when `ret` is true; a `-fsanitize=bool`
   check on test case 001 is added to `v4Tests/scripts/runWireTests.sh`.
   Report and reproducer:
   [`../asn1scc-issues/deferred-determinant-uninit/`](../asn1scc-issues/deferred-determinant-uninit/).
-- `deferred-sequence-of-arguments.patch`: with `--acn-v2`, a determinant
+- `0002-deferred-sequence-of-arguments.patch`: with `--acn-v2`, a determinant
   passed as an argument to the elements of a SEQUENCE OF child was not
   deferred: the encoder computed it from `arr[i1]` outside the element loop,
   with `i1` uninitialized. The two collectors of deferred determinants in
   `BackendAst/DAstACNDeferred.fs` now look through SEQUENCE OF to the
   element's reference type. Test case `25-ACNV2-BOUNDARIES/016` and its
   wire test in `v4Tests/scripts/runWireTests.sh`.
-- `deferred-sibling-consumers.patch`: a deferred determinant that a sibling
+- `0003-deferred-sibling-consumers.patch`: a deferred determinant that a sibling
   also consumes (`head [size len]` beside `payload <len> []`): the decoder
   now keeps the ordinary variable the sibling reads (it did not compile),
   and the encoder patches the determinant from the sibling too, or fails on
@@ -32,7 +32,7 @@ Applied now:
 
   Report and reproducers for both:
   [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
-- `icdpdus-reference-init.patch`: with `-icdPdus`, the init function of a
+- `0004-icdpdus-reference-init.patch`: with `-icdPdus`, the init function of a
   referenced type that is not complex (an OCTET STRING type assignment, say)
   was dropped although a PDU's init function calls it, so the generated C
   did not link. `BackendAst/DAstInitialize.fs` now records that call for
@@ -41,11 +41,21 @@ Applied now:
   which `../build-asn1scc.sh` runs. `lib/generate.sh` relies on it (the
   model's `RreqMask` and `Extra`). Report and reproducer:
   [`../asn1scc-issues/icdpdus-reference-init/`](../asn1scc-issues/icdpdus-reference-init/).
+- `0005-deferred-fixed-size-determinant.patch`: with `--acn-v2`, deferred size
+  determinants for fixed-size OCTET STRING values were generated from a
+  nonexistent C `nCount` member. `BackendAst/DAstACNDeferred.fs` now uses the
+  declared ACN size when its minimum and maximum are equal, matching the
+  existing nondeferred size-determinant rule. Variable-size values keep the
+  runtime size expression. Test case `25-ACNV2-BOUNDARIES/019` compiles the
+  generated C and checks its exact wire bytes and round trip in
+  `v4Tests/scripts/runWireTests.sh`. Report and reproducer:
+  [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
 
 ## Reference: the former fixes for deferred ACN
 
-`0001` to `0003` are not in `series`. They are the former local fix for
-deferred ACN (`--acn-v2`) generation and apply, in that order, to the
+The patches in [`reference/`](reference/) are not in `series`. They are the
+former `0001` to `0003` fixes for deferred ACN (`--acn-v2`) generation.
+They apply, in that order, to the
 unmodified ASN1SCC commit `4434cad8bbcc436183ce4cc15721392be1466e36`, not to
 `VERSION`. `VERSION` now pins the upstream fix for
 [issue #415](https://github.com/esa/asn1scc/issues/415), which replaces them.

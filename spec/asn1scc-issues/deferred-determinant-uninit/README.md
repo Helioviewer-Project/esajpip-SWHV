@@ -93,7 +93,7 @@ variable initialized (`let mut Msg_a_more: bool = false;`).
 
 ## Fix
 
-[`../../asn1scc-patches/deferred-determinant-uninit.patch`](../../asn1scc-patches/deferred-determinant-uninit.patch)
+[`../../asn1scc-patches/0001-deferred-determinant-uninit.patch`](../../asn1scc-patches/0001-deferred-determinant-uninit.patch)
 (applies to 161cc246; `spec/build-asn1scc.sh` applies it until upstream
 has the fix):
 

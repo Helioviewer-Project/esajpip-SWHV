@@ -151,11 +151,11 @@ head 3, data 2: encode rejected
 
 ## Fix
 
-Two patches, applied after `deferred-determinant-uninit.patch` in
+Two patches, applied after `0001-deferred-determinant-uninit.patch` in
 `../../asn1scc-patches/series` (`spec/build-asn1scc.sh` applies them until
 upstream has the fix):
 
-- [`deferred-sequence-of-arguments.patch`](../../asn1scc-patches/deferred-sequence-of-arguments.patch):
+- [`0002-deferred-sequence-of-arguments.patch`](../../asn1scc-patches/0002-deferred-sequence-of-arguments.patch):
   both collectors look through SEQUENCE OF children, nested ones included,
   to the element's reference type. `len` is then deferred: `InitDet`
   before the list, `PatchDet` in each element (a mismatch fails with
@@ -163,7 +163,7 @@ upstream has the fix):
   element patched it (0 for an empty list). Test case
   `25-ACNV2-BOUNDARIES/016` with `016_wire_test.c` in
   `scripts/runWireTests.sh`.
-- [`deferred-sibling-consumers.patch`](../../asn1scc-patches/deferred-sibling-consumers.patch):
+- [`0003-deferred-sibling-consumers.patch`](../../asn1scc-patches/0003-deferred-sibling-consumers.patch):
   for a local deferred determinant that siblings also consume,
   - decoding: decode into the ordinary variable, `ac.c_name`, and copy it
     to `det.value` (the existing `temp_copy` path, with that name instead
@@ -244,16 +244,41 @@ At that point `regression` itself and the other backends had not been run
 
 ## Revalidation against the pinned source (2026-09-26)
 
-The complete pinned compiler was built with no patches, the first two
-patches, the first three patches, and all four patches. With GCC 13.3.0,
+Before the fixed-size patch was added, the complete pinned compiler was built
+with no patches, the first two patches, the first three patches, and all four
+patches. With GCC 13.3.0,
 the unpatched `min` encoder emits `02 02 A0 A0 A1 A1`, but its decoder
 returns false; the unpatched `sibling` generated C does not compile because
 `Msg_len` is undeclared. The first two patches make `min` round-trip, but
-`sibling` still does not compile. Adding `deferred-sibling-consumers.patch`
+`sibling` still does not compile. Adding `0003-deferred-sibling-consumers.patch`
 makes both reproducers pass and rejects the mismatched sizes. The complete
 patched build passes `25-ACNV2-BOUNDARIES`, `runWireTests.sh`, and
 `spec/check-model.sh`. The AddressSanitizer crash above is the outcome
 recorded with GCC 11.4.0, not a repeatable outcome on GCC 13.3.0.
+
+## Fixed-size determinant
+
+`fixed.asn1` / `fixed.acn` give the sibling relationship above with
+`OCTET STRING (SIZE (2))`. Before
+[`0005-deferred-fixed-size-determinant.patch`](../../asn1scc-patches/0005-deferred-fixed-size-determinant.patch),
+the generator emitted `pVal->data.nCount` and `pVal->head.nCount`, although
+these fixed-size C fields have no `nCount`. The generated C did not compile.
+
+`computePatchDetValueExpr` now emits the declared ACN size when the minimum
+and maximum are equal. This follows the existing nondeferred rule in
+`BackendAst/Acn/AcnDependencies.fs`; variable-size fields still use their
+runtime `nCount`. Test case `25-ACNV2-BOUNDARIES/019` exercises both the
+reference child and the direct sibling: its generated C compiles, encodes
+the expected bytes, and decodes them back.
+
+The fixed-size reproducer from this directory can also be generated and
+compiled with the pinned compiler after applying the patch series:
+
+```sh
+out=$(mktemp -d)
+$ASN1SCC -c -ACN --acn-v2 -o "$out" fixed.asn1 fixed.acn
+cc -std=c11 -I "$out" -c "$out/fixed.c" -o "$out/fixed.o"
+```
 
 ## Other confirmed behavior (separate from these patches)
 
@@ -265,17 +290,3 @@ recorded with GCC 11.4.0, not a repeatable outcome on GCC 13.3.0.
   observed effect on esajpip. The compiler's intended meaning for
   `pErrCode` on success is not documented here; this is a status-output
   inconsistency, not a demonstrated encoding failure.
-- `fixed.asn1` / `fixed.acn` give the same determinant relationship with
-  `OCTET STRING (SIZE (2))`. The fully patched compiler emits both
-  `pVal->data.nCount` and `pVal->head.nCount` in `fixed.c`, although these
-  fixed-size fields have no `nCount`; compiling it fails on both references.
-  This is not covered by the variable-size cases 016 to 018.
-
-To reproduce the fixed-size failure from this directory with the pinned
-compiler (including the patches), set `ASN1SCC` as in the main reproducer:
-
-```sh
-out=$(mktemp -d)
-$ASN1SCC -c -ACN --acn-v2 -o "$out" fixed.asn1 fixed.acn
-cc -std=c11 -I "$out" -c "$out/fixed.c" -o "$out/fixed.o"
-```
