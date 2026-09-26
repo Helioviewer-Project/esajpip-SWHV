@@ -60,7 +60,7 @@ extern asn1SccUint psot_decode(asn1SccUint);
 flag MainMarkerCode_Profile_IsConstraintValid(const MainMarkerCode_Profile* pVal, int* pErrCode)
 {
     flag ret = TRUE;
-    ret = ((((((65281UL <= (*(pVal))) && ((*(pVal)) <= 65362UL))) || (((65364UL <= (*(pVal))) && ((*(pVal)) <= 65374UL))))) || (((65377UL <= (*(pVal))) && ((*(pVal)) <= 65534UL))));
+    ret = ((((((((((((((((((65281UL <= (*(pVal))) && ((*(pVal)) <= 65327UL))) || (((65344UL <= (*(pVal))) && ((*(pVal)) <= 65358UL))))) || (((*(pVal)) == 65360UL)))) || (((*(pVal)) == 65362UL)))) || (((65364UL <= (*(pVal))) && ((*(pVal)) <= 65367UL))))) || (((65369UL <= (*(pVal))) && ((*(pVal)) <= 65374UL))))) || (((65378UL <= (*(pVal))) && ((*(pVal)) <= 65424UL))))) || (((65428UL <= (*(pVal))) && ((*(pVal)) <= 65496UL))))) || (((65498UL <= (*(pVal))) && ((*(pVal)) <= 65534UL))));
     *pErrCode = ret ? 0 :  ERR_MAINMARKERCODE_PROFILE;
 
 	return ret;

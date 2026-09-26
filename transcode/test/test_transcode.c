@@ -470,26 +470,26 @@ static void test_tile_parts(void) {
     b = codestream(&s.main);
     tile_part(&b, 1, 0, 1, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("tile 1 of 1", &b, "SOT: tile index outside the tile grid");
+    expect_error("tile 1 of 1", &b, "sot.isot-range");
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 1, 1, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("tile-part 1 first", &b, "SOT: tile-parts of a tile out of order");
+    expect_error("tile-part 1 first", &b, "sot.tpsot-sequence");
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 0, 2, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("one of two tile-parts", &b, "number of tile-parts differs from TNsot");
+    expect_error("one of two tile-parts", &b, "sot.tnsot-count");
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 0, 2, s.body.data, first, 0);
     tile_part(&b, 0, 1, 3, s.body.data + first, s.body.size - first, 0);
     eoc(&b);
-    expect_error("TNsot 2 then 3", &b, "SOT: TNsot differs between tile-parts of a tile");
+    expect_error("TNsot 2 then 3", &b, "sot.tnsot-inconsistent");
     bytes_free(&b);
 
     b = codestream(&s.main);
@@ -516,7 +516,7 @@ static void test_tile_parts(void) {
     tile_part(&b, 0, 1, 2, s.body.data + first, s.body.size - first, 0);
     eoc(&b);
     expect_error("Psot = 0 on the first of two, TNsot = 2", &b,
-                 "number of tile-parts differs from TNsot");
+                 "sot.tnsot-count");
     bytes_free(&b);
 
     bytes_free(&expected);

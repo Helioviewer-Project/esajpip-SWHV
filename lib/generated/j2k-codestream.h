@@ -235,7 +235,9 @@ typedef struct {
 typedef asn1SccUint MainMarkerCode_Profile;
 
 
-#define ERR_MAINMARKERCODE_PROFILE		2225  /*(65281..65362 | 65364..65374 | 65377..65534)*/
+#define ERR_MAINMARKERCODE_PROFILE		2225  /*(65281..65327 | 65344..65358 | 65360 | 65362 |
+                                    65364..65367 | 65369..65374 | 65378..65424 |
+                                    65428..65496 | 65498..65534)*/
 flag MainMarkerCode_Profile_IsConstraintValid(const MainMarkerCode_Profile* pVal, int* pErrCode);
 
 void MainMarkerCode_Profile_Initialize(MainMarkerCode_Profile* pVal);

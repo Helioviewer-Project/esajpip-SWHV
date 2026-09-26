@@ -3,7 +3,7 @@
  *   CF_S          type-name suffix:  (empty) for layer-1 types, _Profile for layer-2
  *   CF_FILE       the file type:     Jp2Family, Jp2File_Profile or JpxFile_Profile
  *   CF_FN         function name to define
- *   CF_MAIN_OTHER defined when MainBody has the `other` marker alternative
+ *   CF_MAIN_OTHER defined when MainSegment has the `other` marker alternative
  * Generated-name assumptions (asn1scc C back end):
  *   SEQUENCE OF / OCTET STRING:  .nCount, .arr[]
  *   CHOICE:                      .kind, .u.<alt>, enum <Type>_<alt>_PRESENT
@@ -58,11 +58,16 @@ static const char *CF_CAT3(cf_cod, CF_S, )(const CF_COD *c, cf_layer layer) {
 static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf_layer layer) {
     int i, j;
     int cod_before = 0, qcd_before = 0, tile_parts = 0, plts = 0;
-    int seen_tile = 0, expect_tpsot = 0, tnsot = 0;
+    int seen_tile = 0;
     int all_parts_have_plt = 1, packet_layout_override = 0;
     hv_plt_count count = { 0, 0 };
+    hv_tile_parts seen = { 0, cf_tile_parts, cf_tile_tnsot };
     const CF_COD *main_cod = NULL;
     const char *r;
+
+    seen.tiles = hv_rule_tiles(&cs->siz.body);
+    memset(cf_tile_parts, 0, seen.tiles * sizeof *cf_tile_parts);
+    memset(cf_tile_tnsot, 0, seen.tiles * sizeof *cf_tile_tnsot);
 
     for (i = 0; i < cs->segments.nCount; ++i) {
         const CF_T(MainSegment) *seg = &cs->segments.arr[i];
@@ -75,14 +80,9 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 seen_tile = 1;
             }
             tile_parts++;
-            if ((int) tp->tpsot != expect_tpsot) return "sot.tpsot-sequence";
-            expect_tpsot++;
-            if (tp->tnsot != 0) {
-                if (tnsot == 0) tnsot = (int) tp->tnsot;
-                if (tp->tpsot >= tp->tnsot) return "sot.tpsot-below-tnsot";
-                /* A.4.2: TNsot, where given, is the one tile-part count. */
-                if ((int) tp->tnsot != tnsot) return "sot.tnsot-inconsistent";
-            }
+            /* A.4.2, per tile: Isot in the grid, TPsot in order, TNsot. */
+            if ((r = hv_rule_tile_part(&seen, tp->isot, tp->tpsot, tp->tnsot)) != NULL)
+                return r;
             {
                 /* T.800 A.7.3: the PLT segments of a tile-part list the
                  * length of every packet in it, so where any is present
@@ -151,14 +151,9 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
             /* T.800 A.3: after the first SOT only tile-parts and EOC follow. */
             return "codestream.segment-after-sot";
         }
-#ifdef CF_MAIN_OTHER
-        if (seg->exist.other &&
-            (code == MC_SOC || code == MC_SIZ))
-            return "main.other-code";
-#endif
     }
     if (tile_parts == 0) return "codestream.no-tile-part";
-    if (tnsot != 0 && tile_parts != tnsot) return "sot.tnsot-count";
+    if ((r = hv_rule_tile_parts_end(&seen)) != NULL) return r;
 
     if ((r = CF_CAT3(cf_siz, CF_S, )(&cs->siz.body, layer, main_cod)) != NULL) return r;
     for (i = 0; i < cs->segments.nCount; ++i) {
@@ -169,10 +164,14 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
 #ifndef CF_TILE_PLT_ONLY
         if (seg->exist.tilePart) {
             const CF_T(TilePart) *tp = &seg->tilePart;
-            for (j = 0; j < tp->rest.headers.nCount; ++j)
-                if (tp->rest.headers.arr[j].exist.cod &&
-                    (r = CF_CAT3(cf_cod, CF_S, )(&tp->rest.headers.arr[j].cod.body, layer)) != NULL)
+            for (j = 0; j < tp->rest.headers.nCount; ++j) {
+                const CF_COD *c = &tp->rest.headers.arr[j].cod.body;
+                if (!tp->rest.headers.arr[j].exist.cod) continue;
+                if ((r = CF_CAT3(cf_cod, CF_S, )(c, layer)) != NULL) return r;
+                /* A tile-part COD's MCT needs the same components. */
+                if ((r = hv_rule_siz(&cs->siz.body, &c->sgcod, layer >= CF_PROFILE)) != NULL)
                     return r;
+            }
         }
 #endif
     }
@@ -206,22 +205,11 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
     /* T.800 I.4: signature box then file type box. */
     if (file->boxes.nCount < 2) return "file.two-boxes";
     if (file->boxes.arr[0].payload.kind != CF_K(TopPayload, jP) ||
-        file->boxes.arr[0].payload.u.jP.data.nCount != 4 ||
-        memcmp(file->boxes.arr[0].payload.u.jP.data.arr, "\x0D\x0A\x87\x0A", 4) != 0)
+        !cf_signature(&file->boxes.arr[0].payload.u.jP))
         return "file.signature";
     if (file->boxes.arr[1].payload.kind != CF_K(TopPayload, ftyp))
         return "file.ftyp-second";
-    {
-        const Ftyp *ftyp = &file->boxes.arr[1].payload.u.ftyp;
-        const char *expected = kind == CF_JP2 ? "jp2 " : "jpx ";
-        int compatible = 0;
-        if (file->boxes.arr[1].payload.kind != CF_K(TopPayload, ftyp) ||
-            memcmp(ftyp->brand.arr, expected, 4) != 0)
-            return "file.ftyp-brand";
-        for (i = 0; i < ftyp->compat.nCount; ++i)
-            compatible |= memcmp(ftyp->compat.arr[i].arr, expected, 4) == 0;
-        if (!compatible) return "file.ftyp-compatibility";
-    }
+    if ((r = cf_ftyp(&file->boxes.arr[1].payload.u.ftyp, kind)) != NULL) return r;
 
     /* First pass: dtbl (ndr is needed to validate fragment references). */
     for (i = 0; i < file->boxes.nCount; ++i) {
@@ -312,17 +300,13 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         if (jpch > 0 && jp2c + ftbl != jpch) return "jpx.codestream-count";
     }
 
-    if (layer >= CF_PROFILE) {
-        if (kind == CF_JP2) {
-            /* ReadJP2 looks at jp2c boxes only. */
-            if (jp2c != 1) return "jp2.one-codestream";
-        } else {
-            /* ReadJPX requires the header the standard makes optional. */
-            if (jpch < 1) return "jpx.no-jpch";
-            /* Embedded and linked codestreams do not mix. */
-            if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
-            if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
-        }
+    /* Layer 2 for a .jp2 is cf_check_jp2_profile, in crossfield.c. */
+    if (layer >= CF_PROFILE && kind == CF_JPX) {
+        /* ReadJPX requires the header the standard makes optional. */
+        if (jpch < 1) return "jpx.no-jpch";
+        /* Embedded and linked codestreams do not mix. */
+        if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
+        if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
     }
     return NULL;
 }

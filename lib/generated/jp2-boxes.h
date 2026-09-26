@@ -282,6 +282,50 @@ typedef asn1SccUint BoxType_Profile;
 
 
 
+/*-- Jp2Payload_Profile --------------------------------------------*/
+
+typedef enum {
+    Jp2Payload_Profile_NONE,
+    Jp2Payload_Profile_jp2c_PRESENT,
+    Jp2Payload_Profile_jP_PRESENT,
+    Jp2Payload_Profile_ftyp_PRESENT,
+    Jp2Payload_Profile_other_PRESENT
+} Jp2Payload_Profile_selection;
+
+typedef union {
+    Codestream_Profile jp2c;
+    OpaqueBox jP;
+    Ftyp ftyp;
+    OpaqueBox other;
+} Jp2Payload_Profile_unchecked_union;
+
+typedef struct {
+    Jp2Payload_Profile_selection kind;
+
+    Jp2Payload_Profile_unchecked_union u;
+} Jp2Payload_Profile;
+
+
+/*-- Jp2Box_Profile --------------------------------------------*/
+typedef struct {
+    Jp2Payload_Profile payload;
+
+} Jp2Box_Profile;
+
+
+/*-- Jp2File_Profile --------------------------------------------*/
+
+
+typedef struct {
+    int nCount;
+    Jp2Box_Profile arr[32];
+} Jp2File_Profile_boxes;
+typedef struct {
+    Jp2File_Profile_boxes boxes;
+
+} Jp2File_Profile;
+
+
 /*-- InnerPayload_Profile --------------------------------------------*/
 
 typedef enum {
@@ -421,19 +465,6 @@ typedef struct {
     TopPayload_Profile payload;
 
 } TopBox_Profile;
-
-
-/*-- Jp2File_Profile --------------------------------------------*/
-
-
-typedef struct {
-    int nCount;
-    TopBox_Profile arr[32];
-} Jp2File_Profile_boxes;
-typedef struct {
-    Jp2File_Profile_boxes boxes;
-
-} Jp2File_Profile;
 
 
 /*-- JpxFile_Profile --------------------------------------------*/

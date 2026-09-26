@@ -150,8 +150,12 @@ expectations, not that it conforms completely to JP2 or JPX.
   indexing is derived from the main `COD` marker. A main-header `PPM` marker is
   rejected because it moves the packet headers into the main header: precinct
   data-bins, built from the tile-part data, would hold packet bodies without
-  their headers. Main-header component quantization and region markers are
-  preserved but do not affect packet indexing.
+  their headers. `PPT`, `SOP` and `EPH`, which T.800 places in tile-part
+  headers and packets, `0xFF00`, which is not a marker, and `0xFF30` to
+  `0xFF3F`, which have no marker segment to skip, are rejected in the main
+  header. Main-header component quantization and region markers are
+  preserved but do not affect packet indexing; other length-delimited
+  markers are skipped.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - SOP marker segments are outside the served profile because they precede the
@@ -169,7 +173,8 @@ expectations, not that it conforms completely to JP2 or JPX.
   structure is checked while opening the source; coverage and packet bounds are
   checked lazily as packets are indexed. As a compatibility exception for
   deployed JPEG 2000 files, zero `Iplt` entries after the logical packet list
-  are ignored; a nonzero trailing entry is rejected.
+  are ignored; a nonzero trailing entry is rejected. An `Iplt` entry has at
+  most ten bytes, enough for any 64-bit length.
 - Packet counts, packet locations, and each data-bin's cumulative byte length
   must fit the signed 32-bit JPIP state. Source files larger than `INT_MAX`
   bytes are outside the supported profile.

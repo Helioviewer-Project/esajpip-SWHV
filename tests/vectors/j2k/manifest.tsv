@@ -45,6 +45,11 @@ jp2-code-90-65424.jp2	jp2	invalid	invalid	decode	Lxxx@0x90	code FF90: SOT where 
 jp2-code-a2-65392.jp2	jp2	invalid	invalid	decode	Lxxx@0xa2	code FF70: undefined marker	-
 jp2-code-a2-65361.jp2	jp2	invalid	invalid	decode	Lxxx@0xa2	code FF51: SIZ out of place	-
 jp2-code-a2-65424.jp2	jp2	invalid	invalid	decode	Lxxx@0xa2	code FF90: SOT where a segment was	-
+jp2-main-ppt.jp2	jp2	invalid	invalid	decode	main.marker-code	PPT, a tile-part header marker, in the main header	-
+jp2-main-sop.jp2	jp2	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
+jp2-main-ff30-length.jp2	jp2	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
+jp2-main-ff00.jp2	jp2	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jp2-plt-iplt-eleven-bytes.jp2	jp2	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jp2-siz.rsiz-2.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jp2-siz.rsiz-32768.jp2	jp2	valid	valid	-	siz.rsiz	extension capability flag	-
 jp2-siz.xsiz-0.jp2	jp2	invalid	invalid	decode	siz.xsiz	min-1	-
@@ -82,7 +87,7 @@ jp2-cod.spcod.cbStyle-64.jp2	jp2	invalid	invalid	decode	cod.spcod.cbStyle	reserv
 jp2-cod.spcod.cbStyle-255.jp2	jp2	invalid	invalid	decode	cod.spcod.cbStyle	all bits	-
 jp2-cod.spcod.transform-2.jp2	jp2	invalid	invalid	decode	cod.spcod.transform	max+1	-
 jp2-sot.lsot-11.jp2	jp2	invalid	invalid	decode	sot.lsot	Lsot != 10	-
-jp2-sot.isot-1.jp2	jp2	valid	invalid	decode	sot.isot	profile max+1 (tile 1): standard valid	-
+jp2-sot.isot-1.jp2	jp2	invalid	invalid	sot.isot-range	sot.isot	tile 1 of a one-tile grid (A.4.2)	-
 jp2-sot.isot-65535.jp2	jp2	invalid	invalid	decode	sot.isot	standard max+1	-
 jp2-sot.tpsot-1.jp2	jp2	invalid	invalid	sot.tpsot-sequence	sot.tpsot	first tile-part index 1: sequence	-
 jp2-sot.tpsot-255.jp2	jp2	invalid	invalid	decode	sot.tpsot	reserved	-
@@ -130,6 +135,9 @@ jp2-rule-plt.zero-length-44.jp2	jp2	invalid	invalid	plt.zero-length	plt.zero-len
 jp2-rule-plt.packet-count-45.jp2	jp2	invalid	invalid	plt.packet-count	plt.packet-count	nonzero Iplt beyond the only logical packet	-
 jp2-rule-plt.value-overflow-46.jp2	jp2	invalid	invalid	plt.value-overflow	plt.value-overflow	Iplt value 2^64+1 wraps to data length 1	-
 jp2-rule-main.packet-headers-moved-48.jp2	jp2	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
+jp2-rule-sot.two-tiles-49.jp2	jp2	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
+jp2-rule-siz.mct-components-50.jp2	jp2	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
+jp2-rule-ftbl.one-flst-51.jp2	jp2	invalid	valid	ftbl.one-flst	ftbl.one-flst	empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -176,6 +184,11 @@ jp2-precincts-code-92-65424.jp2	jp2	invalid	invalid	decode	Lxxx@0x92	code FF90: 
 jp2-precincts-code-a7-65392.jp2	jp2	invalid	invalid	decode	Lxxx@0xa7	code FF70: undefined marker	-
 jp2-precincts-code-a7-65361.jp2	jp2	invalid	invalid	decode	Lxxx@0xa7	code FF51: SIZ out of place	-
 jp2-precincts-code-a7-65424.jp2	jp2	invalid	invalid	decode	Lxxx@0xa7	code FF90: SOT where a segment was	-
+jp2-precincts-main-ppt.jp2	jp2	invalid	invalid	decode	main.marker-code	PPT, a tile-part header marker, in the main header	-
+jp2-precincts-main-sop.jp2	jp2	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
+jp2-precincts-main-ff30-length.jp2	jp2	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
+jp2-precincts-main-ff00.jp2	jp2	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jp2-precincts-plt-iplt-eleven-bytes.jp2	jp2	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jp2-precincts-cod.spcod.precincts.lowest.ppx-0.jp2	jp2	valid	valid	-	cod.spcod.precincts.lowest.ppx	zero at r=0: valid	-
 jp2-precincts-cod.spcod.precincts.higher[0].ppx-0.jp2	jp2	invalid	invalid	cod.precincts-higher-zero	cod.spcod.precincts.higher[0].ppx	zero above r=0 (Table A.21)	-
 jp2-precincts-cod.spcod.precincts.higher[0].ppy-0.jp2	jp2	invalid	invalid	cod.precincts-higher-zero	cod.spcod.precincts.higher[0].ppy	zero above r=0 (Table A.21)	-
@@ -256,6 +269,11 @@ jpx-embedded-code-eb-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xeb	code FF90: S
 jpx-embedded-code-fd-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF70: undefined marker	-
 jpx-embedded-code-fd-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF51: SIZ out of place	-
 jpx-embedded-code-fd-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF90: SOT where a segment was	-
+jpx-embedded-main-ppt.jpx	jpx	invalid	invalid	decode	main.marker-code	PPT, a tile-part header marker, in the main header	-
+jpx-embedded-main-sop.jpx	jpx	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
+jpx-embedded-main-ff30-length.jpx	jpx	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
+jpx-embedded-main-ff00.jpx	jpx	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jpx-embedded-plt-iplt-eleven-bytes.jpx	jpx	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jpx-embedded-siz.rsiz-2.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	extension capability flag	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-
@@ -293,7 +311,7 @@ jpx-embedded-cod.spcod.cbStyle-64.jpx	jpx	invalid	invalid	decode	cod.spcod.cbSty
 jpx-embedded-cod.spcod.cbStyle-255.jpx	jpx	invalid	invalid	decode	cod.spcod.cbStyle	all bits	-
 jpx-embedded-cod.spcod.transform-2.jpx	jpx	invalid	invalid	decode	cod.spcod.transform	max+1	-
 jpx-embedded-sot.lsot-11.jpx	jpx	invalid	invalid	decode	sot.lsot	Lsot != 10	-
-jpx-embedded-sot.isot-1.jpx	jpx	valid	invalid	decode	sot.isot	profile max+1 (tile 1): standard valid	-
+jpx-embedded-sot.isot-1.jpx	jpx	invalid	invalid	sot.isot-range	sot.isot	tile 1 of a one-tile grid (A.4.2)	-
 jpx-embedded-sot.isot-65535.jpx	jpx	invalid	invalid	decode	sot.isot	standard max+1	-
 jpx-embedded-sot.tpsot-1.jpx	jpx	invalid	invalid	sot.tpsot-sequence	sot.tpsot	first tile-part index 1: sequence	-
 jpx-embedded-sot.tpsot-255.jpx	jpx	invalid	invalid	decode	sot.tpsot	reserved	-
@@ -344,6 +362,8 @@ jpx-embedded-rule-plt.zero-length-44.jpx	jpx	invalid	invalid	plt.zero-length	plt
 jpx-embedded-rule-plt.packet-count-45.jpx	jpx	invalid	invalid	plt.packet-count	plt.packet-count	nonzero Iplt beyond the only logical packet	-
 jpx-embedded-rule-plt.value-overflow-46.jpx	jpx	invalid	invalid	plt.value-overflow	plt.value-overflow	Iplt value 2^64+1 wraps to data length 1	-
 jpx-embedded-rule-main.packet-headers-moved-48.jpx	jpx	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
+jpx-embedded-rule-sot.two-tiles-49.jpx	jpx	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
+jpx-embedded-rule-siz.mct-components-50.jpx	jpx	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-

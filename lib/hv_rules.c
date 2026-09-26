@@ -41,6 +41,34 @@ const char *hv_rule_cod(const Scod *scod, const Spcod *spcod, int profile) {
     return NULL;
 }
 
+uint32_t hv_rule_tiles(const Siz *s) {
+    uint64_t nx, ny;
+    if (s->xsiz <= s->xtosiz || s->ysiz <= s->ytosiz || s->xtsiz == 0 || s->ytsiz == 0)
+        return 0;
+    nx = (s->xsiz - s->xtosiz + s->xtsiz - 1) / s->xtsiz;
+    ny = (s->ysiz - s->ytosiz + s->ytsiz - 1) / s->ytsiz;
+    return nx > 65535 || ny > 65535 || nx * ny > 65535 ? 65535 : (uint32_t)(nx * ny);
+}
+
+const char *hv_rule_tile_part(hv_tile_parts *t, uint64_t isot, uint64_t tpsot, uint64_t tnsot) {
+    if (isot >= t->tiles) return "sot.isot-range";
+    if (tpsot != t->parts[isot]) return "sot.tpsot-sequence";
+    if (tnsot != 0) {
+        if (tpsot >= tnsot) return "sot.tpsot-below-tnsot";
+        if (t->tnsot[isot] != 0 && t->tnsot[isot] != tnsot) return "sot.tnsot-inconsistent";
+        t->tnsot[isot] = (uint8_t)tnsot;
+    }
+    t->parts[isot]++;
+    return NULL;
+}
+
+const char *hv_rule_tile_parts_end(const hv_tile_parts *t) {
+    uint32_t i;
+    for (i = 0; i < t->tiles; i++)
+        if (t->tnsot[i] != 0 && t->parts[i] != t->tnsot[i]) return "sot.tnsot-count";
+    return NULL;
+}
+
 const char *hv_rule_iplt(const Iplt *e, uint64_t *value) {
     uint64_t v = e->b0.bits;
 #define HV_IPLT_STEP(n)                                                      \

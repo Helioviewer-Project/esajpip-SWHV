@@ -31,6 +31,28 @@ const char *hv_rule_siz(const Siz *siz, const Sgcod *sgcod, int profile);
  * adds: no SOP markers. */
 const char *hv_rule_cod(const Scod *scod, const Spcod *spcod, int profile);
 
+/* The tiles of the grid SIZ describes that Isot (0 to 65 534) can
+ * address: at most 65 535. 0 if SIZ has no tile grid (siz.tile-origin and
+ * the other SIZ rules fail then). */
+uint32_t hv_rule_tiles(const Siz *siz);
+
+/* The tile-parts of a codestream, counted per tile. The caller provides
+ * `tiles` (hv_rule_tiles) and two zeroed arrays of that many entries. */
+typedef struct {
+    uint32_t tiles;
+    uint16_t *parts;        /* tile-parts seen, per tile */
+    uint8_t *tnsot;         /* the nonzero TNsot seen, per tile */
+} hv_tile_parts;
+
+/* Counts one tile-part, in codestream order (A.4.2): Isot within the grid;
+ * per tile, TPsot 0, 1, 2, ...; a nonzero TNsot above TPsot and the same
+ * in every tile-part that gives one. */
+const char *hv_rule_tile_part(hv_tile_parts *t, uint64_t isot, uint64_t tpsot, uint64_t tnsot);
+
+/* After the last tile-part: every tile with a nonzero TNsot has that many
+ * tile-parts. */
+const char *hv_rule_tile_parts_end(const hv_tile_parts *t);
+
 /* The value of one PLT entry (A.7.3): 7-bit groups, most significant
  * first. "plt.value-overflow" when it does not fit 64 bits. */
 const char *hv_rule_iplt(const Iplt *entry, uint64_t *value);

@@ -142,7 +142,10 @@ Plt ::= PltBody {128}                         -- corpus bound
 Plt-Std ::= PltBody {65532}                   -- Table A.37: Lplt 4 to 65 535, entries >= 1 byte
 
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
--- byte follows. T.800 does not bound the byte count; ten bytes cover 64 bits.
+-- byte follows. T.800 does not bound the byte count; the model stops at ten
+-- bytes (70 bits), enough for any 64-bit value. Longer chains, which can
+-- only add leading zero groups or overflow, are outside both layers, and
+-- the server rejects them.
 Iplt ::= SEQUENCE {
     b0  IpltByte,
     b1  IpltByte OPTIONAL,                    -- present iff b0.more
@@ -207,9 +210,9 @@ Qcd-Profile ::= Qcd
 Com-Profile ::= Com
 
 -- The server bounds a packet length by its *value* (it must lie within the
--- tile-part data, ImageIndex::GetOffsetPacket), not by its byte count, so
--- the profile does not restrict the Iplt chain length: a value written in
--- more groups than needed is accepted. The value rule is cross-field.
+-- tile-part data, ImageIndex::GetOffsetPacket). Within Iplt's ten bytes, a
+-- value written in more groups than needed is accepted. The value rule is
+-- cross-field.
 Plt-Profile ::= Plt
 
 END

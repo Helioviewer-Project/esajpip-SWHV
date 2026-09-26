@@ -65,6 +65,9 @@ namespace jpeg2000 {
 #define PLT_MARKER 0xFF58
 #define COM_MARKER 0xFF64
 #define SOD_MARKER 0xFF93
+#define PPT_MARKER 0xFF61
+#define SOP_MARKER 0xFF91
+#define EPH_MARKER 0xFF92
 
 // Marker segment lengths (Lxxx counts itself) and COM registration values,
 // T.800 Tables A.9, A.12, A.27, A.37, A.43 and A.44.
@@ -373,11 +376,24 @@ namespace jpeg2000 {
                 case SOC_MARKER:
                     return false;
 
+                case PPT_MARKER:
+                case SOP_MARKER:
+                case EPH_MARKER:
+                    // T.800 Table A.1 places these in tile-part headers and
+                    // packets, never in the main header.
+                    return false;
+
                 default:
                     // Tile-header contents are not sent: the JPIP tile-header
                     // data-bin is empty. PLT is the only supported tile-header
                     // segment because it is used only to locate packets.
-                    if (phase == TILE_HEADER || !SkipMarker(file, marker_limit))
+                    // 0xFF00 is not a marker. 0xFF30 to 0xFF3F have no
+                    // segment (T.800 A.1.3), so they cannot be skipped by
+                    // length, and T.800 leaves open whether skipping them
+                    // is harmless.
+                    if (phase == TILE_HEADER || value == 0xFF00 ||
+                        (value >= 0xFF30 && value <= 0xFF3F) ||
+                        !SkipMarker(file, marker_limit))
                         return false;
             }
         }

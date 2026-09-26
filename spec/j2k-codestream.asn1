@@ -50,9 +50,9 @@ IMPORTS
 -- PLT FF58, PPM FF60, PPT FF61. Informational: CRG FF63, COM FF64.
 --
 -- Layer 1 admits only the codes T.800 defines for each position. Layer 2
--- admits any marker the server would skip by length (any FFxx except SOC,
--- SIZ, SOT, EOC and FFFF) through an `other` alternative selected by a
--- negated present-when (ACN 4.9 boolean expressions).
+-- skips unknown codes by length, as the server does, through an `other`
+-- alternative selected by a negated present-when (ACN 4.9 boolean
+-- expressions); MainMarkerCode-Profile limits which codes get there.
 
 MainMarkerCode ::= INTEGER (65362 | 65363 | 65372 | 65373 | 65374 | 65375 |
                             65365 | 65367 | 65376 | 65379 | 65380 | 65424)
@@ -131,14 +131,21 @@ TileSegment ::= SEQUENCE {
 -- ===========================================================================
 
 -- Any marker code the server tolerates in that position; the listed
--- alternatives are interpreted, everything else is `other` (skipped).
--- COC (FF53) and POC (FF5F) are outside the value set: the server rejects
--- them because packet indexing is derived from the main COD alone. PPM
--- (FF60) is outside it too: it moves the packet headers into the main
--- header, so the precinct data-bins, built from the tile-part data, would
--- hold packet bodies without their headers.
-MainMarkerCode-Profile ::= INTEGER (65281..65362 | 65364..65374 | 65377..65534)
-                                                    -- FF01..FFFE minus COC/POC/PPM; SOC/SIZ excluded by rule
+-- alternatives are interpreted, everything else is `other` (skipped by
+-- length). Outside the value set:
+--   COC (FF53) and POC (FF5F): the server rejects them because packet
+--     indexing is derived from the main COD alone.
+--   PPM (FF60): it moves the packet headers into the main header, so the
+--     precinct data-bins, built from the tile-part data, would hold packet
+--     bodies without their headers.
+--   SOC, SIZ, PLT, PPT, SOP, EPH, SOD and EOC: T.800 defines them for
+--     other positions (Table A.1).
+--   FF30 to FF3F: markers without a segment (A.1.3), so they cannot be
+--     skipped by length, and T.800 leaves open whether skipping them is
+--     harmless; the profile rejects them.
+MainMarkerCode-Profile ::= INTEGER (65281..65327 | 65344..65358 | 65360 | 65362 |
+                                    65364..65367 | 65369..65374 | 65378..65424 |
+                                    65428..65496 | 65498..65534)
 -- PLT is the only tile-header segment the server accepts (the served
 -- tile-header data-bin is empty, so nothing else could reach the client).
 TileMarkerCode-Profile ::= INTEGER (65368..65368)
@@ -200,6 +207,8 @@ END
 --   After the first tilePart, every element of Codestream.segments is a
 --     tilePart (A.3: only SOT and EOC follow tile-part data). The main list
 --     admits other kinds structurally; the rule rejects them.
+--   isot is a tile of the grid SIZ describes (A.4.2: tiles in raster order
+--     from 0).
 --   For each tile: tile-part indices tpsot are 0, 1, 2, ... in stream order;
 --     every non-zero tnsot of that tile is the same value, tpsot < tnsot for
 --     every tile-part of that tile, and the tile's tile-part count == tnsot.
@@ -211,10 +220,9 @@ END
 --     and every tile-part has PLT, nonzero Iplt count matches the packet count.
 --
 -- Profile only:
---   Main-header `other` codes are never SOC (FF4F) or SIZ (FF51) — the server
---     rejects those (ReadCodestream), everything else it skips.
---   (Types, not rules: MainMarkerCode-Profile excludes COC and POC, and
---     TileMarkerCode-Profile / TileBody-Profile admit only PLT, so a tile
+--   (Types, not rules: MainMarkerCode-Profile excludes COC, POC, PPM, the
+--     codes T.800 defines for other positions and FF30 to FF3F, and
+--     TileMarkerCode-Profile / TileSegment-Profile admit only PLT, so a tile
 --     header carrying COD, QCD, COM or anything else fails to decode at
 --     layer 2.)
 --   1..64 tile-parts in total (single tile, so per tile == total).

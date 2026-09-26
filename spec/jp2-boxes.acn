@@ -123,6 +123,20 @@ Jp2File-Profile [] {
     boxes       [size deduced]
 }
 
+Jp2Box-Profile [] {
+    lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
+    jp2Type     BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function jp2boxtype],
+    payload     <jp2Type, lbox> []
+}
+
+-- jp2boxtype maps every type but jp2c, jP and ftyp to `other`.
+Jp2Payload-Profile <BoxType-Profile:tbox, INTEGER:length> [] {
+    jp2c        [present-when tbox == 1785737827, size length],
+    jP          [present-when tbox == 1783636000, size length],
+    ftyp        [present-when tbox == 1718909296, size length],
+    other       [present-when tbox == 1633837924, size length]
+}
+
 JpxFile-Profile [] {
     boxes       [size deduced]
 }

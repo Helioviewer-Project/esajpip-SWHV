@@ -49,3 +49,16 @@ asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
             return 1633837924u; /* abcd: `other` choice determinant */
     }
 }
+
+/* A .jp2 at the profile layer: ReadJP2 reads only these; every other box,
+ * superboxes included, is opaque `other`. */
+asn1SccUint MAPPING_DECODE_NAME(jp2boxtype)(asn1SccUint type) {
+    switch (type) {
+        case 1718909296u: /* ftyp */
+        case 1783636000u: /* jP   */
+        case 1785737827u: /* jp2c */
+            return type;
+        default:
+            return 1633837924u; /* abcd: `other` choice determinant */
+    }
+}

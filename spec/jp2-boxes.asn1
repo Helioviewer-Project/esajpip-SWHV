@@ -169,9 +169,22 @@ DataEntryUrl ::= SEQUENCE {
 -- here; their internal box framing remains part of the standard layer only.
 -- ===========================================================================
 
--- .jp2: exactly one jp2c, carrying a profile codestream.
+-- .jp2: exactly one jp2c, carrying a profile codestream. ReadJP2 reads
+-- the signature, ftyp and jp2c boxes and skips every other box by length,
+-- so every other box is opaque here, superboxes included.
 Jp2File-Profile ::= SEQUENCE {
-    boxes       SEQUENCE (SIZE (1..32)) OF TopBox-Profile
+    boxes       SEQUENCE (SIZE (1..32)) OF Jp2Box-Profile
+}
+
+Jp2Box-Profile ::= SEQUENCE {
+    payload     Jp2Payload-Profile
+}
+
+Jp2Payload-Profile ::= CHOICE {
+    jp2c        OCTET STRING (CONTAINING Codestream-Profile),
+    jP          OCTET STRING (CONTAINING OpaqueBox),
+    ftyp        OCTET STRING (CONTAINING Ftyp),
+    other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
 -- .jpx: N jpch boxes and either N jp2c boxes (embedded) or N ftbl/flst
@@ -260,7 +273,9 @@ END
 -- Cross-field constraints for the box layer (harness/crossfield.c)
 -- ===========================================================================
 --
--- Standard (both layers):
+-- Standard (both layers of a .jpx; for a .jp2, layer 1 and, at layer 2,
+-- only the signature and ftyp rules, as Jp2Payload-Profile keeps every
+-- other box opaque):
 --   T.800 I.4: the first box is jP with payload 0D0A870A, the second is ftyp.
 --   T.800 I.5.2 / T.801 M.8: the ftyp brand is 'jp2 ' for a .jp2 and
 --     'jpx ' for a .jpx, and the compatibility list contains that brand. The

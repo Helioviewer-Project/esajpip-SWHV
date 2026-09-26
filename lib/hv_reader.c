@@ -202,8 +202,6 @@ static int fail(hv_codestream *cs, const char *error, size_t at) {
     return -1;
 }
 
-static uint64_t ceil_div(uint64_t a, uint64_t b) { return (a + b - 1) / b; }
-
 /* The served profile, in the scope the flags ask for. */
 static int profile_headers(const hv_codestream *cs) { return (cs->flags & HV_PROFILE_HEADERS) != 0; }
 static int profile_full(const hv_codestream *cs) { return (cs->flags & HV_PROFILE) == HV_PROFILE; }
@@ -212,17 +210,14 @@ static int profile_full(const hv_codestream *cs) { return (cs->flags & HV_PROFIL
  * model's Siz-Profile type; then the tiles Isot can address. */
 static const char *check_siz(const hv_codestream *cs, const Siz *s, uint32_t *tiles) {
     const char *error;
-    uint64_t nx, ny;
     int err;
     if ((error = hv_rule_siz(s, NULL, profile_headers(cs))) != NULL)
         return error;
     if (profile_headers(cs) && !Siz_Profile_IsConstraintValid(s, &err))
         return "SIZ: outside Siz-Profile";
-    nx = ceil_div(s->xsiz - s->xtosiz, s->xtsiz);
-    ny = ceil_div(s->ysiz - s->ytosiz, s->ytsiz);
     /* Isot (0 to 65 534) can address at most 65 535 tiles; a larger grid
      * is not an error by itself, its other tiles just cannot appear. */
-    *tiles = nx * ny > 65535 ? 65535 : (uint32_t)(nx * ny);
+    *tiles = hv_rule_tiles(s);
     return NULL;
 }
 
@@ -314,6 +309,8 @@ static int read_segment(hv_codestream *cs, size_t limit, uint16_t *code, size_t 
 static int start_tile_part(hv_codestream *cs, hv_item *item) {
     SotSegment *sot = &cs->sot;
     size_t pos = cs->pos;
+    hv_tile_parts seen = {cs->tiles, cs->parts, cs->tnsot};
+    const char *error;
 
     if (cs->state == ST_MAIN && (cs->cods != 1 || cs->qcds != 1))
         return fail(cs, "main header needs exactly one COD and one QCD", pos);
@@ -321,17 +318,8 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
         return fail(cs, "invalid SOT", pos);
     if (profile_full(cs) && cs->tile_parts == 64)
         return fail(cs, "codestream.tile-part-limit", pos);
-    if (sot->isot >= cs->tiles)
-        return fail(cs, "SOT: tile index outside the tile grid", pos);
-    if (sot->tpsot != cs->parts[sot->isot])
-        return fail(cs, "SOT: tile-parts of a tile out of order", pos);
-    if (sot->tnsot != 0) {
-        if (cs->tnsot[sot->isot] != 0 && cs->tnsot[sot->isot] != sot->tnsot)
-            return fail(cs, "SOT: TNsot differs between tile-parts of a tile", pos);
-        if (sot->tpsot >= sot->tnsot)
-            return fail(cs, "SOT: TPsot not below TNsot", pos);
-        cs->tnsot[sot->isot] = (uint8_t)sot->tnsot;
-    }
+    if ((error = hv_rule_tile_part(&seen, sot->isot, sot->tpsot, sot->tnsot)) != NULL)
+        return fail(cs, error, pos);
     if (sot->psot == 0) {
         /* A.4.2: the last tile-part; its data runs up to the EOC that ends
          * the codestream. */
@@ -343,7 +331,6 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
             return fail(cs, "tile-part overruns the codestream", pos);
         cs->tp_end = pos + (size_t)sot->psot;
     }
-    cs->parts[sot->isot]++;
     cs->tile_parts++;
     cs->tp_start = pos;
     cs->tp_cod = cs->tp_qcd = cs->plts = 0;
@@ -494,7 +481,6 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
 int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     uint16_t code;
     size_t end;
-    uint32_t t;
     const char *error;
 
     item->siz = NULL;
@@ -528,9 +514,11 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
                 return fail(cs, "codestream without a tile-part", cs->pos);
             if (end != cs->end)
                 return fail(cs, "bytes after EOC", end);
-            for (t = 0; t < cs->tiles; t++)
-                if (cs->tnsot[t] != 0 && cs->parts[t] != cs->tnsot[t])
-                    return fail(cs, "number of tile-parts differs from TNsot", cs->pos);
+            {
+                hv_tile_parts seen = {cs->tiles, cs->parts, cs->tnsot};
+                if ((error = hv_rule_tile_parts_end(&seen)) != NULL)
+                    return fail(cs, error, cs->pos);
+            }
             if (profile_full(cs) &&
                 (error = hv_rule_plt_packets(&cs->plt_count, &cs->siz->body, &cs->cod.body.sgcod,
                                              &cs->cod.body.spcod, 1)) != NULL)

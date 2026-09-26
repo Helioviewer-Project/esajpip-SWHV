@@ -99,7 +99,8 @@ enum {
     HV_ACCEPT_PLT_PADDING = 1,
     /* The served profile's rules on the main header (JPIP_PROFILE.md; the
      * model's layer 2): SIZ as Siz-Profile, with zero origins, unit
-     * sampling and one tile; no COC, POC or PPM (MainMarkerCode-Profile).
+     * sampling and one tile; no COC, POC, PPM, marker T.800 places
+     * elsewhere or segment-less 0xFF30 to 0xFF3F (MainMarkerCode-Profile).
      * What a transcoder needs of its input: it rewrites the tile-parts. */
     HV_PROFILE_HEADERS = 2,
     /* The whole served profile, main header included: no SOP; tile-part

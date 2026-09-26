@@ -52,7 +52,8 @@ a PLT decoder that reads an uninitialized flag on truncated input.
 - The served profile (`JPIP_PROFILE.md`, the model's layer 2), in two
   scopes. `HV_PROFILE_HEADERS`, the main header: SIZ as `Siz-Profile`
   (zero origins, unit sampling, dimensions up to `INT32_MAX`) and one tile;
-  no COC, POC or PPM (`MainMarkerCode-Profile`). This is what a transcoder
+  no COC, POC or PPM, no marker T.800 places elsewhere and none of 0xFF30
+  to 0xFF3F (`MainMarkerCode-Profile`). This is what a transcoder
   needs of its input, since it rewrites the tile-parts. `HV_PROFILE`, all
   of it: also no SOP; tile-part headers with PLT only
   (`TileMarkerCode-Profile`) and at least one; at most 64 tile-parts; one

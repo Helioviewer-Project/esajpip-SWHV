@@ -565,7 +565,9 @@ static const char *check_linked_extents(const JpxFile_Profile *file) {
 /* The generated CONTAINING decoder temporarily trusts LBox as its stream
  * size. Check physical box boundaries first so a malformed LBox cannot make
  * an opaque unknown box read beyond the input buffer. Profile metadata boxes
- * are opaque where their internal framing is not interpreted by the server. */
+ * are opaque where their internal framing is not interpreted by the server:
+ * profile 1 is a .jpx at layer 2, profile 2 a .jp2, where every box but
+ * jp2c is opaque. */
 static int box_bounds_ok(const Bytes *b, size_t start, size_t end, int profile, int top) {
     while (start < end) {
         uint32_t length, type;
@@ -576,8 +578,9 @@ static int box_bounds_ok(const Bytes *b, size_t start, size_t end, int profile, 
         type = be32(b->data + start + 4);
         if (length < 8 || length > end - start) return 0;
         box_end = start + length;
-        children = top && (profile ? (type == BT_JPCH || type == BT_FTBL || type == BT_DTBL)
-                                   : is_superbox(type));
+        children = top && (profile == 2 ? 0
+                           : profile ? (type == BT_JPCH || type == BT_FTBL || type == BT_DTBL)
+                           : is_superbox(type));
         if (children) {
             child_start = start + 8 + (type == BT_DTBL ? 2 : 0);
             if (child_start > box_end || !box_bounds_ok(b, child_start, box_end, profile, 0))
@@ -605,7 +608,7 @@ static Label label(Bytes b, cf_kind kind) {
     BitStream_AttachBuffer(&bs, b.data, (long) b.len);
     if (kind == CF_JP2) {
         INIT(Jp2File_Profile)(dec_jp2);
-        if (!box_bounds_ok(&b, 0, b.len, 1, 1) ||
+        if (!box_bounds_ok(&b, 0, b.len, 2, 1) ||
             !DEC(Jp2File_Profile)(dec_jp2, &bs, &err)) l.prof_reason = "decode";
         else if (!VALID(Jp2File_Profile)(dec_jp2, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jp2_profile(dec_jp2)) != NULL) l.prof_reason = r;
@@ -777,7 +780,7 @@ static const FieldMutant field_mutants[] = {
     { "cod.spcod.precincts.higher[0].ppx", set_cod_ppx_higher, 0, "zero above r=0 (Table A.21)", 1, X_STD },
     { "cod.spcod.precincts.higher[0].ppy", set_cod_ppy_higher, 0, "zero above r=0 (Table A.21)", 1, X_STD },
     { "sot.lsot", set_sot_lsot, 11, "Lsot != 10", 0, X_STD },
-    { "sot.isot", set_sot_isot, 1, "profile max+1 (tile 1): standard valid", 0, X_PROF },
+    { "sot.isot", set_sot_isot, 1, "tile 1 of a one-tile grid (A.4.2)", 0, X_STD },
     { "sot.isot", set_sot_isot, 65535, "standard max+1", 0, X_STD },
     { "sot.tpsot", set_sot_tpsot, 1, "first tile-part index 1: sequence", 0, X_STD },
     { "sot.tpsot", set_sot_tpsot, 255, "reserved", 0, X_STD },
@@ -1138,6 +1141,23 @@ static void rule_missing_signature(Jp2Family *f, int box) {
     for (i = 1; i < f->boxes.nCount; ++i) f->boxes.arr[i - 1] = f->boxes.arr[i];
     f->boxes.nCount--;
 }
+static void rule_two_tiles(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    cs->siz.body.xtsiz = BASE_W / 2;                       /* two tiles, one tile-part each */
+    cs->segments.arr[3] = cs->segments.arr[2];
+    cs->segments.arr[3].tilePart.isot = 1;
+    cs->segments.nCount = 4;
+}
+static void rule_tile_cod_mct(Jp2Family *f, int box) {
+    rule_tile_cod(f, box);                                 /* one component */
+    tp_of(f, box)->rest.headers.arr[1].cod.body.sgcod.mct = 1;
+}
+static void rule_jp2_empty_ftbl(Jp2Family *f, int box) {
+    TopBox *b = &f->boxes.arr[f->boxes.nCount++];         /* no flst */
+    (void) box;
+    b->payload.kind = TopPayload_ftbl_PRESENT;
+    b->payload.u.ftbl.children.nCount = 0;
+}
 static void rule_two_jp2c(Jp2Family *f, int box) {
     f->boxes.arr[f->boxes.nCount] = f->boxes.arr[box];
     f->boxes.nCount++;
@@ -1203,6 +1223,9 @@ static const RuleMutant rule_mutants[] = {
     { "plt.value-overflow", rule_iplt_value_overflow, "Iplt value 2^64+1 wraps to data length 1", 0, 0, X_STD },
     { "plt.sum-overflow", rule_iplt_sum_overflow, "Iplt lengths UINT64_MAX+3 wrap to data length 2", 0, 1, X_STD },
     { "main.packet-headers-moved", rule_main_ppm, "PPM in the main header: profile invalid", 0, 0, X_PROF },
+    { "sot.two-tiles", rule_two_tiles, "two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid", 0, 0, X_PROF },
+    { "siz.mct-components", rule_tile_cod_mct, "MCT in a tile-part COD with one component", 0, 0, X_STD },
+    { "ftbl.one-flst", rule_jp2_empty_ftbl, "empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)", CF_JP2, 0, X_STD },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -1361,6 +1384,66 @@ static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) 
     free(rs.r);
 }
 
+/* Inserts n bytes at `at` and grows every length whose region encloses it
+ * (LBox, Psot, Lxxx), so only the inserted bytes are new. */
+static Bytes insert_bytes(Bytes valid, size_t at, const void *bytes, size_t n) {
+    Regions rs = walk(&valid);
+    Bytes m = { xcalloc(valid.len + n + 1), valid.len + n };
+    int i;
+    memcpy(m.data, valid.data, at);
+    memcpy(m.data + at, bytes, n);
+    memcpy(m.data + at + n, valid.data + at, valid.len - at);
+    for (i = 0; i < rs.n; ++i) {
+        const Region *r = &rs.r[i];
+        if (!(r->start < at && at < r->end)) continue;
+        if (r->len_width == 2) put16(m.data + r->len_off, (uint16_t) (be16(valid.data + r->len_off) + n));
+        else put32(m.data + r->len_off, (uint32_t) (be32(valid.data + r->len_off) + n));
+    }
+    free(rs.r);
+    return m;
+}
+
+/* Insertions the structured mutants cannot make: codes the model has no
+ * alternative for, placed before the first SOT, and an Iplt longer than
+ * the model's ten bytes. Invalid at layer 1; the server skipped the main-
+ * header codes by length and read any Iplt length, which the profile now
+ * rejects. */
+static void emit_insertion_mutants(Bytes valid, cf_kind kind, const char *base_name) {
+    static const struct { const char *name; const char *bytes; size_t n; const char *note; } main_codes[] = {
+        { "ppt", "\xFF\x61\x00\x03\x00", 5, "PPT, a tile-part header marker, in the main header" },
+        { "sop", "\xFF\x91\x00\x04\x00\x00", 6, "SOP, a packet marker, in the main header" },
+        { "ff30-length", "\xFF\x30\x00\x02", 4, "FF30 read with a length: FF30 to FF3F have no segment (A.1.3)" },
+        { "ff00", "\xFF\x00\x00\x02", 4, "FF00, not a marker, in the main header" },
+    };
+    static const unsigned char continuation[10] = {
+        0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+    Regions rs = walk(&valid);
+    size_t sot = 0, plt = 0, k;
+    int i, tp = -1;
+    for (i = 0; i < rs.n && tp < 0; ++i)
+        if (strcmp(rs.r[i].kind, "Psot") == 0) { tp = i; sot = rs.r[i].start; }
+    for (i = tp + 1; i < rs.n && plt == 0; ++i)
+        if (rs.r[i].parent == tp && be16(valid.data + rs.r[i].start) == MC_PLT)
+            plt = rs.r[i].payload_start + 1;              /* first Iplt, after Zplt */
+    free(rs.r);
+    if (tp < 0 || plt == 0) die("insertion mutants: no tile-part with PLT");
+    for (k = 0; k < sizeof main_codes / sizeof *main_codes; ++k) {
+        Bytes m = insert_bytes(valid, sot, main_codes[k].bytes, main_codes[k].n);
+        char name[256];
+        snprintf(name, sizeof name, "%s-main-%s", base_name, main_codes[k].name);
+        emit(m, kind, name, "main.marker-code", main_codes[k].note, NULL, X_STD);
+        free(m.data);
+    }
+    {
+        Bytes m = insert_bytes(valid, plt, continuation, sizeof continuation);
+        char name[256];
+        snprintf(name, sizeof name, "%s-plt-iplt-eleven-bytes", base_name);
+        emit(m, kind, name, "plt.iplt-length",
+             "11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound", NULL, X_STD);
+        free(m.data);
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 /* Driver                                                                    */
 /* ------------------------------------------------------------------------ */
@@ -1375,6 +1458,8 @@ static void run_base(Base base, const char *companions) {
     emit_signature_mutant(valid, base.kind, base.name);
     emit_length_mutants(valid, base.kind, base.name);
     emit_code_mutants(valid, base.kind, base.name);
+    if (base.jp2c_box >= 0)
+        emit_insertion_mutants(valid, base.kind, base.name);
 
     if (base.jp2c_box >= 0) {
         int has_precincts = cod_of(base.file, base.jp2c_box)->scod.customPrecincts;

@@ -1168,6 +1168,10 @@ int main() {
     // T.800 A.7.4: PPM with Zppm 0 and Nppm 0.
     WriteFile(directory + "main-ppm.jp2",
               MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x60, 0, 7, 0, 0, 0, 0, 0})));
+    // T.800 A.1.3: 0xFF30 to 0xFF3F are markers without a segment. The
+    // corpus has them only with a length, which the model can express.
+    WriteFile(directory + "main-ff30.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x30})));
     WriteFile(directory + "wrong-tile-part-count.jp2",
               MakeJP2(SetTilePartNumbers(codestream, 0, 0, 2)));
     WriteFile(directory + "wrong-first-tile-part.jp2",
@@ -1354,6 +1358,10 @@ int main() {
     jpeg2000::FileManager main_ppm_manager;
     Check(!OpenImage(directory, "main-ppm.jp2", &main_ppm_manager),
           "Accepted packet headers moved into the main header (PPM)");
+
+    jpeg2000::FileManager main_ff30_manager;
+    Check(!OpenImage(directory, "main-ff30.jp2", &main_ff30_manager),
+          "Accepted a segment-less 0xFF30 marker in the main header");
 
     jpeg2000::FileManager valid_mct_manager;
     Check(OpenImage(directory, "valid-mct.jp2", &valid_mct_manager),
