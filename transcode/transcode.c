@@ -12,11 +12,16 @@
 #include "hv_reader.h"
 #include "tier2.h"
 
-/* Limits for one transcode, as in jp2_precincts.py (they bound the memory
- * for the per-code-block state), plus the int32 range of packet indices. */
+/* Memory bounds of one transcode, for what a header can declare with
+ * little or no data behind it. Each component-resolution takes 360 bytes
+ * of layout (checked before it is allocated), each code-block under 100
+ * bytes of state and tag-tree nodes, each output packet 20 bytes (its
+ * place in the order and its PLT length) and at least a byte of output.
+ * The input's packets need no bound of their own: each takes at least a
+ * byte of its tile's data (B.10.3). */
+#define MAX_RESOLUTIONS 65536
 #define MAX_CODE_BLOCKS 250000
-#define MAX_BLOCK_LAYER_ENTRIES 2000000
-#define MAX_PACKETS 0x7FFFFFFF
+#define MAX_OUTPUT_PACKETS 2000000
 
 enum { COD = 0xFF52, COC = 0xFF53, TLM = 0xFF55, PLM = 0xFF57, PLT = 0xFF58,
        RGN = 0xFF5E, POC = 0xFF5F, PPM = 0xFF60, COM = 0xFF64,
@@ -54,40 +59,10 @@ static int grow(void *p, size_t *cap, size_t need, size_t size) {
  * Limits and the code-block partition
  * ------------------------------------------------------------------------ */
 
-/* The limits of one transcode, checked per resolution in the order
- * jp2_precincts._geometry checks them. packet_limit >= 0 bounds the packet
- * count: even an empty packet takes a byte of tile data. */
-static int check_limits(const hv_geometry *g, int64_t packet_limit, errors *e) {
-    int64_t packets = 0, blocks = 0, all_packets = 0;
-    int c, r, b;
-    for (c = 0; c < g->ncomps; c++)
-        for (r = 0; r <= g->levels; r++) {
-            const hv_resolution *res = hv_geometry_res(g, c, r);
-            int64_t n = res->pw, m = res->ph;
-            if (n == 0 || m == 0)
-                continue;
-            if (packet_limit >= 0) {
-                if (n > packet_limit || m > packet_limit / n ||
-                    n * m > (packet_limit - packets) / g->layers)
-                    return fail(e, "packet count exceeds tile data");
-                packets += n * m * g->layers;
-            }
-            for (b = 0; b < res->nbands; b++) {
-                const hv_band *band = &res->band[b];
-                if (band->nx > MAX_CODE_BLOCKS || band->ny > MAX_CODE_BLOCKS ||
-                    band->nx * band->ny > MAX_CODE_BLOCKS - blocks)
-                    return fail(e, "code-block count exceeds supported limit");
-                blocks += band->nx * band->ny;
-                if (blocks * g->layers > MAX_BLOCK_LAYER_ENTRIES)
-                    return fail(e, "code-block layer count exceeds supported limit");
-            }
-            /* hv_geometry_packets indexes packets with int32. */
-            if (n > MAX_PACKETS || m > MAX_PACKETS / n ||
-                n * m > (MAX_PACKETS - all_packets) / g->layers)
-                return fail(e, "packet count exceeds supported limit");
-            all_packets += n * m * g->layers;
-        }
-    return 0;
+/* The tile's packet count, saturating. */
+static uint64_t packet_count(const hv_geometry *g) {
+    return g->nprecincts > UINT64_MAX / (uint64_t)g->layers
+           ? UINT64_MAX : g->nprecincts * (uint64_t)g->layers;
 }
 
 /* Nonzero if every non-empty band has the same code-blocks in both. */
@@ -212,10 +187,18 @@ static int read_packets(transcode *t) {
         return fail(&t->e, "code-block styles with bypass or termall are not supported");
     for (i = 0; i < t->nparts; i++)
         data += t->parts[i].end - t->parts[i].start;
+    /* Empty components and resolutions have no packets, so the data does
+     * not bound them. */
+    if ((uint64_t)hv_codestream_siz(&t->cs)->csiz * (cod->spcod.levels + 1) > MAX_RESOLUTIONS)
+        return fail(&t->e, "component and resolution count exceeds supported limit");
     if (hv_geometry_init(&t->in, hv_codestream_siz(&t->cs), cod, 0, t->e.error,
-                         t->e.error_size) != 0 ||
-        check_limits(&t->in, (int64_t)data, &t->e) != 0 ||
-        hv_geometry_packets(&t->in, &t->in_packets, &t->in_count, t->e.error,
+                         t->e.error_size) != 0)
+        return -1;
+    if (packet_count(&t->in) > data)
+        return fail(&t->e, "packet count exceeds tile data");
+    if (t->in.nblocks > MAX_CODE_BLOCKS)
+        return fail(&t->e, "code-block count exceeds supported limit");
+    if (hv_geometry_packets(&t->in, &t->in_packets, &t->in_count, t->e.error,
                             t->e.error_size) != 0)
         return -1;
     if (hv_codeblocks_init(&t->cb, (size_t)t->in.nblocks) != 0)
@@ -231,13 +214,16 @@ static int read_packets(transcode *t) {
 static int write_tile(transcode *t, int ppx, int ppy, hv_out *out) {
     size_t tp_start;
 
+    /* The same code-block partition means the same code-blocks, so their
+     * count is already bounded. */
     if (hv_geometry_init(&t->out, hv_codestream_siz(&t->cs), &t->cod.body, 0, t->e.error,
-                         t->e.error_size) != 0 ||
-        check_limits(&t->out, -1, &t->e) != 0)
+                         t->e.error_size) != 0)
         return -1;
     if (!same_partition(&t->in, &t->out))
         return fail(&t->e, "%dx%d precincts change the code-block partition", 1 << ppx,
                     1 << ppy);
+    if (packet_count(&t->out) > MAX_OUTPUT_PACKETS)
+        return fail(&t->e, "output packet count exceeds supported limit");
     if (hv_geometry_packets(&t->out, &t->out_packets, &t->out_count, t->e.error,
                             t->e.error_size) != 0)
         return -1;
