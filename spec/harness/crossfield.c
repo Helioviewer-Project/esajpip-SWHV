@@ -109,6 +109,8 @@ static uint32_t cf_header_type(const InnerBox *b) {
         case InnerPayload_cmap_PRESENT: return HV_BOX_CMAP;
         case InnerPayload_cdef_PRESENT: return HV_BOX_CDEF;
         case InnerPayload_res_PRESENT:  return HV_BOX_RES;
+        case InnerPayload_jp2i_PRESENT: return HV_BOX_JP2I;
+        case InnerPayload_creg_PRESENT: return HV_BOX_CREG;
         default:                        return 1;
     }
 }
@@ -188,7 +190,13 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
     static cf_header_state jp2h, jpch, jplh;
     const Superbox *jp2h_box = NULL;
     int i, n = 0, jp2c = 0, late = 0, codestreams = 0, headers = 0, stream = 0, jpchs = 0;
+    int ipr = 0, jplhs = 0, cregs = 0;
     const char *r;
+
+    /* T.801 M.8: MinV (the second box is ftyp, cf_check_family_). */
+    if (kind == CF_JPX &&
+        (r = hv_rule_ftyp_minor(file->boxes.arr[1].payload.u.ftyp.header.minor)) != NULL)
+        return r;
 
     /* T.801 M.11.1: the Reader Requirements box, its count and place
      * checked by hv_rule_jpx. */
@@ -208,6 +216,7 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
             case TopPayload_ftbl_PRESENT: codestreams += kind == CF_JPX; break;
             case TopPayload_jpch_PRESENT: jpchs++; headers++; break;
             case TopPayload_jplh_PRESENT: headers++; break;
+            case TopPayload_jp2i_PRESENT: ipr++; break;
             default: break;
         }
         if (kind == CF_JP2) headers = 0;        /* T.800 I.2: before the jp2c box */
@@ -220,16 +229,18 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
         for (i = 0; i < file->boxes.nCount; ++i)
             if (file->boxes.arr[i].payload.kind == TopPayload_jp2c_PRESENT) break;
         hv_siz siz = cf_siz_view(&file->boxes.arr[i].payload.u.jp2c.siz.body);
-        return hv_rule_codestream_header(&jp2h.h, NULL, &siz, 0);
+        if ((r = hv_rule_codestream_header(&jp2h.h, NULL, &siz, 0)) != NULL) return r;
+        return hv_rule_ihdr_ipr(&jp2h.h, ipr);
     }
 
     /* JPX: codestream k has jpch k (M.11.6; the counts agree, hv_rule_jpx),
      * or only jp2h's defaults when there is no jpch. */
     for (i = 0; i < file->boxes.nCount; ++i) {
         const TopPayload *p = &file->boxes.arr[i].payload;
-        if (p->kind == TopPayload_jplh_PRESENT &&
-            (r = cf_header(&p->u.jplh, HV_BOX_JPLH, kind, &jplh)) != NULL)
-            return r;
+        if (p->kind != TopPayload_jplh_PRESENT) continue;
+        if ((r = cf_header(&p->u.jplh, HV_BOX_JPLH, kind, &jplh)) != NULL) return r;
+        jplhs++;
+        cregs += jplh.h.creg > 0;
     }
     for (i = 0; i < file->boxes.nCount; ++i) {
         const TopPayload *p = &file->boxes.arr[i].payload;
@@ -254,7 +265,7 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
         if (r != NULL) return r;
         stream++;
     }
-    return NULL;
+    return hv_rule_jpx_creg(jplhs, cregs);
 }
 
 const char *cf_check_family(const Jp2Family *file, cf_layer layer, cf_kind kind) {

@@ -53,6 +53,8 @@ TopPayload <BoxType:tbox, INTEGER:length> [] {
     xml         [present-when tbox == 2020437024, size length],
     uinf        [present-when tbox == 1969843814, size length],
     free        [present-when tbox == 1718773093, size length],
+    jp2i        [present-when tbox == 1785737833, size length],
+    creg        [present-when tbox == 1668441447, size length],
     other       [present-when tbox == 1633837924, size length]
 }
 
@@ -115,6 +117,8 @@ InnerPayload <BoxType:tbox, INTEGER:length> [] {
     cmap        [present-when tbox == 1668112752, size length],
     cdef        [present-when tbox == 1667523942, size length],
     jp2c        [present-when tbox == 1785737827, size length],
+    jp2i        [present-when tbox == 1785737833, size length],
+    creg        [present-when tbox == 1668441447, size length],
     other       [present-when tbox == 1633837924, size length]
 }
 
@@ -309,6 +313,8 @@ TopPayload-Profile <BoxType:tbox, INTEGER:length> [] {
     xml         [present-when tbox == 2020437024, size length],
     uinf        [present-when tbox == 1969843814, size length],
     free        [present-when tbox == 1718773093, size length],
+    jp2i        [present-when tbox == 1785737833, size length],
+    creg        [present-when tbox == 1668441447, size length],
     other       [present-when tbox == 1633837924, size length]
 }
 
@@ -360,6 +366,8 @@ InnerPayload-Profile <BoxType:tbox, INTEGER:length> [] {
     cmap        [present-when tbox == 1668112752, size length],
     cdef        [present-when tbox == 1667523942, size length],
     jp2c        [present-when tbox == 1785737827, size length],
+    jp2i        [present-when tbox == 1785737833, size length],
+    creg        [present-when tbox == 1668441447, size length],
     other       [present-when tbox == 1633837924, size length]
 }
 

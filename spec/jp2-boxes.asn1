@@ -74,9 +74,12 @@ IMPORTS Codestream, Codestream-Profile FROM J2K-Codestream;
 --   cmap 0x636D6170  cdef 0x63646566  res  0x72657320  resc 0x72657363
 --   resd 0x72657364
 -- Opaque, permitted anywhere their level allows:
---   rreq 0x72726571
+--   rreq 0x72726571  jp2i 0x6A703269  creg 0x63726567
 --   jP   0x6A502020  uuid 0x75756964  xml  0x786D6C20  nlst 0x6E6C7374
 --   lbl  0x6C626C20  uinf 0x75696E66  free 0x66726565
+-- jp2i (Intellectual Property, T.800 I.6) and creg (Codestream
+-- Registration, T.801 M.11.7.7) are opaque; their presence is what the
+-- header rules count (ihdr.ipr, jpch.ipr, jpx.creg).
 
 -- T.800 I.8 and T.801 M.12 require readers to skip box types they do not
 -- understand, so both layers admit every four-cc and decode unlisted types
@@ -109,6 +112,8 @@ TopPayload ::= CHOICE {
     xml         OCTET STRING (CONTAINING OpaqueBox),
     uinf        OCTET STRING (CONTAINING Superbox),
     free        OCTET STRING (CONTAINING OpaqueBox),
+    jp2i        OCTET STRING (CONTAINING OpaqueBox),
+    creg        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
@@ -180,6 +185,8 @@ InnerPayload ::= CHOICE {
     cmap        OCTET STRING (CONTAINING Cmap),
     cdef        OCTET STRING (CONTAINING Cdef),
     jp2c        OCTET STRING (CONTAINING OpaqueBox),
+    jp2i        OCTET STRING (CONTAINING OpaqueBox),
+    creg        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
@@ -227,10 +234,12 @@ Bpcc ::= SEQUENCE {
 
 -- Colour Specification box, I.5.3.3: METH, PREC, APPROX, then EnumCS when
 -- METH is 1; the rest of the box is the ICC profile when METH is 2, fields
--- T.800 reserves for other values, and nothing when METH is 1 (a rule).
--- PREC and APPROX bind writers only (T.800: readers ignore them; T.801
--- M.11.7.2: APPROX 1 to 4 in JPX), as ftyp's MinV, so neither layer
--- constrains them.
+-- T.800 reserves for other values, and, when METH is 1, nothing in a JP2
+-- file or the EP parameters of T.801 M.11.7.4 in a JPX file (a rule). In a
+-- JP2 file PREC and APPROX "shall be set to zero; however, conforming
+-- readers shall ignore" them (I.5.3.3), so neither is constrained; in a
+-- JPX file APPROX is 1 to 4 (T.801 M.11.7.2, Table M.23: 0 "is illegal"),
+-- a rule (colr.approx), and PREC any value.
 ColrHeader ::= SEQUENCE {
     meth        INTEGER (0..255),          -- 1 enumerated, 2 restricted ICC; others: rules
     prec        INTEGER (-128..127),
@@ -428,6 +437,8 @@ TopPayload-Profile ::= CHOICE {
     xml         OCTET STRING (CONTAINING OpaqueBox),
     uinf        OCTET STRING (CONTAINING OpaqueBox),
     free        OCTET STRING (CONTAINING OpaqueBox),
+    jp2i        OCTET STRING (CONTAINING OpaqueBox),
+    creg        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
@@ -466,6 +477,8 @@ InnerPayload-Profile ::= CHOICE {
     cmap        OCTET STRING (CONTAINING OpaqueBox),
     cdef        OCTET STRING (CONTAINING OpaqueBox),
     jp2c        OCTET STRING (CONTAINING OpaqueBox),
+    jp2i        OCTET STRING (CONTAINING OpaqueBox),
+    creg        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
@@ -505,9 +518,12 @@ END
 --     standard states this per format -- a conforming JP2 file carries 'jp2 '
 --     in a CLi field, a conforming JPX file carries 'jpx ' -- which for the
 --     two permitted brands is the same rule (ReadFileType). Box size and
---     alignment are the Ftyp type's job. MinV (0 for JP2, 1 for JPX) binds
---     writers only: readers shall parse the file whatever its value and
---     esajpip ignores it, so neither layer constrains it.
+--     alignment are the Ftyp type's job. MinV: 0 in a JP2 file binds
+--     writers only (I.5.2: "readers shall continue to parse and interpret
+--     this file even if the value of this field is not zero"); 1 in a JPX
+--     file (T.801 M.8), which T.801 gives readers no leave to ignore, is a
+--     header rule (file.ftyp-minor, standard layer only: esajpip ignores
+--     MinV).
 --   T.801 M.11.2 (JPX): at most one dtbl box, at the top level.
 --   T.801 M.11.1: a JPX file has exactly one rreq box immediately after
 --     ftyp. The profile parser deliberately ignores this writer requirement.
@@ -565,10 +581,20 @@ END
 --     contiguously (jp2h.colr-contiguous). A header box holds at most one
 --     bpcc, pclr, cmap, cdef and res (header.one-<box>); a jpch at most one
 --     ihdr (header.one-ihdr; elsewhere a second ihdr is ignored, I.5.3.1).
---   colr: nothing after EnumCS when METH is 1 (colr.enumcs-length). JP2:
---     METH 1 or 2 (colr.method), and EnumCS 16, 17 or 18 in the first colr
---     (colr.enumcs). JPX: no two enumerated and no two ICC colr in jp2h
+--   colr: when METH is 1, nothing after EnumCS, except in a JPX file the EP
+--     parameters (T.801 M.11.7.4): 28 bytes for EnumCS 14 (CIELab), 24 for
+--     EnumCS 19 (CIEJab), or none (colr.enumcs-length). JP2: METH 1 or 2
+--     (colr.method), and EnumCS 16, 17 or 18 in the first colr
+--     (colr.enumcs). JPX: APPROX 1 to 4 in every colr (colr.approx,
+--     M.11.7.2), and no two enumerated and no two ICC colr in jp2h
 --     (colr.one-method, M.11.7.1).
+--   IPR (T.800 I.5.3.1, T.801 M.11.6): in a JP2 file, the ihdr's IPR is 1
+--     exactly when the file has a top-level jp2i box (ihdr.ipr); in a JPX
+--     file, a jpch holds no jp2i when the codestream's ihdr (its own, or
+--     jp2h's) has IPR 0 (jpch.ipr).
+--   creg (T.801 M.11.7): if any jplh holds a creg, every jplh does
+--     (jpx.creg).
+--   MinV 1 in a JPX file (file.ftyp-minor, above).
 --   pclr: NE x NPC entries, each of its column's depth padded to whole
 --     bytes (pclr.entries-length).
 --   cmap: PCOL 0 when MTYP is 0 (cmap.pcol-zero).
@@ -595,7 +621,9 @@ END
 --   Not checked: that cdef is absent when the channels are the colours in
 --     order and that it describes every colour (I.5.3.6); a colour group
 --     in JPX (M.11.7.1: cgrp is opaque), opct against cdef, and the header
---     of a linked codestream against the linked file's SIZ.
+--     of a linked codestream against the linked file's SIZ. A colr found
+--     directly in a jplh, where T.801 M.11.7 puts a layer's colours in a
+--     cgrp, is checked as any colr and otherwise ignored.
 --
 -- Profile only (ReadJP2 / ReadJPX):
 --   Jp2File-Profile: exactly one jp2c among the top-level boxes

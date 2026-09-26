@@ -194,6 +194,9 @@ jp2-header-ihdr.extent-63.jp2	jp2	invalid	valid	ihdr.extent	ihdr.extent	a byte a
 jp2-header-cdef.extent-64.jp2	jp2	invalid	valid	cdef.extent	cdef.extent	a byte after the cdef descriptions	-
 jp2-header-res.extent-65.jp2	jp2	invalid	valid	res.extent	res.extent	a byte after the resc fields	-
 jp2-header-box.nested-jp2c-66.jp2	jp2	invalid	valid	box.nested-jp2c	box.nested-jp2c	jp2c inside jp2h (T.800 I.2: at the top level)	-
+jp2-header-ihdr.ipr-74.jp2	jp2	invalid	valid	ihdr.ipr	ihdr.ipr	IPR 1 without an IPR box (T.800 I.5.3.1)	-
+jp2-header-ihdr.ipr-75.jp2	jp2	invalid	valid	ihdr.ipr	ihdr.ipr	a top-level IPR box with IPR 0 (T.800 I.5.3.1)	-
+jp2-header-jp2.ipr-76.jp2	jp2	valid	valid	-	jp2.ipr	IPR 1 and a top-level IPR box: valid	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -457,6 +460,16 @@ jpx-embedded-header-cdef.pairs-60.jpx	jpx	invalid	valid	cdef.pairs	cdef.pairs	jp
 jpx-embedded-header-rreq.mask-length-61.jpx	jpx	valid	valid	-	rreq.mask-length	rreq masks of 2 bytes (ML 2): valid	-
 jpx-embedded-header-rreq.ml-62.jpx	jpx	invalid	valid	decode	rreq.ml	rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)	-
 jpx-embedded-header-box.flst-placement-67.jpx	jpx	invalid	valid	box.flst-placement	box.flst-placement	flst inside jp2h (T.801 M.11.3: in ftbl)	-
+jpx-embedded-header-colr.cielab-parameters-68.jpx	jpx	valid	valid	-	colr.cielab-parameters	EnumCS 14 (CIELab) with its 28-byte EP: valid	-
+jpx-embedded-header-colr.ciejab-parameters-69.jpx	jpx	valid	valid	-	colr.ciejab-parameters	EnumCS 19 (CIEJab) with its 24-byte EP: valid	-
+jpx-embedded-header-colr.enumcs-length-70.jpx	jpx	invalid	valid	colr.enumcs-length	colr.enumcs-length	EnumCS 14 with 4 bytes after it (T.801 M.11.7.4.1: 28 or none)	-
+jpx-embedded-header-colr.approx-71.jpx	jpx	invalid	valid	colr.approx	colr.approx	APPROX 0 (T.801 M.11.7.2: illegal in JPX)	-
+jpx-embedded-header-colr.approx-72.jpx	jpx	invalid	valid	colr.approx	colr.approx	APPROX 5 (T.801 Table M.23: 1 to 4)	-
+jpx-embedded-header-file.ftyp-minor-73.jpx	jpx	invalid	valid	file.ftyp-minor	file.ftyp-minor	MinV 0 (T.801 M.8: 1)	-
+jpx-embedded-header-jpch.ipr-77.jpx	jpx	invalid	valid	jpch.ipr	jpch.ipr	IPR box in a jpch whose ihdr has IPR 0 (M.11.6)	-
+jpx-embedded-header-jpch.ipr-box-78.jpx	jpx	valid	valid	-	jpch.ipr-box	IPR box in a jpch whose ihdr has IPR 1: valid	-
+jpx-embedded-header-jpx.creg-79.jpx	jpx	invalid	valid	jpx.creg	jpx.creg	creg in one of two jplh (T.801 M.11.7: in every one)	-
+jpx-embedded-header-jplh.creg-80.jpx	jpx	valid	valid	-	jplh.creg	creg in both jplh: valid	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-

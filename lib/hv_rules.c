@@ -214,6 +214,10 @@ const char *hv_rule_jpx(const hv_jpx_boxes *b, int profile) {
     return NULL;
 }
 
+const char *hv_rule_ftyp_minor(uint64_t minv) {
+    return minv != 1 ? "file.ftyp-minor" : NULL;
+}
+
 /* ------------------------------------------------------------------------
  * JP2 header boxes
  * ------------------------------------------------------------------------ */
@@ -243,6 +247,8 @@ const char *hv_rule_header_child(hv_header *h, uint32_t type) {
     }
     h->children++;
     if (type == HV_BOX_COLR) h->colr++;
+    if (type == HV_BOX_JP2I) h->ipr++;
+    if (type == HV_BOX_CREG) h->creg++;
     if (count == NULL) return NULL;
     if (++*count > 1) {
         /* T.800 I.5.3: ihdr in other places is ignored; jpch has one. */
@@ -278,8 +284,21 @@ const char *hv_rule_bpcc(hv_header *h, const uint8_t *depths, size_t n) {
     return NULL;
 }
 
+/* The bytes T.801 M.11.7.4 lets follow EnumCS in a JPX file (EP): RL, OL,
+ * RA, OA, RB, OB and IL for CIELab (14), RJ, OJ, RA, OA, RB and OB for
+ * CIEJab (19), 4 bytes each; or none, the defaults. */
+static int jpx_ep_length(uint64_t enumcs, size_t rest) {
+    return rest == 0 || (enumcs == 14 && rest == 28) || (enumcs == 19 && rest == 24);
+}
+
 const char *hv_rule_colr(hv_header *h, const ColrHeader *colr, size_t rest) {
-    if (colr->meth == 1 && rest != 0) return "colr.enumcs-length";
+    if (colr->meth == 1 && (h->jpx ? !jpx_ep_length(colr->enumcs, rest) : rest != 0))
+        return "colr.enumcs-length";
+    /* T.801 M.11.7.2, Table M.23: APPROX 1 to 4 ("a value of 0 in the
+     * APPROX field is illegal in a JPX file"), for the methods T.801
+     * defines (Table M.22: a reader ignores a colr of another METH). */
+    if (h->jpx && colr->meth >= 1 && colr->meth <= 5 && (colr->approx < 1 || colr->approx > 4))
+        return "colr.approx";
     if (!h->jpx) {
         /* T.800 I.5.3.3: METH "shall be 1 or 2"; EnumCS 16 (sRGB), 17
          * (greyscale) or 18 (sYCC) in the first colr box. */
@@ -374,6 +393,10 @@ const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, co
     cmap = pick(h, d, h->cmap, d->cmap);
     if (ihdr == NULL) return jpx ? "jpch.ihdr" : "jp2h.ihdr-first";
     nc = ihdr->image.nc;
+    /* T.801 M.11.6: with IPR 0 in the codestream's ihdr, its jpch holds no
+     * IPR box. */
+    if (jpx && h->parent == HV_BOX_JPCH && h->ipr > 0 && ihdr->image.ipr == 0)
+        return "jpch.ipr";
 
     if (!jpx) {
         if (h->colr == 0) return "jp2h.colr";
@@ -409,4 +432,13 @@ const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, co
     }
     if (ihdr->image.bpc != (same ? ssiz0 : 255)) return "ihdr.bpc";
     return NULL;
+}
+
+const char *hv_rule_ihdr_ipr(const hv_header *jp2h, int ipr_boxes) {
+    if (jp2h->ihdr > 0 && (jp2h->image.ipr == 1) != (ipr_boxes > 0)) return "ihdr.ipr";
+    return NULL;
+}
+
+const char *hv_rule_jpx_creg(int jplh, int with_creg) {
+    return with_creg > 0 && with_creg != jplh ? "jpx.creg" : NULL;
 }

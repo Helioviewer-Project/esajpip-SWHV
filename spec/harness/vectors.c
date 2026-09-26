@@ -485,12 +485,20 @@ static void set_ihdr(InnerBox *c, int width, int height) {
     ihdr->ipr = 0;
 }
 
-static void set_colr(InnerBox *c, int meth, uint32_t enumcs) {
+/* A JPX file: the second box, ftyp, has the JPX brand. */
+static int is_jpx(const Jp2Family *f) {
+    return f->boxes.nCount > 1 && f->boxes.arr[1].payload.kind == TopPayload_ftyp_PRESENT &&
+           f->boxes.arr[1].payload.u.ftyp.header.brand == HV_BRAND_JPX;
+}
+
+/* A colr of file f, with the APPROX its kind requires of a writer: 0 in a
+ * JP2 file (T.800 I.5.3.3), 1 in a JPX file (T.801 M.11.7.2: 1 to 4). */
+static void set_colr(const Jp2Family *f, InnerBox *c, int meth, uint32_t enumcs) {
     ColrHeader *h = &c->payload.u.colr.header;
     c->payload.kind = InnerPayload_colr_PRESENT;
     h->meth = meth;
     h->prec = 0;
-    h->approx = 0;
+    h->approx = is_jpx(f) ? 1 : 0;
     h->exist.enumcs = meth == 1;
     h->enumcs = enumcs;
     c->payload.u.colr.rest.nCount = 0;
@@ -501,7 +509,7 @@ static void add_jp2h(Jp2Family *f, int width, int height) {
     b->payload.kind = TopPayload_jp2h_PRESENT;
     b->payload.u.jp2h.children.nCount = 2;
     set_ihdr(&b->payload.u.jp2h.children.arr[0], width, height);
-    set_colr(&b->payload.u.jp2h.children.arr[1], 1, 17);          /* greyscale */
+    set_colr(f, &b->payload.u.jp2h.children.arr[1], 1, 17);          /* greyscale */
 }
 
 static Codestream *add_jp2c(Jp2Family *f, int width, int height, int levels,
@@ -1821,7 +1829,10 @@ static void hdr_palette(Jp2Family *f, int box) {
 }
 static void hdr_resolution(Jp2Family *f, int box) { (void) box; set_res(append_child(jp2h_of(f)), 1, 1, 0); }
 static void hdr_other_child(Jp2Family *f, int box) { (void) box; set_xml(append_child(jp2h_of(f))); }
-static void hdr_second_colr(Jp2Family *f, int box) { (void) box; set_colr(append_child(jp2h_of(f)), 1, 17); }
+static void hdr_second_colr(Jp2Family *f, int box) {
+    (void) box;
+    set_colr(f, append_child(jp2h_of(f)), 1, 17);
+}
 /* Three channels from a three-column palette: grey and two auxiliary
  * channels of unspecified type, which may share the pair (65535, 65535). */
 static void hdr_cdef_unspecified(Jp2Family *f, int box) {
@@ -1879,7 +1890,7 @@ static void hdr_no_colr(Jp2Family *f, int box) { (void) box; jp2h_of(f)->childre
 static void hdr_colr_split(Jp2Family *f, int box) {
     (void) box;
     set_xml(append_child(jp2h_of(f)));
-    set_colr(append_child(jp2h_of(f)), 1, 16);
+    set_colr(f, append_child(jp2h_of(f)), 1, 16);
 }
 static void hdr_bpcc_not_varying(Jp2Family *f, int box) { (void) box; set_bpcc(append_child(jp2h_of(f)), 1, 7); }
 static void hdr_bpc_255_no_bpcc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 255; }
@@ -1908,7 +1919,10 @@ static void hdr_ihdr_c(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children
 static void hdr_ihdr_unkc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.unkc = 2; }
 static void hdr_ihdr_nc_zero(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.nc = 0; }
 static void hdr_ihdr_bpc_38(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 38; }
-static void hdr_colr_method(Jp2Family *f, int box) { (void) box; set_colr(&jp2h_of(f)->children.arr[1], 3, 0); }
+static void hdr_colr_method(Jp2Family *f, int box) {
+    (void) box;
+    set_colr(f, &jp2h_of(f)->children.arr[1], 3, 0);
+}
 static void hdr_colr_enumcs(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[1].payload.u.colr.header.enumcs = 12; }
 static void hdr_colr_enumcs_length(Jp2Family *f, int box) {
     (void) box;
@@ -2006,7 +2020,7 @@ static void hdr_jpx_palette(Jp2Family *f, int box) {
 static void hdr_jpx_pclr_no_cmap(Jp2Family *f, int box) { (void) box; set_pclr(append_child(jpch_of(f))); }
 static void hdr_jpx_two_enumerated(Jp2Family *f, int box) {
     (void) box;
-    set_colr(append_child(jp2h_of(f)), 1, 16);
+    set_colr(f, append_child(jp2h_of(f)), 1, 16);
 }
 static void hdr_jpx_jplh(Jp2Family *f, int box) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];     /* after the codestreams */
@@ -2065,6 +2079,76 @@ static void hdr_flst_in_jp2h(Jp2Family *f, int box) {
     flst->fragments.arr[0].len = 1;
     flst->fragments.arr[0].dr = 0;
 }
+
+/* JPX colr in jp2h, METH 1 (T.801 M.11.7.2): EnumCS and `ep` EP bytes. */
+static void set_jpx_colr_ep(Jp2Family *f, uint32_t enumcs, int ep) {
+    static const unsigned char zero[28];
+    InnerBox *c = &jp2h_of(f)->children.arr[1];
+    c->payload.u.colr.header.enumcs = enumcs;
+    OCTETS(c->payload.u.colr.rest, zero, ep);
+}
+static void hdr_jpx_cielab_ep(Jp2Family *f, int box) { (void) box; set_jpx_colr_ep(f, 14, 28); }
+static void hdr_jpx_ciejab_ep(Jp2Family *f, int box) { (void) box; set_jpx_colr_ep(f, 19, 24); }
+static void hdr_jpx_cielab_short_ep(Jp2Family *f, int box) { (void) box; set_jpx_colr_ep(f, 14, 4); }
+static void hdr_jpx_approx_zero(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[1].payload.u.colr.header.approx = 0;
+}
+static void hdr_jpx_approx_five(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[1].payload.u.colr.header.approx = 5;
+}
+static void hdr_jpx_minor_zero(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[1].payload.u.ftyp.header.minor = 0;
+}
+/* An IPR box (T.800 I.6; contents reserved): top-level, or in a header box. */
+static void add_top_ipr(Jp2Family *f) {
+    TopBox *b = &f->boxes.arr[f->boxes.nCount++];
+    b->payload.kind = TopPayload_jp2i_PRESENT;
+    b->payload.u.jp2i.data.nCount = 0;
+}
+static void set_ipr_box(InnerBox *c) {
+    c->payload.kind = InnerPayload_jp2i_PRESENT;
+    c->payload.u.jp2i.data.nCount = 0;
+}
+static void hdr_ipr_flag_no_box(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[0].payload.u.ihdr.ipr = 1;
+}
+static void hdr_ipr_box_no_flag(Jp2Family *f, int box) { (void) box; add_top_ipr(f); }
+static void hdr_ipr_flag_and_box(Jp2Family *f, int box) {
+    hdr_ipr_flag_no_box(f, box);
+    add_top_ipr(f);
+}
+static void hdr_jpx_jpch_ipr_no_flag(Jp2Family *f, int box) {
+    (void) box;
+    set_ipr_box(append_child(jpch_of(f)));
+}
+static void hdr_jpx_jpch_ipr_flag(Jp2Family *f, int box) {
+    (void) box;
+    jpch_of(f)->children.arr[0].payload.u.ihdr.ipr = 1;
+    set_ipr_box(append_child(jpch_of(f)));
+}
+/* Codestream Registration (T.801 M.11.7.7): XS, YS 1, then CDN 0, XR, YR
+ * 1, XO, YO 0. */
+static void set_creg(InnerBox *c) {
+    c->payload.kind = InnerPayload_creg_PRESENT;
+    OCTETS(c->payload.u.creg.data, "\x00\x01\x00\x01\x00\x00\x01\x01\x00\x00", 10);
+}
+/* Two jplh after the codestreams, the first with a creg; `both`: the
+ * second too. */
+static void add_jplh_creg(Jp2Family *f, int both) {
+    int i;
+    for (i = 0; i < 2; ++i) {
+        TopBox *b = &f->boxes.arr[f->boxes.nCount++];
+        b->payload.kind = TopPayload_jplh_PRESENT;
+        b->payload.u.jplh.children.nCount = 0;
+        if (i == 0 || both) set_creg(append_child(&b->payload.u.jplh));
+    }
+}
+static void hdr_jpx_creg_one(Jp2Family *f, int box) { (void) box; add_jplh_creg(f, 0); }
+static void hdr_jpx_creg_both(Jp2Family *f, int box) { (void) box; add_jplh_creg(f, 1); }
 
 /* Appended entries only: array positions are in fixture names. */
 static const RuleMutant header_mutants[] = {
@@ -2193,6 +2277,32 @@ static const RuleMutant header_mutants[] = {
       0, X_LENIENT, "box.nested-jp2c", NULL },
     { "box.flst-placement", hdr_flst_in_jp2h, "flst inside jp2h (T.801 M.11.3: in ftbl)", CF_JPX, 0,
       X_LENIENT, "box.flst-placement", NULL },
+    { "colr.cielab-parameters", hdr_jpx_cielab_ep, "EnumCS 14 (CIELab) with its 28-byte EP: valid",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "colr.ciejab-parameters", hdr_jpx_ciejab_ep, "EnumCS 19 (CIEJab) with its 24-byte EP: valid",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "colr.enumcs-length", hdr_jpx_cielab_short_ep,
+      "EnumCS 14 with 4 bytes after it (T.801 M.11.7.4.1: 28 or none)", CF_JPX, 0, X_LENIENT,
+      "colr.enumcs-length", NULL },
+    { "colr.approx", hdr_jpx_approx_zero, "APPROX 0 (T.801 M.11.7.2: illegal in JPX)", CF_JPX, 0,
+      X_LENIENT, "colr.approx", NULL },
+    { "colr.approx", hdr_jpx_approx_five, "APPROX 5 (T.801 Table M.23: 1 to 4)", CF_JPX, 0,
+      X_LENIENT, "colr.approx", NULL },
+    { "file.ftyp-minor", hdr_jpx_minor_zero, "MinV 0 (T.801 M.8: 1)", CF_JPX, 0, X_LENIENT,
+      "file.ftyp-minor", NULL },
+    { "ihdr.ipr", hdr_ipr_flag_no_box, "IPR 1 without an IPR box (T.800 I.5.3.1)", CF_JP2, 0,
+      X_LENIENT, "ihdr.ipr", NULL },
+    { "ihdr.ipr", hdr_ipr_box_no_flag, "a top-level IPR box with IPR 0 (T.800 I.5.3.1)", CF_JP2, 0,
+      X_LENIENT, "ihdr.ipr", NULL },
+    { "jp2.ipr", hdr_ipr_flag_and_box, "IPR 1 and a top-level IPR box: valid", CF_JP2, 0, X_VALID,
+      NULL, NULL },
+    { "jpch.ipr", hdr_jpx_jpch_ipr_no_flag, "IPR box in a jpch whose ihdr has IPR 0 (M.11.6)",
+      CF_JPX, 0, X_LENIENT, "jpch.ipr", NULL },
+    { "jpch.ipr-box", hdr_jpx_jpch_ipr_flag, "IPR box in a jpch whose ihdr has IPR 1: valid",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "jpx.creg", hdr_jpx_creg_one, "creg in one of two jplh (T.801 M.11.7: in every one)", CF_JPX,
+      0, X_LENIENT, "jpx.creg", NULL },
+    { "jplh.creg", hdr_jpx_creg_both, "creg in both jplh: valid", CF_JPX, 0, X_VALID, NULL, NULL },
 };
 
 /* ------------------------------------------------------------------------ */

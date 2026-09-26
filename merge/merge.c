@@ -181,9 +181,19 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     return 0;
 }
 
+/* Byte i of a Colour Specification box's payload as the JPX file carries
+ * it. Its APPROX, after METH and PREC (T.800 I.5.3.3): T.801 M.11.7.2 has
+ * no 0, which JP2 files write, so 0 becomes 1 (as hvJP2K's jpx_colr). */
+enum { COLR_APPROX = 2 };
+
+static uint8_t colr_byte(const uint8_t *payload, size_t i) {
+    return i == COLR_APPROX && payload[i] == 0 ? 1 : payload[i];
+}
+
 /* The first input's Colour Specification boxes as the JPX file's jp2h
- * holds them (hv_rule_colr for a JPX jp2h: at most one with METH 1 and one
- * with METH 2, T.801 M.11.7.1), which a JP2 file's jp2h need not keep. */
+ * holds them, APPROX 0 written as 1 (colr_byte): hv_rule_colr for a JPX
+ * jp2h, which a JP2 file's jp2h need not keep (at most one with METH 1 and
+ * one with METH 2, T.801 M.11.7.1; APPROX 1 to 4, M.11.7.2). */
 static int check_jpx_colrs(const source *s, char *error, size_t size) {
     hv_header h;
     const char *rule = NULL;
@@ -197,6 +207,7 @@ static int check_jpx_colrs(const source *s, char *error, size_t size) {
                               &used) != 0)
             return hv_fail(error, size, "%s: colr at %zu cannot be decoded", s->in.path,
                            colr->start);
+        header.approx = colr_byte(s->in.buf + colr->payload, COLR_APPROX);
         rule = hv_rule_colr(&h, &header, colr->end - colr->payload - used);
     }
     return rule == NULL ? 0
@@ -237,15 +248,6 @@ static int same_box(const source *a, const hv_box *x, const source *b, const hv_
         return x->type == y->type;
     return x->type == y->type && n == y->end - y->payload &&
            memcmp(a->in.buf + x->payload, b->in.buf + y->payload, n) == 0;
-}
-
-/* Byte i of a Colour Specification box's payload as the JPX file carries
- * it. Its APPROX, after METH and PREC (T.800 I.5.3.3): T.801 M.11.7.2 has
- * no 0, which JP2 files write, so 0 becomes 1 (as hvJP2K's jpx_colr). */
-enum { COLR_APPROX = 2 };
-
-static uint8_t colr_byte(const uint8_t *payload, size_t i) {
-    return i == COLR_APPROX && payload[i] == 0 ? 1 : payload[i];
 }
 
 static int same_colrs(const source *a, const source *b) {

@@ -62,6 +62,13 @@ while letting HTTP connections be pooled or replaced independently of channels.
   standard QCD, PLT and COM segments; the `-Std` types, the parameterized
   bodies and the profile aliases that narrowed nothing are gone.
   `spec/check-model.sh` compares `SotSegment` with `TilePart`.
+- Model, JPX header boxes at the standard layer: a `colr` with METH 1 may
+  carry the CIELab or CIEJab parameters after EnumCS (T.801 M.11.7.4), and
+  has APPROX 1 to 4 (`colr.approx`); MinV is 1 (`file.ftyp-minor`); an IPR
+  box in a `jpch` needs IPR 1 in its `ihdr` (`jpch.ipr`); `creg` is in
+  every `jplh` or none (`jpx.creg`). JP2: the `ihdr`'s IPR is 1 exactly
+  when the file has an IPR box (`ihdr.ipr`). The profile, and so what the
+  server accepts, is unchanged; the JPX base vectors carry APPROX 1.
 - Keep channels alive across replacement connections, and allow one persistent
   connection to carry requests for different channels. This permits ordinary
   browser and reverse-proxy connection pooling. Random, opaque channel IDs

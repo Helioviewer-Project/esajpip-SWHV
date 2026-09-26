@@ -26,6 +26,7 @@ asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
         case 1667523942u: /* cdef */
         case 1668112752u: /* cmap */
         case 1668246642u: /* colr */
+        case 1668441447u: /* creg */
         case 1685348972u: /* dtbl */
         case 1718383476u: /* flst */
         case 1718773093u: /* free */
@@ -35,6 +36,7 @@ asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
         case 1783636000u: /* jP   */
         case 1785737827u: /* jp2c */
         case 1785737832u: /* jp2h */
+        case 1785737833u: /* jp2i */
         case 1785750376u: /* jpch */
         case 1785752680u: /* jplh */
         case 1818389536u: /* lbl  */

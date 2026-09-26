@@ -86,16 +86,16 @@ typedef struct {
 
 } BoxHeader;
 
-#define ERR_BOXHEADER_LBOX		7330  /*(0..1 | 8..4294967295)*/
+#define ERR_BOXHEADER_LBOX		7602  /*(0..1 | 8..4294967295)*/
 flag BoxHeader_lbox_IsConstraintValid(const BoxHeader_lbox* pVal, int* pErrCode);
 
-#define ERR_BOXHEADER_TBOX		7335  /*(0..4294967295)*/
+#define ERR_BOXHEADER_TBOX		7607  /*(0..4294967295)*/
 flag BoxHeader_tbox_IsConstraintValid(const BoxHeader_tbox* pVal, int* pErrCode);
 
-#define ERR_BOXHEADER_XLBOX		7340  /*(16..18446744073709551615)*/
+#define ERR_BOXHEADER_XLBOX		7612  /*(16..18446744073709551615)*/
 flag BoxHeader_xlbox_IsConstraintValid(const BoxHeader_xlbox* pVal, int* pErrCode);
 
-#define ERR_BOXHEADER		7345  /**/
+#define ERR_BOXHEADER		7617  /**/
 flag BoxHeader_IsConstraintValid(const BoxHeader* pVal, int* pErrCode);
 
 void BoxHeader_lbox_Initialize(BoxHeader_lbox* pVal);
@@ -106,24 +106,24 @@ void BoxHeader_Initialize(BoxHeader* pVal);
 #define BoxHeader_REQUIRED_BYTES_FOR_ACN_ENCODING       16
 #define BoxHeader_REQUIRED_BITS_FOR_ACN_ENCODING        128
 
-#define ERR_ACN_ENCODE_BOXHEADER		7348  /**/
-#define ERR_ACN_ENCODE_BOXHEADER_LBOX		7333  /**/
-#define ERR_ACN_ENCODE_BOXHEADER_TBOX		7338  /**/
-#define ERR_ACN_ENCODE_BOXHEADER_XLBOX_PRESENT_WHEN_EXP_FAILED		7349  /**/
-#define ERR_ACN_ENCODE_BOXHEADER_XLBOX		7343  /**/
+#define ERR_ACN_ENCODE_BOXHEADER		7620  /**/
+#define ERR_ACN_ENCODE_BOXHEADER_LBOX		7605  /**/
+#define ERR_ACN_ENCODE_BOXHEADER_TBOX		7610  /**/
+#define ERR_ACN_ENCODE_BOXHEADER_XLBOX_PRESENT_WHEN_EXP_FAILED		7621  /**/
+#define ERR_ACN_ENCODE_BOXHEADER_XLBOX		7615  /**/
 
 flag BoxHeader_ACN_Encode(const BoxHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_BOXHEADER		7350  /**/
-#define ERR_ACN_DECODE_BOXHEADER_LBOX		7334  /**/
-#define ERR_ACN_DECODE_BOXHEADER_TBOX		7339  /**/
-#define ERR_ACN_DECODE_BOXHEADER_XLBOX_PRESENT_WHEN_EXP_FAILED		7351  /**/
-#define ERR_ACN_DECODE_BOXHEADER_XLBOX		7344  /**/
+#define ERR_ACN_DECODE_BOXHEADER		7622  /**/
+#define ERR_ACN_DECODE_BOXHEADER_LBOX		7606  /**/
+#define ERR_ACN_DECODE_BOXHEADER_TBOX		7611  /**/
+#define ERR_ACN_DECODE_BOXHEADER_XLBOX_PRESENT_WHEN_EXP_FAILED		7623  /**/
+#define ERR_ACN_DECODE_BOXHEADER_XLBOX		7616  /**/
 flag BoxHeader_ACN_Decode(BoxHeader* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef asn1SccUint MarkerCode;
 
 
-#define ERR_MARKERCODE		7352  /*(65281..65534)*/
+#define ERR_MARKERCODE		7624  /*(65281..65534)*/
 flag MarkerCode_IsConstraintValid(const MarkerCode* pVal, int* pErrCode);
 
 void MarkerCode_Initialize(MarkerCode* pVal);
@@ -131,16 +131,16 @@ void MarkerCode_Initialize(MarkerCode* pVal);
 #define MarkerCode_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define MarkerCode_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_MARKERCODE		7355  /**/
+#define ERR_ACN_ENCODE_MARKERCODE		7627  /**/
 
 flag MarkerCode_ACN_Encode(const MarkerCode* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_MARKERCODE		7356  /**/
+#define ERR_ACN_DECODE_MARKERCODE		7628  /**/
 flag MarkerCode_ACN_Decode(MarkerCode* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef asn1SccUint SegmentLength;
 
 
-#define ERR_SEGMENTLENGTH		7357  /*(2..65535)*/
+#define ERR_SEGMENTLENGTH		7629  /*(2..65535)*/
 flag SegmentLength_IsConstraintValid(const SegmentLength* pVal, int* pErrCode);
 
 void SegmentLength_Initialize(SegmentLength* pVal);
@@ -148,16 +148,16 @@ void SegmentLength_Initialize(SegmentLength* pVal);
 #define SegmentLength_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define SegmentLength_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_SEGMENTLENGTH		7360  /**/
+#define ERR_ACN_ENCODE_SEGMENTLENGTH		7632  /**/
 
 flag SegmentLength_ACN_Encode(const SegmentLength* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_SEGMENTLENGTH		7361  /**/
+#define ERR_ACN_DECODE_SEGMENTLENGTH		7633  /**/
 flag SegmentLength_ACN_Decode(SegmentLength* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef asn1SccUint FeatureCount;
 
 
-#define ERR_FEATURECOUNT		7362  /*(0..65535)*/
+#define ERR_FEATURECOUNT		7634  /*(0..65535)*/
 flag FeatureCount_IsConstraintValid(const FeatureCount* pVal, int* pErrCode);
 
 void FeatureCount_Initialize(FeatureCount* pVal);
@@ -165,11 +165,11 @@ void FeatureCount_Initialize(FeatureCount* pVal);
 #define FeatureCount_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define FeatureCount_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_FEATURECOUNT		7365  /**/
+#define ERR_ACN_ENCODE_FEATURECOUNT		7637  /**/
 
 flag FeatureCount_ACN_Encode(const FeatureCount* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_FEATURECOUNT		7366  /**/
+#define ERR_ACN_DECODE_FEATURECOUNT		7638  /**/
 flag FeatureCount_ACN_Decode(FeatureCount* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- RreqHeader --------------------------------------------*/
 typedef struct {
@@ -179,10 +179,10 @@ typedef struct {
 
 } RreqHeader;
 
-#define ERR_RREQHEADER		7403  /**/
-#define ERR_RREQHEADER_FUAM_2		7374  /**/
-#define ERR_RREQHEADER_DCM_2		7386  /**/
-#define ERR_RREQHEADER_NSF_2		7398  /**/
+#define ERR_RREQHEADER		7675  /**/
+#define ERR_RREQHEADER_FUAM_2		7646  /**/
+#define ERR_RREQHEADER_DCM_2		7658  /**/
+#define ERR_RREQHEADER_NSF_2		7670  /**/
 flag RreqHeader_IsConstraintValid(const RreqHeader* pVal, int* pErrCode);
 
 void RreqHeader_Initialize(RreqHeader* pVal);
@@ -190,18 +190,18 @@ void RreqHeader_Initialize(RreqHeader* pVal);
 #define RreqHeader_REQUIRED_BYTES_FOR_ACN_ENCODING       19
 #define RreqHeader_REQUIRED_BITS_FOR_ACN_ENCODING        152
 
-#define ERR_ACN_ENCODE_RREQHEADER		7406  /**/
-#define ERR_ACN_ENCODE_RREQHEADER_FUAM_2_2		7378  /**/
-#define ERR_ACN_ENCODE_RREQHEADER_DCM_2_2		7390  /**/
-#define ERR_ACN_ENCODE_RREQHEADER_NSF_2		7401  /**/
+#define ERR_ACN_ENCODE_RREQHEADER		7678  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_FUAM_2_2		7650  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_DCM_2_2		7662  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_NSF_2		7673  /**/
 
 flag RreqHeader_ACN_Encode(const RreqHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_RREQHEADER		7407  /**/
-#define ERR_ACN_DECODE_RREQHEADER_ML		7368  /**/
-#define ERR_ACN_DECODE_RREQHEADER_FUAM_2_2		7380  /**/
-#define ERR_ACN_DECODE_RREQHEADER_DCM_2_2		7392  /**/
-#define ERR_ACN_DECODE_RREQHEADER_NSF_2		7402  /**/
+#define ERR_ACN_DECODE_RREQHEADER		7679  /**/
+#define ERR_ACN_DECODE_RREQHEADER_ML		7640  /**/
+#define ERR_ACN_DECODE_RREQHEADER_FUAM_2_2		7652  /**/
+#define ERR_ACN_DECODE_RREQHEADER_DCM_2_2		7664  /**/
+#define ERR_ACN_DECODE_RREQHEADER_NSF_2		7674  /**/
 flag RreqHeader_ACN_Decode(RreqHeader* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- PclrCounts --------------------------------------------*/
 typedef asn1SccUint PclrCounts_ne;
@@ -214,13 +214,13 @@ typedef struct {
 
 } PclrCounts;
 
-#define ERR_PCLRCOUNTS_NE		7408  /*(1..1024)*/
+#define ERR_PCLRCOUNTS_NE		7680  /*(1..1024)*/
 flag PclrCounts_ne_IsConstraintValid(const PclrCounts_ne* pVal, int* pErrCode);
 
-#define ERR_PCLRCOUNTS_NPC		7413  /*(1..255)*/
+#define ERR_PCLRCOUNTS_NPC		7685  /*(1..255)*/
 flag PclrCounts_npc_IsConstraintValid(const PclrCounts_npc* pVal, int* pErrCode);
 
-#define ERR_PCLRCOUNTS		7418  /**/
+#define ERR_PCLRCOUNTS		7690  /**/
 flag PclrCounts_IsConstraintValid(const PclrCounts* pVal, int* pErrCode);
 
 void PclrCounts_ne_Initialize(PclrCounts_ne* pVal);
@@ -230,15 +230,15 @@ void PclrCounts_Initialize(PclrCounts* pVal);
 #define PclrCounts_REQUIRED_BYTES_FOR_ACN_ENCODING       3
 #define PclrCounts_REQUIRED_BITS_FOR_ACN_ENCODING        24
 
-#define ERR_ACN_ENCODE_PCLRCOUNTS		7421  /**/
-#define ERR_ACN_ENCODE_PCLRCOUNTS_NE		7411  /**/
-#define ERR_ACN_ENCODE_PCLRCOUNTS_NPC		7416  /**/
+#define ERR_ACN_ENCODE_PCLRCOUNTS		7693  /**/
+#define ERR_ACN_ENCODE_PCLRCOUNTS_NE		7683  /**/
+#define ERR_ACN_ENCODE_PCLRCOUNTS_NPC		7688  /**/
 
 flag PclrCounts_ACN_Encode(const PclrCounts* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_PCLRCOUNTS		7422  /**/
-#define ERR_ACN_DECODE_PCLRCOUNTS_NE		7412  /**/
-#define ERR_ACN_DECODE_PCLRCOUNTS_NPC		7417  /**/
+#define ERR_ACN_DECODE_PCLRCOUNTS		7694  /**/
+#define ERR_ACN_DECODE_PCLRCOUNTS_NE		7684  /**/
+#define ERR_ACN_DECODE_PCLRCOUNTS_NPC		7689  /**/
 flag PclrCounts_ACN_Decode(PclrCounts* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- SotSegment --------------------------------------------*/
 typedef asn1SccUint SotSegment_lsot;
@@ -260,22 +260,22 @@ typedef struct {
 
 } SotSegment;
 
-#define ERR_SOTSEGMENT_LSOT		7423  /*(10..10)*/
+#define ERR_SOTSEGMENT_LSOT		7695  /*(10..10)*/
 flag SotSegment_lsot_IsConstraintValid(const SotSegment_lsot* pVal, int* pErrCode);
 
-#define ERR_SOTSEGMENT_ISOT		7428  /*(0..65534)*/
+#define ERR_SOTSEGMENT_ISOT		7700  /*(0..65534)*/
 flag SotSegment_isot_IsConstraintValid(const SotSegment_isot* pVal, int* pErrCode);
 
-#define ERR_SOTSEGMENT_PSOT		7433  /*(0 | 14..4294967295)*/
+#define ERR_SOTSEGMENT_PSOT		7705  /*(0 | 14..4294967295)*/
 flag SotSegment_psot_IsConstraintValid(const SotSegment_psot* pVal, int* pErrCode);
 
-#define ERR_SOTSEGMENT_TPSOT		7438  /*(0..254)*/
+#define ERR_SOTSEGMENT_TPSOT		7710  /*(0..254)*/
 flag SotSegment_tpsot_IsConstraintValid(const SotSegment_tpsot* pVal, int* pErrCode);
 
-#define ERR_SOTSEGMENT_TNSOT		7443  /*(0..255)*/
+#define ERR_SOTSEGMENT_TNSOT		7715  /*(0..255)*/
 flag SotSegment_tnsot_IsConstraintValid(const SotSegment_tnsot* pVal, int* pErrCode);
 
-#define ERR_SOTSEGMENT		7448  /**/
+#define ERR_SOTSEGMENT		7720  /**/
 flag SotSegment_IsConstraintValid(const SotSegment* pVal, int* pErrCode);
 
 void SotSegment_lsot_Initialize(SotSegment_lsot* pVal);
@@ -288,21 +288,21 @@ void SotSegment_Initialize(SotSegment* pVal);
 #define SotSegment_REQUIRED_BYTES_FOR_ACN_ENCODING       10
 #define SotSegment_REQUIRED_BITS_FOR_ACN_ENCODING        80
 
-#define ERR_ACN_ENCODE_SOTSEGMENT		7451  /**/
-#define ERR_ACN_ENCODE_SOTSEGMENT_LSOT		7426  /**/
-#define ERR_ACN_ENCODE_SOTSEGMENT_ISOT		7431  /**/
-#define ERR_ACN_ENCODE_SOTSEGMENT_PSOT		7436  /**/
-#define ERR_ACN_ENCODE_SOTSEGMENT_TPSOT		7441  /**/
-#define ERR_ACN_ENCODE_SOTSEGMENT_TNSOT		7446  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT		7723  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT_LSOT		7698  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT_ISOT		7703  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT_PSOT		7708  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT_TPSOT		7713  /**/
+#define ERR_ACN_ENCODE_SOTSEGMENT_TNSOT		7718  /**/
 
 flag SotSegment_ACN_Encode(const SotSegment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_SOTSEGMENT		7452  /**/
-#define ERR_ACN_DECODE_SOTSEGMENT_LSOT		7427  /**/
-#define ERR_ACN_DECODE_SOTSEGMENT_ISOT		7432  /**/
-#define ERR_ACN_DECODE_SOTSEGMENT_PSOT		7437  /**/
-#define ERR_ACN_DECODE_SOTSEGMENT_TPSOT		7442  /**/
-#define ERR_ACN_DECODE_SOTSEGMENT_TNSOT		7447  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT		7724  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT_LSOT		7699  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT_ISOT		7704  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT_PSOT		7709  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT_TPSOT		7714  /**/
+#define ERR_ACN_DECODE_SOTSEGMENT_TNSOT		7719  /**/
 flag SotSegment_ACN_Decode(SotSegment* pVal, BitStream* pBitStrm, int* pErrCode);
 
 

@@ -886,6 +886,8 @@ typedef enum {
     InnerPayload_cmap_PRESENT,
     InnerPayload_cdef_PRESENT,
     InnerPayload_jp2c_PRESENT,
+    InnerPayload_jp2i_PRESENT,
+    InnerPayload_creg_PRESENT,
     InnerPayload_other_PRESENT
 } InnerPayload_selection;
 
@@ -911,6 +913,8 @@ typedef union {
     Cmap cmap;
     Cdef cdef;
     OpaqueBox jp2c;
+    OpaqueBox jp2i;
+    OpaqueBox creg;
     OpaqueBox other;
 } InnerPayload_unchecked_union;
 
@@ -986,6 +990,8 @@ typedef enum {
     TopPayload_xml_PRESENT,
     TopPayload_uinf_PRESENT,
     TopPayload_free_PRESENT,
+    TopPayload_jp2i_PRESENT,
+    TopPayload_creg_PRESENT,
     TopPayload_other_PRESENT
 } TopPayload_selection;
 
@@ -1004,6 +1010,8 @@ typedef union {
     OpaqueBox xml;
     Superbox uinf;
     OpaqueBox free;
+    OpaqueBox jp2i;
+    OpaqueBox creg;
     OpaqueBox other;
 } TopPayload_unchecked_union;
 
@@ -1063,6 +1071,8 @@ typedef enum {
     InnerPayload_Profile_cmap_PRESENT,
     InnerPayload_Profile_cdef_PRESENT,
     InnerPayload_Profile_jp2c_PRESENT,
+    InnerPayload_Profile_jp2i_PRESENT,
+    InnerPayload_Profile_creg_PRESENT,
     InnerPayload_Profile_other_PRESENT
 } InnerPayload_Profile_selection;
 
@@ -1088,6 +1098,8 @@ typedef union {
     OpaqueBox cmap;
     OpaqueBox cdef;
     OpaqueBox jp2c;
+    OpaqueBox jp2i;
+    OpaqueBox creg;
     OpaqueBox other;
 } InnerPayload_Profile_unchecked_union;
 
@@ -1150,6 +1162,8 @@ typedef enum {
     TopPayload_Profile_xml_PRESENT,
     TopPayload_Profile_uinf_PRESENT,
     TopPayload_Profile_free_PRESENT,
+    TopPayload_Profile_jp2i_PRESENT,
+    TopPayload_Profile_creg_PRESENT,
     TopPayload_Profile_other_PRESENT
 } TopPayload_Profile_selection;
 
@@ -1168,6 +1182,8 @@ typedef union {
     OpaqueBox xml;
     OpaqueBox uinf;
     OpaqueBox free;
+    OpaqueBox jp2i;
+    OpaqueBox creg;
     OpaqueBox other;
 } TopPayload_Profile_unchecked_union;
 

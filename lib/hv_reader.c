@@ -528,7 +528,7 @@ const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, 
 static uint32_t header_type(uint32_t type) {
     switch (type) {
     case HV_BOX_IHDR: case HV_BOX_BPCC: case HV_BOX_COLR: case HV_BOX_PCLR:
-    case HV_BOX_CMAP: case HV_BOX_CDEF: case HV_BOX_RES:
+    case HV_BOX_CMAP: case HV_BOX_CDEF: case HV_BOX_RES: case HV_BOX_JP2I: case HV_BOX_CREG:
         return type;
     default:
         return 1;
@@ -747,7 +747,7 @@ static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     hv_box box, jp2h = {0}, jp2c = {0};
     hv_header h;
     const char *error;
-    int status, n = 0, late = 0, codestreams = 0;
+    int status, n = 0, late = 0, codestreams = 0, ipr = 0;
 
     *at = 0;
     hv_boxes_file(&it, buf, size);
@@ -759,6 +759,7 @@ static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
         } else if (box.type == HV_BOX_JP2C && codestreams++ == 0) {
             jp2c = box;
         }
+        ipr += box.type == HV_BOX_JP2I;
     }
     if (status < 0)
         return error;
@@ -770,6 +771,8 @@ static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     *at = jp2h.start;
     if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, &h, at)) == NULL)
         error = check_codestream_header(buf, jp2c.payload, jp2c.end, &h, NULL, 0, jp2h.start, at);
+    if (error == NULL && (error = hv_rule_ihdr_ipr(&h, ipr)) != NULL)
+        *at = jp2h.start;
     return error;
 }
 
@@ -823,16 +826,19 @@ static const char *check_rreq(const uint8_t *buf, const hv_box *box) {
  * defaults. */
 static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
     hv_boxes it, next_jpch;
-    hv_box box, jpch, jp2h = {0}, rreq = {0};
+    hv_box box, jpch, jp2h = {0}, rreq = {0}, ftyp = {0}, jplh = {0};
     hv_jpx_boxes count = {0, 0, 0, 0, 0, 0};
     hv_header h[2], *defaults;  /* h[0]: the jpch or jplh being read */
+    FtypHeader header;
     const char *error = NULL;
-    int status, boxes = 0, jp2hs = 0, late = 0, later = 0;
+    int status, boxes = 0, jp2hs = 0, late = 0, later = 0, jplhs = 0, cregs = 0;
 
     *at = 0;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
-        if (++boxes == 3)
+        if (++boxes == 2 && box.type == HV_BOX_FTYP)
+            ftyp = box;
+        if (boxes == 3)
             count.rreq_third = box.type == HV_BOX_RREQ;
         switch (box.type) {
         case HV_BOX_RREQ:
@@ -858,6 +864,14 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
     if ((error = hv_rule_jpx(&count, 0)) != NULL ||
         (error = check_placement(buf, size, at)) != NULL)
         return error;
+    /* MinV (T.801 M.8). A second box that is no File Type box, or one
+     * shorter than BR and MinV, is the file rules' (hv_check_jpx). */
+    *at = ftyp.start;
+    if (ftyp.type == HV_BOX_FTYP &&
+        DECODE(FtypHeader, &header, buf, ftyp.payload,
+               min_size(ftyp.end - ftyp.payload, HV_FIXED(FtypHeader))) == 0 &&
+        (error = hv_rule_ftyp_minor(header.minor)) != NULL)
+        return error;
     *at = rreq.start;
     if ((error = check_rreq(buf, &rreq)) != NULL)
         return error;
@@ -877,6 +891,9 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
         if (box.type == HV_BOX_JPLH) {
             *at = box.start;
             error = read_header(buf, &box, HV_BOX_JPLH, 1, h, at);
+            if (jplhs++ == 0)
+                jplh = box;
+            cregs += h->creg > 0;
             continue;
         }
         if (box.type != HV_BOX_JP2C && box.type != HV_BOX_FTBL)
@@ -900,6 +917,8 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
             error = hv_rule_codestream_header(own, defaults, NULL, 1);
         }
     }
+    if (error == NULL && (error = hv_rule_jpx_creg(jplhs, cregs)) != NULL)
+        *at = jplh.start;
     return error;
 }
 

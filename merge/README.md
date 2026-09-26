@@ -85,14 +85,16 @@ and its codestream with `HV_PROFILE`), so the JPX file is within it too
 (`hv_check_jpx`), and must have valid header boxes (`hv_check_jp2h`: T.800
 I.5.3, with `ihdr` and `bpcc` agreeing with SIZ), which the JPX headers are
 made of, so theirs are valid too (`hv_check_jpx_headers`). The tests check
-both of every JPX file they write. Two things valid in a JP2 file are not
-in the JPX file, and are rejected: more than one `colr` box with the same
-METH in the first input, whose `jp2h` the JPX file's is
-(`colr.one-method`, T.801 M.11.7.1); and a later input without a `cdef` or
-`res` box after a first input with one, as its `jplh` would inherit the
-first input's from `jp2h` (T.801 M.11.7). hvJP2K checks neither the
-profile, nor the header boxes, nor the link targets, nor these two: it
-merges files without PLT, which the server then rejects.
+both of every JPX file they write. Three things valid in a JP2 file are
+not in the JPX file, and are rejected: more than one `colr` box with the
+same METH in the first input, whose `jp2h` the JPX file's is
+(`colr.one-method`, T.801 M.11.7.1); a `colr` with APPROX 5 or more
+(`colr.approx`, M.11.7.2: 1 to 4; an APPROX of 0 is written as 1, below);
+and a later input without a `cdef` or `res` box after a first input with
+one, as its `jplh` would inherit the first input's from `jp2h` (T.801
+M.11.7). hvJP2K checks neither the profile, nor the header boxes, nor the
+link targets, nor these three: it merges files without PLT, which the
+server then rejects.
 
 Errors about an input name the file and, where a shared rule fails, the
 rule and its offset, as in `siz.zero-origin at 410`. The others are

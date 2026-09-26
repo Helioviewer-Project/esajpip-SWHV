@@ -162,6 +162,10 @@ typedef struct {
  * and a dtbl where they are linked. */
 const char *hv_rule_jpx(const hv_jpx_boxes *boxes, int profile);
 
+/* MinV of a JPX file's ftyp: 1 (T.801 M.8; file.ftyp-minor). Standard
+ * layer only; in a JP2 file MinV binds writers only (T.800 I.5.2). */
+const char *hv_rule_ftyp_minor(uint64_t minv);
+
 /* ------------------------------------------------------------------------
  * JP2 header boxes, T.800 I.5.3 and T.801 M.11.5 to M.11.7 (listed at the
  * end of ../spec/jp2-boxes.asn1). Standard layer only: the server reads
@@ -206,6 +210,7 @@ typedef struct {
     uint32_t cmap_pcol;         /* the largest PCOL of those entries */
     uint32_t cdef_cn;           /* the largest Cn of the first cdef */
     int resc, resd;             /* children of the current res box */
+    int ipr, creg;              /* jp2i and creg children */
 } hv_header;
 
 void hv_header_init(hv_header *h, uint32_t parent, int jpx);
@@ -231,9 +236,12 @@ const char *hv_rule_extent(uint32_t type, uint64_t extra);
  * keeps the pointer: the entries must stay in place until
  * hv_rule_codestream_header has read h. */
 const char *hv_rule_bpcc(hv_header *h, const uint8_t *depths, size_t n);
-/* METH, EnumCS, and `rest`, the bytes after them. In a JP2 file, METH 1 or
- * 2, and the first colr, if enumerated, sRGB, greyscale or sYCC (I.5.3.3);
- * in a JPX file, no two enumerated or two ICC colr in jp2h (M.11.7.1). */
+/* METH, APPROX, EnumCS, and `rest`, the bytes after them: none when METH
+ * is 1, but in a JPX file the EP parameters of CIELab and CIEJab (T.801
+ * M.11.7.4). In a JP2 file, METH 1 or 2, and the first colr, if
+ * enumerated, sRGB, greyscale or sYCC (I.5.3.3); in a JPX file, APPROX 1
+ * to 4 (M.11.7.2), and no two enumerated or two ICC colr in jp2h
+ * (M.11.7.1). */
 const char *hv_rule_colr(hv_header *h, const ColrHeader *colr, size_t rest);
 /* A pclr box in order: NE and NPC, the BitDepth of each of the NPC
  * columns, then `entries`, the bytes of the table: NE x NPC values, each
@@ -258,8 +266,8 @@ const char *hv_rule_res_end(hv_header *h);
  *   JP2 (T.800 I.5.3), h the jp2h and no defaults: at least one colr; bpcc
  *     exactly when BPC is 255; pclr exactly with cmap.
  *   JPX (T.801 M.11.6), h the jpch and defaults the jp2h: an ihdr in
- *     either; bpcc when BPC is 255; pclr needs cmap, and an MTYP 1 cmap
- *     entry needs pclr.
+ *     either; no IPR box in the jpch when that ihdr's IPR is 0; bpcc when
+ *     BPC is 255; pclr needs cmap, and an MTYP 1 cmap entry needs pclr.
  *   Both: bpcc has NC entries; cmap maps components below NC and palette
  *     columns below NPC; cdef describes channels there are (JP2); and
  *     against SIZ, HEIGHT = Ysiz - YOsiz, WIDTH = Xsiz - XOsiz, NC = Csiz,
@@ -267,6 +275,15 @@ const char *hv_rule_res_end(hv_header *h);
  *     bpcc entry the component's Ssiz (read where hv_rule_bpcc left it). */
 const char *hv_rule_codestream_header(const hv_header *h, const hv_header *defaults,
                                       const hv_siz *siz, int jpx);
+
+/* A JP2 file's IPR (T.800 I.5.3.1): the jp2h's ihdr has IPR 1 exactly
+ * when the file has a top-level IPR box, of which there are ipr_boxes
+ * (ihdr.ipr). */
+const char *hv_rule_ihdr_ipr(const hv_header *jp2h, int ipr_boxes);
+
+/* A JPX file's Compositing Layer Header boxes (T.801 M.11.7): if one holds
+ * a Codestream Registration box, every one does (jpx.creg). */
+const char *hv_rule_jpx_creg(int jplh, int with_creg);
 
 #ifdef __cplusplus
 }

@@ -442,8 +442,8 @@ void RreqHeader_Initialize(RreqHeader* pVal)
 	FeatureCount_Initialize((&(pVal->nsf)));
 }
 
-#define ERR_ACN_ENCODE_RREQHEADER_FUAM_2		7377  /**/
-#define ERR_ACN_ENCODE_RREQHEADER_FUAM		7372  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_FUAM_2		7649  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_FUAM		7644  /**/
 
 flag RreqHeader_fuam_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* RreqHeader_fuam_ml);
 
@@ -466,8 +466,8 @@ flag RreqHeader_fuam_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* 
     return ret;
 }
 
-#define ERR_ACN_ENCODE_RREQHEADER_DCM_2		7389  /**/
-#define ERR_ACN_ENCODE_RREQHEADER_DCM		7384  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_DCM_2		7661  /**/
+#define ERR_ACN_ENCODE_RREQHEADER_DCM		7656  /**/
 
 flag RreqHeader_dcm_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* RreqHeader_dcm_ml);
 
@@ -524,8 +524,8 @@ flag RreqHeader_ACN_Encode(const RreqHeader* pVal, BitStream* pBitStrm, int* pEr
     return ret;
 }
 
-#define ERR_ACN_DECODE_RREQHEADER_FUAM_2		7379  /**/
-#define ERR_ACN_DECODE_RREQHEADER_FUAM		7373  /**/
+#define ERR_ACN_DECODE_RREQHEADER_FUAM_2		7651  /**/
+#define ERR_ACN_DECODE_RREQHEADER_FUAM		7645  /**/
 flag RreqHeader_fuam_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* RreqHeader_fuam_ml);
 
 flag RreqHeader_fuam_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* RreqHeader_fuam_ml)
@@ -545,8 +545,8 @@ flag RreqHeader_fuam_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCo
     return ret;
 }
 
-#define ERR_ACN_DECODE_RREQHEADER_DCM_2		7391  /**/
-#define ERR_ACN_DECODE_RREQHEADER_DCM		7385  /**/
+#define ERR_ACN_DECODE_RREQHEADER_DCM_2		7663  /**/
+#define ERR_ACN_DECODE_RREQHEADER_DCM		7657  /**/
 flag RreqHeader_dcm_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* RreqHeader_dcm_ml);
 
 flag RreqHeader_dcm_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* RreqHeader_dcm_ml)
