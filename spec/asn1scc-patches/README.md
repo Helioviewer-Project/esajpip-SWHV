@@ -5,6 +5,9 @@
 [`../VERSION`](../VERSION) before building the compiler. Each one fixes a
 bug still present in that pinned upstream revision. When updating `VERSION`,
 retest each bug against the new revision and remove any patch it supersedes.
+The numbered filenames show the application order directly. Keep retired
+series in separate `reference/<upstream-base>/` directories so their numbers
+do not mix with those of another series.
 
 Applied now, in `series` order:
 
@@ -61,8 +64,9 @@ Applied now, in `series` order:
 
 ## Reference: the former fixes for deferred ACN
 
-The patches in [`reference/`](reference/) are not in `series`. They are the
-former `0001` to `0003` fixes for deferred ACN (`--acn-v2`) generation.
+The patches in [`reference/4434cad8/`](reference/4434cad8/) are not in
+`series`. They are the former `0001` to `0003` fixes for deferred ACN
+(`--acn-v2`) generation.
 They apply, in that order, to the
 unmodified ASN1SCC commit `4434cad8bbcc436183ce4cc15721392be1466e36`, not to
 `VERSION`. `VERSION` now pins the upstream fix for
