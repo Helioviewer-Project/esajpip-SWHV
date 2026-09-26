@@ -838,6 +838,32 @@ static void test_boxes(void) {
     hv_out_free(&once);
     bytes_free(&g);
 
+    /* Superboxes nested HV_BOX_DEPTH_MAX deep are copied; one more level
+     * is refused instead of recursing further. */
+    {
+        int depth;
+        for (depth = HV_BOX_DEPTH_MAX; depth <= HV_BOX_DEPTH_MAX + 1; depth++) {
+            int k;
+            g = bytes_copy(f.data, f.size);
+            for (k = 0; k < depth; k++) {
+                uint8_t h[8] = {0, 0, 0, 0, 'a', 's', 'o', 'c'};
+                put32(h, (uint32_t)(8 * (depth - k)));
+                append(&g, h, sizeof h);
+            }
+            hv_out_init(&once);
+            error[0] = 0;
+            if (depth == HV_BOX_DEPTH_MAX)
+                check(hv_transcode_file(g.data, g.size, 7, 7, 0, &once, error, sizeof error) == 0,
+                      "%d nested superboxes: rejected: %s", depth, error);
+            else
+                check(hv_transcode_file(g.data, g.size, 7, 7, 0, &once, error, sizeof error) != 0 &&
+                          strncmp(error, "boxes nested deeper than", 24) == 0,
+                      "%d nested superboxes: \"%s\"", depth, error[0] ? error : "accepted");
+            hv_out_free(&once);
+            bytes_free(&g);
+        }
+    }
+
     bytes_free(&f);
     bytes_free(&file);
 }

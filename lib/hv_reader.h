@@ -51,6 +51,11 @@ int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at);
 /* Nonzero for the box types T.800 and T.801 define as superboxes. */
 int hv_is_superbox(uint32_t type);
 
+/* The deepest superbox nesting a tool descends into (the top level is 1),
+ * so that walking the boxes recursively cannot exhaust the stack. The
+ * standard sets no limit; files for the server nest at most 2 deep. */
+enum { HV_BOX_DEPTH_MAX = 32 };
+
 /* The file rules of the served profile (JPIP_PROFILE.md; the profile layer
  * of ../spec/jp2-boxes.asn1) for a JP2 file: at most INT_MAX bytes; the
  * signature box, then a file type box with the jp2 brand and a jp2

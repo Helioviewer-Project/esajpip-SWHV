@@ -714,9 +714,16 @@ int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npac
         length = wr.size;
         for (k = 0; k < nbody; k++)
             length += cb->contrib[body[k]].length;
-        lengths[pkt] = length;
-        if (out == NULL)
+        if (out == NULL) {
+            lengths[pkt] = length;
             continue;
+        }
+        /* The PLT was written from the first pass: the packets must match. */
+        if (lengths[pkt] != length) {
+            status = fail(error, error_size, "packet %zu: %llu bytes, the PLT says %llu", pkt,
+                          (unsigned long long)length, (unsigned long long)lengths[pkt]);
+            break;
+        }
         if (hv_write_bytes(out, wr.out, wr.size) != 0)
             status = fail(error, error_size, "%s", out->error);
         for (k = 0; k < nbody && status == 0; k++) {

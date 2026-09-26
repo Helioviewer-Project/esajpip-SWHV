@@ -174,6 +174,11 @@ static int walk_boxes(const uint8_t *buf, hv_boxes *it, int depth, walk_result *
                 return -1;
         } else if (hv_is_superbox(box.type)) {
             hv_boxes children;
+            if (depth + 1 > HV_BOX_DEPTH_MAX) {       /* depth 0 is the top level */
+                r->error = "boxes nested too deep";
+                r->at = box.start;
+                return -1;
+            }
             hv_boxes_children(&children, buf, &box);
             if (walk_boxes(buf, &children, depth + 1, r) != 0)
                 return -1;

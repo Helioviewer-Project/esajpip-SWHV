@@ -40,7 +40,7 @@ int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t ti
     /* B-5 to B-10: the tile's position in the grid and its extent. */
     ntx = ceildiv((int64_t)siz->xsiz - (int64_t)siz->xtosiz, (int64_t)siz->xtsiz);
     nty = ceildiv((int64_t)siz->ysiz - (int64_t)siz->ytosiz, (int64_t)siz->ytsiz);
-    if ((int64_t)tile >= ntx * nty)
+    if (ntx <= 0 || nty <= 0 || (int64_t)tile / ntx >= nty)   /* ntx * nty can overflow */
         return fail(error, error_size, "tile %u outside the tile grid", (unsigned)tile);
     p = (int64_t)tile % ntx;
     q = (int64_t)tile / ntx;

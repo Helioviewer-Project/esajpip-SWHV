@@ -19,8 +19,9 @@ The options are hvJP2K's:
 - `-o`: the output JPX file.
 - `-links`: link to the codestreams (`ftbl`, and `url` boxes naming each
   input by absolute, resolved path) instead of copying them (`jp2c`).
-- `-s`: more arguments from a file, split as Python's `shlex.split` does
-  (quotes and backslashes), after those of the command line.
+- `-s`: more arguments from a file, or from standard input for `-`, split as
+  Python's `shlex.split` does (quotes and backslashes), after those of the
+  command line.
 
 The inputs are read in two passes, as hvJP2K does. The first is checked once
 and stays mapped throughout. Each later input is checked, unmapped, then
@@ -28,7 +29,9 @@ mapped and checked again before its bytes are used. Its size and parsed
 structure must match the first pass. At most two inputs are mapped at a
 time. With `-links`, the second open supplies header and XML boxes; the
 codestream stays in the input JP2 file. The output is written to a temporary
-file next to it and renamed into place; on error nothing is written. Exit
+file next to it and renamed into place; on error nothing is written. An
+existing output keeps its permissions, and one that is a symbolic link is
+written where the link points, as when hvJP2K opens it for writing. Exit
 status: 0, 1 on error, 2 on usage errors.
 
 ## The output

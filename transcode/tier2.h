@@ -67,10 +67,10 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
                     const hv_tile_data *tile, int sop, int eph, hv_codeblocks *cb,
                     char *error, size_t error_size);
 
-/* Encodes `packets` from the contributions in cb and sets lengths[k] to
- * the length of packet k. With out, also appends the packets to it, with
- * the contributions' bytes from buf; without, only computes the lengths
- * (for a PLT written before the packets). Always writes a full header,
+/* Encodes `packets` from the contributions in cb. Without out, sets
+ * lengths[k] to the length of packet k (for a PLT written before the
+ * packets); with out, appends the packets to it, with the contributions'
+ * bytes from buf, and fails if a packet's length is not lengths[k]. Always writes a full header,
  * never the one-bit empty packet, as Kakadu does. Returns 0, or -1 with a
  * message in error. */
 int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,

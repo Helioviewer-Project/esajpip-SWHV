@@ -137,8 +137,10 @@ static int xml_root(const uint8_t *p, size_t n, size_t *start, size_t *end) {
  * Boxes
  * ------------------------------------------------------------------------ */
 
-/* Checks the boxes inside superboxes, which are copied as read. */
-static int check_children(const uint8_t *buf, const hv_box *parent, char *error, size_t size) {
+/* Checks the boxes inside superboxes, which are copied as read; parent is
+ * at nesting depth `depth`. */
+static int check_children(const uint8_t *buf, const hv_box *parent, int depth, char *error,
+                          size_t size) {
     hv_boxes it;
     hv_box box;
     const char *message;
@@ -146,9 +148,17 @@ static int check_children(const uint8_t *buf, const hv_box *parent, char *error,
     int status;
 
     hv_boxes_children(&it, buf, parent);
-    while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1)
-        if (hv_is_superbox(box.type) && check_children(buf, &box, error, size) != 0)
+    while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
+        if (!hv_is_superbox(box.type))
+            continue;
+        if (depth + 1 > HV_BOX_DEPTH_MAX) {
+            snprintf(error, size, "boxes nested deeper than %d at %zu", HV_BOX_DEPTH_MAX,
+                     box.start);
             return -1;
+        }
+        if (check_children(buf, &box, depth + 1, error, size) != 0)
+            return -1;
+    }
     if (status < 0)
         snprintf(error, size, "%s at %zu", message, at);
     return status < 0 ? -1 : 0;
@@ -191,7 +201,7 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
             done_xml = 1;
             continue;
         }
-        if (hv_is_superbox(box.type) && check_children(buf, &box, error, error_size) != 0)
+        if (hv_is_superbox(box.type) && check_children(buf, &box, 1, error, error_size) != 0)
             return -1;
         if (hv_write_bytes(out, buf + box.start, box.end - box.start) != 0)
             return -1;

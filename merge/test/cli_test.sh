@@ -68,6 +68,20 @@ rmdir "$work/argdir"
     fail "-links failed: $(cat "$work/stderr")"
 [ -s "$work/links.jpx" ] || fail "-links wrote nothing"
 
+# Arguments from standard input.
+[ "$(status "$exe" -s - <"$work/args")" = 0 ] || fail "-s - failed: $(cat "$work/stderr")"
+cmp -s "$work/argfile.jpx" "$expected" || fail "-s - gives other bytes"
+
+# An existing output keeps its mode; one that is a symbolic link keeps the
+# link and gets its target replaced.
+chmod 600 "$work/links.jpx"
+ln -s links.jpx "$work/link.jpx"
+[ "$(status "$exe" -i "$fixtures/input/swap_000.jp2" -o "$work/link.jpx" -links)" = 0 ] ||
+    fail "-o through a link failed: $(cat "$work/stderr")"
+[ -L "$work/link.jpx" ] || fail "the link was replaced by a file"
+[ "$(ls -l "$work/links.jpx" | cut -c2-10)" = "rw-------" ] ||
+    fail "the output's mode changed to $(ls -l "$work/links.jpx" | cut -c2-10)"
+
 # Failures: exit status 1, a message naming the input, no output, no
 # temporary file.
 head -c 2000 "$fixtures/input/swap_000.jp2" >"$work/cut.jp2"

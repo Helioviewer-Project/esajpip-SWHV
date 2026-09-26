@@ -8,11 +8,14 @@
  *   -i      input JP2 files, comma or space separated, in the JPX order
  *   -o      output JPX file
  *   -links  link the codestreams instead of copying them
- *   -s      read more arguments from a file (split as the shell would,
- *           quotes and backslashes included)
+ *   -s      read more arguments from a file, or standard input for "-"
+ *           (split as Python's shlex.split does, quotes and backslashes
+ *           included)
  *
  * The output is written to a temporary file next to it and renamed into
- * place. Exit status: 0 on success, 1 on error, 2 on usage errors. */
+ * place; an existing output keeps its permissions, and one that is a
+ * symbolic link is written where the link points. Exit status: 0 on
+ * success, 1 on error, 2 on usage errors. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
@@ -96,11 +99,13 @@ static int split_words(char *text, list *words) {
     return 0;
 }
 
-/* The whole of a file as a string, or NULL: also on a read error and on a
- * NUL byte, which would end the text early. Either would leave a prefix of
- * the arguments, and merge fewer frames than asked for. */
+/* The whole of a file ("-": standard input, as hvJP2K's fileinput) as a
+ * string, or NULL: also on a read error and on a NUL byte, which would end
+ * the text early. Either would leave a prefix of the arguments, and merge
+ * fewer frames than asked for. */
 static char *read_text(const char *path) {
-    FILE *f = fopen(path, "rb");
+    int in = strcmp(path, "-") == 0;
+    FILE *f = in ? stdin : fopen(path, "rb");
     char *text = NULL;
     size_t n = 0, cap = 0, got;
     if (f == NULL)
@@ -110,7 +115,8 @@ static char *read_text(const char *path) {
             char *t = realloc(text, cap = 2 * cap + 4096 + 1);
             if (t == NULL) {
                 free(text);
-                fclose(f);
+                if (!in)
+                    fclose(f);
                 return NULL;
             }
             text = t;
@@ -119,10 +125,12 @@ static char *read_text(const char *path) {
     } while (got > 0);
     if (ferror(f) || memchr(text, 0, n) != NULL) {
         free(text);
-        fclose(f);
+        if (!in)
+            fclose(f);
         return NULL;
     }
-    fclose(f);
+    if (!in)
+        fclose(f);
     text[n] = 0;
     return text;
 }
@@ -148,7 +156,8 @@ static int parse(char **argv, size_t argc, arguments *a) {
                 return -1;
         } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc && argv[i + 1][0] != '-') {
             a->output = argv[++i];
-        } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc && argv[i + 1][0] != '-') {
+        } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc &&
+                   (argv[i + 1][0] != '-' || strcmp(argv[i + 1], "-") == 0)) {
             a->argfile = argv[++i];
         } else if (strcmp(argv[i], "-links") == 0) {
             a->links = 1;
@@ -207,25 +216,31 @@ static void unmap_input(void *context, size_t i, hv_merge_input *in) {
 static int merge(char **names, size_t n, const char *output, int links, char *error,
                  size_t error_size) {
     hv_merge_inputs inputs = {map_input, unmap_input, NULL};
-    size_t len = strlen(output);
-    char *tmp = malloc(len + 8);
+    char *real = realpath(output, NULL), *tmp = NULL;
+    const char *target = real ? real : output;
+    size_t len = strlen(target);
     FILE *file = NULL;
-    mode_t mask = umask(0);
+    mode_t mask = umask(0), mode = 0666 & ~mask;
+    struct stat st;
     int fd = -1, status = -1;
 
     umask(mask);
     inputs.context = names;
-    if (tmp == NULL) {
+    /* An existing output keeps its permissions, and a symbolic link its
+     * target, as when hvJP2K opens the output for writing. */
+    if (stat(target, &st) == 0 && S_ISREG(st.st_mode))
+        mode = st.st_mode & 0777;
+    if ((tmp = malloc(len + 8)) == NULL) {
         snprintf(error, error_size, "out of memory");
         goto done;
     }
-    memcpy(tmp, output, len);
+    memcpy(tmp, target, len);
     memcpy(tmp + len, ".XXXXXX", 8);
     if ((fd = mkstemp(tmp)) < 0) {
-        snprintf(error, error_size, "cannot create %s: %s", tmp, strerror(errno));
+        snprintf(error, error_size, "cannot create %s: %s", output, strerror(errno));
         goto done;
     }
-    if (fchmod(fd, 0666 & ~mask) != 0 || (file = fdopen(fd, "wb")) == NULL) {
+    if (fchmod(fd, mode) != 0 || (file = fdopen(fd, "wb")) == NULL) {
         snprintf(error, error_size, "cannot write %s: %s", tmp, strerror(errno));
         close(fd);
         unlink(tmp);
@@ -236,7 +251,7 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
         unlink(tmp);
         goto done;
     }
-    if (fclose(file) != 0 || rename(tmp, output) != 0) {
+    if (fclose(file) != 0 || rename(tmp, target) != 0) {
         snprintf(error, error_size, "cannot write %s: %s", output, strerror(errno));
         unlink(tmp);
         goto done;
@@ -245,6 +260,7 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
 
 done:
     free(tmp);
+    free(real);
     return status;
 }
 

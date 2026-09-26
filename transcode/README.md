@@ -22,9 +22,12 @@ writes headers, and lays out precincts and packets, with `jpeg2000_io`
   hvJP2K's `--xml-rewrite` does (see below).
 
 The input is mapped into memory. The file keeps its boxes, in order: the
-`jp2c` box is transcoded, the others are copied as read. The output is written to a temporary file next to it with
-the input's mode and renamed into place, so input and output may be the
-same file; on error nothing is written. Exit status: 0, 1 on error, 2 on
+`jp2c` box is transcoded, the others are copied as read. The output is
+written to a temporary file next to it with the input's permissions
+(without the setuid, setgid and sticky bits) and renamed into place, so
+input and output may be the same file; an output that is a symbolic link is
+written where the link points. On error nothing is written. Superboxes
+nested more than `HV_BOX_DEPTH_MAX` (32) deep are refused. Exit status: 0, 1 on error, 2 on
 usage errors.
 
 ## Supported input

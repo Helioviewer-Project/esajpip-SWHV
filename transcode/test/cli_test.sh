@@ -43,6 +43,16 @@ chmod 640 "$work/in-place.jp2"
 cmp -s "$work/in-place.jp2" "$work/out.jp2" || fail "in place gives other bytes"
 [ "$(mode "$work/in-place.jp2")" = "rw-r-----" ] || fail "in place changed the mode to $(mode "$work/in-place.jp2")"
 
+# Through a symbolic link: the link stays, its target is replaced; the
+# setuid bit is not copied.
+cp "$input" "$work/target.jp2"
+chmod 4640 "$work/target.jp2"
+ln -s target.jp2 "$work/link.jp2"
+[ "$(status "$exe" -x "$work/link.jp2" "$work/link.jp2")" = 0 ] || fail "through a link failed"
+[ -L "$work/link.jp2" ] || fail "the link was replaced by a file"
+cmp -s "$work/target.jp2" "$work/out.jp2" || fail "through a link gives other bytes"
+[ "$(mode "$work/target.jp2")" = "rw-r-----" ] || fail "setuid input gave mode $(mode "$work/target.jp2")"
+
 # Failures: exit status 1, a message naming the input, no output, no
 # temporary file.
 head -c 2000 "$input" >"$work/cut.jp2"

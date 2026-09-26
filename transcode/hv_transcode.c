@@ -14,8 +14,10 @@
  * rewritten. JPX files and raw codestreams are rejected. The boxes are
  * kept: the codestream box is transcoded and every other box is copied as
  * read. The output is written to a temporary file next to it and renamed
- * into place, so input and output may be the same file. Exit status: 0 on
- * success, 1 on error, 2 on usage errors. */
+ * into place, so input and output may be the same file; it gets the
+ * input's permissions (without setuid, setgid and sticky bits), and an
+ * output that is a symbolic link is written where the link points. Exit
+ * status: 0 on success, 1 on error, 2 on usage errors. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
@@ -48,22 +50,26 @@ static int exponent(const char *s, char **end) {
 }
 
 /* Writes out to a temporary file next to `path` with `mode`, then renames
- * it to `path`. */
+ * it to `path`. An existing `path` that is a symbolic link is replaced
+ * where it points, so the link stays. */
 static int write_file(const char *path, const hv_out *out, mode_t mode, char *error,
                       size_t error_size) {
-    size_t n = strlen(path), done = 0;
-    char *tmp = malloc(n + 8);
+    char *real = realpath(path, NULL), *tmp;
+    const char *target = real ? real : path;
+    size_t n = strlen(target), done = 0;
     int fd;
 
-    if (tmp == NULL) {
+    if ((tmp = malloc(n + 8)) == NULL) {
         snprintf(error, error_size, "out of memory");
+        free(real);
         return -1;
     }
-    memcpy(tmp, path, n);
+    memcpy(tmp, target, n);
     memcpy(tmp + n, ".XXXXXX", 8);
     if ((fd = mkstemp(tmp)) < 0) {
-        snprintf(error, error_size, "cannot create %s: %s", tmp, strerror(errno));
+        snprintf(error, error_size, "cannot create %s: %s", path, strerror(errno));
         free(tmp);
+        free(real);
         return -1;
     }
     if (fchmod(fd, mode) != 0)
@@ -82,9 +88,10 @@ static int write_file(const char *path, const hv_out *out, mode_t mode, char *er
         goto failed;
     }
     fd = -1;
-    if (rename(tmp, path) != 0)
+    if (rename(tmp, target) != 0)
         goto failed;
     free(tmp);
+    free(real);
     return 0;
 
 failed:
@@ -93,6 +100,7 @@ failed:
         close(fd);
     unlink(tmp);
     free(tmp);
+    free(real);
     return -1;
 }
 
@@ -151,7 +159,7 @@ int main(int argc, char **argv) {
     if (size)
         munmap(buf, size);
     if (status == 0)
-        status = write_file(output, &out, st.st_mode & 07777, error, sizeof error);
+        status = write_file(output, &out, st.st_mode & 0777, error, sizeof error);
     hv_out_free(&out);
     if (status != 0) {
         fprintf(stderr, "hv_transcode: %s: %s\n", input, error);
