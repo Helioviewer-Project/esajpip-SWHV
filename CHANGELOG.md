@@ -19,6 +19,8 @@ while letting HTTP connections be pooled or replaced independently of channels.
   that description and sharing its rules, and the `hv_walk` tool.
 - `hv_transcode` (`transcode/`), a C port of hvJP2K's transcoder that
   rejects files it cannot make servable.
+- `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`), writing the
+  same bytes, from inputs the server serves only.
 
 ### Changed
 

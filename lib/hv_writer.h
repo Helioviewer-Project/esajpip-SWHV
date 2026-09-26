@@ -59,6 +59,21 @@ int hv_end_tile_part(hv_out *out, size_t start);
 int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start);
 int hv_end_box(hv_out *out, size_t start);
 
+/* A box header for a payload of `size` bytes the caller writes itself:
+ * LBox, or LBox = 1 and XLBox above 4 GiB - 9 bytes. */
+int hv_write_box_header(hv_out *out, uint32_t type, uint64_t size);
+
+/* JPX boxes (T.801 Annex M), with the served profile's types. */
+
+/* A Fragment List box with one fragment (FragmentList-Profile). */
+int hv_write_flst(hv_out *out, uint64_t offset, uint32_t length, uint16_t dr);
+
+/* NDR, the start of a Data Reference box's contents. */
+int hv_write_ndr(hv_out *out, uint16_t ndr);
+
+/* A Data Entry URL box, version 0 and flags 0, with LOC and its NUL. */
+int hv_write_url(hv_out *out, const char *loc);
+
 #ifdef __cplusplus
 }
 #endif

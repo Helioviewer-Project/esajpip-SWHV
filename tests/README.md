@@ -25,9 +25,10 @@ Set `ESAJPIP_TEST_BUILD_DIR` to use another build directory and
 `CMAKE_BUILD_PARALLEL_LEVEL` to limit build parallelism. For an already built
 tree, `ctest --test-dir build --output-on-failure` remains sufficient.
 
-The JPEG 2000 reader's and `hv_transcode`'s tests are separate: they are
-built only with `ESAJPIP_TRANSCODE_TESTS=ON` and run with
-`transcode/test/run.sh` (see [`../transcode/README.md`](../transcode/README.md)).
+The tests of the JPEG 2000 reader and the tools on it (`hv_transcode`,
+`hv_merge`) are separate: they are built only with
+`ESAJPIP_TOOL_TESTS=ON` and run with `lib/test/run.sh` (see
+[`../lib/README.md`](../lib/README.md)).
 One of them, `reader_profile`, checks the reader against the JP2 labels of
 the same corpus, so run both runners after a corpus change.
 

@@ -56,14 +56,15 @@ else()
 endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
-# Tests of the reader/writer and hv_transcode (lib/test, transcode/test),
-# separate from the server's. Run them with transcode/test/run.sh.
-option(ESAJPIP_TRANSCODE_TESTS "Build and register the jpeg2000_io and hv_transcode tests" OFF)
+# Tests of the reader/writer and the tools on it (lib/test, transcode/test,
+# merge/test), separate from the server's. Run them with lib/test/run.sh.
+option(ESAJPIP_TOOL_TESTS "Build and register the tests of jpeg2000_io, hv_transcode and hv_merge" OFF)
 
 # The JPEG 2000 reader/writer (lib/), built as a static library.
 add_subdirectory(lib)
-# hv_transcode (transcode/), on that library.
+# hv_transcode (transcode/) and hv_merge (merge/), on that library.
 add_subdirectory(transcode)
+add_subdirectory(merge)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS

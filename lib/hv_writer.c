@@ -1,6 +1,8 @@
 /* hv_writer.c: see hv_writer.h. */
 #include "hv_writer.h"
 
+#include "jp2-boxes.h"        /* FragmentList-Profile */
+
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,6 +82,9 @@ DEFINE_ENCODE(CodSegment_Std)
 DEFINE_ENCODE(QcdSegment_Std)
 DEFINE_ENCODE(PltSegment_Std)
 DEFINE_ENCODE(ComSegment_Std)
+DEFINE_ENCODE(FragmentList_Profile)
+DEFINE_ENCODE(DataReferenceCount)
+DEFINE_ENCODE(UrlHeader)
 
 /* Reads back a header this writer wrote, with the generated decoder. */
 #define DECODE(T, value, out, at, size)                                      \
@@ -123,6 +128,9 @@ DEFINE_APPEND(CodSegment_Std)
 DEFINE_APPEND(QcdSegment_Std)
 DEFINE_APPEND(PltSegment_Std)
 DEFINE_APPEND(ComSegment_Std)
+DEFINE_APPEND(FragmentList_Profile)
+DEFINE_APPEND(DataReferenceCount)
+DEFINE_APPEND(UrlHeader)
 
 enum { SIZ = 0xFF51, COD = 0xFF52, PLT = 0xFF58, QCD = 0xFF5C, COM = 0xFF64, SOT = 0xFF90 };
 
@@ -310,4 +318,42 @@ int hv_end_box(hv_out *out, size_t start) {
         h.lbox = length;
     }
     return ENCODE(BoxHeader, &h, out, start, h.exist.xlbox ? 16 : 8, &written);
+}
+
+int hv_write_box_header(hv_out *out, uint32_t type, uint64_t size) {
+    BoxHeader h;
+    memset(&h, 0, sizeof h);
+    h.tbox = type;
+    if (size > HV_LBOX_MAX - 8) {
+        h.lbox = 1;
+        h.xlbox = size + 16;
+        h.exist.xlbox = TRUE;
+    } else {
+        h.lbox = size + 8;
+    }
+    return APPEND(BoxHeader, &h, out);
+}
+
+int hv_write_flst(hv_out *out, uint64_t offset, uint32_t length, uint16_t dr) {
+    FragmentList_Profile f;
+    memset(&f, 0, sizeof f);
+    f.nf = 1;
+    f.fragments.nCount = 1;
+    f.fragments.arr[0].off = offset;
+    f.fragments.arr[0].len = length;
+    f.fragments.arr[0].dr = dr;
+    return hv_write_box_header(out, 0x666C7374, 16) != 0 ? -1 : APPEND(FragmentList_Profile, &f, out);
+}
+
+int hv_write_ndr(hv_out *out, uint16_t ndr) {
+    DataReferenceCount c = ndr;
+    return APPEND(DataReferenceCount, &c, out);
+}
+
+int hv_write_url(hv_out *out, const char *loc) {
+    UrlHeader h = {0, 0};
+    size_t n = strlen(loc) + 1;
+    if (hv_write_box_header(out, 0x75726C20, 4 + (uint64_t)n) != 0 || APPEND(UrlHeader, &h, out) != 0)
+        return -1;
+    return hv_write_bytes(out, loc, n);
 }

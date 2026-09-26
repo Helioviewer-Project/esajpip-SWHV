@@ -213,7 +213,8 @@ transcoding step required for such inputs (`hv_transcode`,
   JPX composition model.
 
 This linked profile matches the movies produced for JHelioviewer by
-`hv_jpx_merge` and the compatible `kdu_merge` form used in deployment. It
+`hv_merge` ([`merge/`](merge/README.md)) and hvJP2K's `hv_jpx_merge`, and
+the compatible `kdu_merge` form used in deployment. It
 preserves codestream order and validates link counts, reference indices,
 fragment ranges, and source codestream structure before serving.
 

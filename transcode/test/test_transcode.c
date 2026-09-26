@@ -1,5 +1,5 @@
 /* test_transcode.c: tests of hv_transcode_file and hv_transcode_codestream,
- * run by CTest as "transcode" (label "transcode").
+ * run by CTest as "transcode" (label "tools").
  *
  * TRANSCODE_FIXTURES holds JP2 files in input/ and, under the same names
  * in kakadu/, what kdu_transcode made of them (FIXTURES.md). With the

@@ -1,4 +1,4 @@
-# jpeg2000_io: the JPEG 2000 reader/writer, for hv_transcode and later the
+# jpeg2000_io: the JPEG 2000 reader/writer, for hv_transcode, hv_merge and later the
 # server. hv_reader, hv_rules, hv_writer and hv_geometry are hand-written; generated/ is produced
 # from the model in ../spec by generate.sh (asn1scc is not part of the
 # build).
@@ -29,6 +29,6 @@ esajpip_configure_target(hv_walk)
 target_link_libraries(hv_walk PRIVATE jpeg2000_io)
 
 # Tests (test/), with hv_transcode's.
-if(ESAJPIP_TRANSCODE_TESTS)
+if(ESAJPIP_TOOL_TESTS)
     add_subdirectory(test)
 endif()

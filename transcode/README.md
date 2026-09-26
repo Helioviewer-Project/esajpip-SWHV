@@ -123,11 +123,11 @@ fuzz/transcode/fuzz_transcode -max_len=131072 corpus/
 Tests, separate from the server's (`test/`):
 
 ```sh
-transcode/test/run.sh             # or: transcode/test/run.sh sanitize
-TRANSCODE_ARCHIVE=~/AIA:~/EUI transcode/test/run.sh
+lib/test/run.sh             # or: lib/test/run.sh sanitize
+TRANSCODE_ARCHIVE=~/AIA:~/EUI lib/test/run.sh
 ```
 
-The build goes to `build/transcode-tests-<mode>`, or to
+The build goes to `build/tool-tests-<mode>`, or to
 `ESAJPIP_TEST_BUILD_DIR`, which `../tests/run.sh` also reads: set it for
 one runner at a time.
 

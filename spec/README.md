@@ -300,7 +300,7 @@ root.
 
    ```sh
    ./tests/run.sh
-   transcode/test/run.sh
+   lib/test/run.sh
    ```
 5. Commit the changed model or harness, `spec/VERSION` and
    `spec/asn1scc-patches/` if they changed, `lib/generated/`, and
