@@ -40,6 +40,7 @@ docker run --rm --entrypoint sh "$image" -c '
         -tcd test-cases/acn/25-ACNV2-BOUNDARIES \
         -ac "$compiler" -l c -s false -acnv2
     ASN1SCC=$compiler ./scripts/runWireTests.sh
+    ASN1SCC=$compiler sh ./scripts/runIcdPdusTests.sh
 '
 
 echo "asn1scc: pinned upstream compiler with local patches built and ACN v2 regressions passed"

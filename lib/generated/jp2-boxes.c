@@ -28,6 +28,26 @@ extern asn1SccUint jp2boxtype_decode(asn1SccUint);
 
 
 
+flag Extra_IsConstraintValid(const Extra* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = (pVal->nCount <= 64);
+    *pErrCode = ret ? 0 :  ERR_EXTRA;
+
+	return ret;
+}
+
+void Extra_Initialize(Extra* pVal)
+{
+	(void)pVal;
+
+
+	memset(pVal->arr, 0x0, 64);
+	pVal->nCount = 0;
+
+}
+
+
 flag Ihdr_height_IsConstraintValid(const Ihdr_height* pVal, int* pErrCode)
 {
     flag ret = TRUE;
@@ -107,6 +127,9 @@ flag Ihdr_IsConstraintValid(const Ihdr* pVal, int* pErrCode)
                         ret = Ihdr_unkc_IsConstraintValid((&(pVal->unkc)), pErrCode);
                         if (ret) {
                             ret = Ihdr_ipr_IsConstraintValid((&(pVal->ipr)), pErrCode);
+                            if (ret) {
+                                ret = Extra_IsConstraintValid((&(pVal->extra)), pErrCode);
+                            }   /*COVERAGE_IGNORE*/
                         }   /*COVERAGE_IGNORE*/
                     }   /*COVERAGE_IGNORE*/
                 }   /*COVERAGE_IGNORE*/
@@ -185,6 +208,8 @@ void Ihdr_Initialize(Ihdr* pVal)
 	Ihdr_unkc_Initialize((&(pVal->unkc)));
 	/*set ipr */
 	Ihdr_ipr_Initialize((&(pVal->ipr)));
+	/*set extra */
+	Extra_Initialize((&(pVal->extra)));
 }
 
 flag Ihdr_ACN_Encode(const Ihdr* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
@@ -214,6 +239,10 @@ flag Ihdr_ACN_Encode(const Ihdr* pVal, BitStream* pBitStrm, int* pErrCode, flag 
 	                        if (ret) {
 	                            /*Encode ipr */
 	                            Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->ipr);
+	                            if (ret) {
+	                                /*Encode extra */
+	                                ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->extra.arr, pVal->extra.nCount);
+	                            }   /*COVERAGE_IGNORE*/
 	                        }   /*COVERAGE_IGNORE*/
 	                    }   /*COVERAGE_IGNORE*/
 	                }   /*COVERAGE_IGNORE*/
@@ -259,6 +288,20 @@ flag Ihdr_ACN_Decode(Ihdr* pVal, BitStream* pBitStrm, int* pErrCode)
 	                        /*Decode ipr */
 	                        ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->ipr)));
 	                        *pErrCode = ret ? 0 : ERR_ACN_DECODE_IHDR_IPR;
+	                        if (ret) {
+	                            /*Decode extra */
+	                            {
+	                            	long ded_avail_bits = (pBitStrm->count * 8L - 0) - (pBitStrm->currentByte * 8L + pBitStrm->currentBit);
+	                            	asn1SccSint ded_count = ded_avail_bits / 8;
+	                            	ret = (ded_avail_bits >= 0) && (ded_count <= 64);
+	                            	*pErrCode = ret ? 0 : ERR_ACN_DECODE_IHDR_EXTRA;
+	                            	if (ret) {
+	                            		pVal->extra.nCount = (int)ded_count;
+	                            		ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->extra.arr, pVal->extra.nCount);
+	                            		*pErrCode = ret ? 0 : ERR_ACN_DECODE_IHDR_EXTRA;
+	                            	}
+	                            }
+	                        }   /*COVERAGE_IGNORE*/
 	                    }   /*COVERAGE_IGNORE*/
 	                }   /*COVERAGE_IGNORE*/
 	            }   /*COVERAGE_IGNORE*/
@@ -267,6 +310,241 @@ flag Ihdr_ACN_Decode(Ihdr* pVal, BitStream* pBitStrm, int* pErrCode)
 	}   /*COVERAGE_IGNORE*/
 
     return ret && Ihdr_IsConstraintValid(pVal, pErrCode);
+}
+
+
+flag Resolution_vn_IsConstraintValid(const Resolution_vn* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VN;
+
+	return ret;
+}
+
+flag Resolution_vd_IsConstraintValid(const Resolution_vd* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VD;
+
+	return ret;
+}
+
+flag Resolution_hn_IsConstraintValid(const Resolution_hn* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HN;
+
+	return ret;
+}
+
+flag Resolution_hd_IsConstraintValid(const Resolution_hd* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HD;
+
+	return ret;
+}
+
+flag Resolution_ve_IsConstraintValid(const Resolution_ve* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((-128LL <= (*(pVal))) && ((*(pVal)) <= 127LL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VE;
+
+	return ret;
+}
+
+flag Resolution_he_IsConstraintValid(const Resolution_he* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((-128LL <= (*(pVal))) && ((*(pVal)) <= 127LL));
+    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HE;
+
+	return ret;
+}
+
+flag Resolution_IsConstraintValid(const Resolution* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Resolution_vn_IsConstraintValid((&(pVal->vn)), pErrCode);
+    if (ret) {
+        ret = Resolution_vd_IsConstraintValid((&(pVal->vd)), pErrCode);
+        if (ret) {
+            ret = Resolution_hn_IsConstraintValid((&(pVal->hn)), pErrCode);
+            if (ret) {
+                ret = Resolution_hd_IsConstraintValid((&(pVal->hd)), pErrCode);
+                if (ret) {
+                    ret = Resolution_ve_IsConstraintValid((&(pVal->ve)), pErrCode);
+                    if (ret) {
+                        ret = Resolution_he_IsConstraintValid((&(pVal->he)), pErrCode);
+                        if (ret) {
+                            ret = Extra_IsConstraintValid((&(pVal->extra)), pErrCode);
+                        }   /*COVERAGE_IGNORE*/
+                    }   /*COVERAGE_IGNORE*/
+                }   /*COVERAGE_IGNORE*/
+            }   /*COVERAGE_IGNORE*/
+        }   /*COVERAGE_IGNORE*/
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void Resolution_vn_Initialize(Resolution_vn* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 1UL;
+}
+void Resolution_vd_Initialize(Resolution_vd* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 1UL;
+}
+void Resolution_hn_Initialize(Resolution_hn* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 1UL;
+}
+void Resolution_hd_Initialize(Resolution_hd* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 1UL;
+}
+void Resolution_ve_Initialize(Resolution_ve* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0LL;
+}
+void Resolution_he_Initialize(Resolution_he* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0LL;
+}
+void Resolution_Initialize(Resolution* pVal)
+{
+	(void)pVal;
+
+
+	/*set vn */
+	Resolution_vn_Initialize((&(pVal->vn)));
+	/*set vd */
+	Resolution_vd_Initialize((&(pVal->vd)));
+	/*set hn */
+	Resolution_hn_Initialize((&(pVal->hn)));
+	/*set hd */
+	Resolution_hd_Initialize((&(pVal->hd)));
+	/*set ve */
+	Resolution_ve_Initialize((&(pVal->ve)));
+	/*set he */
+	Resolution_he_Initialize((&(pVal->he)));
+	/*set extra */
+	Extra_Initialize((&(pVal->extra)));
+}
+
+flag Resolution_ACN_Encode(const Resolution* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? Resolution_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode vn */
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->vn);
+	    if (ret) {
+	        /*Encode vd */
+	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->vd);
+	        if (ret) {
+	            /*Encode hn */
+	            Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->hn);
+	            if (ret) {
+	                /*Encode hd */
+	                Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->hd);
+	                if (ret) {
+	                    /*Encode ve */
+	                    Acn_Enc_Int_TwosComplement_ConstSize_8(pBitStrm, pVal->ve);
+	                    if (ret) {
+	                        /*Encode he */
+	                        Acn_Enc_Int_TwosComplement_ConstSize_8(pBitStrm, pVal->he);
+	                        if (ret) {
+	                            /*Encode extra */
+	                            ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->extra.arr, pVal->extra.nCount);
+	                        }   /*COVERAGE_IGNORE*/
+	                    }   /*COVERAGE_IGNORE*/
+	                }   /*COVERAGE_IGNORE*/
+	            }   /*COVERAGE_IGNORE*/
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag Resolution_ACN_Decode(Resolution* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	/*Decode vn */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->vn)));
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VN;
+	if (ret) {
+	    /*Decode vd */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->vd)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VD;
+	    if (ret) {
+	        /*Decode hn */
+	        ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->hn)));
+	        *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HN;
+	        if (ret) {
+	            /*Decode hd */
+	            ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->hd)));
+	            *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HD;
+	            if (ret) {
+	                /*Decode ve */
+	                ret = Acn_Dec_Int_TwosComplement_ConstSize_8(pBitStrm, (&(pVal->ve)));
+	                *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VE;
+	                if (ret) {
+	                    /*Decode he */
+	                    ret = Acn_Dec_Int_TwosComplement_ConstSize_8(pBitStrm, (&(pVal->he)));
+	                    *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HE;
+	                    if (ret) {
+	                        /*Decode extra */
+	                        {
+	                        	long ded_avail_bits = (pBitStrm->count * 8L - 0) - (pBitStrm->currentByte * 8L + pBitStrm->currentBit);
+	                        	asn1SccSint ded_count = ded_avail_bits / 8;
+	                        	ret = (ded_avail_bits >= 0) && (ded_count <= 64);
+	                        	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_EXTRA;
+	                        	if (ret) {
+	                        		pVal->extra.nCount = (int)ded_count;
+	                        		ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->extra.arr, pVal->extra.nCount);
+	                        		*pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_EXTRA;
+	                        	}
+	                        }
+	                    }   /*COVERAGE_IGNORE*/
+	                }   /*COVERAGE_IGNORE*/
+	            }   /*COVERAGE_IGNORE*/
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && Resolution_IsConstraintValid(pVal, pErrCode);
 }
 
 
@@ -916,220 +1194,141 @@ flag CdefEntry_ACN_Decode(CdefEntry* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 
-flag Resolution_vn_IsConstraintValid(const Resolution_vn* pVal, int* pErrCode)
+
+
+
+
+
+
+flag RreqMask_IsConstraintValid(const RreqMask* pVal, int* pErrCode)
 {
     flag ret = TRUE;
-    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VN;
+    ret = (((((((pVal->nCount == 1)) || ((pVal->nCount == 2)))) || ((pVal->nCount == 4)))) || ((pVal->nCount == 8)));
+    *pErrCode = ret ? 0 :  ERR_RREQMASK;
 
 	return ret;
 }
 
-flag Resolution_vd_IsConstraintValid(const Resolution_vd* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VD;
-
-	return ret;
-}
-
-flag Resolution_hn_IsConstraintValid(const Resolution_hn* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HN;
-
-	return ret;
-}
-
-flag Resolution_hd_IsConstraintValid(const Resolution_hd* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HD;
-
-	return ret;
-}
-
-flag Resolution_ve_IsConstraintValid(const Resolution_ve* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = ((-128LL <= (*(pVal))) && ((*(pVal)) <= 127LL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_VE;
-
-	return ret;
-}
-
-flag Resolution_he_IsConstraintValid(const Resolution_he* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = ((-128LL <= (*(pVal))) && ((*(pVal)) <= 127LL));
-    *pErrCode = ret ? 0 :  ERR_RESOLUTION_HE;
-
-	return ret;
-}
-
-flag Resolution_IsConstraintValid(const Resolution* pVal, int* pErrCode)
-{
-    flag ret = TRUE;
-    ret = Resolution_vn_IsConstraintValid((&(pVal->vn)), pErrCode);
-    if (ret) {
-        ret = Resolution_vd_IsConstraintValid((&(pVal->vd)), pErrCode);
-        if (ret) {
-            ret = Resolution_hn_IsConstraintValid((&(pVal->hn)), pErrCode);
-            if (ret) {
-                ret = Resolution_hd_IsConstraintValid((&(pVal->hd)), pErrCode);
-                if (ret) {
-                    ret = Resolution_ve_IsConstraintValid((&(pVal->ve)), pErrCode);
-                    if (ret) {
-                        ret = Resolution_he_IsConstraintValid((&(pVal->he)), pErrCode);
-                    }   /*COVERAGE_IGNORE*/
-                }   /*COVERAGE_IGNORE*/
-            }   /*COVERAGE_IGNORE*/
-        }   /*COVERAGE_IGNORE*/
-    }   /*COVERAGE_IGNORE*/
-
-	return ret;
-}
-
-void Resolution_vn_Initialize(Resolution_vn* pVal)
+void RreqMask_Initialize(RreqMask* pVal)
 {
 	(void)pVal;
 
 
-	(*(pVal)) = 1UL;
-}
-void Resolution_vd_Initialize(Resolution_vd* pVal)
-{
-	(void)pVal;
+	memset(pVal->arr, 0x0, 8);
+	pVal->nCount = 1;
 
-
-	(*(pVal)) = 1UL;
-}
-void Resolution_hn_Initialize(Resolution_hn* pVal)
-{
-	(void)pVal;
-
-
-	(*(pVal)) = 1UL;
-}
-void Resolution_hd_Initialize(Resolution_hd* pVal)
-{
-	(void)pVal;
-
-
-	(*(pVal)) = 1UL;
-}
-void Resolution_ve_Initialize(Resolution_ve* pVal)
-{
-	(void)pVal;
-
-
-	(*(pVal)) = 0LL;
-}
-void Resolution_he_Initialize(Resolution_he* pVal)
-{
-	(void)pVal;
-
-
-	(*(pVal)) = 0LL;
-}
-void Resolution_Initialize(Resolution* pVal)
-{
-	(void)pVal;
-
-
-	/*set vn */
-	Resolution_vn_Initialize((&(pVal->vn)));
-	/*set vd */
-	Resolution_vd_Initialize((&(pVal->vd)));
-	/*set hn */
-	Resolution_hn_Initialize((&(pVal->hn)));
-	/*set hd */
-	Resolution_hd_Initialize((&(pVal->hd)));
-	/*set ve */
-	Resolution_ve_Initialize((&(pVal->ve)));
-	/*set he */
-	Resolution_he_Initialize((&(pVal->he)));
 }
 
-flag Resolution_ACN_Encode(const Resolution* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+flag RreqMask_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
 {
     flag ret = TRUE;
 
     *pErrCode = 0;
-	ret = bCheckConstraints ? Resolution_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	ret = bCheckConstraints ? RreqMask_IsConstraintValid(pVal, pErrCode) : TRUE ;
 	if (ret && *pErrCode == 0) {
-	    /*Encode vn */
-	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->vn);
-	    if (ret) {
-	        /*Encode vd */
-	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->vd);
-	        if (ret) {
-	            /*Encode hn */
-	            Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->hn);
-	            if (ret) {
-	                /*Encode hd */
-	                Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->hd);
-	                if (ret) {
-	                    /*Encode ve */
-	                    Acn_Enc_Int_TwosComplement_ConstSize_8(pBitStrm, pVal->ve);
-	                    if (ret) {
-	                        /*Encode he */
-	                        Acn_Enc_Int_TwosComplement_ConstSize_8(pBitStrm, pVal->he);
-	                    }   /*COVERAGE_IGNORE*/
-	                }   /*COVERAGE_IGNORE*/
-	            }   /*COVERAGE_IGNORE*/
-	        }   /*COVERAGE_IGNORE*/
-	    }   /*COVERAGE_IGNORE*/
+	    BitStream_EncodeConstraintWholeNumber(pBitStrm, pVal->nCount, 1, 8);
+	    ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
     } /*COVERAGE_IGNORE*/
 
 
     return ret;
 }
 
-flag Resolution_ACN_Decode(Resolution* pVal, BitStream* pBitStrm, int* pErrCode)
+flag RreqMask_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode)
 {
     flag ret = TRUE;
 	*pErrCode = 0;
 
+	asn1SccSint nCount;
 
-	/*Decode vn */
-	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->vn)));
-	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VN;
-	if (ret) {
-	    /*Decode vd */
-	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->vd)));
-	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VD;
-	    if (ret) {
-	        /*Decode hn */
-	        ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->hn)));
-	        *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HN;
-	        if (ret) {
-	            /*Decode hd */
-	            ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->hd)));
-	            *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HD;
-	            if (ret) {
-	                /*Decode ve */
-	                ret = Acn_Dec_Int_TwosComplement_ConstSize_8(pBitStrm, (&(pVal->ve)));
-	                *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_VE;
-	                if (ret) {
-	                    /*Decode he */
-	                    ret = Acn_Dec_Int_TwosComplement_ConstSize_8(pBitStrm, (&(pVal->he)));
-	                    *pErrCode = ret ? 0 : ERR_ACN_DECODE_RESOLUTION_HE;
-	                }   /*COVERAGE_IGNORE*/
-	            }   /*COVERAGE_IGNORE*/
-	        }   /*COVERAGE_IGNORE*/
-	    }   /*COVERAGE_IGNORE*/
-	}   /*COVERAGE_IGNORE*/
+	ret = BitStream_DecodeConstraintWholeNumber(pBitStrm, &nCount, 1, 8);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQMASK;
+	pVal->nCount = (long)nCount;
+	ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
 
-    return ret && Resolution_IsConstraintValid(pVal, pErrCode);
+    return ret && RreqMask_IsConstraintValid(pVal, pErrCode);
 }
 
 
+flag StandardFeature_sf_IsConstraintValid(const StandardFeature_sf* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 65535UL);
+    *pErrCode = ret ? 0 :  ERR_STANDARDFEATURE_SF;
+
+	return ret;
+}
+
+flag StandardFeature_IsConstraintValid(const StandardFeature* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = StandardFeature_sf_IsConstraintValid((&(pVal->sf)), pErrCode);
+    if (ret) {
+        ret = RreqMask_IsConstraintValid((&(pVal->sm)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void StandardFeature_sf_Initialize(StandardFeature_sf* pVal)
+{
+	(void)pVal;
 
 
+	(*(pVal)) = 0UL;
+}
+void StandardFeature_Initialize(StandardFeature* pVal)
+{
+	(void)pVal;
+
+
+	/*set sf */
+	StandardFeature_sf_Initialize((&(pVal->sf)));
+	/*set sm */
+	RreqMask_Initialize((&(pVal->sm)));
+}
+
+
+flag VendorFeature_vf_IsConstraintValid(const VendorFeature_vf* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+	(void)pVal;
+    ret = TRUE;
+    *pErrCode = 0;
+
+	return ret;
+}
+
+flag VendorFeature_IsConstraintValid(const VendorFeature* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = VendorFeature_vf_IsConstraintValid((&(pVal->vf)), pErrCode);
+    if (ret) {
+        ret = RreqMask_IsConstraintValid((&(pVal->vm)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void VendorFeature_vf_Initialize(VendorFeature_vf* pVal)
+{
+	(void)pVal;
+
+
+	memset(pVal->arr, 0x0, 16);
+
+
+}
+void VendorFeature_Initialize(VendorFeature* pVal)
+{
+	(void)pVal;
+
+
+	/*set vf */
+	VendorFeature_vf_Initialize((&(pVal->vf)));
+	/*set vm */
+	RreqMask_Initialize((&(pVal->vm)));
+}
 
 
 

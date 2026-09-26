@@ -96,12 +96,17 @@ static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind, 
                 break;
             case InnerPayload_cdef_PRESENT:
                 r = hv_rule_cdef(h, p->u.cdef.entries.arr, (size_t) p->u.cdef.entries.nCount);
+                if (r == NULL) r = hv_rule_extent(HV_BOX_CDEF, (uint64_t) p->u.cdef.extra.nCount);
                 break;
             case InnerPayload_res_PRESENT:
                 for (j = 0; j < p->u.res.children.nCount && r == NULL; ++j) {
-                    int kind_ = p->u.res.children.arr[j].payload.kind;
-                    r = hv_rule_res_child(h, kind_ == resc_PRESENT ? HV_BOX_RESC
-                                           : kind_ == resd_PRESENT ? HV_BOX_RESD : 1);
+                    const ResPayload *c = &p->u.res.children.arr[j].payload;
+                    r = hv_rule_res_child(h, c->kind == resc_PRESENT ? HV_BOX_RESC
+                                           : c->kind == resd_PRESENT ? HV_BOX_RESD : 1);
+                    if (r == NULL && c->kind == resc_PRESENT)
+                        r = hv_rule_extent(HV_BOX_RESC, (uint64_t) c->u.resc.extra.nCount);
+                    if (r == NULL && c->kind == resd_PRESENT)
+                        r = hv_rule_extent(HV_BOX_RESD, (uint64_t) c->u.resd.extra.nCount);
                 }
                 if (r == NULL) r = hv_rule_res_end(h);
                 break;
@@ -121,6 +126,13 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
     const Superbox *jp2h_box = NULL;
     int i, n = 0, jp2c = 0, late = 0, codestreams = 0, headers = 0, stream = 0, jpchs = 0;
     const char *r;
+
+    /* T.801 M.11.1: the Reader Requirements box, its count and place
+     * checked by hv_rule_jpx. */
+    for (i = 0; kind == CF_JPX && i < file->boxes.nCount; ++i)
+        if (file->boxes.arr[i].payload.kind == TopPayload_rreq_PRESENT &&
+            (r = hv_rule_extent(HV_BOX_RREQ, (uint64_t) file->boxes.arr[i].payload.u.rreq.extra.nCount)) != NULL)
+            return r;
 
     for (i = 0; i < file->boxes.nCount; ++i) {
         switch (file->boxes.arr[i].payload.kind) {

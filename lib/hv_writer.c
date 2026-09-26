@@ -77,6 +77,7 @@ DEFINE_ENCODE(BoxHeader)
 DEFINE_ENCODE(MarkerCode)
 DEFINE_ENCODE(SegmentLength)
 DEFINE_ENCODE(SotSegment)
+DEFINE_ENCODE(Rreq_Std)
 DEFINE_ENCODE(SizSegment_Std)
 DEFINE_ENCODE(CodSegment_Std)
 DEFINE_ENCODE(QcdSegment_Std)
@@ -131,6 +132,7 @@ DEFINE_APPEND(ComSegment_Std)
 DEFINE_APPEND(FragmentList_Profile)
 DEFINE_APPEND(DataReferenceCount)
 DEFINE_APPEND(UrlHeader)
+DEFINE_APPEND(Rreq_Std)
 
 enum { SIZ = 0xFF51, COD = 0xFF52, PLT = 0xFF58, QCD = 0xFF5C, COM = 0xFF64, SOT = 0xFF90 };
 
@@ -356,4 +358,10 @@ int hv_write_url(hv_out *out, const char *loc) {
     if (hv_write_box_header(out, 0x75726C20, 4 + (uint64_t)n) != 0 || APPEND(UrlHeader, &h, out) != 0)
         return -1;
     return hv_write_bytes(out, loc, n);
+}
+
+int hv_write_rreq(hv_out *out, const Rreq_Std *rreq) {
+    size_t start;
+    return hv_begin_box(out, 0x72726571, 0, &start) != 0 || APPEND(Rreq_Std, rreq, out) != 0
+         ? -1 : hv_end_box(out, start);
 }

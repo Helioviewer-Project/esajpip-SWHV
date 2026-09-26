@@ -30,7 +30,9 @@ EXPORTS ALL;
 
 IMPORTS
     Siz, Cod, Qcd-Std, Plt-Std, Com-Std
-        FROM J2K-Headers;
+        FROM J2K-Headers
+    RreqMask, StandardFeature, VendorFeature, Extra
+        FROM JP2-Boxes;
 
 -- ---------------------------------------------------------------------------
 -- Box header, T.800 I.4: LBox, TBox, and XLBox when LBox = 1
@@ -75,6 +77,17 @@ DataReferenceCount ::= INTEGER (0..65535)
 UrlHeader ::= SEQUENCE {
     vers        INTEGER (0..255),
     flag        INTEGER (0..16777215)
+}
+
+-- Reader Requirements box (M.11.1): Rreq of jp2-boxes.asn1 at the
+-- standard's bounds, for the reader and for writing it. About 3.7 MB as a
+-- C struct.
+Rreq-Std ::= SEQUENCE {
+    fuam        RreqMask,
+    dcm         RreqMask,
+    standard    SEQUENCE (SIZE (0..65535)) OF StandardFeature,
+    vendor      SEQUENCE (SIZE (0..65535)) OF VendorFeature,
+    extra       Extra                                  -- empty (rreq.extent)
 }
 
 -- The Fragment List box of the served profile, one fragment: FragmentList-

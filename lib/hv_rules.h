@@ -128,7 +128,7 @@ enum {
     HV_BOX_JP2H = 0x6A703268, HV_BOX_JPLH = 0x6A706C68, HV_BOX_IHDR = 0x69686472,
     HV_BOX_BPCC = 0x62706363, HV_BOX_COLR = 0x636F6C72, HV_BOX_PCLR = 0x70636C72,
     HV_BOX_CMAP = 0x636D6170, HV_BOX_CDEF = 0x63646566, HV_BOX_RES = 0x72657320,
-    HV_BOX_RESC = 0x72657363, HV_BOX_RESD = 0x72657364
+    HV_BOX_RESC = 0x72657363, HV_BOX_RESD = 0x72657364, HV_BOX_RREQ = 0x72726571
 };
 
 /* Where the JP2 Header box is, among the top-level boxes: how many there
@@ -176,6 +176,11 @@ const char *hv_rule_header_child(hv_header *h, uint32_t type);
  * values must satisfy their types' constraints (Ihdr_IsConstraintValid and
  * so on). */
 const char *hv_rule_ihdr(hv_header *h, const Ihdr *ihdr);
+/* The bytes a box holds after its fields (`extra` of Ihdr, Cdef,
+ * Resolution and Rreq): none. type is the box's, as HV_BOX_IHDR; the rule
+ * is "<box>.extent" (ihdr: "the length of the Image Header box shall be
+ * 22 bytes", I.5.3.1). */
+const char *hv_rule_extent(uint32_t type, uint64_t extra);
 /* One bpcc entry, in order. */
 const char *hv_rule_bpcc_entry(hv_header *h, uint64_t depth);
 /* METH, EnumCS, and `rest`, the bytes after them. In a JP2 file, METH 1 or

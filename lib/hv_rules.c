@@ -216,9 +216,20 @@ const char *hv_rule_header_child(hv_header *h, uint32_t type) {
     return NULL;
 }
 
+const char *hv_rule_extent(uint32_t type, uint64_t extra) {
+    if (extra == 0) return NULL;
+    switch (type) {
+        case HV_BOX_IHDR: return "ihdr.extent";
+        case HV_BOX_CDEF: return "cdef.extent";
+        case HV_BOX_RESC: case HV_BOX_RESD: return "res.extent";
+        case HV_BOX_RREQ: return "rreq.extent";
+        default: return "box.extent";
+    }
+}
+
 const char *hv_rule_ihdr(hv_header *h, const Ihdr *ihdr) {
     if (h->ihdr == 1) h->image = *ihdr;
-    return NULL;
+    return hv_rule_extent(HV_BOX_IHDR, (uint64_t)ihdr->extra.nCount);
 }
 
 const char *hv_rule_bpcc_entry(hv_header *h, uint64_t depth) {

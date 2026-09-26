@@ -1,0 +1,117 @@
+diff --git a/BackendAst/DAstInitialize.fs b/BackendAst/DAstInitialize.fs
+index b2cc95c..0235f5b 100644
+--- a/BackendAst/DAstInitialize.fs
++++ b/BackendAst/DAstInitialize.fs
+@@ -1337,17 +1337,22 @@ let createReferenceType (r:Asn1AcnAst.AstRoot) (lm:LanguageMacros) (t:Asn1AcnAst
+     | false ->
+         createInitFunctionCommon r lm t typeDefinition bs.initByAsn1Value bs.initTas bs.automaticTestCases bs.initExpressionFnc bs.initExpressionGlobalFnc  bs.nonEmbeddedChildrenFuncs [] [], us
+     | true  ->
++        // The referenced type's init function is called whether or not the
++        // type is complex: a SEQUENCE child of a non-RTL typedef (e.g. an
++        // OCTET STRING type assignment) is initialized with it
++        // (handleChild, ReferenceToExistingDefinition). Record the call in
++        // both cases, or -icdPdus drops the function.
++        let ns =
++            match t.id.topLevelTas with
++            | None ->
++                //printfn "No type assignment info for %A" t.id
++                us
++            | Some tasInfo ->
++                let caller = {Caller.typeId = tasInfo; funcType=InitFunctionType}
++                let callee = {Callee.typeId = {TypeAssignmentInfo.modName = o.modName.Value; tasName=o.tasName.Value} ; funcType=InitFunctionType}
++                addFunctionCallToState us caller callee
+         match t.isComplexType with
+         | true ->
+-            let ns =
+-                match t.id.topLevelTas with
+-                | None -> 
+-                    //printfn "No type assignment info for %A" t.id
+-                    us
+-                | Some tasInfo ->
+-                    let caller = {Caller.typeId = tasInfo; funcType=InitFunctionType}
+-                    let callee = {Callee.typeId = {TypeAssignmentInfo.modName = o.modName.Value; tasName=o.tasName.Value} ; funcType=InitFunctionType}
+-                    addFunctionCallToState us caller callee
+             let baseFncName, baseGlobalName =
+                 let funcName = typeDefinitionName + (lm.init.methodNameSuffix())
+                 let globalName = typeDefinitionName + "_constant"
+@@ -1369,5 +1374,5 @@ let createReferenceType (r:Asn1AcnAst.AstRoot) (lm:LanguageMacros) (t:Asn1AcnAst
+                 {InitFunctionResult.funcBody = funcBody; resultVar = resVar; localVariables = []}
+             createInitFunctionCommon r lm t typeDefinition bs.initByAsn1Value initTasFunction bs.automaticTestCases constantInitExpression constantInitExpressionGlobal nonEmbeddedChildrenFuncs [] [], ns
+         | false ->
+-            createInitFunctionCommon r lm t typeDefinition bs.initByAsn1Value bs.initTas bs.automaticTestCases bs.initExpressionFnc bs.initExpressionGlobalFnc bs.nonEmbeddedChildrenFuncs [] [], us
++            createInitFunctionCommon r lm t typeDefinition bs.initByAsn1Value bs.initTas bs.automaticTestCases bs.initExpressionFnc bs.initExpressionGlobalFnc bs.nonEmbeddedChildrenFuncs [] [], ns
+ 
+diff --git a/v4Tests/scripts/runIcdPdusTests.sh b/v4Tests/scripts/runIcdPdusTests.sh
+new file mode 100755
+index 0000000..bf754b3
+--- /dev/null
++++ b/v4Tests/scripts/runIcdPdusTests.sh
+@@ -0,0 +1,35 @@
++#!/bin/sh
++# -icdPdus generates the functions of the listed PDUs and of what they call.
++# Each test-cases/icd-pdus/<n>.asn1 names its PDUs in its first line
++# ("-- -icdPdus A,B: ..."); <n>_test.c must compile and link against the
++# generated C with them only.
++# ASN1SCC overrides the compiler (executable or .dll), as for runTests.py.
++
++set -eu
++
++root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
++cases=$root/test-cases/icd-pdus
++compiler=${ASN1SCC:-$root/../asn1scc/bin/Debug/net10.0/asn1scc}
++work=$(mktemp -d "${TMPDIR:-/tmp}/asn1scc-icdpdus.XXXXXX")
++trap 'rm -rf "$work"' EXIT HUP INT TERM
++
++run_compiler() {
++    case $compiler in
++        *.dll) dotnet "$compiler" "$@" ;;
++        *) "$compiler" "$@" ;;
++    esac
++}
++
++for asn1 in "$cases"/*.asn1; do
++    n=$(basename "$asn1" .asn1)
++    pdus=$(sed -n '1s/^-- -icdPdus \([^:]*\):.*/\1/p' "$asn1")
++    out=$work/$n
++    mkdir "$out"
++    run_compiler -c -icdPdus "$pdus" -o "$out" "$asn1" >/dev/null
++    cc -std=c11 -pedantic-errors -Wall -Wextra -Werror -I "$out" \
++        "$out"/*.c "$cases/${n}_test.c" -o "$out/test"
++    "$out/test"
++    echo "icdPdus $n OK"
++done
++
++echo "icdPdus checks passed"
+diff --git a/v4Tests/test-cases/icd-pdus/001.asn1 b/v4Tests/test-cases/icd-pdus/001.asn1
+new file mode 100644
+index 0000000..3697a09
+--- /dev/null
++++ b/v4Tests/test-cases/icd-pdus/001.asn1
+@@ -0,0 +1,11 @@
++-- -icdPdus Rec: Rec_Initialize initializes its child m with Mask_Initialize,
++-- so Mask_Initialize must be generated, though only Rec is a PDU.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Mask ::= OCTET STRING (SIZE (1..4))
++
++Rec ::= SEQUENCE {
++    m Mask
++}
++
++END
+diff --git a/v4Tests/test-cases/icd-pdus/001_test.c b/v4Tests/test-cases/icd-pdus/001_test.c
+new file mode 100644
+index 0000000..639e86f
+--- /dev/null
++++ b/v4Tests/test-cases/icd-pdus/001_test.c
+@@ -0,0 +1,10 @@
++/* Links only if every function the PDU's functions call was generated. */
++#include "001.h"
++
++int main(void)
++{
++    Rec value;
++    int error = 0;
++    Rec_Initialize(&value);
++    return Rec_IsConstraintValid(&value, &error) ? 0 : 1;
++}

@@ -49,6 +49,18 @@ UrlHeader [] {
     flag        [encoding pos-int, size 24, endianness big]
 }
 
+-- Rreq of jp2-boxes.acn
+Rreq-Std [] {
+    ml          INTEGER [encoding pos-int, size 8],
+    fuam        [size ml],
+    dcm         [size ml],
+    nsf         INTEGER [encoding pos-int, size 16, endianness big],
+    standard    [size nsf] { <ml> [] },
+    nvf         INTEGER [encoding pos-int, size 16, endianness big],
+    vendor      [size nvf] { <ml> [] },
+    extra       [size deduced]
+}
+
 SotSegment [] {
     lsot        [encoding pos-int, size 16, endianness big],
     isot        [encoding pos-int, size 16, endianness big],

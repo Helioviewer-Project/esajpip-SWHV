@@ -480,7 +480,7 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     switch (box->type) {
     case HV_BOX_IHDR: {
         Ihdr ihdr;
-        if (n != 14 || DECODE(Ihdr, &ihdr, buf, p, n) != 0)
+        if (n < 14 || DECODE(Ihdr, &ihdr, buf, p, n) != 0)
             return "ihdr: not 14 bytes of valid fields";
         return hv_rule_ihdr(h, &ihdr);
     }
@@ -528,7 +528,7 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     case HV_BOX_CDEF: {
         CdefCount count;
         CdefEntry *entries;
-        if (n < 2 || DECODE(CdefCount, &count, buf, p, 2) != 0 || n != 2 + 6 * (size_t)count)
+        if (n < 2 || DECODE(CdefCount, &count, buf, p, 2) != 0 || n < 2 + 6 * (size_t)count)
             return "cdef: N does not match the box";
         if ((entries = malloc((size_t)count * sizeof *entries)) == NULL)
             return "out of memory";
@@ -537,6 +537,8 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
                 error = "cdef: invalid entry";
         if (error == NULL)
             error = hv_rule_cdef(h, entries, (size_t)count);
+        if (error == NULL)
+            error = hv_rule_extent(HV_BOX_CDEF, n - 2 - 6 * (size_t)count);
         free(entries);
         return error;
     }
@@ -549,10 +551,13 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
             Resolution r;
             *at = child.start;
             if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
-                (child.end - child.payload != 10 ||
-                 DECODE(Resolution, &r, buf, child.payload, 10) != 0))
+                (child.end - child.payload < 10 ||
+                 DECODE(Resolution, &r, buf, child.payload, child.end - child.payload) != 0))
                 return "res: invalid resc or resd";
             if ((error = hv_rule_res_child(h, child.type)) != NULL)
+                return error;
+            if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
+                (error = hv_rule_extent(child.type, (uint64_t)r.extra.nCount)) != NULL)
                 return error;
         }
         if (status < 0)
@@ -633,16 +638,40 @@ const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     return error;
 }
 
+/* The contents of a Reader Requirements box, decoded with Rreq-Std, and
+ * nothing after them (rreq.extent). */
+static const char *check_rreq(const uint8_t *buf, const hv_box *box) {
+    Rreq_Std *rreq = malloc(sizeof *rreq);
+    size_t n = box->end - box->payload;
+    const char *error = NULL;
+    BitStream s;
+    int err = 0;
+    if (rreq == NULL)
+        return "out of memory";
+    BitStream_AttachBuffer(&s, (unsigned char *)buf + box->payload, (long)min_size(n, LONG_MAX));
+    if (!Rreq_Std_ACN_Decode(rreq, &s, &err))
+        error = "rreq: contents are not ML, FUAM, DCM, NSF standard and NVF vendor features";
+    else
+        error = hv_rule_extent(HV_BOX_RREQ, (uint64_t)rreq->extra.nCount);
+    free(rreq);
+    return error;
+}
+
 const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
     hv_boxes it;
-    hv_box box, jp2h = {0};
+    hv_box box, jp2h = {0}, rreq = {0};
     hv_header *h;
     const char *error = NULL;
     int status, n = 0, late = 0, later = 0, jpchs = 0, codestreams = 0, stream = 0;
+    int boxes = 0, rreqs = 0, rreq_third = 0;
 
     *at = 0;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
+        if (++boxes == 3)
+            rreq_third = box.type == BOX_RREQ;
+        if (box.type == BOX_RREQ && rreqs++ == 0)
+            rreq = box;
         switch (box.type) {
         case HV_BOX_JP2H:
             late |= later;
@@ -656,6 +685,13 @@ const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
         }
     }
     if (status < 0)
+        return error;
+    /* T.801 M.11.1: one Reader Requirements box, right after ftyp. */
+    *at = size;
+    if (rreqs != 1 || !rreq_third)
+        return "jpx.reader-requirements";
+    *at = rreq.start;
+    if ((error = check_rreq(buf, &rreq)) != NULL)
         return error;
     *at = size;
     if ((error = hv_rule_jp2h_place(n, late, 0, 1)) != NULL)

@@ -25,7 +25,9 @@ while letting HTTP connections be pooled or replaced independently of channels.
   with their rules shared by the corpus and the reader (`hv_check_jp2h`,
   `hv_check_jpx_headers`, `hv_walk -H`). `hv_transcode` and `hv_merge` reject
   inputs whose header boxes are invalid or disagree with the codestream; the
-  server, which does not read them, is unchanged.
+  server, which does not read them, is unchanged. The JPX Reader
+  Requirements box too, which `hv_merge` now writes with the model's encoder
+  (after two local asn1scc fixes, `spec/asn1scc-patches/`).
 
 ### Changed
 

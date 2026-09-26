@@ -104,7 +104,7 @@ static uint8_t *vector(const char *dir, const char *name, size_t *size) {
 static int header_rule(const char *name) {
     static const char *const prefixes[] = {
         "jp2.one-jp2h", "jp2.codestream", "jp2h.", "jpch.ihdr", "header.", "ihdr.", "bpcc.",
-        "colr.", "pclr.", "cmap.", "cdef.", "res."};
+        "colr.", "pclr.", "cmap.", "cdef.", "res.", "jpx.reader-requirements", "rreq."};
     size_t i;
     for (i = 0; i < sizeof prefixes / sizeof *prefixes; i++)
         if (strncmp(name, prefixes[i], strlen(prefixes[i])) == 0)

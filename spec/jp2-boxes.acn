@@ -108,7 +108,8 @@ Ihdr [] {
     bpc         [encoding pos-int, size 8],
     c           [encoding pos-int, size 8],
     unkc        [encoding pos-int, size 8],
-    ipr         [encoding pos-int, size 8]
+    ipr         [encoding pos-int, size 8],
+    extra       [size deduced]
 }
 
 BitDepth [encoding pos-int, size 8]
@@ -160,7 +161,8 @@ CdefEntry [] {
 
 Cdef [] {
     n           CdefCount [],
-    entries     [size n]
+    entries     [size n],
+    extra       [size deduced]
 }
 
 Res [] {
@@ -185,7 +187,34 @@ Resolution [] {
     hn          [encoding pos-int, size 16, endianness big],
     hd          [encoding pos-int, size 16, endianness big],
     ve          [encoding twos-complement, size 8],
-    he          [encoding twos-complement, size 8]
+    he          [encoding twos-complement, size 8],
+    extra       [size deduced]
+}
+
+-- Reader Requirements box, T.801 M.11.1. ML, NSF and NVF are inserted
+-- determinants; ML reaches the masks of the features through the element
+-- types' parameter (spec/asn1scc-patches: deferred-sequence-of-arguments
+-- and deferred-sibling-consumers).
+
+StandardFeature <INTEGER:ml> [] {
+    sf          [encoding pos-int, size 16, endianness big],
+    sm          [size ml]
+}
+
+VendorFeature <INTEGER:ml> [] {
+    vf          [],
+    vm          [size ml]
+}
+
+Rreq [] {
+    ml          INTEGER [encoding pos-int, size 8],
+    fuam        [size ml],
+    dcm         [size ml],
+    nsf         INTEGER [encoding pos-int, size 16, endianness big],
+    standard    [size nsf] { <ml> [] },
+    nvf         INTEGER [encoding pos-int, size 16, endianness big],
+    vendor      [size nvf] { <ml> [] },
+    extra       [size deduced]
 }
 
 FragmentList [] {

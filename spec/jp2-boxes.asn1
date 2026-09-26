@@ -31,13 +31,12 @@
 --   * Codestream Header boxes inside a Compositing Layer Extensions box, and
 --     codestreams inside a Multiple Codestream box, are outside the model;
 --     every jpch, jp2c and ftbl here is top level, as the server requires.
---   * Reader Requirements contents are opaque because the server ignores
---     them.
 --   * ICC profiles (colr METH 2) are opaque; so are the reserved fields of
 --     colr boxes with other METH values, and the Palette box's entries,
 --     whose length is a cross-field rule. The IPR, XML and UUID boxes in
---     jp2h are opaque as elsewhere. The standard layer checks the box's required count and position;
---     the harness writes accurate contents for its base JPX files.
+--     jp2h are opaque as elsewhere.
+--   * The Reader Requirements box is modelled at layer 1 only; the server
+--     ignores it, so layer 2 keeps it opaque.
 --
 -- Cross-field rules are at the end (harness/crossfield_impl.h and
 -- harness/crossfield.c).
@@ -61,8 +60,9 @@ IMPORTS Codestream, Codestream-Profile FROM J2K-Codestream;
 --   cmap 0x636D6170  cdef 0x63646566  res  0x72657320  resc 0x72657363
 --   resd 0x72657364
 -- Opaque, permitted anywhere their level allows:
---   jP   0x6A502020  rreq 0x72726571  uuid 0x75756964  xml  0x786D6C20
---   nlst 0x6E6C7374  lbl  0x6C626C20  uinf 0x75696E66  free 0x66726565
+--   rreq 0x72726571
+--   jP   0x6A502020  uuid 0x75756964  xml  0x786D6C20  nlst 0x6E6C7374
+--   lbl  0x6C626C20  uinf 0x75696E66  free 0x66726565
 
 -- T.800 I.8 and T.801 M.12 require readers to skip box types they do not
 -- understand, so both layers admit every four-cc and decode unlisted types
@@ -90,7 +90,7 @@ TopPayload ::= CHOICE {
     ftyp        OCTET STRING (CONTAINING Ftyp),
     jp2h        OCTET STRING (CONTAINING Superbox),
     jplh        OCTET STRING (CONTAINING Superbox),
-    rreq        OCTET STRING (CONTAINING OpaqueBox),
+    rreq        OCTET STRING (CONTAINING Rreq),
     uuid        OCTET STRING (CONTAINING OpaqueBox),
     xml         OCTET STRING (CONTAINING OpaqueBox),
     uinf        OCTET STRING (CONTAINING Superbox),
@@ -159,7 +159,13 @@ InnerPayload ::= CHOICE {
 -- only, and the other values are rules of the file kind (listed at the end).
 -- ---------------------------------------------------------------------------
 
--- Image Header box, I.5.3.1: 14 bytes.
+-- A CONTAINING region's decoder skips to the region's end whatever the
+-- contents left unread, so a type whose layout does not end in a deduced
+-- size ends in `extra`, the bytes after its fields, which a rule requires
+-- to be empty (<box>.extent).
+Extra ::= OCTET STRING (SIZE (0..64))                     -- corpus bound
+
+-- Image Header box, I.5.3.1: 14 bytes (the box 22, ihdr.extent).
 Ihdr ::= SEQUENCE {
     height      INTEGER (1..4294967295),   -- Ysiz - YOsiz
     width       INTEGER (1..4294967295),   -- Xsiz - XOsiz
@@ -167,7 +173,8 @@ Ihdr ::= SEQUENCE {
     bpc         INTEGER (0..37 | 128..165 | 255),   -- common Ssiz, or 255: see bpcc
     c           INTEGER (7),               -- JPEG 2000 (T.801 Table M.19: 7)
     unkc        INTEGER (0..1),
-    ipr         INTEGER (0..1)
+    ipr         INTEGER (0..1),
+    extra       Extra
 }
 
 -- A component or palette column's bit depth, Tables I.11 and I.13: the
@@ -233,7 +240,8 @@ CdefEntry ::= SEQUENCE {
 }
 
 Cdef ::= SEQUENCE {
-    entries     SEQUENCE (SIZE (1..16)) OF CdefEntry    -- corpus bound; the standard's is 65 535
+    entries     SEQUENCE (SIZE (1..16)) OF CdefEntry,   -- corpus bound; the standard's is 65 535
+    extra       Extra
 }
 
 -- Resolution box, I.5.3.7: a superbox holding resc and/or resd, each once
@@ -262,7 +270,33 @@ Resolution ::= SEQUENCE {
     hn          INTEGER (1..65535),
     hd          INTEGER (1..65535),
     ve          INTEGER (-128..127),
-    he          INTEGER (-128..127)
+    he          INTEGER (-128..127),
+    extra       Extra
+}
+
+-- T.801 M.11.1, Reader Requirements box: ML, the length in bytes of every
+-- mask (1, 2, 4 or 8; an ACN-inserted determinant, so the masks agree by
+-- construction), the Fully Understand Aspects and Display Contents masks,
+-- NSF standard features and NVF vendor features, each with its mask. SF
+-- values are Table M.14's and those of extensions, so any 16-bit value.
+RreqMask ::= OCTET STRING (SIZE (1 | 2 | 4 | 8))
+
+StandardFeature ::= SEQUENCE {
+    sf          INTEGER (0..65535),
+    sm          RreqMask
+}
+
+VendorFeature ::= SEQUENCE {
+    vf          OCTET STRING (SIZE (16)),                -- a UUID
+    vm          RreqMask
+}
+
+Rreq ::= SEQUENCE {
+    fuam        RreqMask,
+    dcm         RreqMask,
+    standard    SEQUENCE (SIZE (0..16)) OF StandardFeature,  -- corpus bound; the standard's is 65 535
+    vendor      SEQUENCE (SIZE (0..4)) OF VendorFeature,     -- corpus bound; the standard's is 65 535
+    extra       Extra
 }
 
 -- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR u16).
@@ -411,6 +445,11 @@ END
 --   T.801 M.11.2 (JPX): at most one dtbl box, at the top level.
 --   T.801 M.11.1: a JPX file has exactly one rreq box immediately after
 --     ftyp. The profile parser deliberately ignores this writer requirement.
+--     Its contents are Rreq (ML the length of every mask, NSF and NVF the
+--     counts: determinants, so they agree by construction), with nothing
+--     after them (rreq.extent). That the masks describe the file's
+--     features accurately is the writer's to ensure (M.11.1); SF values
+--     are open (Table M.14 and extensions).
 --   T.801 M.11.6: if any jpch box is present, the number of codestreams
 --     (jp2c and ftbl boxes) equals the number of codestream headers; each is
 --     numbered by source-box order. A file with no jpch box inherits its
@@ -422,9 +461,11 @@ END
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
 --   Every Fragment.dr is 0 or <= the file's ndr.
 --   T.801 Annex M, Fragment Table box: it contains exactly one flst box.
---   Every CONTAINING region is exactly filled: automatic (size deduced /
---     null-terminated loc followed by nothing — the harness checks that the
---     url box ends right after the terminator).
+--   Every CONTAINING region is exactly filled. Where the type ends in a
+--     deduced size this is automatic; the url box's harness check requires
+--     it to end right after the terminator; Ihdr, Cdef, Resolution and Rreq
+--     end in `extra`, which must be empty (<box>.extent: the decoder skips
+--     to the end of a region whatever its contents left unread).
 --
 -- Header boxes, standard layer only (hv_rules.c; the reader's
 -- hv_check_jp2h and hv_check_jpx_headers). The server reads none of them:

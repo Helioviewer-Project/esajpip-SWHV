@@ -188,6 +188,9 @@ jp2-header-res.resc-resd-46.jp2	jp2	invalid	valid	res.resc-resd	res.resc-resd	tw
 jp2-header-res.resc-resd-47.jp2	jp2	invalid	valid	res.resc-resd	res.resc-resd	res with neither resc nor resd	-
 jp2-header-res.vd-48.jp2	jp2	invalid	valid	decode	res.vd	resc VRcD 0	-
 jp2-header-cdef.opacity-49.jp2	jp2	valid	valid	-	cdef.opacity	grey and opacity channels from a palette: valid	-
+jp2-header-ihdr.extent-63.jp2	jp2	invalid	valid	ihdr.extent	ihdr.extent	a byte after the ihdr fields: a 23-byte box (I.5.3.1: 22)	-
+jp2-header-cdef.extent-64.jp2	jp2	invalid	valid	cdef.extent	cdef.extent	a byte after the cdef descriptions	-
+jp2-header-res.extent-65.jp2	jp2	invalid	valid	res.extent	res.extent	a byte after the resc fields	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -341,6 +344,9 @@ jpx-embedded-main-sop.jpx	jpx	invalid	invalid	decode	main.marker-code	SOP, a pac
 jpx-embedded-main-ff30-length.jpx	jpx	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
 jpx-embedded-main-ff00.jpx	jpx	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
 jpx-embedded-plt-iplt-eleven-bytes.jpx	jpx	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
+jpx-embedded-header-rreq.nsf.jpx	jpx	invalid	valid	decode	rreq.nsf	NSF one more than the standard features	-
+jpx-embedded-header-rreq.nvf.jpx	jpx	invalid	valid	decode	rreq.nvf	NVF 1 with no vendor feature	-
+jpx-embedded-header-rreq.extent.jpx	jpx	invalid	valid	rreq.extent	rreq.extent	a byte after the vendor features, inside the box	-
 jpx-embedded-siz.rsiz-2.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	extension capability flag	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-
@@ -442,6 +448,8 @@ jpx-embedded-header-ihdr.width-57.jpx	jpx	invalid	valid	ihdr.width	ihdr.width	jp
 jpx-embedded-header-header.pclr-cmap-58.jpx	jpx	invalid	valid	header.pclr-cmap	header.pclr-cmap	pclr in a jpch without cmap	-
 jpx-embedded-header-colr.one-method-59.jpx	jpx	invalid	valid	colr.one-method	colr.one-method	two enumerated colr in jp2h (T.801 M.11.7.1)	-
 jpx-embedded-header-cdef.pairs-60.jpx	jpx	invalid	valid	cdef.pairs	cdef.pairs	jplh cdef with two descriptions Typ 0, Asoc 1	-
+jpx-embedded-header-rreq.mask-length-61.jpx	jpx	valid	valid	-	rreq.mask-length	rreq masks of 2 bytes (ML 2): valid	-
+jpx-embedded-header-rreq.ml-62.jpx	jpx	invalid	valid	decode	rreq.ml	rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-

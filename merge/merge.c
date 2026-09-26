@@ -271,12 +271,17 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
  * standard features 1 (no extensions beyond the JP2 features), 2 (more
  * than one codestream), 4 and 5 (the codestreams' Rsiz), 9 and 10 (opacity
  * channels in cdef), 15 (linked codestreams), each needed for both the
- * Fully Understand and the Display expressions. */
+ * Fully Understand and the Display expressions: feature i sets mask bit i,
+ * FUAM and DCM all of them. At most 7 features, so ML is 1. */
 static int write_rreq(hv_out *out, const source *s, size_t n, int links) {
-    int has[16] = {0}, features[16], k = 0, ml, i;
-    uint8_t box[8 + 1 + 2 * 2 + 2 + 16 * (2 + 2) + 2];
-    size_t len = 8, j, c;
+    int has[16] = {0}, k = 0, i, status;
+    Rreq_Std *rreq = calloc(1, sizeof *rreq);
+    size_t j, c;
 
+    if (rreq == NULL) {
+        out->error = "out of memory";
+        return -1;
+    }
     has[1] = 1;
     for (j = 0; j < n; j++) {
         const uint8_t *cdef = s[j].in->buf + s[j].cdef.payload;
@@ -291,32 +296,22 @@ static int write_rreq(hv_out *out, const source *s, size_t n, int links) {
     }
     has[2] = n > 1;
     has[15] = links != 0;
-    for (i = 0; i < 16; i++)
-        if (has[i])
-            features[k++] = i;
-    ml = (k + 7) / 8;
-    box[len++] = (uint8_t)ml;
-    for (i = 0; i < 2; i++) {                    /* FUAM, DCM: every feature */
-        unsigned long long all = ((1ULL << k) - 1) << (8 * ml - k);
-        int b;
-        for (b = ml - 1; b >= 0; b--)
-            box[len++] = (uint8_t)(all >> (8 * b));
+    rreq->fuam.nCount = rreq->dcm.nCount = 1;
+    for (i = 0; i < 16; i++) {
+        if (!has[i])
+            continue;
+        rreq->standard.arr[k].sf = (asn1SccUint)i;
+        rreq->standard.arr[k].sm.nCount = 1;
+        rreq->standard.arr[k].sm.arr[0] = (byte)(0x80 >> k);
+        rreq->fuam.arr[0] |= (byte)(0x80 >> k);
+        k++;
     }
-    box[len++] = 0;
-    box[len++] = (uint8_t)k;                     /* NSF */
-    for (i = 0; i < k; i++) {
-        unsigned long long mask = 1ULL << (8 * ml - i - 1);
-        int b;
-        box[len++] = 0;
-        box[len++] = (uint8_t)features[i];
-        for (b = ml - 1; b >= 0; b--)
-            box[len++] = (uint8_t)(mask >> (8 * b));
-    }
-    box[len++] = 0;
-    box[len++] = 0;                              /* NVF */
-    put32(box, (uint32_t)len);
-    put32(box + 4, BOX_RREQ);
-    return hv_write_bytes(out, box, len);
+    rreq->dcm.arr[0] = rreq->fuam.arr[0];
+    rreq->standard.nCount = k;
+    rreq->vendor.nCount = 0;
+    status = hv_write_rreq(out, rreq);
+    free(rreq);
+    return status;
 }
 
 /* The URL of a linked file: file:// and its absolute path, resolved, with

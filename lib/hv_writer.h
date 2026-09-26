@@ -74,6 +74,10 @@ int hv_write_ndr(hv_out *out, uint16_t ndr);
 /* A Data Entry URL box, version 0 and flags 0, with LOC and its NUL. */
 int hv_write_url(hv_out *out, const char *loc);
 
+/* A Reader Requirements box (T.801 M.11.1, Rreq-Std): ML from the masks,
+ * which must all have its length (1, 2, 4 or 8 bytes). */
+int hv_write_rreq(hv_out *out, const Rreq_Std *rreq);
+
 #ifdef __cplusplus
 }
 #endif

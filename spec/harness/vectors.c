@@ -350,28 +350,36 @@ static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     FIXED_OCTETS(ftyp->compat.arr[0], brand, 4);
 }
 
+/* A mask of `ml` bytes: `bits` as a big-endian 32-bit value, then zeros
+ * (bit 0 of a mask is the most significant bit of its first byte). */
+static void set_mask(RreqMask *m, int ml, uint32_t bits) {
+    int i;
+    m->nCount = ml;
+    for (i = 0; i < ml; ++i) m->arr[i] = (unsigned char) (i < 4 ? bits >> (24 - 8 * i) : 0);
+}
+
+/* Reader Requirements as hvJP2K writes them (T.801 M.11.1): one standard
+ * feature per mask bit, every one needed both to understand the file fully
+ * and to display it: 1 (no extensions), 2 (multiple compositing layers), 5
+ * (unrestricted Part 1 codestream), and 15 (fragments in locally accessible
+ * files) when linked. */
 static void add_rreq(Jp2Family *f, int linked) {
-    static const unsigned char embedded_requirements[] = {
-        1, 0xE0, 0xE0, 0, 3,     /* ML, FUAM, DCM, NSF */
-        0, 1, 0x80,               /* core codestream */
-        0, 2, 0x40,               /* multiple compositing layers */
-        0, 5, 0x20,               /* unrestricted Part 1 codestream */
-        0, 0                      /* NVF */
-    };
-    static const unsigned char linked_requirements[] = {
-        1, 0xF0, 0xF0, 0, 4,     /* ML, FUAM, DCM, NSF */
-        0, 1, 0x80,
-        0, 2, 0x40,
-        0, 5, 0x20,
-        0, 15, 0x10,              /* fragments in locally accessible files */
-        0, 0                      /* NVF */
-    };
+    static const int features[] = { 1, 2, 5, 15 };
+    int n = linked ? 4 : 3, i;
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
+    Rreq *r;
+    uint32_t all = 0;
     b->payload.kind = TopPayload_rreq_PRESENT;
-    if (linked)
-        OCTETS(b->payload.u.rreq.data, linked_requirements, sizeof linked_requirements);
-    else
-        OCTETS(b->payload.u.rreq.data, embedded_requirements, sizeof embedded_requirements);
+    r = &b->payload.u.rreq;
+    r->standard.nCount = n;
+    for (i = 0; i < n; ++i) {
+        r->standard.arr[i].sf = features[i];
+        set_mask(&r->standard.arr[i].sm, 1, 0x80000000u >> i);
+        all |= 0x80000000u >> i;
+    }
+    set_mask(&r->fuam, 1, all);
+    set_mask(&r->dcm, 1, all);
+    r->vendor.nCount = 0;
 }
 
 /* Canonical files. Sizes 4x4 leave room for origin/tile mutants. */
@@ -1690,6 +1698,33 @@ static void hdr_jpx_jplh(Jp2Family *f, int box) {
     b->payload.u.jplh.children.nCount = 0;
     set_res(append_child(&b->payload.u.jplh), 0, 1, 0);
 }
+/* A byte after the fields of a box whose layout ends before its end. */
+static void hdr_ihdr_extent(Jp2Family *f, int box) {
+    (void) box;
+    OCTETS(jp2h_of(f)->children.arr[0].payload.u.ihdr.extra, "\x00", 1);
+}
+static void hdr_cdef_extent(Jp2Family *f, int box) {
+    hdr_cdef_opacity(f, box);
+    OCTETS(jp2h_of(f)->children.arr[4].payload.u.cdef.extra, "\x00", 1);
+}
+static void hdr_res_extent(Jp2Family *f, int box) {
+    (void) box;
+    set_res(append_child(jp2h_of(f)), 1, 0, 0);
+    OCTETS(jp2h_of(f)->children.arr[2].payload.u.res.children.arr[0].payload.u.resc.extra, "\x00", 1);
+}
+
+/* The Reader Requirements box is box 2 of a JPX base. */
+static void hdr_rreq_mask_length(Jp2Family *f, int box, int ml) {
+    Rreq *r = &f->boxes.arr[2].payload.u.rreq;
+    int i;
+    (void) box;
+    set_mask(&r->fuam, ml, (uint32_t) r->fuam.arr[0] << 24);
+    set_mask(&r->dcm, ml, (uint32_t) r->dcm.arr[0] << 24);
+    for (i = 0; i < r->standard.nCount; ++i)
+        set_mask(&r->standard.arr[i].sm, ml, (uint32_t) r->standard.arr[i].sm.arr[0] << 24);
+}
+static void hdr_rreq_ml2(Jp2Family *f, int box) { hdr_rreq_mask_length(f, box, 2); }
+static void hdr_rreq_ml3(Jp2Family *f, int box) { hdr_rreq_mask_length(f, box, 3); }
 static void hdr_jpx_jplh_cdef_pairs(Jp2Family *f, int box) {
     hdr_jpx_jplh(f, box);
     set_cdef(append_child(&f->boxes.arr[f->boxes.nCount - 1].payload.u.jplh), 2, 0, 0, 1);
@@ -1758,6 +1793,11 @@ static const RuleMutant header_mutants[] = {
     { "header.pclr-cmap", hdr_jpx_pclr_no_cmap, "pclr in a jpch without cmap", CF_JPX, 0, X_STD },
     { "colr.one-method", hdr_jpx_two_enumerated, "two enumerated colr in jp2h (T.801 M.11.7.1)", CF_JPX, 0, X_STD },
     { "cdef.pairs", hdr_jpx_jplh_cdef_pairs, "jplh cdef with two descriptions Typ 0, Asoc 1", CF_JPX, 0, X_STD },
+    { "rreq.mask-length", hdr_rreq_ml2, "rreq masks of 2 bytes (ML 2): valid", CF_JPX, 0, X_VALID },
+    { "rreq.ml", hdr_rreq_ml3, "rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)", CF_JPX, 0, X_STD },
+    { "ihdr.extent", hdr_ihdr_extent, "a byte after the ihdr fields: a 23-byte box (I.5.3.1: 22)", CF_JP2, 0, X_STD },
+    { "cdef.extent", hdr_cdef_extent, "a byte after the cdef descriptions", CF_JP2, 0, X_STD },
+    { "res.extent", hdr_res_extent, "a byte after the resc fields", CF_JP2, 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1902,6 +1942,35 @@ static void emit_insertion_mutants(Bytes valid, cf_kind kind, const char *base_n
     }
 }
 
+/* Reader Requirements counts and extent the typed mutants cannot break
+ * (NSF, NVF and ML are determinants): NSF and NVF one too high, and a byte
+ * after the contents. Invalid at layer 1; the profile keeps rreq opaque. */
+static void emit_rreq_mutants(Bytes valid, const char *base_name) {
+    size_t rreq = 12 + be32(valid.data + 12), payload = rreq + 8, nsf, nvf;
+    unsigned ml;
+    char name[256];
+    Bytes m;
+    if (be32(valid.data + rreq + 4) != BT_RREQ) die("rreq mutants: rreq is not the third box");
+    ml = valid.data[payload];
+    nsf = payload + 1 + 2 * ml;
+    nvf = nsf + 2 + (2 + ml) * be16(valid.data + nsf);
+    m = bytes_dup(valid);
+    put16(m.data + nsf, (uint16_t) (be16(m.data + nsf) + 1));
+    snprintf(name, sizeof name, "%s-header-rreq.nsf", base_name);
+    emit(m, CF_JPX, name, "rreq.nsf", "NSF one more than the standard features", NULL, X_STD);
+    free(m.data);
+    m = bytes_dup(valid);
+    put16(m.data + nvf, (uint16_t) (be16(m.data + nvf) + 1));
+    snprintf(name, sizeof name, "%s-header-rreq.nvf", base_name);
+    emit(m, CF_JPX, name, "rreq.nvf", "NVF 1 with no vendor feature", NULL, X_STD);
+    free(m.data);
+    m = insert_bytes(valid, nvf + 2, "\x00", 1);                 /* at the end of the box */
+    put32(m.data + rreq, be32(m.data + rreq) + 1);
+    snprintf(name, sizeof name, "%s-header-rreq.extent", base_name);
+    emit(m, CF_JPX, name, "rreq.extent", "a byte after the vendor features, inside the box", NULL, X_STD);
+    free(m.data);
+}
+
 /* ------------------------------------------------------------------------ */
 /* Driver                                                                    */
 /* ------------------------------------------------------------------------ */
@@ -1918,6 +1987,8 @@ static void run_base(Base base, const char *companions) {
     emit_code_mutants(valid, base.kind, base.name);
     if (base.jp2c_box >= 0)
         emit_insertion_mutants(valid, base.kind, base.name);
+    if (base.kind == CF_JPX && base.jp2c_box >= 0)
+        emit_rreq_mutants(valid, base.name);
 
     if (base.jp2c_box >= 0) {
         int has_precincts = cod_of(base.file, base.jp2c_box)->scod.customPrecincts;

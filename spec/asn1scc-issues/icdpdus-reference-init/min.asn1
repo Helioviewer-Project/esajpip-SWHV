@@ -1,0 +1,4 @@
+Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+    Mask ::= OCTET STRING (SIZE (1..4))
+    Rec ::= SEQUENCE { m Mask }
+END

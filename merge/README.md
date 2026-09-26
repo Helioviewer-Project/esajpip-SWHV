@@ -32,7 +32,8 @@ error, 2 on usage errors.
 As hvJP2K writes it:
 
 - the signature, `ftyp` (brand `jpx `, compatible with `jpx `, `jp2 ` and
-  `jpxb`, or `jpx ` alone when linked) and `rreq` (T.801 M.11.1: features
+  `jpxb`, or `jpx ` alone when linked) and `rreq`, written with the model's
+  encoder (`hv_write_rreq`; T.801 M.11.1: features
   1, 2 for more than one codestream, 4 and 5 from the codestreams' Rsiz, 9
   and 10 for opacity channels in `cdef`, 15 when linked);
 - `jp2h`, the first input's, with each `colr`'s APPROX of 0 written as 1

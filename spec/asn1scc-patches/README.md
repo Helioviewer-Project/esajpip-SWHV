@@ -32,6 +32,15 @@ Applied now:
 
   Report and reproducers for both:
   [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
+- `icdpdus-reference-init.patch`: with `-icdPdus`, the init function of a
+  referenced type that is not complex (an OCTET STRING type assignment, say)
+  was dropped although a PDU's init function calls it, so the generated C
+  did not link. `BackendAst/DAstInitialize.fs` now records that call for
+  every reference, as it did for complex types. Test case
+  `v4Tests/test-cases/icd-pdus/001` and `v4Tests/scripts/runIcdPdusTests.sh`,
+  which `../build-asn1scc.sh` runs. `lib/generate.sh` relies on it (the
+  model's `RreqMask` and `Extra`). Report and reproducer:
+  [`../asn1scc-issues/icdpdus-reference-init/`](../asn1scc-issues/icdpdus-reference-init/).
 
 ## Reference: the former fixes for deferred ACN
 
