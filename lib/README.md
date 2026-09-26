@@ -187,7 +187,9 @@ header is checked.
   (`hv_walk -P`) does all of it for a file on disk.
 - `hv_check_jp2h` and `hv_check_jpx_headers` (`hv_walk -H`), the header
   boxes, at the standard layer (the server reads none of them, but a
-  client decodes the image by them): where `jp2h` is; the placement of
+  client decodes the image by them): first the start of the file, as the
+  profile's checks (signature, `ftyp` second with the brand, two boxes at
+  least); then where `jp2h` is; the placement of
   the children of every top-level superbox (`hv_rule_child`, as the
   harness checks at layer 1: no `jp2c`, `jpch`, `ftbl` or `dtbl` below the
   top level, `flst` only in `ftbl`, `url` only in `dtbl`, except that a
@@ -198,7 +200,10 @@ header is checked.
   `PclrCounts`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) and
   checked by the header rules of `hv_rules.c`; and each codestream's
   header (for a JPX file its `jpch` over the `jp2h` defaults) against its
-  SIZ, where the codestream is embedded. A rule comparing boxes points at the
+  SIZ, where the codestream is embedded. In a JP2 file also the `ihdr`'s
+  IPR against the top-level IPR boxes (`ihdr.ipr`); in a JPX file MinV
+  (`file.ftyp-minor`), an IPR box in a `jpch` (`jpch.ipr`) and `creg` in
+  every `jplh` or none (`jpx.creg`). A rule comparing boxes points at the
   codestream's header box (its `jpch`, else `jp2h`); a codestream whose
   SIZ does not open fails with the reader's error at its offset. For a JPX
   file also the count rules of `hv_rule_jpx` at the standard layer (the

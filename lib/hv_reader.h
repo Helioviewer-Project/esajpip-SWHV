@@ -135,17 +135,22 @@ const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, 
  * at layer 1 (hv_rule_child): no jp2c, jpch, ftbl or dtbl below the top
  * level, flst only in ftbl, url only in dtbl (not checked in jp2h, jplh,
  * uinf and asoc: uinf may hold one, T.800 I.7.3); one flst per ftbl.
+ * Both first check the file's start as hv_check_jp2 and hv_check_jpx do
+ * (file.signature, file.ftyp-second, file.ftyp-brand,
+ * file.ftyp-compatibility, file.two-boxes).
  * hv_check_jp2h, for a JP2 file: one or more codestreams; exactly one jp2h,
  * before the first; its children decoded by the model's types and checked
- * by hv_rules.c; and ihdr and bpcc against the first codestream's SIZ.
+ * by hv_rules.c; ihdr and bpcc against the first codestream's SIZ; and
+ * the ihdr's IPR against the top-level IPR boxes (ihdr.ipr).
  * hv_check_jpx_headers, for a JPX file: the count rules of hv_rule_jpx at
  * the standard layer (one Reader Requirements box, the third box; at most
- * one dtbl; a codestream per jpch), the Reader Requirements box's contents
- * decoded one part at a time (RreqHeader, the features, NVF) and nothing
- * after them (rreq.extent); at most one jp2h, before the first codestream or
- * header box; the children of jp2h, jplh and jpch; and each codestream's
- * header (its jpch over jp2h's defaults, T.801 M.11.6) against its SIZ
- * where the codestream is embedded.
+ * one dtbl; a codestream per jpch), MinV 1 (file.ftyp-minor), the Reader
+ * Requirements box's contents decoded one part at a time (RreqHeader, the
+ * features, NVF) and nothing after them (rreq.extent); at most one jp2h,
+ * before the first codestream or header box; the children of jp2h, jplh
+ * and jpch, in box order; each codestream's header (its jpch over jp2h's
+ * defaults, T.801 M.11.6) against its SIZ where the codestream is
+ * embedded; and creg in every jplh or none (jpx.creg).
  * Both expect framing hv_boxes_next accepts. NULL, or the rule that fails
  * (the manifest's name where it has one) and *at its offset. A header rule
  * that compares boxes (ihdr.bpcc, header.pclr-cmap, ihdr.width, ...)

@@ -69,6 +69,13 @@ while letting HTTP connections be pooled or replaced independently of channels.
   every `jplh` or none (`jpx.creg`). JP2: the `ihdr`'s IPR is 1 exactly
   when the file has an IPR box (`ihdr.ipr`). The profile, and so what the
   server accepts, is unchanged; the JPX base vectors carry APPROX 1.
+- Corpus: a vector for every rule the harness and the reader share
+  (`siz.tile-covers-origin`, `siz.mct-geometry`, `sot.tpsot-below-tnsot`,
+  `tile.qcd-once`, `file.ftyp-second`, `file.two-boxes`, `dtbl.non-url`,
+  `jpx.one-jp2h`, `url.percent-encoding` had none), and the harness checks
+  a JPX file's `jplh` and codestream headers in box order, as the reader
+  does. `hv_check_jp2h` and `hv_check_jpx_headers` check the start of the
+  file first (signature, `ftyp`, two boxes), as the harness does.
 - Keep channels alive across replacement connections, and allow one persistent
   connection to carry requests for different channels. This permits ordinary
   browser and reverse-proxy connection pooling. Random, opaque channel IDs

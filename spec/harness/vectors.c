@@ -1353,6 +1353,52 @@ static void rule_tile_cod_mct(Jp2Family *f, int box) {
     rule_tile_cod(f, box);                                 /* one component */
     tp_of(f, box)->rest.headers.arr[1].cod.body.sgcod.mct = 1;
 }
+/* The origin past the first tile: XOsiz 2, XTsiz 2 from XTOsiz 0. */
+static void rule_tile_short_of_origin(Jp2Family *f, int box) {
+    SizFixed *s = &cs_of(f, box)->siz.body.fixed;
+    s->xosiz = 2;
+    s->xtsiz = 2;
+}
+/* MCT over three components, the second sampled 2:1 horizontally. */
+static void rule_mct_geometry(Jp2Family *f, int box) {
+    Siz *s = &cs_of(f, box)->siz.body;
+    s->fixed.csiz = 3;
+    s->components.nCount = 3;
+    s->components.arr[1] = s->components.arr[2] = s->components.arr[0];
+    s->components.arr[1].xrsiz = 2;
+    cod_of(f, box)->sgcod.mct = 1;
+}
+/* Two tile-parts, both declaring TNsot 1: the second's TPsot is 1. */
+static void rule_tpsot_at_tnsot(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    rule_two_tile_parts(f, box);
+    cs->segments.arr[2].tilePart.tnsot = 1;
+    cs->segments.arr[3].tilePart.tnsot = 1;
+}
+static void rule_tile_qcd_twice(Jp2Family *f, int box) {
+    rule_tile_qcd(f, box);
+    rule_tile_qcd(f, box);
+}
+static void rule_tile_qcd_second_part(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    TilePart *tp;
+    TileSegment *ts;
+    rule_two_tile_parts(f, box);
+    tp = &cs->segments.arr[3].tilePart;                 /* QCD in tile-part 1 */
+    ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
+    ts->code = HV_QCD;
+    ts->exist.qcd = 1;
+    ts->qcd.body = cs->segments.arr[1].qcd.body;
+}
+/* An unknown box between the signature and ftyp. */
+static void rule_ftyp_third(Jp2Family *f, int box) {
+    rule_unknown_box(f, box);
+    move_box(f, f->boxes.nCount - 1, 1);
+}
+static void rule_signature_only(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.nCount = 1;
+}
 static void rule_jp2_empty_ftbl(Jp2Family *f, int box) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];         /* no flst */
     (void) box;
@@ -1491,6 +1537,21 @@ static const RuleMutant rule_mutants[] = {
       X_LENIENT, "ftbl.one-flst", NULL },
     { "siz.xsiz", rule_xsiz_profile_limit, "profile max+1 with one tile", 0, 0, X_PROF, "decode",
       NULL },
+    { "siz.tile-covers-origin", rule_tile_short_of_origin,
+      "XOsiz 2, XTOsiz 0, XTsiz 2: the first tile ends at the image origin", 0, 0, X_STD,
+      "siz.tile-covers-origin", NULL },
+    { "siz.mct-geometry", rule_mct_geometry, "MCT over three components, one sampled 2:1", 0, 0,
+      X_STD, "siz.mct-geometry", NULL },
+    { "sot.tpsot-below-tnsot", rule_tpsot_at_tnsot, "two tile-parts, both declaring TNsot 1", 0, 0,
+      X_STD, "sot.tpsot-below-tnsot", NULL },
+    { "tile.qcd-once", rule_tile_qcd_twice, "two QCD in the tile-part header", 0, 0, X_STD,
+      "tile.qcd-once", NULL },
+    { "tile.qcd-once", rule_tile_qcd_second_part, "QCD in the second tile-part", 0, 0, X_STD,
+      "tile.qcd-once", NULL },
+    { "file.ftyp-second", rule_ftyp_third, "an unknown box before ftyp (T.800 I.4)", 0, 0, X_STD,
+      "file.ftyp-second", NULL },
+    { "file.two-boxes", rule_signature_only, "the signature box alone (T.800 I.4)", 0, 0, X_STD,
+      "file.two-boxes", NULL },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -1587,6 +1648,18 @@ static void rule_url_terminator(Jp2Family *f, int box) {
     (void) box;
     OCTETS(url_of(f, 0)->extra, "\x00", 1);
 }
+static void set_xml(InnerBox *c);
+/* An xml box in the dtbl beside the url boxes, NDR counting it. */
+static void rule_dtbl_xml(Jp2Family *f, int box) {
+    DataReferences *d = dtbl_of(f);
+    (void) box;
+    set_xml(&d->references.arr[d->references.nCount++]);
+    d->ndr = d->references.nCount;
+}
+static void rule_url_bad_escape(Jp2Family *f, int box) {
+    (void) box;
+    strcpy((char *) url_of(f, 0)->loc, "file://./jpx-linked-frame1%zz.jp2");
+}
 /* NF 2 in the first flst, which holds one fragment. */
 static void rule_flst_nf(Jp2Family *f, int box) { (void) box; flst_of(f, 0)->nf = 2; }
 /* The first flst at the edges of T.801 Table M.17: OFF 11 (below its 12),
@@ -1673,6 +1746,10 @@ static const RuleMutant linked_rule_mutants[] = {
       CF_JPX, 0, X_PROF, "flst.source-extent", NULL },
     { "flst.one-fragment", rule_flst_no_fragment, "NF 0, no fragment (Table M.17: valid)", CF_JPX,
       0, X_PROF, "decode", NULL },
+    { "dtbl.non-url", rule_dtbl_xml, "an xml box in the dtbl (T.801 M.11.2: url boxes)", CF_JPX, 0,
+      X_STD, "dtbl.non-url", NULL },
+    { "url.percent-encoding", rule_url_bad_escape, "LOC with the escape %zz: profile invalid",
+      CF_JPX, 0, X_PROF, "url.percent-encoding", NULL },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -2148,6 +2225,11 @@ static void add_jplh_creg(Jp2Family *f, int both) {
     }
 }
 static void hdr_jpx_creg_one(Jp2Family *f, int box) { (void) box; add_jplh_creg(f, 0); }
+static void hdr_jpx_two_jp2h(Jp2Family *f, int box) {
+    int at = box_index(f, TopPayload_jp2h_PRESENT, 0);
+    (void) box;
+    copy_box(f, at, at + 1);                                  /* two jp2h, adjacent */
+}
 static void hdr_jpx_creg_both(Jp2Family *f, int box) { (void) box; add_jplh_creg(f, 1); }
 
 /* Appended entries only: array positions are in fixture names. */
@@ -2303,6 +2385,8 @@ static const RuleMutant header_mutants[] = {
     { "jpx.creg", hdr_jpx_creg_one, "creg in one of two jplh (T.801 M.11.7: in every one)", CF_JPX,
       0, X_LENIENT, "jpx.creg", NULL },
     { "jplh.creg", hdr_jpx_creg_both, "creg in both jplh: valid", CF_JPX, 0, X_VALID, NULL, NULL },
+    { "jpx.one-jp2h", hdr_jpx_two_jp2h, "two jp2h (T.801 M.11.5: at most one)", CF_JPX, 0,
+      X_LENIENT, "jpx.one-jp2h", NULL },
 };
 
 /* ------------------------------------------------------------------------ */

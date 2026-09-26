@@ -195,6 +195,31 @@ static const char *check_ftyp(const uint8_t *buf, const hv_box *box, uint32_t br
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
+/* The start of a file, for the header checks, which do not run the
+ * profile's: the signature, ftyp with `brand` second, and two boxes at
+ * least (file.*). */
+static const char *check_file_start(const uint8_t *buf, size_t size, uint32_t brand,
+                                    size_t *at) {
+    hv_boxes it;
+    hv_box box;
+    const char *error;
+    int status, n = 0;
+
+    *at = 0;
+    if ((error = check_start(buf, size)) != NULL)
+        return error;
+    hv_boxes_file(&it, buf, size);
+    while ((status = hv_boxes_next(&it, &box, &error, at)) == 1 && n < 2) {
+        *at = box.start;
+        if (n++ == 1)
+            return check_ftyp(buf, &box, brand);
+    }
+    if (status < 0)
+        return error;
+    *at = size;
+    return "file.two-boxes";
+}
+
 /* The file rules, as ../spec/harness/crossfield.c names them (the harness
  * implements them on the decoded model), except file.size-limit, which the
  * corpus cannot exercise. */
@@ -749,6 +774,8 @@ static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     const char *error;
     int status, n = 0, late = 0, codestreams = 0, ipr = 0;
 
+    if ((error = check_file_start(buf, size, HV_BRAND_JP2, at)) != NULL)
+        return error;
     *at = 0;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
@@ -833,6 +860,8 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
     const char *error = NULL;
     int status, boxes = 0, jp2hs = 0, late = 0, later = 0, jplhs = 0, cregs = 0;
 
+    if ((error = check_file_start(buf, size, HV_BRAND_JPX, at)) != NULL)
+        return error;
     *at = 0;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {

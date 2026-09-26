@@ -233,20 +233,20 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
         return hv_rule_ihdr_ipr(&jp2h.h, ipr);
     }
 
-    /* JPX: codestream k has jpch k (M.11.6; the counts agree, hv_rule_jpx),
-     * or only jp2h's defaults when there is no jpch. */
-    for (i = 0; i < file->boxes.nCount; ++i) {
-        const TopPayload *p = &file->boxes.arr[i].payload;
-        if (p->kind != TopPayload_jplh_PRESENT) continue;
-        if ((r = cf_header(&p->u.jplh, HV_BOX_JPLH, kind, &jplh)) != NULL) return r;
-        jplhs++;
-        cregs += jplh.h.creg > 0;
-    }
+    /* JPX, in box order as the reader: each jplh; codestream k against
+     * jpch k (M.11.6; the counts agree, hv_rule_jpx), or only jp2h's
+     * defaults when there is no jpch. */
     for (i = 0; i < file->boxes.nCount; ++i) {
         const TopPayload *p = &file->boxes.arr[i].payload;
         hv_siz view;
         const hv_siz *siz = NULL;
         int k, seen = 0;
+        if (p->kind == TopPayload_jplh_PRESENT) {
+            if ((r = cf_header(&p->u.jplh, HV_BOX_JPLH, kind, &jplh)) != NULL) return r;
+            jplhs++;
+            cregs += jplh.h.creg > 0;
+            continue;
+        }
         if (p->kind != TopPayload_jp2c_PRESENT && p->kind != TopPayload_ftbl_PRESENT) continue;
         if (p->kind == TopPayload_jp2c_PRESENT) {
             view = cf_siz_view(&p->u.jp2c.siz.body);

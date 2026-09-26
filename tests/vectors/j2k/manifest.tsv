@@ -140,6 +140,13 @@ jp2-rule-sot.two-tiles-49.jp2	jp2	valid	invalid	decode	sot.two-tiles	two tiles, 
 jp2-rule-siz.mct-components-50.jp2	jp2	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
 jp2-rule-ftbl.one-flst-51.jp2	jp2	invalid	valid	ftbl.one-flst	ftbl.one-flst	empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)	-
 jp2-rule-siz.xsiz-52.jp2	jp2	valid	invalid	decode	siz.xsiz	profile max+1 with one tile	-
+jp2-rule-siz.tile-covers-origin-53.jp2	jp2	invalid	invalid	siz.tile-covers-origin	siz.tile-covers-origin	XOsiz 2, XTOsiz 0, XTsiz 2: the first tile ends at the image origin	-
+jp2-rule-siz.mct-geometry-54.jp2	jp2	invalid	invalid	siz.mct-geometry	siz.mct-geometry	MCT over three components, one sampled 2:1	-
+jp2-rule-sot.tpsot-below-tnsot-55.jp2	jp2	invalid	invalid	sot.tpsot-below-tnsot	sot.tpsot-below-tnsot	two tile-parts, both declaring TNsot 1	-
+jp2-rule-tile.qcd-once-56.jp2	jp2	invalid	invalid	tile.qcd-once	tile.qcd-once	two QCD in the tile-part header	-
+jp2-rule-tile.qcd-once-57.jp2	jp2	invalid	invalid	tile.qcd-once	tile.qcd-once	QCD in the second tile-part	-
+jp2-rule-file.ftyp-second-58.jp2	jp2	invalid	invalid	file.ftyp-second	file.ftyp-second	an unknown box before ftyp (T.800 I.4)	-
+jp2-rule-file.two-boxes-59.jp2	jp2	invalid	invalid	file.two-boxes	file.two-boxes	the signature box alone (T.800 I.4)	-
 jp2-header-jp2h.palette-0.jp2	jp2	valid	valid	-	jp2h.palette	pclr (2 entries) and cmap through it: valid	-
 jp2-header-jp2h.resolution-1.jp2	jp2	valid	valid	-	jp2h.resolution	res with resc and resd: valid	-
 jp2-header-jp2h.other-box-2.jp2	jp2	valid	valid	-	jp2h.other-box	xml box in jp2h after colr: valid and skipped (T.800 I.5.3)	-
@@ -446,6 +453,13 @@ jpx-embedded-rule-main.packet-headers-moved-48.jpx	jpx	valid	invalid	decode	main
 jpx-embedded-rule-sot.two-tiles-49.jpx	jpx	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
 jpx-embedded-rule-siz.mct-components-50.jpx	jpx	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
 jpx-embedded-rule-siz.xsiz-52.jpx	jpx	valid	invalid	decode	siz.xsiz	profile max+1 with one tile	-
+jpx-embedded-rule-siz.tile-covers-origin-53.jpx	jpx	invalid	invalid	siz.tile-covers-origin	siz.tile-covers-origin	XOsiz 2, XTOsiz 0, XTsiz 2: the first tile ends at the image origin	-
+jpx-embedded-rule-siz.mct-geometry-54.jpx	jpx	invalid	invalid	siz.mct-geometry	siz.mct-geometry	MCT over three components, one sampled 2:1	-
+jpx-embedded-rule-sot.tpsot-below-tnsot-55.jpx	jpx	invalid	invalid	sot.tpsot-below-tnsot	sot.tpsot-below-tnsot	two tile-parts, both declaring TNsot 1	-
+jpx-embedded-rule-tile.qcd-once-56.jpx	jpx	invalid	invalid	tile.qcd-once	tile.qcd-once	two QCD in the tile-part header	-
+jpx-embedded-rule-tile.qcd-once-57.jpx	jpx	invalid	invalid	tile.qcd-once	tile.qcd-once	QCD in the second tile-part	-
+jpx-embedded-rule-file.ftyp-second-58.jpx	jpx	invalid	invalid	file.ftyp-second	file.ftyp-second	an unknown box before ftyp (T.800 I.4)	-
+jpx-embedded-rule-file.two-boxes-59.jpx	jpx	invalid	invalid	file.two-boxes	file.two-boxes	the signature box alone (T.800 I.4)	-
 jpx-embedded-header-jpx.header-defaults-50.jpx	jpx	valid	valid	-	jpx.header-defaults	jp2h ihdr and colr as the default for both codestreams, empty jpch: valid	-
 jpx-embedded-header-jpch.palette-51.jpx	jpx	valid	valid	-	jpch.palette	pclr and cmap in a jpch: valid	-
 jpx-embedded-header-jpx.no-jp2h-52.jpx	jpx	valid	valid	-	jpx.no-jp2h	no jp2h, an ihdr in each jpch (T.801: jp2h optional)	-
@@ -470,6 +484,7 @@ jpx-embedded-header-jpch.ipr-77.jpx	jpx	invalid	valid	jpch.ipr	jpch.ipr	IPR box 
 jpx-embedded-header-jpch.ipr-box-78.jpx	jpx	valid	valid	-	jpch.ipr-box	IPR box in a jpch whose ihdr has IPR 1: valid	-
 jpx-embedded-header-jpx.creg-79.jpx	jpx	invalid	valid	jpx.creg	jpx.creg	creg in one of two jplh (T.801 M.11.7: in every one)	-
 jpx-embedded-header-jplh.creg-80.jpx	jpx	valid	valid	-	jplh.creg	creg in both jplh: valid	-
+jpx-embedded-header-jpx.one-jp2h-81.jpx	jpx	invalid	valid	jpx.one-jp2h	jpx.one-jp2h	two jp2h (T.801 M.11.5: at most one)	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
@@ -560,6 +575,8 @@ jpx-linked-rule-flst.one-fragment-21.jpx	jpx	invalid	invalid	decode	flst.one-fra
 jpx-linked-rule-flst.off-22.jpx	jpx	invalid	invalid	decode	flst.off	OFF 11 (Table M.17: 12 or more)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.source-extent-23.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	LEN 0 (Table M.17: valid): profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.one-fragment-24.jpx	jpx	valid	invalid	decode	flst.one-fragment	NF 0, no fragment (Table M.17: valid)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-dtbl.non-url-25.jpx	jpx	invalid	invalid	dtbl.non-url	dtbl.non-url	an xml box in the dtbl (T.801 M.11.2: url boxes)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.percent-encoding-26.jpx	jpx	valid	invalid	url.percent-encoding	url.percent-encoding	LOC with the escape %zz: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

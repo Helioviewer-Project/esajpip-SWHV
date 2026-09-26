@@ -468,9 +468,10 @@ names, in `../lib/hv_reader.c`; one, `flst.nf-count`, in the harness only
 oracle in `harness/vectors.c`. Some rules of the reader never appear as a
 manifest reason because a type rejects the vector first, with reason
 `decode`: the rule lists say which (`main.marker-code`,
-`codestream.tile-part-limit`, `siz.zero-origin`,
-`siz.component-sampling`, `url.version-flags`, `url.length`,
-`flst.one-fragment`).
+`tile.marker-code`, `codestream.tile-part-limit`, `siz.zero-origin`,
+`siz.component-sampling`, `cod.sop-markers`, `url.version-flags`,
+`url.length`, `flst.one-fragment`). Only `file.size-limit` is in no
+vector: the corpus holds no file over `INT_MAX` bytes.
 
 ## When a vector fails
 
