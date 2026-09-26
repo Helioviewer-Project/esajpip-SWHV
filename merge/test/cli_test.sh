@@ -52,6 +52,18 @@ cmp -s "$work/out.jpx" "$expected" || fail "the output differs from hvJP2K's"
 [ "$(status "$exe" -s "$work/args")" = 0 ] || fail "-s failed: $(cat "$work/stderr")"
 cmp -s "$work/argfile.jpx" "$expected" || fail "-s gives other bytes"
 
+# An argument file read only in part must not merge the part: a read
+# error (a directory) and a NUL byte (which would end the text) fail.
+mkdir "$work/argdir"
+[ "$(status "$exe" -i "$fixtures/input/swap_000.jp2" -o "$work/partial.jpx" -s "$work/argdir")" = 1 ] ||
+    fail "-s with a read error: expected 1"
+printf -- '-i %s\0%s\n' "$fixtures/input/swap_000.jp2" "$fixtures/input/swap_001.jp2" \
+    >"$work/nul-args"
+[ "$(status "$exe" -o "$work/partial.jpx" -s "$work/nul-args")" = 1 ] ||
+    fail "-s with a NUL byte: expected 1"
+[ ! -e "$work/partial.jpx" ] || fail "a partly read -s file gave a merge"
+rmdir "$work/argdir"
+
 [ "$(status "$exe" -i "$fixtures/input/swap_000.jp2" -o "$work/links.jpx" -links)" = 0 ] ||
     fail "-links failed: $(cat "$work/stderr")"
 [ -s "$work/links.jpx" ] || fail "-links wrote nothing"

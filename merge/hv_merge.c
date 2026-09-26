@@ -96,7 +96,9 @@ static int split_words(char *text, list *words) {
     return 0;
 }
 
-/* The whole of a file as a string, or NULL. */
+/* The whole of a file as a string, or NULL: also on a read error and on a
+ * NUL byte, which would end the text early. Either would leave a prefix of
+ * the arguments, and merge fewer frames than asked for. */
 static char *read_text(const char *path) {
     FILE *f = fopen(path, "rb");
     char *text = NULL;
@@ -115,6 +117,11 @@ static char *read_text(const char *path) {
         }
         n += got = fread(text + n, 1, 4096, f);
     } while (got > 0);
+    if (ferror(f) || memchr(text, 0, n) != NULL) {
+        free(text);
+        fclose(f);
+        return NULL;
+    }
     fclose(f);
     text[n] = 0;
     return text;
@@ -127,7 +134,8 @@ typedef struct {
 } arguments;
 
 /* Parses argv as argparse does for hvJP2K's options: -i takes the words up
- * to the next option (the last -i counts). 0, or -1 on a usage error. */
+ * to the next option (the last -i counts). 0, -1 on a usage error, -2 out
+ * of memory. */
 static int parse(char **argv, size_t argc, arguments *a) {
     size_t i;
     for (i = 0; i < argc; i++) {
@@ -135,7 +143,7 @@ static int parse(char **argv, size_t argc, arguments *a) {
             a->inputs.n = 0;
             while (i + 1 < argc && argv[i + 1][0] != '-')
                 if (push(&a->inputs, argv[++i]) != 0)
-                    return -1;
+                    return -2;
             if (a->inputs.n == 0)
                 return -1;
         } else if (strcmp(argv[i], "-o") == 0 && i + 1 < argc && argv[i + 1][0] != '-') {
@@ -170,9 +178,12 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
         struct stat st;
         in[i].path = names[i];
         in[i].buf = NULL;
-        if ((fd = open(names[i], O_RDONLY)) < 0 || fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
-            snprintf(error, error_size, "cannot open %s: %s", names[i],
-                     fd < 0 || errno ? strerror(errno) : "not a regular file");
+        if ((fd = open(names[i], O_RDONLY)) < 0 || fstat(fd, &st) != 0) {
+            snprintf(error, error_size, "cannot open %s: %s", names[i], strerror(errno));
+            goto done;
+        }
+        if (!S_ISREG(st.st_mode)) {
+            snprintf(error, error_size, "cannot open %s: not a regular file", names[i]);
             goto done;
         }
         in[i].size = (size_t)st.st_size;
@@ -198,6 +209,7 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
     if (fchmod(fd, 0666 & ~mask) != 0 || (file = fdopen(fd, "wb")) == NULL) {
         snprintf(error, error_size, "cannot write %s: %s", tmp, strerror(errno));
         close(fd);
+        fd = -1;
         unlink(tmp);
         goto done;
     }
@@ -232,8 +244,8 @@ int main(int argc, char **argv) {
     int status = 2;
 
     memset(&a, 0, sizeof a);
-    if (parse(argv + 1, (size_t)argc - 1, &a) != 0)
-        goto usage;
+    if ((status = parse(argv + 1, (size_t)argc - 1, &a)) != 0)
+        goto parsed;
     if (a.argfile != NULL) {
         /* argparse's reparse: the command line, then the file's words. */
         if ((text = read_text(a.argfile)) == NULL || split_words(text, &extra) != 0) {
@@ -249,8 +261,8 @@ int main(int argc, char **argv) {
                 goto oom;
         free(a.inputs.v);
         memset(&a, 0, sizeof a);
-        if (parse(all.v, all.n, &a) != 0)
-            goto usage;
+        if ((status = parse(all.v, all.n, &a)) != 0)
+            goto parsed;
     }
     /* Names are split at commas, empty ones dropped (hvJP2K is lenient
      * with stray commas). */
@@ -273,12 +285,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "hv_merge: %s\n", error);
     goto done;
 
+parsed:
+    if (status == -1)
+        goto usage;
 oom:
     fprintf(stderr, "hv_merge: out of memory\n");
     status = 1;
     goto done;
 usage:
     usage();
+    status = 2;
 done:
     free(names.v);
     free(extra.v);
