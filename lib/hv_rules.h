@@ -79,6 +79,43 @@ uint64_t hv_rule_packets(const Siz *siz, const Sgcod *sgcod, const Spcod *spcod)
 const char *hv_rule_plt_packets(const hv_plt_count *count, const Siz *siz,
                                 const Sgcod *sgcod, const Spcod *spcod, int profile);
 
+/* ------------------------------------------------------------------------
+ * JPX boxes, T.801 Annex M (listed at the end of ../spec/jp2-boxes.asn1)
+ * ------------------------------------------------------------------------ */
+
+enum {
+    HV_BOX_JP2C = 0x6A703263, HV_BOX_JPCH = 0x6A706368, HV_BOX_FTBL = 0x6674626C,
+    HV_BOX_DTBL = 0x6474626C, HV_BOX_FLST = 0x666C7374, HV_BOX_URL = 0x75726C20
+};
+
+/* A box inside a top-level jpch, ftbl or dtbl: jp2c, jpch, ftbl and dtbl
+ * only at the top level (M.11.2, M.11.6), flst only in ftbl, url only in
+ * dtbl, and a dtbl holds url boxes only. */
+const char *hv_rule_child(uint32_t parent, uint32_t child);
+
+/* The profile's Data Entry URL box (ReadUrlBox, ReadJPX): VERS and FLAG 0,
+ * and LOC, `n` bytes with its NUL, a file:// URL naming a .jp2 file. */
+const char *hv_rule_url(uint64_t vers, uint64_t flag, const uint8_t *loc, size_t n);
+
+/* The profile's Fragment List box: one fragment (ReadFlstBox). */
+const char *hv_rule_flst(uint64_t nf, int fragments);
+
+/* A fragment's data reference: 0 (this file) or at most NDR; the profile
+ * links to other files only. */
+const char *hv_rule_fragment_dr(uint64_t dr, uint64_t ndr, int profile);
+
+/* The top-level boxes of a JPX file, counted. */
+typedef struct {
+    int jp2c, jpch, ftbl, dtbl, rreq;
+    int rreq_third;         /* the third box is rreq */
+} hv_jpx_boxes;
+
+/* The file rules on those counts: at most one dtbl, a codestream per jpch
+ * where there is any, and rreq, once and third (standard only); in the
+ * profile, at least one jpch, embedded or linked codestreams but not both,
+ * and a dtbl where they are linked. */
+const char *hv_rule_jpx(const hv_jpx_boxes *boxes, int profile);
+
 #ifdef __cplusplus
 }
 #endif

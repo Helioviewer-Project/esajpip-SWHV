@@ -62,6 +62,47 @@ int hv_is_superbox(uint32_t type);
  * HV_PROFILE. */
 const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at);
 
+/* A linked codestream: the fragment of its flst box, and the LOC of the url
+ * box its DR names. */
+typedef struct {
+    uint64_t offset, length;    /* the codestream in the linked file */
+    uint64_t dr;                /* its data reference, 1 to NDR */
+    const uint8_t *loc;         /* the URL, in the caller's buffer */
+    size_t loc_size;            /* without its NUL */
+} hv_link;
+
+/* The codestreams of a JPX file, in box order: embedded (jp2c boxes) or
+ * linked (links), never both. */
+typedef struct {
+    size_t count;
+    hv_box *jp2c;               /* count boxes, or NULL */
+    hv_link *links;             /* count links, or NULL */
+} hv_jpx;
+
+/* The file rules of the served profile for a JPX file (JPIP_PROFILE.md; the
+ * profile layer of ../spec/jp2-boxes.asn1): at most INT_MAX bytes; the
+ * signature, then a file type box with the jpx brand and a jpx
+ * compatibility entry; top-level boxes framed as hv_boxes_next requires,
+ * and the children of jpch, ftbl and dtbl; the placement and count rules of
+ * hv_rules.c; one fragment per ftbl, linking to a .jp2 file through a
+ * version-0 file:// URL. Other boxes, asoc included, are not read. NULL on
+ * success, with *jpx the codestreams (hv_jpx_free); otherwise the rule that
+ * fails and *at its offset. Check each embedded codestream with
+ * hv_codestream_check and HV_PROFILE, and each linked file with
+ * hv_check_link. */
+const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at);
+void hv_jpx_free(hv_jpx *jpx);
+
+/* The file a link names, as the server resolves it: LOC without "file://",
+ * percent-decoded (no %00), and, unless absolute, relative to the directory
+ * of jpx_path. 0, or -1 if LOC cannot be decoded or out is too small. */
+int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size);
+
+/* A linked file, held in buf, against its link: hv_check_jp2, its
+ * codestream with HV_PROFILE, and the fragment exactly that codestream
+ * (flst.source-extent). NULL, or the rule that fails and *at its offset. */
+const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, size_t *at);
+
 /* ------------------------------------------------------------------------
  * Codestream, T.800 Annex A
  * ------------------------------------------------------------------------ */
@@ -149,6 +190,11 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
 int hv_codestream_next(hv_codestream *cs, hv_item *item);
 
 void hv_codestream_close(hv_codestream *cs);
+
+/* Reads the codestream in buf[start, end) through with these flags. NULL,
+ * or the reader's error and *at its offset. */
+const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,
+                                size_t *at);
 
 /* The value of one PLT entry (7-bit groups, most significant first);
  * saturates at UINT64_MAX. */

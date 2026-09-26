@@ -72,7 +72,38 @@ typedef struct {
 
 } Fragment;
 
+#define ERR_FRAGMENT_OFF		2810  /*(0..18446744073709551615)*/
+flag Fragment_off_IsConstraintValid(const Fragment_off* pVal, int* pErrCode);
 
+#define ERR_FRAGMENT_LEN		2815  /*(1..4294967295)*/
+flag Fragment_len_IsConstraintValid(const Fragment_len* pVal, int* pErrCode);
+
+#define ERR_FRAGMENT_DR		2820  /*(0..65535)*/
+flag Fragment_dr_IsConstraintValid(const Fragment_dr* pVal, int* pErrCode);
+
+#define ERR_FRAGMENT		2825  /**/
+flag Fragment_IsConstraintValid(const Fragment* pVal, int* pErrCode);
+
+void Fragment_off_Initialize(Fragment_off* pVal);
+void Fragment_len_Initialize(Fragment_len* pVal);
+void Fragment_dr_Initialize(Fragment_dr* pVal);
+void Fragment_Initialize(Fragment* pVal);
+
+#define Fragment_REQUIRED_BYTES_FOR_ACN_ENCODING       14
+#define Fragment_REQUIRED_BITS_FOR_ACN_ENCODING        112
+
+#define ERR_ACN_ENCODE_FRAGMENT		2828  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_OFF		2813  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_LEN		2818  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_DR		2823  /**/
+
+flag Fragment_ACN_Encode(const Fragment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
+
+#define ERR_ACN_DECODE_FRAGMENT		2829  /**/
+#define ERR_ACN_DECODE_FRAGMENT_OFF		2814  /**/
+#define ERR_ACN_DECODE_FRAGMENT_LEN		2819  /**/
+#define ERR_ACN_DECODE_FRAGMENT_DR		2824  /**/
+flag Fragment_ACN_Decode(Fragment* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- FragmentList --------------------------------------------*/
 typedef asn1SccUint FragmentList_nf;
 
@@ -88,11 +119,45 @@ typedef struct {
 
 } FragmentList;
 
+#define ERR_FRAGMENTLIST_NF		2830  /*(1..65535)*/
+flag FragmentList_nf_IsConstraintValid(const FragmentList_nf* pVal, int* pErrCode);
 
+#define ERR_FRAGMENTLIST_FRAGMENTS		2840  /*(SIZE (1..16))*/
+#define ERR_FRAGMENTLIST_FRAGMENTS_ELM		2835  /**/
+flag FragmentList_fragments_IsConstraintValid(const FragmentList_fragments* pVal, int* pErrCode);
+
+#define ERR_FRAGMENTLIST		2845  /**/
+flag FragmentList_IsConstraintValid(const FragmentList* pVal, int* pErrCode);
+
+void FragmentList_nf_Initialize(FragmentList_nf* pVal);
+void FragmentList_fragments_Initialize(FragmentList_fragments* pVal);
+void FragmentList_Initialize(FragmentList* pVal);
 typedef FragmentList FragmentList_Profile;
 
 
+#define ERR_FRAGMENTLIST_PROFILE_2		2870  /*(WITH COMPONENTS {
+    nf (1..1),
+    fragments (SIZE (1..1))
+})*/
+flag FragmentList_Profile_IsConstraintValid(const FragmentList_Profile* pVal, int* pErrCode);
 
+void FragmentList_Profile_Initialize(FragmentList_Profile* pVal);
+
+#define FragmentList_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       16
+#define FragmentList_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        128
+
+#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE		2868  /**/
+#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_NF		2853  /**/
+#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_FRAGMENTS		2863  /**/
+#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_FRAGMENTS_ELM		2858  /**/
+
+flag FragmentList_Profile_ACN_Encode(const FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
+
+#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE		2869  /**/
+#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_NF		2854  /**/
+#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_FRAGMENTS		2864  /**/
+#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_FRAGMENTS_ELM		2859  /**/
+flag FragmentList_Profile_ACN_Decode(FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- DataEntryUrl --------------------------------------------*/
 typedef asn1SccUint DataEntryUrl_vers;
 

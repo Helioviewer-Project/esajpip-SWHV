@@ -1,8 +1,9 @@
 /* test_profile: the reader's served-profile mode against the corpus in
  * tests/vectors/j2k. The reader and the model's harness share the rules
- * (lib/hv_rules.c), so hv_check_jp2 with HV_PROFILE must accept a JP2
- * vector exactly when the manifest labels it profile-valid. JPX vectors
- * are skipped: the reader's profile is JP2 only.
+ * (lib/hv_rules.c), so the reader's profile mode must accept a vector
+ * exactly when the manifest labels it profile-valid: hv_check_jp2 or
+ * hv_check_jpx, then every codestream with HV_PROFILE, embedded or in the
+ * linked files (hv_check_link).
  *
  *   test_profile <vector directory> */
 #include <limits.h>
@@ -38,28 +39,51 @@ static uint8_t *read_file(const char *path, size_t *size) {
     return buf;
 }
 
-/* NULL if the file passes hv_check_jp2 and its codestream reads through
- * with `flags`, otherwise the error. */
+/* NULL if the JP2 file passes hv_check_jp2 and its codestream reads
+ * through with `flags`, otherwise the error. */
 static const char *profile_error(const uint8_t *buf, size_t size, unsigned flags) {
     static char message[256];
     hv_box jp2c;
-    hv_codestream cs;
-    hv_item item;
     size_t at;
     const char *error = hv_check_jp2(buf, size, &jp2c, &at);
-    int status;
+    if (error == NULL)
+        error = hv_codestream_check(buf, jp2c.payload, jp2c.end, flags, &at);
+    if (error == NULL)
+        return NULL;
+    snprintf(message, sizeof message, "%s at %zu", error, at);
+    return message;
+}
 
-    if (error != NULL) {
-        snprintf(message, sizeof message, "%s at %zu", error, at);
-        return message;
+/* The same for a JPX file at `path`: its codestreams, or its linked files,
+ * which the server resolves from the JPX file's directory. */
+static const char *jpx_profile_error(const char *path, const uint8_t *buf, size_t size) {
+    static char message[4400];
+    char linked[4096] = "";
+    hv_jpx jpx;
+    size_t at, i;
+    const char *error = hv_check_jpx(buf, size, &jpx, &at);
+
+    for (i = 0; error == NULL && i < jpx.count; i++) {
+        if (jpx.jp2c != NULL) {
+            error = hv_codestream_check(buf, jpx.jp2c[i].payload, jpx.jp2c[i].end, HV_PROFILE, &at);
+        } else if (hv_link_path(&jpx.links[i], path, linked, sizeof linked) != 0) {
+            error = "url: cannot decode the path";
+            at = 0;
+        } else {
+            size_t link_size;
+            uint8_t *link = read_file(linked, &link_size);
+            at = 0;
+            error = link ? hv_check_link(link, link_size, &jpx.links[i], &at)
+                         : "url.missing-companion";
+            free(link);
+        }
     }
-    status = hv_codestream_open(&cs, buf, jp2c.payload, jp2c.end, flags);
-    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1)
-        status = item.kind == HV_END ? 1 : 0;
-    if (status < 0)
-        snprintf(message, sizeof message, "%s at %zu", cs.error, cs.error_at);
-    hv_codestream_close(&cs);
-    return status < 0 ? message : NULL;
+    hv_jpx_free(&jpx);
+    if (error == NULL)
+        return NULL;
+    snprintf(message, sizeof message, "%s at %zu%s%s", error, at, linked[0] ? " of " : "",
+             linked);
+    return message;
 }
 
 static uint8_t *vector(const char *dir, const char *name, size_t *size) {
@@ -71,11 +95,11 @@ static uint8_t *vector(const char *dir, const char *name, size_t *size) {
     return buf;
 }
 
-/* The corpus: every JP2 row of the manifest. */
+/* The corpus: every row of the manifest. */
 static void check_corpus(const char *dir) {
     char path[4096], line[8192];
     FILE *manifest;
-    int jp2 = 0, valid = 0;
+    int jp2 = 0, jpx = 0, valid = 0;
 
     snprintf(path, sizeof path, "%s/manifest.tsv", dir);
     if ((manifest = fopen(path, "r")) == NULL) {
@@ -102,22 +126,26 @@ static void check_corpus(const char *dir) {
             check(0, "manifest row", line);
             continue;
         }
-        if (strcmp(field[1], "jp2") != 0)
-            continue;
         expected = strcmp(field[3], "valid") == 0;
         if ((buf = vector(dir, field[0], &size)) == NULL)
             continue;
-        error = profile_error(buf, size, HV_PROFILE);
+        if (strcmp(field[1], "jpx") == 0) {
+            snprintf(path, sizeof path, "%s/%s", dir, field[0]);
+            error = jpx_profile_error(path, buf, size);
+            jpx++;
+        } else {
+            error = profile_error(buf, size, HV_PROFILE);
+            jp2++;
+        }
         snprintf(detail, sizeof detail, "%s: reader %s, manifest %s (%s)", field[0],
                  error ? error : "valid", field[3], field[4]);
         check((error == NULL) == expected, "profile label", detail);
-        jp2++;
         valid += expected;
         free(buf);
     }
     fclose(manifest);
-    printf("%d JP2 vectors, %d profile-valid\n", jp2, valid);
-    check(jp2 > 0 && valid > 0, "corpus has JP2 vectors, some valid", NULL);
+    printf("%d JP2 and %d JPX vectors, %d profile-valid\n", jp2, jpx, valid);
+    check(jp2 > 0 && jpx > 0 && valid > 0, "corpus has JP2 and JPX vectors, some valid", NULL);
 }
 
 /* HV_PROFILE_HEADERS: the main header only. */

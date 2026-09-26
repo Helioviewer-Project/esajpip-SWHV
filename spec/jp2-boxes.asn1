@@ -295,6 +295,8 @@ END
 --     numbered by source-box order. A file with no jpch box inherits its
 --     header information from jp2h and is unconstrained here.
 --   DataReferences.references has exactly ndr elements and every one is url.
+--   jp2c, jpch, ftbl and dtbl only at the top level; flst only in an ftbl,
+--     url only in a dtbl (M.11.2, M.11.3, M.11.6; ReadJPX).
 --   FragmentList.fragments has exactly nf elements.
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
 --   Every Fragment.dr is 0 or <= the file's ndr.

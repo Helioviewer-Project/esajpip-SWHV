@@ -1282,6 +1282,19 @@ static void rule_missing_companion(Jp2Family *f, int box) {
            "file://./jpx-missing-frame.jp2");
 }
 
+static void rule_flst_in_jpch(Jp2Family *f, int box) {
+    Superbox *jpch = &f->boxes.arr[3].payload.u.jpch;      /* a copy of the first flst */
+    (void) box;
+    jpch->children.arr[jpch->children.nCount++] = f->boxes.arr[5].payload.u.ftbl.children.arr[0];
+}
+static void rule_url_in_ftbl(Jp2Family *f, int box) {
+    Superbox *ftbl = &f->boxes.arr[5].payload.u.ftbl;      /* a copy of the first url */
+    (void) box;
+    ftbl->children.arr[ftbl->children.nCount++] =
+        f->boxes.arr[7].payload.u.dtbl.references.arr[0];
+}
+
+/* Appended entries only: array positions are in fixture names. */
 static const RuleMutant linked_rule_mutants[] = {
     { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
     { "file.unknown-box", rule_unknown_box, "unknown top-level box: valid and skipped", CF_JPX, 0, X_VALID },
@@ -1300,6 +1313,8 @@ static const RuleMutant linked_rule_mutants[] = {
     { "flst.source-extent", rule_fragment_short, "fragment omits final companion codestream byte", CF_JPX, 0, X_PROF },
     { "flst.source-extent", rule_fragment_long, "fragment extends past companion codestream", CF_JPX, 0, X_PROF },
     { "url.missing-companion", rule_missing_companion, "structurally valid JPX with unavailable companion", CF_JPX, 0, X_PROF },
+    { "box.flst-placement", rule_flst_in_jpch, "flst inside a jpch (T.801 M.11.3: in ftbl)", CF_JPX, 0, X_STD },
+    { "box.url-placement", rule_url_in_ftbl, "url inside an ftbl (T.801 M.11.2: in dtbl)", CF_JPX, 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */

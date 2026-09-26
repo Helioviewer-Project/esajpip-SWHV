@@ -197,9 +197,22 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     return NULL;
 }
 
+/* The box type of an inner box, as far as the rules of hv_rule_child
+ * distinguish them (0: any other). jpch holds layer-1 boxes at both layers
+ * (cf_inner_type, crossfield.c). */
+static uint32_t CF_CAT3(cf_inner_type, CF_S, _)(const CF_T(InnerBox) *b) {
+    switch (b->payload.kind) {
+        case CF_K(InnerPayload, flst): return HV_BOX_FLST;
+        case CF_K(InnerPayload, url):  return HV_BOX_URL;
+        case CF_K(InnerPayload, jp2c): return HV_BOX_JP2C;
+        default:                       return 0;
+    }
+}
+
 const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
     int i, j, k;
-    int jp2c = 0, jpch = 0, ftbl = 0, dtbl = 0, rreq = 0, ndr = 0;
+    int ndr = 0;
+    hv_jpx_boxes count = { 0, 0, 0, 0, 0, 0 };
     const char *r;
 
     /* T.800 I.4: signature box then file type box. */
@@ -216,23 +229,20 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         const CF_T(TopBox) *b = &file->boxes.arr[i];
         if (b->payload.kind == CF_K(TopPayload, dtbl)) {
             const CF_T(DataReferences) *d = &b->payload.u.dtbl;
-            dtbl++;
+            count.dtbl++;
             ndr = (int) d->ndr;
             if (d->references.nCount != (int) d->ndr) return "dtbl.ndr-count";
             for (j = 0; j < d->references.nCount; ++j) {
                 const CF_T(InnerBox) *u = &d->references.arr[j];
-                if (u->payload.kind != CF_K(InnerPayload, url)) return "dtbl.non-url";
+                if ((r = hv_rule_child(HV_BOX_DTBL, CF_CAT3(cf_inner_type, CF_S, _)(u))) != NULL)
+                    return r;
                 if (layer >= CF_PROFILE && kind == CF_JPX) {
+                    /* ReadUrlBox; ReadJPX: links resolve to .jp2 only. The
+                     * decoded LOC ends at its NUL, which it includes here. */
                     const CF_T(DataEntryUrl) *url = &u->payload.u.url;
-                    const char *loc = (const char *) url->loc;
-                    size_t n = strlen(loc);
-                    if (url->vers != 0 || url->flag != 0)
-                        return "url.version-flags";
-                    if (n < 8) return "url.length";
-                    if (strncmp(loc, "file://", 7) != 0)
-                        return "url.file-scheme";   /* ReadUrlBox; ReadJP2 never reads dtbl */
-                    if (n < 4 || strcmp(loc + n - 4, ".jp2") != 0)
-                        return "url.jp2-target";    /* ReadJPX: links resolve to .jp2 only */
+                    if ((r = hv_rule_url(url->vers, url->flag, (const uint8_t *) url->loc,
+                                         strlen((const char *) url->loc) + 1)) != NULL)
+                        return r;
                 }
             }
         }
@@ -242,34 +252,35 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         const CF_T(TopBox) *b = &file->boxes.arr[i];
         switch (b->payload.kind) {
             case CF_K(TopPayload, jp2c):
-                jp2c++;
+                count.jp2c++;
                 if ((r = CF_CAT3(cf_codestream, CF_S, )(&b->payload.u.jp2c, layer)) != NULL)
                     return r;
                 break;
             case CF_K(TopPayload, jpch):
                 for (j = 0; j < b->payload.u.jpch.children.nCount; ++j)
-                    if (b->payload.u.jpch.children.arr[j].payload.kind ==
-                        InnerPayload_jp2c_PRESENT)
-                        return "jpch.nested-jp2c";
-                jpch++;
+                    if ((r = hv_rule_child(HV_BOX_JPCH,
+                                           cf_inner_type(&b->payload.u.jpch.children.arr[j]))) != NULL)
+                        return r;
+                count.jpch++;
                 break;
             case CF_K(TopPayload, ftbl): {
                 const CF_T(Superbox) *sb = &b->payload.u.ftbl;
                 int flst = 0;
-                ftbl++;
+                count.ftbl++;
                 for (j = 0; j < sb->children.nCount; ++j) {
                     const CF_T(InnerBox) *c = &sb->children.arr[j];
+                    if ((r = hv_rule_child(HV_BOX_FTBL, CF_CAT3(cf_inner_type, CF_S, _)(c))) != NULL)
+                        return r;
                     if (c->payload.kind != CF_K(InnerPayload, flst)) continue;
                     flst++;
-                    if (layer >= CF_PROFILE && kind == CF_JPX &&
-                        (c->payload.u.flst.nf != 1 ||
-                         c->payload.u.flst.fragments.nCount != 1))
-                        return "flst.one-fragment";
-                    for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k) {
-                        int dr = (int) c->payload.u.flst.fragments.arr[k].dr;
-                        if (dr > ndr) return "flst.dr-range";
-                        if (layer >= CF_PROFILE && kind == CF_JPX && dr == 0) return "flst.dr-external";
-                    }
+                    if (layer >= CF_PROFILE &&
+                        (r = hv_rule_flst(c->payload.u.flst.nf,
+                                          c->payload.u.flst.fragments.nCount)) != NULL)
+                        return r;
+                    for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k)
+                        if ((r = hv_rule_fragment_dr(c->payload.u.flst.fragments.arr[k].dr,
+                                                     (uint64_t) ndr, layer >= CF_PROFILE)) != NULL)
+                            return r;
                 }
                 if (flst != 1) return "ftbl.one-flst";     /* T.801 Annex M, Fragment Table box */
                 break;
@@ -279,34 +290,15 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         }
     }
 
+    /* The count rules (hv_rule_jpx). The model has no jclx or Multiple
+     * Codestream box, so every codestream and every header is top level.
+     * Layer 2 for a .jp2 is cf_check_jp2_profile, in crossfield.c. */
     if (kind == CF_JPX) {
         for (i = 0; i < file->boxes.nCount; ++i)
-            if (file->boxes.arr[i].payload.kind == CF_K(TopPayload, rreq)) rreq++;
-        if (layer == CF_STANDARD &&
-            (rreq != 1 || file->boxes.nCount < 3 ||
-             file->boxes.arr[2].payload.kind != CF_K(TopPayload, rreq)))
-            return "jpx.reader-requirements";
-        /* T.801 M.11.2: "A JPX file shall contain zero or one Data Reference
-         * boxes, and that Data Reference box shall be at the top level of the
-         * file." */
-        if (dtbl > 1) return "jpx.one-dtbl";
-        /* T.801 M.11.6: "If Codestream Header boxes appear anywhere in the
-         * file, the number of codestreams found in the file shall be the same
-         * as the number of available codestream headers." Every jp2c or ftbl
-         * is one codestream, numbered by source-box order. A file with no
-         * jpch box takes its header information from jp2h and is unconstrained
-         * here. The model has no jclx or Multiple Codestream box, so every
-         * codestream and every header is top level. */
-        if (jpch > 0 && jp2c + ftbl != jpch) return "jpx.codestream-count";
-    }
-
-    /* Layer 2 for a .jp2 is cf_check_jp2_profile, in crossfield.c. */
-    if (layer >= CF_PROFILE && kind == CF_JPX) {
-        /* ReadJPX requires the header the standard makes optional. */
-        if (jpch < 1) return "jpx.no-jpch";
-        /* Embedded and linked codestreams do not mix. */
-        if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
-        if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
+            if (file->boxes.arr[i].payload.kind == CF_K(TopPayload, rreq)) count.rreq++;
+        count.rreq_third = file->boxes.nCount >= 3 &&
+                           file->boxes.arr[2].payload.kind == CF_K(TopPayload, rreq);
+        if ((r = hv_rule_jpx(&count, layer >= CF_PROFILE)) != NULL) return r;
     }
     return NULL;
 }

@@ -14,13 +14,8 @@
 
 /* Nonzero if the codestream reads through with these flags. */
 static int reads(const hv_out *cs, unsigned flags) {
-    hv_codestream c;
-    hv_item item;
-    int status = hv_codestream_open(&c, cs->data, 0, cs->size, flags);
-    while (status == 0 && (status = hv_codestream_next(&c, &item)) == 1)
-        status = item.kind == HV_END ? 1 : 0;
-    hv_codestream_close(&c);
-    return status == 1;
+    size_t at;
+    return hv_codestream_check(cs->data, 0, cs->size, flags, &at) == NULL;
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {

@@ -5,8 +5,9 @@
  *   -v  print every box and codestream item
  *   -p  accept trailing zero PLT entries of each tile-part
  *       (HV_ACCEPT_PLT_PADDING), as deployed files carry them
- *   -P  check the served profile: the JP2 file rules (hv_check_jp2) and
- *       HV_PROFILE for the codestream
+ *   -P  check the served profile: the file rules (hv_check_jp2, or
+ *       hv_check_jpx for a .jpx, with every linked file), and HV_PROFILE for
+ *       the codestreams
  *   -w  rewrite the whole file with hv_writer from what the reader decoded,
  *       and compare it with the input */
 #include <stdio.h>
@@ -190,51 +191,96 @@ write_failed:
     return -1;
 }
 
-static int walk_file(const char *path) {
+/* The whole file, or NULL. */
+static uint8_t *read_whole(const char *path, size_t *size) {
     FILE *f = fopen(path, "rb");
     uint8_t *buf = NULL;
-    long size;
+    long n;
+    if (f == NULL || fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 ||
+        fseek(f, 0, SEEK_SET) != 0 || (buf = malloc(n ? (size_t)n : 1)) == NULL ||
+        fread(buf, 1, (size_t)n, f) != (size_t)n) {
+        free(buf);
+        buf = NULL;
+    } else {
+        *size = (size_t)n;
+    }
+    if (f)
+        fclose(f);
+    return buf;
+}
+
+/* The file rules of the served profile; for a .jpx, also the linked files,
+ * named in *linked when one fails. */
+static const char *check_profile(const char *path, const uint8_t *buf, size_t size, size_t *at,
+                                 char *linked, size_t linked_size) {
+    size_t n = strlen(path), i;
+    const char *error;
+    hv_jpx jpx;
+    hv_box jp2c;
+
+    if (n < 4 || strcmp(path + n - 4, ".jpx") != 0)
+        return hv_check_jp2(buf, size, &jp2c, at);
+    if ((error = hv_check_jpx(buf, size, &jpx, at)) != NULL)
+        return error;
+    for (i = 0; i < jpx.count && error == NULL && jpx.links != NULL; i++) {
+        size_t link_size = 0;
+        uint8_t *link;
+        if (hv_link_path(&jpx.links[i], path, linked, linked_size) != 0) {
+            error = "url: cannot decode the path";
+            *at = 0;
+        } else if ((link = read_whole(linked, &link_size)) == NULL) {
+            error = "url.missing-companion";
+            *at = 0;
+        } else {
+            error = hv_check_link(link, link_size, &jpx.links[i], at);
+            free(link);
+        }
+    }
+    if (error == NULL)
+        linked[0] = 0;
+    hv_jpx_free(&jpx);
+    return error;
+}
+
+static int walk_file(const char *path) {
+    uint8_t *buf;
+    size_t size = 0;
     walk_result r;
     int status;
+    char linked[4096] = "";
 
     memset(&r, 0, sizeof r);
     hv_out_init(&r.out);
-    if (f == NULL || fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 ||
-        fseek(f, 0, SEEK_SET) != 0 || (buf = malloc(size ? (size_t)size : 1)) == NULL ||
-        fread(buf, 1, (size_t)size, f) != (size_t)size) {
+    if ((buf = read_whole(path, &size)) == NULL) {
         printf("ERROR   %s: cannot read\n", path);
-        if (f) fclose(f);
-        free(buf);
         return -1;
     }
-    fclose(f);
-    if (profile) {
-        hv_box jp2c;
-        r.error = hv_check_jp2(buf, (size_t)size, &jp2c, &r.at);
-    }
+    if (profile)
+        r.error = check_profile(path, buf, size, &r.at, linked, sizeof linked);
     if (r.error != NULL) {
         status = -1;
     } else if (size >= 2 && buf[0] == 0xFF && buf[1] == 0x4F) {
-        status = walk_codestream(buf, 0, (size_t)size, &r);
+        status = walk_codestream(buf, 0, size, &r);
     } else {
         hv_boxes it;
-        hv_boxes_file(&it, buf, (size_t)size);
+        hv_boxes_file(&it, buf, size);
         status = walk_boxes(buf, &it, 0, &r);
     }
     if (status != 0) {
-        printf("invalid %s: %s at %zu\n", path, r.error, r.at);
+        printf("invalid %s: %s at %zu%s%s\n", path, r.error, r.at, linked[0] ? " of " : "",
+               linked);
     } else {
         printf("valid   %s: %d boxes, %d codestreams, %d tile-parts", path, r.boxes,
                r.codestreams, r.tile_parts);
         if (r.plt_padding != 0)
             printf(", %lu zero PLT entries", r.plt_padding);
         if (rewrite) {
-            size_t i = 0, n = r.out.size < (size_t)size ? r.out.size : (size_t)size;
+            size_t i = 0, n = r.out.size < size ? r.out.size : size;
             while (i < n && r.out.data[i] == buf[i])
                 i++;
             if (r.uncomparable != NULL)
                 printf("; rewrite not compared: %s", r.uncomparable);
-            else if (i == n && r.out.size == (size_t)size)
+            else if (i == n && r.out.size == size)
                 printf("; rewritten identically");
             else {
                 printf("; rewrite differs at %zu", i);

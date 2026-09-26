@@ -2,6 +2,7 @@
 #include "hv_rules.h"
 
 #include <stddef.h>
+#include <string.h>
 
 const char *hv_rule_siz(const Siz *s, const Sgcod *sgcod, int profile) {
     int i;
@@ -124,5 +125,50 @@ const char *hv_rule_plt_packets(const hv_plt_count *count, const Siz *siz,
         return profile ? "codestream.packet-count" : NULL;
     if (profile && count->padding && count->packets < packets) return "plt.zero-length";
     if (count->packets != packets) return "plt.packet-count";
+    return NULL;
+}
+
+const char *hv_rule_child(uint32_t parent, uint32_t child) {
+    if (parent == HV_BOX_DTBL && child != HV_BOX_URL) return "dtbl.non-url";
+    if (child == HV_BOX_JP2C) return parent == HV_BOX_JPCH ? "jpch.nested-jp2c" : "box.nested-jp2c";
+    if (child == HV_BOX_JPCH || child == HV_BOX_FTBL || child == HV_BOX_DTBL)
+        return "box.nested-superbox";
+    if (child == HV_BOX_FLST && parent != HV_BOX_FTBL) return "box.flst-placement";
+    if (child == HV_BOX_URL && parent != HV_BOX_DTBL) return "box.url-placement";
+    return NULL;
+}
+
+const char *hv_rule_url(uint64_t vers, uint64_t flag, const uint8_t *loc, size_t n) {
+    if (vers != 0 || flag != 0) return "url.version-flags";
+    if (n == 0 || memchr(loc, 0, n) != loc + n - 1) return "url.terminator";
+    n--;                                           /* the characters */
+    if (n < 8) return "url.length";
+    if (memcmp(loc, "file://", 7) != 0) return "url.file-scheme";
+    if (memcmp(loc + n - 4, ".jp2", 4) != 0) return "url.jp2-target";
+    return NULL;
+}
+
+const char *hv_rule_flst(uint64_t nf, int fragments) {
+    return nf == 1 && fragments == 1 ? NULL : "flst.one-fragment";
+}
+
+const char *hv_rule_fragment_dr(uint64_t dr, uint64_t ndr, int profile) {
+    if (dr > ndr) return "flst.dr-range";
+    if (profile && dr == 0) return "flst.dr-external";
+    return NULL;
+}
+
+const char *hv_rule_jpx(const hv_jpx_boxes *b, int profile) {
+    if (!profile && (b->rreq != 1 || !b->rreq_third)) return "jpx.reader-requirements";
+    /* M.11.2: "A JPX file shall contain zero or one Data Reference boxes". */
+    if (b->dtbl > 1) return "jpx.one-dtbl";
+    /* M.11.6: as many codestreams (jp2c or ftbl) as codestream headers,
+     * where there are any; without jpch, jp2h gives the header. */
+    if (b->jpch > 0 && b->jp2c + b->ftbl != b->jpch) return "jpx.codestream-count";
+    if (profile) {
+        if (b->jpch < 1) return "jpx.no-jpch";     /* ReadJPX needs jpch */
+        if (b->jp2c > 0 && b->ftbl > 0) return "jpx.mixed-sources";
+        if (b->ftbl > 0 && b->dtbl != 1) return "jpx.linked-shape";
+    }
     return NULL;
 }

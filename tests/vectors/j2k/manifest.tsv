@@ -425,6 +425,8 @@ jpx-linked-rule-flst.source-extent-13.jpx	jpx	valid	invalid	flst.source-extent	f
 jpx-linked-rule-flst.source-extent-14.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment omits final companion codestream byte	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.source-extent-15.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment extends past companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.missing-companion-16.jpx	jpx	valid	invalid	url.missing-companion	url.missing-companion	structurally valid JPX with unavailable companion	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-box.flst-placement-17.jpx	jpx	invalid	invalid	box.flst-placement	box.flst-placement	flst inside a jpch (T.801 M.11.3: in ftbl)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-box.url-placement-18.jpx	jpx	invalid	invalid	box.url-placement	box.url-placement	url inside an ftbl (T.801 M.11.2: in dtbl)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

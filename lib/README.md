@@ -15,8 +15,8 @@ payload starts and ends.
 | `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC. |
 | `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65 535). |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
-| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries, `-P` checks the served profile, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
-| `test/` | `test_profile`: every JP2 vector of `../tests/vectors/j2k` must pass `hv_check_jp2` and `HV_PROFILE` exactly when the manifest labels it profile-valid. Run with the transcoder's tests (`../transcode/test/run.sh`). |
+| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries, `-P` checks the served profile (a `.jpx` with its linked files), `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
+| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's profile mode (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid. Run with the transcoder's tests (`../transcode/test/run.sh`). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types in `../spec/jpeg2000-io.asn1`, the profile types the reader checks against, and what they use. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`). |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TRANSCODE_TESTS`. |
@@ -65,8 +65,18 @@ a PLT decoder that reads an uninitialized flag on truncated input.
   at most `INT_MAX` bytes, the signature box, then the file type box with
   the `jp2 ` brand and compatibility entry, top-level boxes framed as above,
   exactly one `jp2c`. A raw codestream fails.
+- `hv_check_jpx` (`hv_walk -P` on a `.jpx`), the profile's file rules for
+  a JPX file, as `ReadJPX` reads it: the signature and a file type box with
+  the `jpx ` brand; the children of `jpch`, `ftbl` and `dtbl`, placed as
+  T.801 Annex M requires (`hv_rule_child`); the count rules
+  (`hv_rule_jpx`); one fragment per `ftbl`, and version-0 `file://` URLs
+  naming `.jp2` files. It returns the codestreams, embedded or linked;
+  `hv_codestream_check` reads an embedded one, `hv_link_path` resolves a
+  link as the server does, and `hv_check_link` checks the linked file and
+  that the fragment is exactly its codestream. Other boxes, `asoc`
+  included, are opaque, as they are to the server.
 
-Not yet: JPX rules, box bodies other than the box header and `ftyp`, and,
+Not yet: box bodies other than the box header, `ftyp`, `flst` and `url`, and,
 outside the profile, PLT against the packet count. The model's standard
 layer counts packets where the layout allows (one tile, no COC or POC),
 which the reader does only with `HV_PROFILE`. Unknown marker codes are

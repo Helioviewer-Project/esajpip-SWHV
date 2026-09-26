@@ -42,6 +42,13 @@ ComSegment-Std [] {
     body        [size length]
 }
 
+DataReferenceCount [encoding pos-int, size 16, endianness big]
+
+UrlHeader [] {
+    vers        [encoding pos-int, size 8],
+    flag        [encoding pos-int, size 24, endianness big]
+}
+
 SotSegment [] {
     lsot        [encoding pos-int, size 16, endianness big],
     isot        [encoding pos-int, size 16, endianness big],

@@ -2,6 +2,7 @@
 #include "hv_reader.h"
 
 #include "j2k-codestream.h"   /* MainMarkerCode-Profile, TileMarkerCode-Profile */
+#include "jp2-boxes.h"        /* FragmentList-Profile */
 
 #include <limits.h>
 #include <stdlib.h>
@@ -34,6 +35,9 @@ DEFINE_DECODE(CodSegment_Std)
 DEFINE_DECODE(QcdSegment_Std)
 DEFINE_DECODE(PltSegment_Std)
 DEFINE_DECODE(ComSegment_Std)
+DEFINE_DECODE(DataReferenceCount)
+DEFINE_DECODE(UrlHeader)
+DEFINE_DECODE(FragmentList_Profile)
 
 static size_t min_size(size_t a, size_t b) { return a < b ? a : b; }
 
@@ -123,50 +127,62 @@ int hv_is_superbox(uint32_t type) {
 }
 
 /* ------------------------------------------------------------------------
- * JP2 file rules of the served profile
+ * File rules of the served profile: JP2 and JPX
  * ------------------------------------------------------------------------ */
 
-enum { BOX_FTYP = 0x66747970, BOX_JP2C = 0x6A703263, BRAND_JP2 = 0x6A703220 };
+enum { BOX_FTYP = 0x66747970, BOX_RREQ = 0x72726571,
+       BRAND_JP2 = 0x6A703220, BRAND_JPX = 0x6A707820 };
 
 static uint32_t get32(const uint8_t *p) {
     return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
 }
 
-/* The rule names are those of the file rules in
- * ../spec/harness/crossfield.c, except file.size-limit, which the corpus
- * cannot exercise. */
-const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
+/* The size and the signature box, before any box is read. */
+static const char *check_start(const uint8_t *buf, size_t size) {
     static const uint8_t signature[12] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
                                           0x0D, 0x0A, 0x87, 0x0A};
-    hv_boxes it;
-    hv_box box;
-    const char *error = NULL;
-    size_t i, n = 0;
-    int status, codestreams = 0, compatible = 0;
-
-    *at = 0;
     if (size > INT_MAX)
         return "file.size-limit";
     if (size < 12 || memcmp(buf, signature, 12) != 0)
         return "file.signature";
+    return NULL;
+}
+
+/* The second box: File Type, with the brand and a compatibility entry
+ * (T.800 I.5.2, T.801 M.11.1.2): brand, MinV, then the list. */
+static const char *check_ftyp(const uint8_t *buf, const hv_box *box, uint32_t brand) {
+    size_t length = box->end - box->payload, i;
+    int compatible = 0;
+    if (box->type != BOX_FTYP)
+        return "file.ftyp-second";
+    if (length < 12 || length % 4 != 0)
+        return "ftyp: contents shorter than 12 bytes or not a multiple of 4";
+    if (get32(buf + box->payload) != brand)
+        return "file.ftyp-brand";
+    for (i = box->payload + 8; i < box->end; i += 4)
+        compatible |= get32(buf + i) == brand;
+    return compatible ? NULL : "file.ftyp-compatibility";
+}
+
+/* The rule names are those of the file rules in
+ * ../spec/harness/crossfield.c and lib/hv_rules.c, except file.size-limit,
+ * which the corpus cannot exercise. */
+const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
+    hv_boxes it;
+    hv_box box;
+    const char *error;
+    size_t n = 0;
+    int status, codestreams = 0;
+
+    *at = 0;
+    if ((error = check_start(buf, size)) != NULL)
+        return error;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
         *at = box.start;
-        if (n == 1) {
-            /* Brand, MinV, then the compatibility list (I.5.2). */
-            size_t length = box.end - box.payload;
-            if (box.type != BOX_FTYP)
-                return "file.ftyp-second";
-            if (length < 12 || length % 4 != 0)
-                return "ftyp: contents shorter than 12 bytes or not a multiple of 4";
-            if (get32(buf + box.payload) != BRAND_JP2)
-                return "file.ftyp-brand";
-            for (i = box.payload + 8; i < box.end; i += 4)
-                compatible |= get32(buf + i) == BRAND_JP2;
-            if (!compatible)
-                return "file.ftyp-compatibility";
-        }
-        if (box.type == BOX_JP2C && codestreams++ == 0)
+        if (n == 1 && (error = check_ftyp(buf, &box, BRAND_JP2)) != NULL)
+            return error;
+        if (box.type == HV_BOX_JP2C && codestreams++ == 0)
             *jp2c = box;
         n++;
     }
@@ -180,6 +196,255 @@ const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *
         *at = size;
         return "jp2.one-codestream";
     }
+    return NULL;
+}
+
+/* Grows *p (elements of `size` bytes, *cap of them) to hold n + 1. */
+static int grow(void *p, size_t *cap, size_t n, size_t size) {
+    void **q = p, *r;
+    size_t c = *cap ? 2 * *cap : 16;
+    if (n < *cap)
+        return 0;
+    if ((r = realloc(*q, c * size)) == NULL)
+        return -1;
+    *q = r;
+    *cap = c;
+    return 0;
+}
+
+void hv_jpx_free(hv_jpx *jpx) {
+    free(jpx->jp2c);
+    free(jpx->links);
+    jpx->jp2c = NULL;
+    jpx->links = NULL;
+    jpx->count = 0;
+}
+
+/* One url box of a dtbl: LOC recorded in urls. */
+static const char *check_url(const uint8_t *buf, const hv_box *box, hv_link *url) {
+    UrlHeader h;
+    const char *error;
+    size_t n = box->end - box->payload;
+    if (n < 4 || DECODE(UrlHeader, &h, buf, box->payload, 4) != 0)
+        return "url: shorter than VERS and FLAG";
+    if ((error = hv_rule_url(h.vers, h.flag, buf + box->payload + 4, n - 4)) != NULL)
+        return error;
+    url->loc = buf + box->payload + 4;
+    url->loc_size = n - 5;                       /* without the NUL */
+    return NULL;
+}
+
+/* One flst box of an ftbl: its fragment recorded in link. */
+static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *link) {
+    FragmentList_Profile f;
+    const char *error;
+    size_t n = box->end - box->payload;
+    int fragments = n >= 2 && (n - 2) % 14 == 0 ? (int)((n - 2) / 14) : 0;
+    if ((error = hv_rule_flst(n >= 2 ? (uint64_t)buf[box->payload] << 8 | buf[box->payload + 1] : 0,
+                              fragments)) != NULL)
+        return error;
+    if (DECODE(FragmentList_Profile, &f, buf, box->payload, n) != 0)
+        return "flst.one-fragment";
+    link->offset = f.fragments.arr[0].off;
+    link->length = f.fragments.arr[0].len;
+    link->dr = f.fragments.arr[0].dr;
+    return NULL;
+}
+
+/* The rule names are those of lib/hv_rules.c and
+ * ../spec/harness/crossfield_impl.h. */
+const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at) {
+    hv_boxes it, children;
+    hv_box box, child;
+    hv_jpx_boxes count = {0, 0, 0, 0, 0, 0};
+    hv_link *urls = NULL;
+    size_t n = 0, nurls = 0, url_cap = 0, jp2c_cap = 0, link_cap = 0, i;
+    uint64_t ndr = 0;
+    const char *error;
+    int status;
+
+    memset(jpx, 0, sizeof *jpx);
+    *at = 0;
+    if ((error = check_start(buf, size)) != NULL)
+        return error;
+    hv_boxes_file(&it, buf, size);
+    while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
+        *at = box.start;
+        if (n == 1 && (error = check_ftyp(buf, &box, BRAND_JPX)) != NULL)
+            goto fail;
+        n++;
+        switch (box.type) {
+        case BOX_RREQ:
+            count.rreq++;
+            count.rreq_third |= n == 3;
+            break;
+        case HV_BOX_JP2C:
+            count.jp2c++;
+            if (grow(&jpx->jp2c, &jp2c_cap, jpx->count, sizeof *jpx->jp2c) != 0)
+                goto oom;
+            jpx->jp2c[jpx->count++] = box;
+            break;
+        case HV_BOX_JPCH:
+        case HV_BOX_FTBL: {
+            int flsts = 0;
+            if (box.type == HV_BOX_JPCH)
+                count.jpch++;
+            else
+                count.ftbl++;
+            hv_boxes_children(&children, buf, &box);
+            while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
+                *at = child.start;
+                if ((error = hv_rule_child(box.type, child.type)) != NULL)
+                    goto fail;
+                if (child.type != HV_BOX_FLST)
+                    continue;
+                if (flsts++ == 0) {
+                    if (grow(&jpx->links, &link_cap, count.ftbl - 1, sizeof *jpx->links) != 0)
+                        goto oom;
+                    if ((error = check_flst(buf, &child, &jpx->links[count.ftbl - 1])) != NULL)
+                        goto fail;
+                }
+            }
+            if (status < 0)
+                goto fail;
+            *at = box.start;
+            if (box.type == HV_BOX_FTBL && flsts != 1) {
+                error = "ftbl.one-flst";        /* T.801 M.11.3 */
+                goto fail;
+            }
+            break;
+        }
+        case HV_BOX_DTBL: {
+            DataReferenceCount c;
+            hv_box refs = box;
+            count.dtbl++;
+            if (box.end - box.payload < 2 || DECODE(DataReferenceCount, &c, buf, box.payload, 2) != 0) {
+                error = "dtbl: shorter than NDR";
+                goto fail;
+            }
+            ndr = c;
+            refs.payload += 2;
+            hv_boxes_children(&children, buf, &refs);
+            while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
+                *at = child.start;
+                if ((error = hv_rule_child(box.type, child.type)) != NULL)
+                    goto fail;
+                if (grow(&urls, &url_cap, nurls, sizeof *urls) != 0)
+                    goto oom;
+                if ((error = check_url(buf, &child, &urls[nurls++])) != NULL)
+                    goto fail;
+            }
+            if (status < 0)
+                goto fail;
+            *at = box.start;
+            if (nurls != ndr) {
+                error = "dtbl.ndr-count";
+                goto fail;
+            }
+            break;
+        }
+        default:
+            break;                              /* asoc and the rest: opaque */
+        }
+    }
+    if (status < 0)
+        goto fail;
+    *at = size;
+    if (n < 2) {
+        error = "file.two-boxes";
+        goto fail;
+    }
+    if ((error = hv_rule_jpx(&count, 1)) != NULL)
+        goto fail;
+    if (count.ftbl > 0) {
+        jpx->count = (size_t)count.ftbl;
+        for (i = 0; i < jpx->count; i++) {
+            if ((error = hv_rule_fragment_dr(jpx->links[i].dr, ndr, 1)) != NULL)
+                goto fail;
+            jpx->links[i].loc = urls[jpx->links[i].dr - 1].loc;
+            jpx->links[i].loc_size = urls[jpx->links[i].dr - 1].loc_size;
+        }
+        free(jpx->jp2c);
+        jpx->jp2c = NULL;
+    } else {
+        free(jpx->links);
+        jpx->links = NULL;
+    }
+    free(urls);
+    return NULL;
+
+oom:
+    error = "out of memory";
+fail:
+    free(urls);
+    hv_jpx_free(jpx);
+    return error;
+}
+
+/* RFC 3986 percent-decoding of LOC after "file://", as the server does
+ * (g_uri_unescape_string): no %00, and every % followed by two hex digits. */
+static int hex(int c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+         : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size) {
+    const uint8_t *p = link->loc + 7, *end = link->loc + link->loc_size;
+    size_t n = 0;
+    if (link->loc_size < 8)
+        return -1;
+    if (*p != '/' && jpx_path != NULL) {
+        const char *slash = strrchr(jpx_path, '/');
+        size_t dir = slash ? (size_t)(slash - jpx_path) + 1 : 0;
+        if (dir >= out_size)
+            return -1;
+        memcpy(out, jpx_path, dir);
+        n = dir;
+    }
+    for (; p < end; p++) {
+        int c = *p;
+        if (c == '%') {
+            int hi, lo;
+            if (end - p < 3 || (hi = hex(p[1])) < 0 || (lo = hex(p[2])) < 0 || hi * 16 + lo == 0)
+                return -1;
+            c = hi * 16 + lo;
+            p += 2;
+        }
+        if (n + 1 >= out_size)
+            return -1;
+        out[n++] = (char)c;
+    }
+    if (n == 0)
+        return -1;
+    out[n] = 0;
+    return 0;
+}
+
+const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,
+                                size_t *at) {
+    hv_codestream cs;
+    hv_item item;
+    const char *error = NULL;
+    int status = hv_codestream_open(&cs, buf, start, end, flags);
+    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1)
+        status = item.kind == HV_END ? 1 : 0;
+    if (status < 0) {
+        error = cs.error;
+        *at = cs.error_at;
+    }
+    hv_codestream_close(&cs);
+    return error;
+}
+
+const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, size_t *at) {
+    hv_box jp2c;
+    const char *error;
+    if ((error = hv_check_jp2(buf, size, &jp2c, at)) != NULL ||
+        (error = hv_codestream_check(buf, jp2c.payload, jp2c.end, HV_PROFILE, at)) != NULL)
+        return error;
+    *at = jp2c.payload;
+    if (link->offset != jp2c.payload || link->length != jp2c.end - jp2c.payload)
+        return "flst.source-extent";
     return NULL;
 }
 

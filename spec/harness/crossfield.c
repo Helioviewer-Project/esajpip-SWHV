@@ -25,6 +25,16 @@ static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
+/* The box type of a layer-1 inner box for hv_rule_child (0: any other). */
+static uint32_t cf_inner_type(const InnerBox *b) {
+    switch (b->payload.kind) {
+        case InnerPayload_flst_PRESENT: return HV_BOX_FLST;
+        case InnerPayload_url_PRESENT:  return HV_BOX_URL;
+        case InnerPayload_jp2c_PRESENT: return HV_BOX_JP2C;
+        default:                        return 0;
+    }
+}
+
 /* Layer-1 family: boxes have `other`; codestream markers do not. */
 #define CF_S
 #define CF_FILE Jp2Family

@@ -62,6 +62,24 @@ QcdSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Std) }   -- Lqcd
 PltSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Std) }   -- Lplt 4 to 65 535
 ComSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Std) }   -- Lcom 5 to 65 535
 
+-- ---------------------------------------------------------------------------
+-- JPX boxes, T.801 Annex M, read one box at a time
+-- ---------------------------------------------------------------------------
+
+-- Data Reference box (M.11.2): NDR, then NDR Data Entry URL boxes, which
+-- the walker steps through.
+DataReferenceCount ::= INTEGER (0..65535)
+
+-- Data Entry URL box: VERS and FLAG. LOC, a NUL-terminated string, fills
+-- the rest of the box; the walker checks it (hv_rule_url).
+UrlHeader ::= SEQUENCE {
+    vers        INTEGER (0..255),
+    flag        INTEGER (0..16777215)
+}
+
+-- The Fragment List box of the served profile, one fragment: FragmentList-
+-- Profile in jp2-boxes.asn1 (16 bytes).
+
 -- SOT marker segment after the FF90 code, A.4.2 (Table A.5).
 SotSegment ::= SEQUENCE {
     lsot        INTEGER (10..10),

@@ -27,10 +27,268 @@ extern asn1SccUint jp2boxtype_decode(asn1SccUint);
 
 
 
+flag Fragment_off_IsConstraintValid(const Fragment_off* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+	(void)pVal;
+    ret = TRUE;
+    *pErrCode = 0;
+
+	return ret;
+}
+
+flag Fragment_len_IsConstraintValid(const Fragment_len* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 4294967295UL));
+    *pErrCode = ret ? 0 :  ERR_FRAGMENT_LEN;
+
+	return ret;
+}
+
+flag Fragment_dr_IsConstraintValid(const Fragment_dr* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 65535UL);
+    *pErrCode = ret ? 0 :  ERR_FRAGMENT_DR;
+
+	return ret;
+}
+
+flag Fragment_IsConstraintValid(const Fragment* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Fragment_off_IsConstraintValid((&(pVal->off)), pErrCode);
+    if (ret) {
+        ret = Fragment_len_IsConstraintValid((&(pVal->len)), pErrCode);
+        if (ret) {
+            ret = Fragment_dr_IsConstraintValid((&(pVal->dr)), pErrCode);
+        }   /*COVERAGE_IGNORE*/
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void Fragment_off_Initialize(Fragment_off* pVal)
+{
+	(void)pVal;
 
 
+	(*(pVal)) = 0UL;
+}
+void Fragment_len_Initialize(Fragment_len* pVal)
+{
+	(void)pVal;
 
 
+	(*(pVal)) = 1UL;
+}
+void Fragment_dr_Initialize(Fragment_dr* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+void Fragment_Initialize(Fragment* pVal)
+{
+	(void)pVal;
+
+
+	/*set off */
+	Fragment_off_Initialize((&(pVal->off)));
+	/*set len */
+	Fragment_len_Initialize((&(pVal->len)));
+	/*set dr */
+	Fragment_dr_Initialize((&(pVal->dr)));
+}
+
+flag Fragment_ACN_Encode(const Fragment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? Fragment_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode off */
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_64(pBitStrm, pVal->off);
+	    if (ret) {
+	        /*Encode len */
+	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->len);
+	        if (ret) {
+	            /*Encode dr */
+	            Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->dr);
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag Fragment_ACN_Decode(Fragment* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	/*Decode off */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_64(pBitStrm, (&(pVal->off)));
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENT_OFF;
+	if (ret) {
+	    /*Decode len */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->len)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENT_LEN;
+	    if (ret) {
+	        /*Decode dr */
+	        ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->dr)));
+	        *pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENT_DR;
+	    }   /*COVERAGE_IGNORE*/
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && Fragment_IsConstraintValid(pVal, pErrCode);
+}
+
+
+flag FragmentList_nf_IsConstraintValid(const FragmentList_nf* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 65535UL));
+    *pErrCode = ret ? 0 :  ERR_FRAGMENTLIST_NF;
+
+	return ret;
+}
+
+flag FragmentList_fragments_IsConstraintValid(const FragmentList_fragments* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    int i1;
+    ret = ((1 <= pVal->nCount) && (pVal->nCount <= 16));
+    *pErrCode = ret ? 0 :  ERR_FRAGMENTLIST_FRAGMENTS;
+    if (ret) {
+        for(i1 = 0; ret && i1 < pVal->nCount; i1++)
+        {
+        	ret = Fragment_IsConstraintValid((&(pVal->arr[i1])), pErrCode);
+        }
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+flag FragmentList_IsConstraintValid(const FragmentList* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = FragmentList_nf_IsConstraintValid((&(pVal->nf)), pErrCode);
+    if (ret) {
+        ret = FragmentList_fragments_IsConstraintValid((&(pVal->fragments)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void FragmentList_nf_Initialize(FragmentList_nf* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 1UL;
+}
+void FragmentList_fragments_Initialize(FragmentList_fragments* pVal)
+{
+	(void)pVal;
+
+    int i1;
+
+	i1 = 0;
+	while (i1< 16) {
+	    Fragment_Initialize((&(pVal->arr[i1])));
+	    i1 = i1 + 1;
+	}
+	pVal->nCount = 1;
+}
+void FragmentList_Initialize(FragmentList* pVal)
+{
+	(void)pVal;
+
+
+	/*set nf */
+	FragmentList_nf_Initialize((&(pVal->nf)));
+	/*set fragments */
+	FragmentList_fragments_Initialize((&(pVal->fragments)));
+}
+
+
+flag FragmentList_Profile_IsConstraintValid(const FragmentList_Profile* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = FragmentList_IsConstraintValid(pVal, pErrCode);
+    if (ret) {
+        ret = ((1UL <= pVal->nf) && (pVal->nf <= 1UL));
+        if (ret) {
+            ret = ((1 <= pVal->fragments.nCount) && (pVal->fragments.nCount <= 1));
+        }   /*COVERAGE_IGNORE*/
+        *pErrCode = ret ? 0 :  ERR_FRAGMENTLIST_PROFILE_2;
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void FragmentList_Profile_Initialize(FragmentList_Profile* pVal)
+{
+	(void)pVal;
+
+
+	FragmentList_Initialize(pVal);
+}
+
+flag FragmentList_Profile_ACN_Encode(const FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+	int i1;
+    *pErrCode = 0;
+	ret = bCheckConstraints ? FragmentList_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode nf */
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->nf);
+	    if (ret) {
+	        /*Encode fragments */
+	        BitStream_EncodeConstraintWholeNumber(pBitStrm, pVal->fragments.nCount, 1, 1);
+	        for(i1=0; (i1 < (int)pVal->fragments.nCount) && ret; i1++)
+	        {
+	        	ret = Fragment_ACN_Encode((&(pVal->fragments.arr[i1])), pBitStrm, pErrCode, FALSE);
+	        }
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag FragmentList_Profile_ACN_Decode(FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	int i1;
+	asn1SccSint nCount;
+
+	/*Decode nf */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->nf)));
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_NF;
+	if (ret) {
+	    /*Decode fragments */
+	    ret = BitStream_DecodeConstraintWholeNumber(pBitStrm, &nCount, 1, 1);
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_FRAGMENTS;
+	    pVal->fragments.nCount = (long)nCount;
+	    for(i1=0; (i1 < (int)pVal->fragments.nCount) && ret; i1++)
+	    {
+	    	ret = Fragment_ACN_Decode((&(pVal->fragments.arr[i1])), pBitStrm, pErrCode);
+	    }
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && FragmentList_Profile_IsConstraintValid(pVal, pErrCode);
+}
 
 
 

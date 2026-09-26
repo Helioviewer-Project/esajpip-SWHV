@@ -15,7 +15,7 @@ a small program that turns that description into a **corpus of test files**:
 hundreds of tiny `.jp2`/`.jpx` files, each labelled "the server must
 accept this" or "the server must reject this". `tests/jpeg2000_test.cc` then
 opens every one and checks that the server agrees, and
-`lib/test/test_profile.c` does the same for the JP2 reader in `../lib/`,
+`lib/test/test_profile.c` does the same for the reader in `../lib/`,
 which shares the cross-field rules on marker-segment bodies with the
 harness (`../lib/hv_rules.c`).
 
@@ -241,7 +241,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
                                         tests/vectors/j2k/*.jp2, *.jpx, manifest.tsv
                                                           │
    tests/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
-   lib/test/test_profile.c ─ hv_check_jp2 + HV_PROFILE, JP2 ▶ must match the profile label
+   lib/test/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
 ```
 
 Two facts make the generated code a good judge of validity. First, the

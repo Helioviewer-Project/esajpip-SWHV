@@ -142,16 +142,8 @@ static bytes without_com(bytes cs) {
 /* NULL if the codestream in buf[start, end) reads through with these
  * hv_codestream_open flags, otherwise the reader's error. */
 static const char *read_error(const uint8_t *buf, size_t start, size_t end, unsigned flags) {
-    hv_codestream cs;
-    hv_item item;
-    const char *error = NULL;
-    int status = hv_codestream_open(&cs, buf, start, end, flags);
-    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1)
-        status = item.kind == HV_END ? 1 : 0;
-    if (status < 0)
-        error = cs.error;
-    hv_codestream_close(&cs);
-    return error;
+    size_t at;
+    return hv_codestream_check(buf, start, end, flags, &at);
 }
 
 /* A transcoded file is within the whole served profile. */
