@@ -8,30 +8,37 @@
  * code-block partition unchanged.
  *
  * Supported input: one tile (any number of tile-parts), any progression
- * order, no COC, POC, PPM, RGN or tile-part header markers other than PLT
+ * order, no COC, POC or PPM, no tile-part header markers other than PLT
  * and COM, and code-block styles without selective arithmetic coding bypass
  * or termination on each coding pass. SOP and EPH markers are checked
- * (A.8) and not written; TLM and PLM are dropped; COM is kept. */
+ * (A.8) and not written; TLM and PLM are dropped; COM and RGN are kept. */
 #ifndef HV_TRANSCODE_H
 #define HV_TRANSCODE_H
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hv_reader.h"
 #include "hv_writer.h"
 
 /* Transcodes the codestream in buf[start, end) and appends the result to
  * out. Precinct width and height exponents: 1 to 15 (2 to 32 768 samples).
- * 0, or -1 with a message in error; on failure out keeps its size. */
+ * flags: hv_codestream_open flags the input must also pass, 0 or
+ * HV_PROFILE_HEADERS. 0, or -1 with a message in error; on failure out
+ * keeps its size. */
 int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
-                            hv_out *out, char *error, size_t error_size);
+                            unsigned flags, hv_out *out, char *error, size_t error_size);
 
-/* Transcodes a JP2/JPX file or a raw codestream (starting with SOC) in
- * buf[0, size) and appends the result to out. A file keeps its boxes: the
- * first top-level contiguous codestream box is transcoded, every other box
- * is copied as read (a box with LBox = 0 gets an explicit length) and
- * superboxes are checked. xml_rewrite: the first top-level XML box keeps
- * only its root element. 0, or -1 with a message in error. */
+/* Transcodes the JP2 file in buf[0, size) for the JPIP server and appends
+ * the result to out. The input must be one the output can serve: it must
+ * pass the served profile's file rules (hv_check_jp2: no JPX, no raw
+ * codestream) and main-header rules (HV_PROFILE_HEADERS), which leaves the
+ * tile-parts, rewritten here, as the only difference. The output passes
+ * HV_PROFILE and is at most INT_MAX bytes. The boxes are kept: the
+ * codestream box is transcoded, every other box is copied as read (a box
+ * with LBox = 0 gets an explicit length) and superboxes are checked.
+ * xml_rewrite: the first top-level XML box keeps only its root element.
+ * 0, or -1 with a message in error; on failure out keeps its size. */
 int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
                       hv_out *out, char *error, size_t error_size);
 

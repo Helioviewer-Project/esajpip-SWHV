@@ -24,7 +24,7 @@
 #define MAX_OUTPUT_PACKETS 2000000
 
 enum { COD = 0xFF52, COC = 0xFF53, TLM = 0xFF55, PLM = 0xFF57, PLT = 0xFF58,
-       RGN = 0xFF5E, POC = 0xFF5F, PPM = 0xFF60, COM = 0xFF64,
+       POC = 0xFF5F, PPM = 0xFF60, COM = 0xFF64,
        SOC = 0xFF4F, SOD = 0xFF93, EOC = 0xFFD9 };
 
 typedef struct {
@@ -131,11 +131,13 @@ static void transcode_free(transcode *t) {
  * is written as it is read, with the new COD in place of the old one and
  * without TLM and PLM, which transcoding makes stale; its other segments
  * are copied. The tile-parts' data is recorded where it is. The input's
- * PLT is not used, so its padding is accepted. */
+ * PLT is not used, so its padding is accepted. COC and POC would change the
+ * packet layout and PPM moves the packet headers, so they are rejected
+ * whatever the flags; RGN changes neither and is kept. */
 static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int ppy,
-                           hv_out *out) {
+                           unsigned flags, hv_out *out) {
     hv_item item;
-    int status = hv_codestream_open(&t->cs, t->buf, start, end, HV_ACCEPT_PLT_PADDING);
+    int status = hv_codestream_open(&t->cs, t->buf, start, end, HV_ACCEPT_PLT_PADDING | flags);
 
     if (status == 0 && hv_write_marker(out, SOC) != 0)
         return fail(&t->e, "%s", out->error);
@@ -143,7 +145,7 @@ static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int 
         status = 0;
         switch (item.kind) {
         case HV_SEGMENT:
-            if (item.code == COC || item.code == POC || item.code == PPM || item.code == RGN)
+            if (item.code == COC || item.code == POC || item.code == PPM)
                 return fail(&t->e, "unsupported main header marker 0x%04X", item.code);
             if (item.code == COD) {
                 t->cod = new_cod(item.cod, ppx, ppy);
@@ -245,7 +247,7 @@ static int write_tile(transcode *t, int ppx, int ppy, hv_out *out) {
 }
 
 int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
-                            hv_out *out, char *error, size_t error_size) {
+                            unsigned flags, hv_out *out, char *error, size_t error_size) {
     size_t out_start = out->size;
     transcode t;
     int status;
@@ -257,7 +259,7 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
     error[0] = 0;
     if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15)
         status = fail(&t.e, "precinct dimensions must be powers of 2 from 2 to 32768");
-    else if ((status = read_codestream(&t, start, end, ppx, ppy, out)) == 0 &&
+    else if ((status = read_codestream(&t, start, end, ppx, ppy, flags, out)) == 0 &&
              (status = read_packets(&t)) == 0)
         status = write_tile(&t, ppx, ppy, out);
     if (status != 0)

@@ -8,7 +8,7 @@ fixtures=$2
 work=$3
 rm -rf "$work"
 mkdir -p "$work"
-input="$fixtures/input/synthetic_rgb_129x129_origin129_CPRL.jp2"
+input="$fixtures/input/solo_fsi174_127x129_RLCP_PLT.jp2"
 failures=0
 
 fail() {
@@ -52,6 +52,11 @@ grep -q "cut.jp2" "$work/stderr" || fail "the message does not name the input"
 : >"$work/empty.jp2"
 [ "$(status "$exe" "$work/empty.jp2" "$work/empty-out.jp2")" = 1 ] || fail "empty file: expected 1"
 [ "$(status "$exe" "$work/missing.jp2" "$work/missing-out.jp2")" = 1 ] || fail "missing file: expected 1"
+# Outside the served profile.
+[ "$(status "$exe" "$fixtures/input/synthetic_rgb_129x129_origin129_CPRL.jp2" "$work/origin-out.jp2")" = 1 ] ||
+    fail "nonzero origins: expected 1"
+grep -q "siz.zero-origin" "$work/stderr" || fail "nonzero origins: the message does not name the rule"
+[ ! -e "$work/origin-out.jp2" ] || fail "a rejected input wrote its output"
 leftover=$(ls "$work" | grep -c 'out\.jp2\.' || true)
 [ "$leftover" = 0 ] || fail "temporary files left behind: $(ls "$work")"
 

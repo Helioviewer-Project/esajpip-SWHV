@@ -20,24 +20,39 @@ writes headers, and lays out precincts and packets, with `jpeg2000_io`
 - `-x`: rewrite the first top-level XML box as its root element alone, as
   hvJP2K's `--xml-rewrite` does (see below).
 
-The input is mapped into memory. A JP2/JPX file keeps its boxes: the first
-top-level `jp2c` box is transcoded, the others are copied as read (a box
-with LBox = 0 gets an explicit length). A raw codestream (starting with
-SOC) is transcoded as such. The output is written to a temporary file next
-to it with the input's mode and renamed into place, so input and output may
-be the same file; on error nothing is written. Exit status: 0, 1 on error,
-2 on usage errors.
+The input is mapped into memory. The file keeps its boxes: the `jp2c` box
+is transcoded, the others are copied as read (a box with LBox = 0 gets an
+explicit length). The output is written to a temporary file next to it with
+the input's mode and renamed into place, so input and output may be the
+same file; on error nothing is written. Exit status: 0, 1 on error, 2 on
+usage errors.
 
 ## Supported input
 
-As in hvJP2K: one tile (any number of tile-parts, Psot = 0 allowed on the
-last one), any progression order, no COC, POC, PPM or RGN, only PLT and COM
-in tile-part headers, and code-block styles without selective arithmetic
-coding bypass or termination on each coding pass. The new precincts must
+The output is for the JPIP server, so the input must be a JP2 file within
+the server's profile (`../JPIP_PROFILE.md`) except for its tile-parts,
+which are rewritten. The reader checks this with the rules shared with the
+model (`../lib/`): the file rules of `hv_check_jp2` (signature, file type
+with the `jp2 ` brand, exactly one `jp2c`, at most `INT_MAX` bytes; JPX
+files and raw codestreams fail) and the main-header rules of
+`HV_PROFILE_HEADERS` (zero origins, unit sampling, one tile, dimensions up
+to `INT32_MAX`, no COC, POC or PPM). Errors name the rule, as in
+`siz.zero-origin`. The output is at most `INT_MAX` bytes and passes the
+whole profile (`HV_PROFILE`); the tests and the fuzz target check that.
+
+Within that, as in hvJP2K: any number of tile-parts (Psot = 0 allowed on
+the last one), any progression order, only PLT and COM in tile-part
+headers, and code-block styles without selective arithmetic coding bypass
+or termination on each coding pass. RGN, which hvJP2K rejects, is kept:
+it changes neither the packets nor their headers. The new precincts must
 keep the code-block partition. SOP and EPH markers are checked and not
 written; TLM and PLM are dropped; the input's PLT is ignored (so its
 trailing zero entries are accepted); every other main-header segment,
 COM included, is copied as read.
+
+`hv_transcode_codestream`, the codestream level that the tests and the
+fuzz target also use, does not apply the profile: it takes nonzero origins
+and sub-sampled components too, and rejects COC, POC and PPM on its own.
 
 Three bounds keep memory in check where a header can declare much more
 than its data holds: at most 65,536 component-resolutions (components
@@ -109,7 +124,9 @@ TRANSCODE_ARCHIVE=~/AIA:~/EUI transcode/test/run.sh
 
 `test_transcode` checks that every file in `test/fixtures/input/`
 transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
-(COM aside) and that each output transcodes to itself; tile-parts split
+(COM aside), that each output is within the served profile and transcodes
+to itself (the origin-129 file is rejected, and only its codestream is
+compared); what the profile accepts and rejects; tile-parts split
 every way T.800 allows and broken in the ways it does not; malformed main
 headers; 2,000 corrupted tiles, each rejected or giving a stable output;
 the SOP, EPH and bit-stuffing rules; and the memory bounds. `cli_test.sh`

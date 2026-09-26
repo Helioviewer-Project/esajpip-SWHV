@@ -139,21 +139,53 @@ static bytes without_com(bytes cs) {
  * Running the transcoder
  * ------------------------------------------------------------------------ */
 
+/* NULL if the codestream in buf[start, end) reads through with these
+ * hv_codestream_open flags, otherwise the reader's error. */
+static const char *read_error(const uint8_t *buf, size_t start, size_t end, unsigned flags) {
+    hv_codestream cs;
+    hv_item item;
+    const char *error = NULL;
+    int status = hv_codestream_open(&cs, buf, start, end, flags);
+    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1)
+        status = item.kind == HV_END ? 1 : 0;
+    if (status < 0)
+        error = cs.error;
+    hv_codestream_close(&cs);
+    return error;
+}
+
+/* A transcoded file is within the whole served profile. */
+static void expect_served(const char *name, const uint8_t *buf, size_t size) {
+    hv_box jp2c;
+    size_t at;
+    const char *error = hv_check_jp2(buf, size, &jp2c, &at);
+    if (error == NULL)
+        error = read_error(buf, jp2c.payload, jp2c.end, HV_PROFILE);
+    check(error == NULL, "%s: output outside the served profile: %s", name, error);
+}
+
 typedef struct {
     int status;
     char error[256];
     bytes out;
 } result;
 
+/* Transcodes a codestream without the profile. An output whose main header
+ * is within the served profile must be within all of it: the rest is what
+ * the transcoder writes. */
 static result transcode(const uint8_t *data, size_t size, int ppx, int ppy) {
     result r;
     hv_out out;
     hv_out_init(&out);
-    r.status = hv_transcode_codestream(data, 0, size, ppx, ppy, &out, r.error, sizeof r.error);
+    r.status = hv_transcode_codestream(data, 0, size, ppx, ppy, 0, &out, r.error, sizeof r.error);
     r.out.data = out.data;
     r.out.size = out.size;
     if (r.status != 0 && out.size != 0)
         check(0, "a failed transcode left %zu bytes of output", out.size);
+    if (r.status == 0 && read_error(out.data, 0, out.size, HV_PROFILE_HEADERS) == NULL) {
+        const char *error = read_error(out.data, 0, out.size, HV_PROFILE);
+        check(error == NULL, "an output outside the served profile: %s", error);
+    }
     return r;
 }
 
@@ -189,8 +221,12 @@ static void expect_stable(const char *name, const bytes *out) {
  * The Kakadu references
  * ------------------------------------------------------------------------ */
 
+/* The fixture outside the served profile: nonzero origins. */
+#define ORIGIN_FIXTURE "synthetic_rgb_129x129_origin129_CPRL.jp2"
+
 /* Every input transcodes, with -x, to its Kakadu reference: the same
- * boxes, the codestream equal except COM. */
+ * boxes, the codestream equal except COM. The origin fixture's file is
+ * rejected, and only its codestream is compared. */
 static void test_references(void) {
     char path[4096];
     DIR *dir;
@@ -220,6 +256,30 @@ static void test_references(void) {
         snprintf(path, sizeof path, "%s/kakadu/%s", TRANSCODE_FIXTURES, e->d_name);
         ref = read_file(path);
         hv_out_init(&out);
+        if (strcmp(e->d_name, ORIGIN_FIXTURE) == 0) {
+            bytes in_cs = box_payload(&input, JP2C);
+            result r;
+            check(hv_transcode_file(input.data, input.size, 7, 7, 1, &out, error,
+                                    sizeof error) != 0 &&
+                  strcmp(error, "siz.zero-origin") == 0 && out.size == 0,
+                  "%s: file accepted or rejected otherwise: %s", e->d_name, error);
+            r = transcode(in_cs.data, in_cs.size, 7, 7);
+            check(r.status == 0, "%s: codestream rejected: %s", e->d_name, r.error);
+            if (r.status == 0) {
+                a = without_com(r.out);
+                b = without_com(box_payload(&ref, JP2C));
+                check(a.size == b.size && memcmp(a.data, b.data, a.size) == 0,
+                      "%s: codestream differs from Kakadu's (COM aside)", e->d_name);
+                bytes_free(&a);
+                bytes_free(&b);
+                expect_stable(e->d_name, &r.out);
+            }
+            bytes_free(&r.out);
+            hv_out_free(&out);
+            bytes_free(&input);
+            bytes_free(&ref);
+            continue;
+        }
         if (hv_transcode_file(input.data, input.size, 7, 7, 1, &out, error, sizeof error) != 0) {
             check(0, "%s: rejected: %s", e->d_name, error);
             hv_out_free(&out);
@@ -227,6 +287,7 @@ static void test_references(void) {
             bytes_free(&ref);
             continue;
         }
+        expect_served(e->d_name, out.data, out.size);
         /* The same boxes; each equal, the codestream except COM. */
         hv_boxes_file(&it_out, out.data, out.size);
         hv_boxes_file(&it_ref, ref.data, ref.size);
@@ -594,6 +655,132 @@ static void test_headers(void) {
 }
 
 /* ------------------------------------------------------------------------
+ * The served profile: what hv_transcode_file accepts
+ * ------------------------------------------------------------------------ */
+
+/* A minimal JP2 file around a codestream: signature, file type with this
+ * brand and compatibility entry, codestream box. */
+static bytes jp2_file(const bytes *cs, const char *brand) {
+    uint8_t h[40] = {0, 0, 0, 12, 'j', 'P', ' ', ' ', 0x0D, 0x0A, 0x87, 0x0A,
+                     0, 0, 0, 20, 'f', 't', 'y', 'p'};
+    bytes b = {NULL, 0};
+    memcpy(h + 20, brand, 4);
+    memset(h + 24, 0, 4);
+    memcpy(h + 28, brand, 4);
+    put32(h + 32, (uint32_t)(8 + cs->size));
+    memcpy(h + 36, "jp2c", 4);
+    append(&b, h, sizeof h);
+    append(&b, cs->data, cs->size);
+    return b;
+}
+
+/* The file is rejected, with an error that starts with `message`. */
+static void expect_file_error(const char *name, const bytes *file, const char *message) {
+    hv_out out;
+    char error[256];
+    hv_out_init(&out);
+    check(hv_transcode_file(file->data, file->size, 7, 7, 0, &out, error, sizeof error) != 0 &&
+          strncmp(error, message, strlen(message)) == 0 && out.size == 0,
+          "%s: \"%s\", expected \"%s\"", name, out.size ? "accepted" : error, message);
+    hv_out_free(&out);
+}
+
+/* The file is accepted, the output is served and its codestream is the
+ * codestream-level transcode. */
+static void expect_file_output(const char *name, const bytes *file, const bytes *cs) {
+    hv_out out;
+    char error[256];
+    result r = transcode(cs->data, cs->size, 7, 7);
+    hv_out_init(&out);
+    if (hv_transcode_file(file->data, file->size, 7, 7, 0, &out, error, sizeof error) != 0) {
+        check(0, "%s: rejected: %s", name, error);
+    } else {
+        bytes got = {out.data, out.size}, got_cs = box_payload(&got, JP2C);
+        expect_served(name, out.data, out.size);
+        check(r.status == 0 && got_cs.size == r.out.size &&
+              memcmp(got_cs.data, r.out.data, got_cs.size) == 0,
+              "%s: codestream differs from the codestream-level transcode", name);
+    }
+    hv_out_free(&out);
+    bytes_free(&r.out);
+}
+
+static void test_profile(void) {
+    static const uint8_t rgn[] = {0xFF, 0x5E, 0x00, 0x05, 0x00, 0x00, 0x07};
+    static const struct {
+        const char *name;
+        uint8_t code;
+        const char *codestream_error;
+    } layout[] = {
+        {"COC", 0x53, "unsupported main header marker 0xFF53"},
+        {"POC", 0x5F, "unsupported main header marker 0xFF5F"},
+        {"PPM", 0x60, "unsupported main header marker 0xFF60"},
+    };
+    bytes file, cs = fixture_codestream("input", "solo_fsi174_127x129_RLCP_PLT.jp2", &file);
+    bytes b, f;
+    size_t sot = 2, i;
+    result plain, with_rgn;
+
+    while (get16(cs.data + sot) != 0xFF90)
+        sot += 2 + get16(cs.data + sot + 2);
+
+    /* The fixture, wrapped minimally: accepted. */
+    f = jp2_file(&cs, "jp2 ");
+    expect_file_output("minimal JP2", &f, &cs);
+    bytes_free(&f);
+
+    /* Not JP2 files. */
+    expect_file_error("raw codestream", &cs, "file.signature at 0");
+    f = jp2_file(&cs, "jpx ");
+    expect_file_error("JPX brand", &f, "file.ftyp-brand at 12");
+    bytes_free(&f);
+    {
+        bytes box = box_payload(&file, JP2C);           /* 8-byte box header */
+        b = bytes_copy(file.data, file.size);
+        append(&b, box.data - 8, box.size + 8);
+        expect_file_error("two codestreams", &b, "jp2.one-codestream");
+        bytes_free(&b);
+    }
+
+    /* COC, POC and PPM: rejected by the transcoder, and outside the
+     * served profile's main header. */
+    for (i = 0; i < sizeof layout / sizeof *layout; i++) {
+        uint8_t segment[5] = {0xFF, layout[i].code, 0x00, 0x03, 0x00};
+        b = concat3(cs.data, sot, segment, sizeof segment, cs.data + sot, cs.size - sot);
+        expect_error(layout[i].name, &b, layout[i].codestream_error);
+        f = jp2_file(&b, "jp2 ");
+        expect_file_error(layout[i].name, &f, "main header: marker outside MainMarkerCode-Profile");
+        bytes_free(&f);
+        bytes_free(&b);
+    }
+
+    /* RGN is kept where it was, the output otherwise unchanged. */
+    b = concat3(cs.data, sot, rgn, sizeof rgn, cs.data + sot, cs.size - sot);
+    plain = transcode(cs.data, cs.size, 7, 7);
+    with_rgn = transcode(b.data, b.size, 7, 7);
+    check(plain.status == 0 && with_rgn.status == 0, "RGN: rejected: %s", with_rgn.error);
+    if (plain.status == 0 && with_rgn.status == 0) {
+        size_t out_sot = 2;
+        bytes expected;
+        while (get16(plain.out.data + out_sot) != 0xFF90)
+            out_sot += 2 + get16(plain.out.data + out_sot + 2);
+        expected = concat3(plain.out.data, out_sot, rgn, sizeof rgn, plain.out.data + out_sot,
+                           plain.out.size - out_sot);
+        check(with_rgn.out.size == expected.size &&
+              memcmp(with_rgn.out.data, expected.data, expected.size) == 0,
+              "RGN: output is not the plain one with RGN");
+        bytes_free(&expected);
+    }
+    f = jp2_file(&b, "jp2 ");
+    expect_file_output("RGN", &f, &b);
+    bytes_free(&f);
+    bytes_free(&plain.out);
+    bytes_free(&with_rgn.out);
+    bytes_free(&b);
+    bytes_free(&file);
+}
+
+/* ------------------------------------------------------------------------
  * Corrupted tile data: every result is a rejection or a stable output
  * ------------------------------------------------------------------------ */
 
@@ -847,6 +1034,7 @@ static void test_archive(const char *dirs) {
                 check(0, "%s: rejected: %s", path, error);
             } else {
                 bytes result_file = {out.data, out.size};
+                expect_served(path, out.data, out.size);
                 cs = box_payload(&result_file, JP2C);
                 expect_stable(path, &cs);
             }
@@ -867,6 +1055,7 @@ int main(void) {
         {"Kakadu references", test_references},
         {"tile-parts and packets", test_tile_parts},
         {"main headers", test_headers},
+        {"served profile", test_profile},
         {"corrupted tile data", test_corruption},
         {"SOP, EPH and bit stuffing", test_packet_rules},
         {"memory bounds", test_memory_bounds},

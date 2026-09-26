@@ -9,12 +9,13 @@
  *   -x      rewrite the first top-level XML box as its root element alone
  *           (see hv_transcode_file)
  *
- * A JP2 or JPX input keeps its boxes; the first top-level contiguous
- * codestream box is transcoded and every other box is copied as read. A raw
- * codestream (starting with SOC) is transcoded as such. The output is
- * written to a temporary file next to it and renamed into place, so input
- * and output may be the same file. Exit status: 0 on success, 1 on error,
- * 2 on usage errors. */
+ * The input must be a JP2 file that the output can serve: within the JPIP
+ * server's profile (JPIP_PROFILE.md) except for its tile-parts, which are
+ * rewritten. JPX files and raw codestreams are rejected. The boxes are
+ * kept: the codestream box is transcoded and every other box is copied as
+ * read. The output is written to a temporary file next to it and renamed
+ * into place, so input and output may be the same file. Exit status: 0 on
+ * success, 1 on error, 2 on usage errors. */
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>

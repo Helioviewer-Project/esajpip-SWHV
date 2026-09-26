@@ -1,4 +1,5 @@
 /* transcode_file.c: hv_transcode_file, see transcode.h. */
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -154,25 +155,24 @@ static int check_children(const uint8_t *buf, const hv_box *parent, char *error,
     return status < 0 ? -1 : 0;
 }
 
-/* Transcodes a JP2/JPX file into out. */
+/* Transcodes a JP2 file that passed hv_check_jp2 into out. */
 static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
                            hv_out *out, char *error, size_t error_size) {
     hv_boxes it;
     hv_box box;
     const char *message;
     size_t at, start;
-    int status, done_jp2c = 0, done_xml = !xml_rewrite;
+    int status, done_xml = !xml_rewrite;
 
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
-        if (box.type == JP2C && !done_jp2c) {
+        if (box.type == JP2C) {
             /* The transcoded codestream goes straight into its box. */
             if (hv_begin_box(out, JP2C, 0, &start) != 0 ||
-                hv_transcode_codestream(buf, box.payload, box.end, ppx, ppy, out, error,
-                                        error_size) != 0 ||
+                hv_transcode_codestream(buf, box.payload, box.end, ppx, ppy, HV_PROFILE_HEADERS,
+                                        out, error, error_size) != 0 ||
                 hv_end_box(out, start) != 0)
                 return -1;
-            done_jp2c = 1;
             continue;
         }
         if (box.type == XML && !done_xml) {
@@ -206,22 +206,30 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
         snprintf(error, error_size, "%s at %zu", message, at);
         return -1;
     }
-    if (!done_jp2c) {
-        snprintf(error, error_size, "no JP2 codestream box");
-        return -1;
-    }
     return 0;
 }
 
 int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
                       hv_out *out, char *error, size_t error_size) {
+    size_t out_start = out->size, at;
+    const char *rule;
+    hv_box jp2c;
     int status;
+
     error[0] = 0;
-    if (size >= 2 && buf[0] == 0xFF && buf[1] == 0x4F)
-        status = hv_transcode_codestream(buf, 0, size, ppx, ppy, out, error, error_size);
-    else
-        status = transcode_boxes(buf, size, ppx, ppy, xml_rewrite, out, error, error_size);
-    if (status != 0 && error[0] == 0)
-        snprintf(error, error_size, "%s", out->error ? out->error : "out of memory");
+    if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL) {
+        snprintf(error, error_size, "%s at %zu", rule, at);
+        return -1;
+    }
+    status = transcode_boxes(buf, size, ppx, ppy, xml_rewrite, out, error, error_size);
+    if (status == 0 && out->size - out_start > INT_MAX) {
+        snprintf(error, error_size, "output larger than INT_MAX bytes (file.size-limit)");
+        status = -1;
+    }
+    if (status != 0) {
+        if (error[0] == 0)
+            snprintf(error, error_size, "%s", out->error ? out->error : "out of memory");
+        out->size = out_start;
+    }
     return status;
 }

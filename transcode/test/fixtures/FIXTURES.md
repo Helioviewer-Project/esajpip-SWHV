@@ -29,7 +29,9 @@ The synthetic inputs have at pixel (x,y) the channels `(x + 3*y) % 256`,
 compression ratios 4, 2 and 1, with a reversible transform. With 128×128
 precincts it has nine packets whose precincts hold no code-blocks; Kakadu
 7.10.3 and 8.4.1 both encode them as `80`. The SOP/EPH file uses grid
-origin (0,0).
+origin (0,0). The origin-129 file is outside the served profile
+(`siz.zero-origin`): `hv_transcode` rejects it, and the tests compare its
+codestream only, transcoded with `hv_transcode_codestream`.
 
 The references were made with Kakadu 7.10.3; for the SOP/EPH file with
 `Cuse_sop=no Cuse_eph=no` as well (Kakadu keeps SOP and EPH by default,
