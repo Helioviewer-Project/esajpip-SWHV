@@ -167,8 +167,9 @@ expectations, not that it conforms completely to JP2 or JPX.
   validated marker, packet, and tile-part bounds. `TPsot` must start at zero
   and increase by one. If `TNsot` is nonzero, it must equal the final
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
-  marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
-  the codestream. Each tile-part's `PLT` lengths must exactly cover its packet
+  marker may follow. A tile-part with `Psot = 0` runs up to the `EOC` that
+  ends the codestream, so it is the last tile-part; its packet data is not
+  scanned for markers. Each tile-part's `PLT` lengths must exactly cover its packet
   data, and no packet data may follow the packet set derived from `COD`. Marker
   structure is checked while opening the source; coverage and packet bounds are
   checked lazily as packets are indexed. As a compatibility exception for

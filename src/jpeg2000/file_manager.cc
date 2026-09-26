@@ -556,27 +556,16 @@ namespace jpeg2000 {
             return false;
 
         if (data.length == 0) {
+            // Psot = 0 (T.800 A.4.2): the tile-part runs up to the EOC that
+            // ends the codestream, so it is the last one; ReadCodestream
+            // then reads that EOC. The packet data is not scanned, as for
+            // any other tile-part.
             data.offset = file->GetOffset();
-            // JPEG 2000 bit stuffing prevents an EOC marker from appearing in
-            // packet data, so the first FF D9 terminates the final tile-part.
-            while (file->Find(0xFF, limit)) {
-                uint64_t marker_offset = file->GetOffset() - 1;
-                if (file->GetOffset() >= limit)
-                    return false;
-                uint8_t value;
-                if (!file->Read(&value))
-                    return false;
-                if (value == (EOC_MARKER & 0xFF)) {
-                    data.length = file->GetOffset() - 2 - data.offset;
-                    file->Seek(file->GetOffset() - 2);
-                    return true;
-                }
-                if (value == (SOT_MARKER & 0xFF))
-                    return false;
-                if (value == 0xFF)
-                    file->Seek(marker_offset + 1);
-            }
-            return false;
+            if (data.offset > limit || limit - data.offset < 2)
+                return false;
+            data.length = limit - 2 - data.offset;
+            file->Seek(limit - 2);
+            return true;
         }
 
         uint64_t header_length = file->GetOffset() - data.offset;

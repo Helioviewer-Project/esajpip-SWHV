@@ -1007,6 +1007,19 @@ static void CheckSourceForms(const string &directory) {
           MakeJP2(MakeOpenEndedTilePart(MakeCodestream(0, 1, 1, 1, 0, 2, 2))), false);
     check("psot-short-plt.jp2",
           MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream), 0)), false);
+    // The tile-part runs up to the codestream's final EOC; its packet data
+    // is not scanned for markers, as with any Psot, so bytes FF D9 inside
+    // a packet do not end it (as in lib/hv_reader.c).
+    {
+        vector<unsigned char> embedded = codestream;  // one one-byte packet
+        embedded.insert(embedded.end() - 2, {0xFF, 0xD9});
+        for (size_t i = 0; i + 5 < embedded.size(); ++i)
+            if (embedded[i] == 0xFF && embedded[i + 1] == 0x58) {
+                embedded[i + 5] = 3;                   // the packet is now 3 bytes
+                break;
+            }
+        check("psot-zero-ff-d9-in-data.jp2", MakeJP2(MakeOpenEndedTilePart(embedded)), true);
+    }
 
     // T.801 M.11.11 allows recursive associations. The server preserves
     // the complete outer payload; no recursion is needed to serve it.

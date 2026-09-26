@@ -649,11 +649,11 @@ each until the model does:
 - Deeper association trees and Multiple Codestream (`j2cx`) storage are
   exercised by explicit server fixtures, not generated-model labels.
 
-`CheckSourceForms` covers 27 cases outside or alongside the ACN model:
+`CheckSourceForms` covers 28 cases outside or alongside the ACN model:
 normal, zero, and extended box lengths in JP2 and JPX; short, oversized, and
 truncated XLBox headers; nested box limits; final zero-length parent and child
-boxes; `Psot=0` with complete, missing, or misplaced EOC and incorrect PLT
-coverage; nested opaque associations; and excluded `j2cx` codestream storage.
+boxes; `Psot=0` with complete, missing, or misplaced EOC, incorrect PLT
+coverage, and bytes FF D9 inside packet data; nested opaque associations; and excluded `j2cx` codestream storage.
 Accepted files are indexed through every declared packet. These tests do not
 claim that the generated decoder supports those alternate encodings.
 
