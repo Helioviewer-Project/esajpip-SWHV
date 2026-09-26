@@ -1,4 +1,4 @@
-/* fuzz_merge: a libFuzzer target for hv_merge_files. The input is two JP2
+/* fuzz_merge: a libFuzzer target for hv_merge_buffers. The input is two JP2
  * files: a 4-byte big-endian length L, the first L bytes (modulo what
  * remains), then the second file. They are merged in that order, embedded,
  * so an input with a palette and one without exercise the generated cmap.
@@ -49,7 +49,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     in[1].size = size - 4 - n;
     if ((f = tmpfile()) == NULL)
         return 0;
-    if (hv_merge_files(in, 2, 0, f, error, sizeof error) == 0) {
+    if (hv_merge_buffers(in, 2, 0, f, error, sizeof error) == 0) {
         if ((jpx = read_back(f, &n)) == NULL || hv_check_jpx_headers(jpx, n, &at) != NULL ||
             hv_check_jpx(jpx, n, &j, &at) != NULL)
             abort();

@@ -22,10 +22,26 @@ typedef struct {
     size_t size;
 } hv_merge_input;
 
+/* The inputs, opened when needed: open fills *in for input i, whose path
+ * stays valid until hv_merge_files returns and whose bytes stay valid until
+ * close; 0, or -1 with a message in error. hv_merge_files opens each input
+ * twice, to check it and to copy it, and has at most two open at a time:
+ * the first input, which every later one is compared with, and the one at
+ * hand. An input must have the same size both times. */
+typedef struct {
+    int (*open)(void *context, size_t i, hv_merge_input *in, char *error, size_t error_size);
+    void (*close)(void *context, size_t i, hv_merge_input *in);
+    void *context;
+} hv_merge_inputs;
+
 /* Writes the JPX file merging n inputs to out: their codestreams embedded,
  * or with `links`, linked. 0, or -1 with a message in error; out may then
  * hold part of the file. */
-int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *out, char *error,
-                 size_t error_size);
+int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *out, char *error,
+                   size_t error_size);
+
+/* The same, for inputs already in memory. */
+int hv_merge_buffers(const hv_merge_input *inputs, size_t n, int links, FILE *out, char *error,
+                     size_t error_size);
 
 #endif

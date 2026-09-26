@@ -16,14 +16,16 @@
 
 #define MAX_COLR 16
 
-/* One input: its boxes, type 0 where absent. */
+/* One input: its boxes, type 0 where absent, and what the output needs of
+ * them; in.buf only while the input is open. */
 typedef struct {
-    const hv_merge_input *in;
+    hv_merge_input in;
     hv_box jp2h, jp2c, xml;
     hv_box ihdr, bpcc, pclr, cmap, cdef, res;
     hv_box colr[MAX_COLR];
     int ncolr;
-    unsigned rsiz;
+    unsigned rsiz, nc;
+    int opacity, premultiplied;     /* cdef Typ 1, Typ 2 */
 } source;
 
 typedef struct {
@@ -63,7 +65,7 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     int status;
 
     memset(s, 0, sizeof *s);
-    s->in = in;
+    s->in = *in;
     if ((message = hv_check_jp2(in->buf, in->size, &s->jp2c, &at)) != NULL ||
         (message = hv_codestream_check(in->buf, s->jp2c.payload, s->jp2c.end, HV_PROFILE, &at)) !=
             NULL ||
@@ -95,6 +97,17 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     if (status < 0)
         return fail(error, size, "%s: %s at %zu", in->path, message, at);
     s->rsiz = get16(in->buf + s->jp2c.payload + 6);     /* SOC, SIZ, Lsiz, Rsiz */
+    s->nc = get16(in->buf + s->ihdr.payload + 8);       /* HEIGHT, WIDTH, NC */
+    if (s->cdef.type != 0) {
+        /* N, then N (Cn, Typ, Asoc): hv_check_jp2h checked the lengths. */
+        const uint8_t *cdef = in->buf + s->cdef.payload;
+        size_t m = s->cdef.end - s->cdef.payload, c;
+        for (c = 0; m >= 2 && c < get16(cdef) && 2 + 6 * c + 6 <= m; c++) {
+            unsigned typ = get16(cdef + 2 + 6 * c + 2);
+            s->opacity |= typ == 1;
+            s->premultiplied |= typ == 2;
+        }
+    }
     return 0;
 }
 
@@ -104,7 +117,7 @@ static int same_box(const source *a, const hv_box *x, const source *b, const hv_
     if (x->type == 0 || y->type == 0)
         return x->type == y->type;
     return x->type == y->type && n == y->end - y->payload &&
-           memcmp(a->in->buf + x->payload, b->in->buf + y->payload, n) == 0;
+           memcmp(a->in.buf + x->payload, b->in.buf + y->payload, n) == 0;
 }
 
 /* The APPROX of a Colour Specification box as the JPX file carries it:
@@ -119,7 +132,7 @@ static int same_colrs(const source *a, const source *b) {
     if (a->ncolr != b->ncolr)
         return 0;
     for (k = 0; k < a->ncolr; k++) {
-        const uint8_t *x = a->in->buf + a->colr[k].payload, *y = b->in->buf + b->colr[k].payload;
+        const uint8_t *x = a->in.buf + a->colr[k].payload, *y = b->in.buf + b->colr[k].payload;
         n = a->colr[k].end - a->colr[k].payload;
         if (n != b->colr[k].end - b->colr[k].payload)
             return 0;
@@ -161,12 +174,12 @@ static int write_through(writer *w, const uint8_t *bytes, size_t n) {
 /* A box of an input with a fresh header, as glymur writes it. */
 static int copy_box(hv_out *out, const source *s, const hv_box *box) {
     return hv_write_box_header(out, box->type, box->end - box->payload) != 0 ? -1
-         : hv_write_bytes(out, s->in->buf + box->payload, box->end - box->payload);
+         : hv_write_bytes(out, s->in.buf + box->payload, box->end - box->payload);
 }
 
 static int copy_colr(hv_out *out, const source *s, const hv_box *box) {
     size_t n = box->end - box->payload, i;
-    const uint8_t *p = s->in->buf + box->payload;
+    const uint8_t *p = s->in.buf + box->payload;
     uint8_t byte;
     if (hv_write_box_header(out, HV_BOX_COLR, n) != 0)
         return -1;
@@ -186,7 +199,7 @@ static int write_jp2h(hv_out *out, const source *s) {
     size_t at, start;
     if (hv_begin_box(out, HV_BOX_JP2H, 0, &start) != 0)
         return -1;
-    hv_boxes_children(&it, s->in->buf, &s->jp2h);
+    hv_boxes_children(&it, s->in.buf, &s->jp2h);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
         if ((box.type == HV_BOX_COLR ? copy_colr(out, s, &box) : copy_box(out, s, &box)) != 0)
             return -1;
@@ -197,7 +210,7 @@ static int write_jp2h(hv_out *out, const source *s) {
  * component used directly (CMP = i, MTYP = 0, PCOL = 0). NC is the checked
  * Csiz, at most 16 384. */
 static int generated_cmap(const source *s, uint8_t *payload, size_t *n) {
-    unsigned nc = get16(s->in->buf + s->ihdr.payload + 8), i;
+    unsigned nc = s->nc, i;
     for (i = 0; i < nc; i++) {
         payload[4 * i] = (uint8_t)(i >> 8);
         payload[4 * i + 1] = (uint8_t)i;
@@ -215,7 +228,7 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
     const hv_box *j = &s->jp2h, *j0 = &first->jp2h;
 
     if (j->end - j->start == j0->end - j0->start &&
-        memcmp(s->in->buf + j->start, first->in->buf + j0->start, j->end - j->start) == 0)
+        memcmp(s->in.buf + j->start, first->in.buf + j0->start, j->end - j->start) == 0)
         return hv_write_box_header(out, HV_BOX_JPCH, 0) != 0 ? -1
              : hv_write_box_header(out, HV_BOX_JPLH, 0);
 
@@ -232,7 +245,7 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
         size_t n;
         generated_cmap(s, cmap, &n);
         if ((first->cmap.type == 0 || n != first->cmap.end - first->cmap.payload ||
-             memcmp(cmap, first->in->buf + first->cmap.payload, n) != 0) &&
+             memcmp(cmap, first->in.buf + first->cmap.payload, n) != 0) &&
             (hv_write_box_header(out, HV_BOX_CMAP, n) != 0 || hv_write_bytes(out, cmap, n) != 0))
             return -1;
     } else if (s->cmap.type != 0 && !same_box(s, &s->cmap, first, &first->cmap) &&
@@ -269,7 +282,7 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
 static int write_rreq(hv_out *out, const source *s, size_t n, int links) {
     int has[16] = {0}, k = 0, i, status;
     Rreq_Std *rreq = calloc(1, sizeof *rreq);
-    size_t j, c;
+    size_t j;
 
     if (rreq == NULL) {
         out->error = "out of memory";
@@ -277,13 +290,8 @@ static int write_rreq(hv_out *out, const source *s, size_t n, int links) {
     }
     has[1] = 1;
     for (j = 0; j < n; j++) {
-        const uint8_t *cdef = s[j].in->buf + s[j].cdef.payload;
-        size_t m = s[j].cdef.type ? (s[j].cdef.end - s[j].cdef.payload) : 0;
-        for (c = 0; m >= 2 && c < get16(cdef) && 2 + 6 * c + 6 <= m; c++) {
-            unsigned typ = get16(cdef + 2 + 6 * c + 2);
-            has[9] |= typ == 1;
-            has[10] |= typ == 2;
-        }
+        has[9] |= s[j].opacity;
+        has[10] |= s[j].premultiplied;
         has[4] |= s[j].rsiz == 2;
         has[5] |= s[j].rsiz != 1 && s[j].rsiz != 2;
     }
@@ -340,8 +348,30 @@ static char *link_url(const char *path, char *error, size_t size) {
     return url;
 }
 
-int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file, char *error,
-                 size_t error_size) {
+/* Opens input i into s->in, or with `check`, checks it against what was
+ * read of it before. */
+static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int check, char *error,
+                      size_t error_size) {
+    hv_merge_input in;
+    memset(&in, 0, sizeof in);
+    if (inputs->open(inputs->context, i, &in, error, error_size) != 0)
+        return -1;
+    if (check && in.size != s->in.size) {
+        inputs->close(inputs->context, i, &in);
+        return fail(error, error_size, "%s: changed while merging", s->in.path);
+    }
+    s->in = in;
+    return 0;
+}
+
+static void close_input(const hv_merge_inputs *inputs, size_t i, source *s) {
+    if (s->in.buf != NULL)
+        inputs->close(inputs->context, i, &s->in);
+    s->in.buf = NULL;
+}
+
+int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *file, char *error,
+                   size_t error_size) {
     static const uint8_t signature[12] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
                                           0x0D, 0x0A, 0x87, 0x0A};
     static const uint8_t ftyp_embedded[] = {0, 0, 0, 28, 'f', 't', 'y', 'p', 'j', 'p', 'x', ' ',
@@ -371,9 +401,24 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
         return fail(error, error_size, "out of memory");
     }
     hv_out_init(&w.out);
-    for (i = 0; i < n; i++)
-        if (read_source(&inputs[i], &s[i], error, error_size) != 0)
+
+    /* First pass: every input checked and what the output needs of it
+     * recorded; open one at a time, besides the first, which every later
+     * one is compared with and which stays open. */
+    for (i = 0; i < n; i++) {
+        hv_merge_input in;
+        int bad;
+        memset(&in, 0, sizeof in);
+        if (inputs->open(inputs->context, i, &in, error, error_size) != 0)
             goto done;
+        bad = read_source(&in, &s[i], error, error_size) != 0;
+        if (bad || i > 0) {
+            inputs->close(inputs->context, i, &in);
+            s[i].in.buf = NULL;
+        }
+        if (bad)
+            goto done;
+    }
     /* A jplh without a cdef or res box takes the one of jp2h, the first
      * input's (T.801 M.11.7): an input without one cannot follow a first
      * input with one. hvJP2K writes such a file. */
@@ -383,20 +428,21 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
                                                                          : NULL;
         if (missing != NULL) {
             fail(error, error_size, "%s: no %s box, but the first input has one, which it would "
-                 "inherit", inputs[i].path, missing);
+                 "inherit", s[i].in.path, missing);
             goto done;
         }
     }
     for (i = 0; links && i < n; i++) {
         const char *rule;
-        if ((urls[i] = link_url(inputs[i].path, error, error_size)) == NULL)
+        if ((urls[i] = link_url(s[i].in.path, error, error_size)) == NULL)
             goto done;
         if ((rule = hv_rule_url(0, 0, (const uint8_t *)urls[i], strlen(urls[i]) + 1)) != NULL) {
-            fail(error, error_size, "%s: %s", inputs[i].path, rule);
+            fail(error, error_size, "%s: %s", s[i].in.path, rule);
             goto done;
         }
     }
 
+    /* Second pass: the output, each input open again while it is copied. */
     if (hv_write_bytes(&w.out, signature, sizeof signature) != 0 ||
         (links ? hv_write_bytes(&w.out, ftyp_linked, sizeof ftyp_linked)
                : hv_write_bytes(&w.out, ftyp_embedded, sizeof ftyp_embedded)) != 0 ||
@@ -404,6 +450,8 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
         goto done;
     for (i = 0; i < n; i++) {
         const hv_box *cs = &s[i].jp2c, *xml = &s[i].xml;
+        if (i > 0 && open_input(inputs, i, &s[i], 1, error, error_size) != 0)
+            goto done;
         if (write_headers(&w.out, &s[i], &s[0]) != 0)
             goto done;
         if (links) {
@@ -412,7 +460,7 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
                               (uint16_t)(i + 1)) != 0)
                 goto done;
         } else if (hv_write_box_header(&w.out, HV_BOX_JP2C, cs->end - cs->payload) != 0 ||
-                   write_through(&w, inputs[i].buf + cs->payload, cs->end - cs->payload) != 0) {
+                   write_through(&w, s[i].in.buf + cs->payload, cs->end - cs->payload) != 0) {
             goto done;
         }
         if (xml->type != 0) {
@@ -428,11 +476,13 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
             if (hv_write_box_header(&w.out, HV_BOX_ASOC, 16 + (uint64_t)box) != 0 ||
                 hv_write_bytes(&w.out, nlst, sizeof nlst) != 0 ||
                 (xml->to_end ? copy_box(&w.out, &s[i], xml) != 0
-                             : write_through(&w, inputs[i].buf + xml->start, box) != 0))
+                             : write_through(&w, s[i].in.buf + xml->start, box) != 0))
                 goto done;
         }
         if (flush(&w) != 0)
             goto done;
+        if (i > 0)
+            close_input(inputs, i, &s[i]);
     }
     if (links) {
         if (hv_begin_box(&w.out, HV_BOX_DTBL, 0, &start) != 0 || hv_write_ndr(&w.out, (uint16_t)n) != 0)
@@ -453,10 +503,34 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
 done:
     if (status != 0 && error[0] == 0)
         fail(error, error_size, "%s", w.out.error ? w.out.error : "out of memory");
+    for (i = 0; i < n; i++)
+        close_input(inputs, i, &s[i]);
     for (i = 0; urls != NULL && i < n; i++)
         free(urls[i]);
     free(urls);
     free(s);
     hv_out_free(&w.out);
     return status;
+}
+
+/* Inputs already in memory. */
+static int buffer_open(void *context, size_t i, hv_merge_input *in, char *error,
+                       size_t error_size) {
+    (void)error;
+    (void)error_size;
+    *in = ((const hv_merge_input *)context)[i];
+    return 0;
+}
+
+static void buffer_close(void *context, size_t i, hv_merge_input *in) {
+    (void)context;
+    (void)i;
+    (void)in;
+}
+
+int hv_merge_buffers(const hv_merge_input *inputs, size_t n, int links, FILE *file, char *error,
+                     size_t error_size) {
+    hv_merge_inputs from = {buffer_open, buffer_close, NULL};
+    from.context = (void *)inputs;
+    return hv_merge_files(&from, n, links, file, error, error_size);
 }

@@ -22,8 +22,11 @@ The options are hvJP2K's:
 - `-s`: more arguments from a file, split as Python's `shlex.split` does
   (quotes and backslashes), after those of the command line.
 
-The inputs are mapped into memory and the codestreams copied from there
-to the output. The output is written to a temporary file next to it and
+The inputs are read in two passes, as hvJP2K does: each is mapped into
+memory, checked and unmapped, then mapped again while its codestream is
+copied to the output. Only the first input, which every other one is
+compared with, stays mapped throughout, so at most two are mapped at a
+time; an input whose size changed in between is an error. The output is written to a temporary file next to it and
 renamed into place; on error nothing is written. Exit status: 0, 1 on
 error, 2 on usage errors.
 
@@ -73,7 +76,7 @@ fresh header, as glymur writes it, where only an XLBox form would differ.
 | File | Role |
 | --- | --- |
 | `hv_merge.c` | The command: options, `-s`, mapping the inputs, writing the output file. |
-| `merge.h` / `.c` | `hv_merge_files`: checks the inputs, and writes the JPX file box by box to a stream. |
+| `merge.h` / `.c` | `hv_merge_files`: checks the inputs, and writes the JPX file box by box to a stream, opening each input when it needs it (`hv_merge_buffers` for inputs already in memory). |
 | `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and served, the reader requirement cases of hvJP2K's tests, and rejected inputs, header boxes included; `cli_test.sh`: the command. |
 | `fuzz_merge.c` | libFuzzer target: two JP2 files from one input, merged; an accepted merge must pass `hv_check_jpx`, `hv_check_jpx_headers` and `HV_PROFILE` for each codestream. |
 

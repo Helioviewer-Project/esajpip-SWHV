@@ -1,5 +1,5 @@
-/* test_merge.c: tests of hv_merge_files (merge.c), run by CTest as "merge"
- * (label "tools").
+/* test_merge.c: tests of hv_merge_files and hv_merge_buffers (merge.c),
+ * run by CTest as "merge" (label "tools").
  *
  * MERGE_FIXTURES holds the inputs and hvJP2K's output for them
  * (fixtures/FIXTURES.md); TRANSCODE_FIXTURES the Kakadu references of the
@@ -119,7 +119,7 @@ static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char
         snprintf(error, error_size, "no temporary file");
         return -1;
     }
-    status = hv_merge_files(in, n, links, f, error, error_size);
+    status = hv_merge_buffers(in, n, links, f, error, error_size);
     if (status == 0 && (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 ||
                         fseek(f, 0, SEEK_SET) != 0 ||
                         (out->data = malloc(size ? (size_t)size : 1)) == NULL ||
@@ -428,6 +428,83 @@ static void test_errors(void) {
     bytes_free(&origin);
 }
 
+/* Inputs opened on demand: counts what hv_merge_files opens, and can
+ * fail an open or change a size. */
+typedef struct {
+    int opens[NINPUTS], open, most;
+    size_t fail_at, shrink_at;          /* NINPUTS: never */
+} counting;
+
+static int counting_open(void *context, size_t i, hv_merge_input *in, char *error,
+                         size_t error_size) {
+    counting *c = context;
+    if (i == c->fail_at) {
+        snprintf(error, error_size, "cannot open %s", names[i]);
+        return -1;
+    }
+    *in = inputs[i];
+    if (i == c->shrink_at && c->opens[i] > 0)
+        in->size--;
+    c->opens[i]++;
+    if (++c->open > c->most)
+        c->most = c->open;
+    return 0;
+}
+
+static void counting_close(void *context, size_t i, hv_merge_input *in) {
+    counting *c = context;
+    (void)i;
+    (void)in;
+    c->open--;
+}
+
+static int merge_counting(counting *c, int links, char *error, size_t error_size) {
+    hv_merge_inputs from = {counting_open, counting_close, NULL};
+    FILE *f = tmpfile();
+    int status;
+    from.context = c;
+    if (f == NULL) {
+        snprintf(error, error_size, "no temporary file");
+        return -1;
+    }
+    status = hv_merge_files(&from, NINPUTS, links, f, error, error_size);
+    fclose(f);
+    return status;
+}
+
+static void test_opening(void) {
+    counting c;
+    char error[512];
+    size_t i;
+    int links;
+
+    for (i = 0; i < NINPUTS; i++)
+        if (files[i].data == NULL)
+            return;
+    for (links = 0; links < 2; links++) {
+        memset(&c, 0, sizeof c);
+        c.fail_at = c.shrink_at = NINPUTS;
+        check(merge_counting(&c, links, error, sizeof error) == 0, "on demand: %s", error);
+        check(c.most <= 2 && c.open == 0, "on demand: at most %d open, %d left open", c.most,
+              c.open);
+        for (i = 0; i < NINPUTS; i++)
+            check(c.opens[i] == (i == 0 ? 1 : 2), "on demand: input %zu opened %d times", i,
+                  c.opens[i]);
+    }
+    memset(&c, 0, sizeof c);
+    c.fail_at = 3;
+    c.shrink_at = NINPUTS;
+    check(merge_counting(&c, 0, error, sizeof error) != 0 && strstr(error, "cannot open") != NULL &&
+              c.open == 0,
+          "failed open: \"%s\", %d left open", error, c.open);
+    memset(&c, 0, sizeof c);
+    c.fail_at = NINPUTS;
+    c.shrink_at = 2;
+    check(merge_counting(&c, 0, error, sizeof error) != 0 &&
+              strstr(error, "changed while merging") != NULL && c.open == 0,
+          "changed input: \"%s\", %d left open", error, c.open);
+}
+
 int main(void) {
     struct {
         const char *name;
@@ -438,6 +515,7 @@ int main(void) {
         {"reader requirements", test_rreq},
         {"header boxes", test_headers},
         {"rejected inputs", test_errors},
+        {"inputs opened on demand", test_opening},
     };
     size_t i;
     load_inputs();

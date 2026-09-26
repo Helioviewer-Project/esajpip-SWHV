@@ -159,46 +159,65 @@ static int parse(char **argv, size_t argc, arguments *a) {
     return 0;
 }
 
-/* The mapped inputs, and the JPX written through a temporary file. */
+/* An input mapped while hv_merge_files has it open: the file is opened,
+ * mapped and closed again, and the mapping dropped on close. */
+static int map_input(void *context, size_t i, hv_merge_input *in, char *error,
+                     size_t error_size) {
+    char **names = context;
+    struct stat st;
+    int fd;
+    in->path = names[i];
+    in->buf = NULL;
+    in->size = 0;
+    if ((fd = open(names[i], O_RDONLY)) < 0 || fstat(fd, &st) != 0) {
+        snprintf(error, error_size, "cannot open %s: %s", names[i], strerror(errno));
+        if (fd >= 0)
+            close(fd);
+        return -1;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        snprintf(error, error_size, "cannot open %s: not a regular file", names[i]);
+        close(fd);
+        return -1;
+    }
+    in->size = (size_t)st.st_size;
+    if (in->size == 0) {
+        in->buf = (const uint8_t *)"";
+    } else {
+        void *p = mmap(NULL, in->size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (p == MAP_FAILED) {
+            snprintf(error, error_size, "cannot map %s: %s", names[i], strerror(errno));
+            close(fd);
+            return -1;
+        }
+        in->buf = p;
+    }
+    close(fd);
+    return 0;
+}
+
+static void unmap_input(void *context, size_t i, hv_merge_input *in) {
+    (void)context;
+    (void)i;
+    if (in->size != 0)
+        munmap((void *)in->buf, in->size);
+}
+
+/* The JPX written through a temporary file. */
 static int merge(char **names, size_t n, const char *output, int links, char *error,
                  size_t error_size) {
-    hv_merge_input *in = calloc(n ? n : 1, sizeof *in);
-    size_t i, len = strlen(output);
+    hv_merge_inputs inputs = {map_input, unmap_input, NULL};
+    size_t len = strlen(output);
     char *tmp = malloc(len + 8);
     FILE *file = NULL;
     mode_t mask = umask(0);
     int fd = -1, status = -1;
 
     umask(mask);
-    if (in == NULL || tmp == NULL) {
+    inputs.context = names;
+    if (tmp == NULL) {
         snprintf(error, error_size, "out of memory");
         goto done;
-    }
-    for (i = 0; i < n; i++) {
-        struct stat st;
-        in[i].path = names[i];
-        in[i].buf = NULL;
-        if ((fd = open(names[i], O_RDONLY)) < 0 || fstat(fd, &st) != 0) {
-            snprintf(error, error_size, "cannot open %s: %s", names[i], strerror(errno));
-            goto done;
-        }
-        if (!S_ISREG(st.st_mode)) {
-            snprintf(error, error_size, "cannot open %s: not a regular file", names[i]);
-            goto done;
-        }
-        in[i].size = (size_t)st.st_size;
-        if (in[i].size != 0) {
-            void *p = mmap(NULL, in[i].size, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (p == MAP_FAILED) {
-                snprintf(error, error_size, "cannot map %s: %s", names[i], strerror(errno));
-                goto done;
-            }
-            in[i].buf = p;
-        } else {
-            in[i].buf = (const uint8_t *)"";
-        }
-        close(fd);
-        fd = -1;
     }
     memcpy(tmp, output, len);
     memcpy(tmp + len, ".XXXXXX", 8);
@@ -209,11 +228,10 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
     if (fchmod(fd, 0666 & ~mask) != 0 || (file = fdopen(fd, "wb")) == NULL) {
         snprintf(error, error_size, "cannot write %s: %s", tmp, strerror(errno));
         close(fd);
-        fd = -1;
         unlink(tmp);
         goto done;
     }
-    if (hv_merge_files(in, n, links, file, error, error_size) != 0) {
+    if (hv_merge_files(&inputs, n, links, file, error, error_size) != 0) {
         fclose(file);
         unlink(tmp);
         goto done;
@@ -226,12 +244,6 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
     status = 0;
 
 done:
-    for (i = 0; in != NULL && i < n; i++)
-        if (in[i].buf != NULL && in[i].size != 0)
-            munmap((void *)in[i].buf, in[i].size);
-    if (fd >= 0 && file == NULL)
-        close(fd);
-    free(in);
     free(tmp);
     return status;
 }
