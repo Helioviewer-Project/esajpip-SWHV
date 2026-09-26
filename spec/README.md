@@ -14,7 +14,10 @@ written in a machine-readable notation (ASN.1 with ACN encoding rules), plus
 a small program that turns that description into a **corpus of test files**:
 hundreds of tiny `.jp2`/`.jpx` files, each labelled "the server must
 accept this" or "the server must reject this". `tests/jpeg2000_test.cc` then
-opens every one and checks that the server agrees.
+opens every one and checks that the server agrees, and
+`lib/test/test_profile.c` does the same for the JP2 reader in `../lib/`,
+which shares the cross-field rules on marker-segment bodies with the
+harness (`../lib/hv_rules.c`).
 
 The point of doing it this way rather than writing test files by hand:
 
@@ -30,10 +33,13 @@ The point of doing it this way rather than writing test files by hand:
   says in prose what the server accepts; `spec/*.asn1` says it in a form a
   test can prove.
 
-Nothing here is part of the server build. The ASN.1 compiler runs offline,
-on a developer machine, only when the description changes. The server tests
-consume only the committed corpus through plain CMake/CTest; generated compiler
-code remains outside the server build.
+The ASN.1 compiler runs offline, on a developer machine, only when the
+description changes; it is never part of the build. The server tests consume
+only the committed corpus through plain CMake/CTest, and the `esajpip`
+binary links no generated code. The reader/writer library in `../lib/`
+does: `lib/generate.sh` generates the header types of `jpeg2000-io.asn1`
+(and the profile types it checks against) into `lib/generated/`, which is
+committed and built by the normal CMake build.
 
 **Status.** With the upstream compiler revision pinned here, the complete model
 generates C, that C builds as strict C11, and the sanitized harness writes the
@@ -51,7 +57,7 @@ corpus test **just failed**, go to "When a vector fails".
 
 ## Scope and development order
 
-This suite is intended to establish that esajpip accepts the JPEG 2000 source
+This suite is intended to establish that esajpip accepts the JPEG 2000 served
 profile it documents and rejects malformed or unsupported structures for the
 right reason. It can provide strong evidence for the parts of T.800 and T.801
 that the server parses: boxes, marker framing, coding parameters, PLT packet
@@ -64,7 +70,7 @@ It is not a complete JPEG 2000 conformance suite. In particular, it does not
 validate entropy-coded packet contents, inverse transforms, color processing,
 decoded samples, rendering, or every legal JPX organization. esajpip does not
 perform those operations. A passing corpus means that the server agrees with
-the modelled structural rules and its declared source profile; it does not mean
+the modelled structural rules and its declared served profile; it does not mean
 that an arbitrary JPEG 2000 decoder is conformant.
 
 The model, corpus integration, and coverage map are in place. The coverage
@@ -93,7 +99,7 @@ follow this order when a concrete need justifies them:
 
 Every new rule needs at least one accepted vector at or near its boundary and
 one rejected vector that violates only that rule. Each must cite the applicable
-standard clause, state whether it belongs to the standard or server-profile
+standard clause, state whether it belongs to the standard or profile
 layer, and exercise `GetPacket` when rejection can occur during lazy indexing.
 Independent tools such as jpylyzer, OpenJPEG, Kakadu, or Grok are useful for
 comparison, but none replaces the cited standard plus the model as the expected
@@ -190,7 +196,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 
 | Term | Meaning here |
 | --- | --- |
-| **model** | The three `spec/*.asn1` files and their `*.acn` companions, together. |
+| **model** | The four `spec/*.asn1` files and their `*.acn` companions, together. |
 | **layer 1 / standard** | Types with the ranges and rules of T.800/T.801. |
 | **layer 2 / profile** | `*-Profile` types and rules: normally layer 1 narrowed to what esajpip serves, with explicit documented leniencies matching deployed server behavior. |
 | **vector** | One generated `.jp2`/`.jpx` file in the corpus. |
@@ -210,7 +216,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
 | `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. The reader also checks values against the profile types `Siz-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile` (`../lib/generate.sh`). |
-| `VERSION` | The exact upstream asn1scc revision used to generate the corpus. |
+| `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
 | `asn1scc-patches/` | Local compiler fixes that upstream does not have yet, applied to `VERSION` in `series` order, and a reference archive of the former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs upstream ACN v2 regressions. |
@@ -218,7 +224,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. The rules on marker segment bodies (SIZ, COD, PLT entries, packet count) are `../lib/hv_rules.c`, shared with the reader. |
-| `harness/mapping.{h,c}` | Three tiny functions ACN needs because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8). |
+| `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8), and the decode-only box-type mappings `boxtype` and `jp2boxtype`. |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 
 ## How the pieces fit
@@ -231,10 +237,11 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
                       ─── mutates them ───────────────────┤
                       ─── encodes ─▶ bytes ─▶ decodes ────┘──▶ label per layer
                       ─── + harness/crossfield.c rules ──────▶ (valid/invalid)
-                                                          │
+                          (body rules: lib/hv_rules.c)    │
                                         tests/vectors/j2k/*.jp2, *.jpx, manifest.tsv
                                                           │
    tests/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
+   lib/test/test_profile.c ─ hv_check_jp2 + HV_PROFILE, JP2 ▶ must match the profile label
 ```
 
 Two facts make the generated code a good judge of validity. First, the
@@ -282,13 +289,21 @@ root.
    values impractical, and it cannot replace the JPEG 2000 cross-field and
    mutation checks. Small compiler regressions cover the backend mechanisms;
    `check-model.sh` covers their composition in the real model.
-3. Run the server tests and read "When a vector fails" for anything red:
+3. Regenerate the reader's code, which the build compiles, with the same
+   compiler:
+
+   ```sh
+   ASN1SCC_IMAGE=esajpip-asn1scc lib/generate.sh
+   ```
+4. Run the server tests, and the reader and transcoder tests, which check
+   the JP2 labels too; read "When a vector fails" for anything red:
 
    ```sh
    ./tests/run.sh
+   transcode/test/run.sh
    ```
-4. Commit the changed model or harness, `spec/VERSION` and
-   `spec/asn1scc-patches/` if they changed, and
+5. Commit the changed model or harness, `spec/VERSION` and
+   `spec/asn1scc-patches/` if they changed, `lib/generated/`, and
    `tests/vectors/j2k/` together. Never edit vector files or manifest labels
    by hand.
 
@@ -318,8 +333,10 @@ Two conventions worth knowing before you edit:
   COMPONENTS` subtype (ranges narrowed) or, where framing has to be repeated
   with profile bodies inside `CONTAINING`, a copy with profile types
   substituted. It has fewer `CHOICE` alternatives or a smaller marker-code
-  value set where the server rejects a whole class (`TileBody-Profile` is
-  `plt` only; `MainMarkerCode-Profile` excludes COC, POC and PPM). The deliberate
+  value set where the server rejects a whole class (`TileSegment-Profile` is
+  `plt` only; `MainMarkerCode-Profile` excludes COC, POC, PPM, the codes
+  T.800 places elsewhere and 0xFF30 to 0xFF3F; `Jp2Payload-Profile` keeps
+  every box of a .jp2 but `jP`, `ftyp` and `jp2c` opaque). The deliberate
   type-level exception is an `other` alternative for marker codes the profile
   parser skips as opaque data. Cross-field rules also express the two deployed
   leniencies: missing JPX `rreq` and trailing zero-valued PLT entries. An
@@ -354,7 +371,8 @@ A vector is *valid at a layer* when all three hold: the generated ACN decoder
 accepts it (this is what catches region overruns, leftover bytes, wrong
 `CHOICE` selection, and unknown codes), the generated constraint checker for
 that layer accepts the decoded value (`<Type>_IsConstraintValid`), and the
-cross-field rules for that layer hold (`crossfield.c`). The compiler performs
+cross-field rules for that layer hold (`crossfield.c`, with the body
+rules of `../lib/hv_rules.c`). The compiler performs
 the evaluation, but the ASN.1/ACN model and the imperative cross-field rules
 are human-maintained sources that cite the corresponding standard clauses.
 
@@ -525,7 +543,7 @@ always expect valid at both layers.
 (`ENC`, `DEC`, `VALID`, `INIT` → `<Type>_ACN_Encode` etc.) and one size
 macro (`Jp2Family_REQUIRED_BYTES_FOR_ACN_ENCODING`); `mapping.h` names the
 mapping-function prototypes through `MAPPING_ENCODE_NAME`/`_DECODE_NAME`;
-`crossfield.h` includes the three generated headers by module name. Field
+`crossfield.h` includes the three generated headers it needs by module name. Field
 access assumes asn1scc's C conventions: `nCount`/`arr` for `SEQUENCE OF` and
 `OCTET STRING`, `kind`/`u.<alt>` and `<Type>_<alt>_PRESENT` for `CHOICE`,
 `exist.<field>` for `OPTIONAL`, a contained type appearing directly for
@@ -552,9 +570,10 @@ target:
 | `SotSegment` | 40 |
 | `BoxHeader` | 32 |
 
-The harness is the one place that depends on the generated API, so it is the
-one thing to touch when regenerating with a newer asn1scc. The server and
-`jpeg2000_test` never see generated code.
+The harness and the reader in `../lib/` (`hv_reader.c`, `hv_writer.c`,
+`hv_rules.c`) depend on the generated API, so they are what to touch when
+regenerating with a newer asn1scc. The server and `jpeg2000_test` never
+see generated code.
 
 ### Mapping functions
 
@@ -570,11 +589,12 @@ also count themselves and their neighbours:
 
 `boxtype` is decode-only. It preserves every box type listed in the ACN
 choices and maps every other 32-bit TBox value to `'abcd'`, which selects the
-opaque `other` alternative. The model uses the normalized type for validity
+opaque `other` alternative. `jp2boxtype`, for a .jp2 at the profile layer,
+preserves only `jP`, `ftyp` and `jp2c`. The model uses the normalized type for validity
 checks; the server retains the original bytes. The model encoder writes
 `'abcd'` for `other`, so the corpus generator patches encoded TBox values to
-exercise other unknown types. `check-model.sh` verifies that the mapping's
-known-type list matches the ACN choices.
+exercise other unknown types. `check-model.sh` verifies that the mappings'
+known-type lists together match the ACN choices.
 
 Before decoding, the corpus harness checks physical LBox boundaries. The
 generated `CONTAINING` decoder uses LBox as a temporary stream size, which
@@ -648,7 +668,8 @@ Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 3. diff `manifest.tsv` against the previous one — new or removed rows must be
    explainable by the model, harness, or compiler change; label flips are
    findings;
-4. commit the changed inputs, `VERSION`, and corpus together.
+4. rerun Quick start steps 3 and 4 (`lib/generate.sh` and both test runners);
+5. commit the changed inputs, `VERSION`, `lib/generated/`, and corpus together.
 
 Never edit vector files or manifest labels by hand.
 
@@ -695,18 +716,22 @@ with. "Rejects a valid standard file" and "accepts something the profile
 excludes" are different bugs with different fixes, and layer 1 rejections
 cite the standard's table so the disagreement can be settled by reading it.
 
-**Why is asn1scc not in the build?** The generated code is only a judge, used
-once per model change to label files. The server never links it; the tests read
-the labelled files. Keeping the compiler offline avoids adding asn1scc and its
-generated code to the production build.
+**Why is asn1scc not in the build?** It only needs to run when the model
+changes. For the corpus, the generated code is a judge, used once per model
+change to label files; the tests read the labelled files. For the reader in
+`../lib/`, its output is committed (`lib/generated/`) and compiled like any
+other source. Keeping the compiler offline keeps asn1scc and .NET out of the
+build.
 
 **Why does the model have "corpus bounds"?** asn1scc's C structs embed
 every list at its maximum size. Bounds like "65,535 boxes" would make a
 single struct gigabytes large. The bounds only limit what the harness
 generates; they are not claims about the standard.
 
-**Can the generated decoder replace `file_manager.cc`?** No, and it is not
-meant to. The server indexes multi-megabyte files by offset without
-copying, parses PLT entries lazily, and reads text (JPIP requests); ACN
-models fully-decoded, bounded records. The model's value is as a
-specification and a test oracle.
+**Can the generated decoder replace `file_manager.cc`?** Not the whole-file
+decoder: the server indexes multi-megabyte files by offset without copying,
+and ACN models fully decoded, bounded records. The reader in `../lib/` is
+meant to: it steps from header to header, decodes one marker segment or box
+header at a time with the generated code of `jpeg2000-io.asn1`, and applies
+the shared rules, so the server can use it for JP2 files once it covers
+JPX. The whole-file model stays the specification and the test oracle.

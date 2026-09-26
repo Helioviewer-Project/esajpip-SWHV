@@ -1,5 +1,5 @@
 # jpeg2000_io: the JPEG 2000 reader/writer, for hv_transcode and later the
-# server. hv_reader, hv_writer and hv_geometry are hand-written; generated/ is produced
+# server. hv_reader, hv_rules, hv_writer and hv_geometry are hand-written; generated/ is produced
 # from the model in ../spec by generate.sh (asn1scc is not part of the
 # build).
 

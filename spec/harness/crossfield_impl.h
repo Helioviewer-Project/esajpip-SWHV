@@ -130,7 +130,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 if (tp_cod > 1 || (tp_cod && tp->tpsot != 0)) return "tile.cod-once";
                 if (tp_qcd > 1 || (tp_qcd && tp->tpsot != 0)) return "tile.qcd-once";
 #endif
-                /* Layer 2: TileBody-Profile admits only PLT, so any other
+                /* Layer 2: TileSegment-Profile admits only PLT, so any other
                  * tile-header segment already failed to decode. */
                 if (layer >= CF_PROFILE && tp_plts == 0) return "codestream.no-plt";
             }

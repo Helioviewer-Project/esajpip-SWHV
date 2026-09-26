@@ -11,6 +11,15 @@ does the JPEG 2000 work. Each channel keeps private image, cache, and traversal
 state and is handled by one worker at a time, which isolates JPEG 2000 state
 while letting HTTP connections be pooled or replaced independently of channels.
 
+### Added
+
+- A formal description of the accepted files in ASN.1/ACN (`spec/`), with a
+  generated, labelled test corpus that the server tests check against.
+- A JPEG 2000 reader/writer library (`lib/`), built on code generated from
+  that description and sharing its rules, and the `hv_walk` tool.
+- `hv_transcode` (`transcode/`), a C port of hvJP2K's transcoder that
+  rejects files it cannot make servable.
+
 ### Changed
 
 - Keep channels alive across replacement connections, and allow one persistent
@@ -55,12 +64,15 @@ while letting HTTP connections be pooled or replaced independently of channels.
   `EOR WINDOW_DONE` instead of failing the channel.
 - Parse standard JPIP codestream lists, closed and open ranges, sampling
   factors, cache-model qualifiers, and absolute request URIs consistently.
-- Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet locations,
+- Validate JPEG 2000 boxes, markers, tile-parts, PLT coverage, packet locations,
   codestream bounds, and linked-JPX references. Invalid or unsupported sources
   are rejected instead of failing later or producing inconsistent JPP data.
   Deployed trailing zero PLT entries remain accepted as padding; nonzero extras
   are rejected. QCD and COM lengths and the COM registration value are checked
-  against T.800 (Lqcd 4 to 197, Lcom at least 5, Rcom 0 or 1).
+  against T.800 (Lqcd 4 to 197, Lcom at least 5, Rcom 0 or 1). COC, POC,
+  PPM, markers T.800 places elsewhere, 0xFF00 and the segment-less 0xFF30 to
+  0xFF3F are rejected in the main header, and PLT entries longer than ten
+  bytes are rejected.
 - Preserve separate coding parameters for embedded JPX codestreams, use the
   standard default precinct size, and number codestreams by physical box order.
 - Bound client-controlled request values before allocation, including cache

@@ -154,7 +154,7 @@ Codestream-Profile ::= SEQUENCE {
     soc         INTEGER (65359..65359),
     sizCode     INTEGER (65361..65361),
     siz         SizSegment-Profile,
-    segments    SEQUENCE (SIZE (3..80)) OF MainSegment-Profile     -- >= COD, QCD, one tile-part
+    segments    SEQUENCE (SIZE (3..80)) OF MainSegment-Profile     -- >= COD, QCD, one tile-part (corpus bound)
 }
 
 SizSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Siz-Profile) }
@@ -186,8 +186,8 @@ TilePart-Profile ::= SEQUENCE {
 }
 
 TilePartRest-Profile ::= SEQUENCE {
-    headers     SEQUENCE (SIZE (0..8)) OF TileSegment-Profile,
-    data        OCTET STRING (SIZE (0..4096))
+    headers     SEQUENCE (SIZE (0..8)) OF TileSegment-Profile,     -- corpus bound
+    data        OCTET STRING (SIZE (0..4096))                      -- corpus bound
 }
 
 TileSegment-Profile ::= SEQUENCE {
@@ -198,7 +198,8 @@ TileSegment-Profile ::= SEQUENCE {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the framing (harness/crossfield.c)
+-- Cross-field constraints for the framing (harness/crossfield_impl.h; the
+-- tile-part and PLT rules are ../lib/hv_rules.c, shared with the reader)
 -- ===========================================================================
 --
 -- Standard (both layers), T.800 A.3 and Table A.1:
@@ -216,8 +217,9 @@ END
 --     the first tile-part of the tile (A.6.1, A.6.4).
 --   The chosen CHOICE alternative matches `code` (automatic: present-when).
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
---   Where a single unsubsampled tile uses COD without packet-layout overrides
---     and every tile-part has PLT, nonzero Iplt count matches the packet count.
+--   Where a single unsubsampled tile with zero image and tile origins uses
+--     COD without packet-layout overrides and every tile-part has PLT, the
+--     nonzero Iplt count matches the packet count.
 --
 -- Profile only:
 --   (Types, not rules: MainMarkerCode-Profile excludes COC, POC, PPM, the

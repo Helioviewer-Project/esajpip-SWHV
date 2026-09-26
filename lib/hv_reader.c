@@ -133,7 +133,8 @@ static uint32_t get32(const uint8_t *p) {
 }
 
 /* The rule names are those of the file rules in
- * ../spec/harness/crossfield_impl.h. */
+ * ../spec/harness/crossfield.c, except file.size-limit, which the corpus
+ * cannot exercise. */
 const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
     static const uint8_t signature[12] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
                                           0x0D, 0x0A, 0x87, 0x0A};

@@ -1,4 +1,4 @@
-# JPEG 2000 source-profile coverage
+# JPEG 2000 served-profile coverage
 
 This map connects the rules in the ASN.1/ACN model to generated vectors and
 the esajpip source that enforces the served profile. It answers a narrower
@@ -8,7 +8,7 @@ file structures it documents and reject malformed or unsupported structures?
 The authoritative list of individual vectors and labels is
 `tests/vectors/j2k/manifest.tsv`. A label is written as `standard/profile`.
 For example, `valid/invalid` usually means that the structure is permitted by
-the cited JPEG 2000 standard but excluded from the esajpip source profile.
+the cited JPEG 2000 standard but excluded from the esajpip served profile.
 For linked-source extent and availability tests, the standard label covers
 the JPX structure only; the profile oracle additionally checks the companion
 file. A structurally valid fragment list need not reference a valid codestream.
@@ -35,7 +35,7 @@ Vector names below are representative. The manifest-driven test runs all of them
 | JPX codestream headers and numbering, T.801 M.11.6 | `jpx.codestream-count`, `jpx.no-jpch`, and source-box-order rules | `jpx-embedded.jpx`, `jpx-embedded-rule-jpx.box-order-12.jpx` | `jpx-embedded-rule-jpx.codestream-count-15.jpx`, `jpx-embedded-rule-jpx.no-jpch-17.jpx` | `ReadJPX` numbers top-level `jp2c` and `ftbl` boxes in physical order and requires one `jpch` per served codestream. The profile does not implement the standard fallback to `jp2h` when `jpch` is absent. |
 | Data Reference and URL boxes, T.801 M.11.2 and Data Entry URL box | `DataReferences`, `DataEntryUrl`, `dtbl.ndr-count`, and `url.*` | `jpx-linked.jpx` | `jpx-linked-rule-dtbl.ndr-count-5.jpx`, `jpx-linked-rule-url.version-7.jpx`, `jpx-linked-rule-url.file-scheme-6.jpx` | `ReadJPX` and `ReadUrlBox` accept one top-level `dtbl` containing version-zero, flag-zero local `file://` references. Remote URLs are outside the served profile. |
 | Fragment tables, T.801 Annex M Fragment Table box | `FragmentList`, `Fragment`, `ftbl.one-flst`, and `flst.dr-range` | `jpx-linked.jpx` | `jpx-linked-rule-ftbl.one-flst-4.jpx`, `jpx-linked-rule-flst.dr-range-3.jpx`, `jpx-linked-rule-flst.dr-external-2.jpx` | `ReadFlstBox` requires one fragment per `ftbl`. The profile requires an external reference and later verifies the fragment against the complete codestream extent in the linked JP2. |
-| Linked-JPX source shape | Profile rules `jpx.mixed-sources`, `jpx.linked-shape`, `url.jp2-target` | `jpx-linked.jpx` and its two companion JP2 files | `jpx-linked-rule-jpx.mixed-sources-9.jpx`, `jpx-linked-rule-jpx.linked-shape-10.jpx`, `jpx-linked-rule-url.jp2-target-8.jpx` | This is a Helioviewer source-profile decision, not a general T.801 restriction. `ReadJPX` supports either embedded codestreams or one complete linked JP2 per codestream, never a mixture or JPX-to-JPX recursion. |
+| Linked-JPX source shape | Profile rules `jpx.mixed-sources`, `jpx.linked-shape`, `url.jp2-target` | `jpx-linked.jpx` and its two companion JP2 files | `jpx-linked-rule-jpx.mixed-sources-9.jpx`, `jpx-linked-rule-jpx.linked-shape-10.jpx` (no top-level `dtbl`; the standard layer's `flst.dr-range` fires first), `jpx-linked-rule-url.jp2-target-8.jpx` | This is a Helioviewer served-profile decision, not a general T.801 restriction. `ReadJPX` supports either embedded codestreams or one complete linked JP2 per codestream, never a mixture or JPX-to-JPX recursion. |
 
 ## Intentional standard/profile differences
 
@@ -49,7 +49,8 @@ The manifest currently contains five kinds of `invalid/valid` evidence:
   `jpx-embedded-rule-jpx.reader-requirements-13.jpx` and
   `jpx-linked-rule-jpx.reader-requirements-0.jpx`.
 - Zero-valued PLT entries after the logical packet set are accepted for
-  deployed AIA-derived files. The vectors are
+  deployed files (every one of 4,014 EUI files checked carries them; see
+  `lib/README.md`). The vectors are
   `jp2-rule-plt.trailing-zero-16.jp2` and
   `jpx-embedded-rule-plt.trailing-zero-16.jpx`.
 - Association contents are opaque to the server. `jpx-asoc-child-length.jpx`

@@ -127,6 +127,10 @@ transcode/test/run.sh             # or: transcode/test/run.sh sanitize
 TRANSCODE_ARCHIVE=~/AIA:~/EUI transcode/test/run.sh
 ```
 
+The build goes to `build/transcode-tests-<mode>`, or to
+`ESAJPIP_TEST_BUILD_DIR`, which `../tests/run.sh` also reads: set it for
+one runner at a time.
+
 `test_transcode` checks that every file in `test/fixtures/input/`
 transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
 (COM aside), that each output is within the served profile and transcodes

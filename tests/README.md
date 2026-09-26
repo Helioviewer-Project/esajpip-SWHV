@@ -7,7 +7,7 @@ From the repository root:
 ./tests/run.sh sanitize
 ```
 
-The runner configures, builds, and runs the complete CTest suite. Normal and
+The runner configures, builds, and runs the server's CTest suite. Normal and
 ASan/UBSan builds use separate directories under `build/`, so neither changes
 your installation build. It needs the same compiler and libraries as the
 server, but no external image collection, running server, JHV, Docker, or
@@ -24,6 +24,12 @@ CTest options follow the mode. For example:
 Set `ESAJPIP_TEST_BUILD_DIR` to use another build directory and
 `CMAKE_BUILD_PARALLEL_LEVEL` to limit build parallelism. For an already built
 tree, `ctest --test-dir build --output-on-failure` remains sufficient.
+
+The JPEG 2000 reader's and `hv_transcode`'s tests are separate: they are
+built only with `ESAJPIP_TRANSCODE_TESTS=ON` and run with
+`transcode/test/run.sh` (see [`../transcode/README.md`](../transcode/README.md)).
+One of them, `reader_profile`, checks the reader against the JP2 labels of
+the same corpus, so run both runners after a corpus change.
 
 ## What each test owns
 
@@ -60,7 +66,8 @@ Source-vector failures name the file and expected outcome. Follow
 the model, manifest and server together. Do not hand-edit generated vectors or
 labels. The [coverage map](../spec/COVERAGE.md) records the tested rules and
 intentional boundaries. Regeneration is a separate Docker workflow needed only
-when the model or corpus generator changes.
+when the model or corpus generator changes; it also regenerates
+`lib/generated/`.
 
 ## What a passing suite does not establish
 

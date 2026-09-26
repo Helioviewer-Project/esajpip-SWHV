@@ -28,7 +28,7 @@ These terms recur here and in the other documents.
 
 ## Build and install
 
-The build requires a C++11 compiler, CMake, pkg-config, GLib, libuv, llhttp,
+The build requires C11 and C++11 compilers, CMake, pkg-config, GLib, libuv, llhttp,
 zlib, and POSIX threads. Debian 13 is the minimum supported Debian release;
 install the packages there with:
 
@@ -60,6 +60,14 @@ For a separate test build, run `./tests/run.sh`, or `./tests/run.sh sanitize`
 to build with AddressSanitizer and UndefinedBehaviorSanitizer. The [test guide](tests/README.md) describes the coverage,
 focused runs, and failure diagnosis.
 
+The same build also produces two tools from the JPEG 2000 reader/writer
+library in [`lib/`](lib/README.md): `hv_transcode`
+([`transcode/`](transcode/README.md)), which prepares image data for the
+server (see below), and `hv_walk`, which checks files with the reader.
+Their tests run separately, with `transcode/test/run.sh`. The formal
+description of the accepted files, and the test corpus generated from it,
+are in [`spec/`](spec/README.md).
+
 ## Configure the server
 
 The server reads `server.ini` from its working directory. The file uses
@@ -88,7 +96,9 @@ disabled.
 
 File names must end in lowercase `.jp2` or `.jpx`. Every codestream must carry
 the `PLT` markers that record each packet length; the server relies on them to
-locate the packets a window needs without decoding the image. The server accepts linked JPX movies produced
+locate the packets a window needs without decoding the image. `hv_transcode`
+rewrites a JP2 file into that form (RPCL order, the given precincts, PLT)
+without recompressing it, and rejects files it cannot make servable. The server accepts linked JPX movies produced
 by `hv_jpx_merge` and the compatible `kdu_merge` form. It preserves the order
 stored in the JPX, so pass source frames to the merge tool in timestamp order.
 

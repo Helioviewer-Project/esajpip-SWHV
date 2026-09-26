@@ -1,10 +1,11 @@
-/* hv_rules.h: the cross-field rules of the model that apply to marker
- * segment bodies (listed at the end of ../spec/j2k-headers.asn1 and
+/* hv_rules.h: the cross-field rules of the model on marker segment bodies
+ * and tile-parts (listed at the end of ../spec/j2k-headers.asn1 and
  * ../spec/j2k-codestream.asn1). They are written once, here, and used both
  * by the reader (hv_reader.c) and by the model's harness
  * (../spec/harness/crossfield_impl.h), which labels the corpus in
- * ../tests/vectors/j2k. The reader therefore applies the rules the corpus
- * labels come from.
+ * ../tests/vectors/j2k. With HV_PROFILE the reader applies every JP2 rule
+ * the profile labels come from; its T.800 mode leaves some out (see
+ * README.md, "What the reader checks").
  *
  * `profile` selects the layer: 0 for the standard (T.800), nonzero for the
  * served profile (JPIP_PROFILE.md), which adds the server's restrictions.

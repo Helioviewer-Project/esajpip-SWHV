@@ -32,7 +32,8 @@
 --     them. The standard layer checks the box's required count and position;
 --     the harness writes accurate contents for its base JPX files.
 --
--- Cross-field rules are at the end (harness/crossfield.c).
+-- Cross-field rules are at the end (harness/crossfield_impl.h and
+-- harness/crossfield.c).
 
 JP2-Boxes DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -270,7 +271,8 @@ DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the box layer (harness/crossfield.c)
+-- Cross-field constraints for the box layer (harness/crossfield_impl.h and
+-- harness/crossfield.c)
 -- ===========================================================================
 --
 -- Standard (both layers of a .jpx; for a .jp2, layer 1 and, at layer 2,
@@ -285,7 +287,7 @@ END
 --     alignment are the Ftyp type's job. MinV (0 for JP2, 1 for JPX) binds
 --     writers only: readers shall parse the file whatever its value and
 --     esajpip ignores it, so neither layer constrains it.
---   T.801 M.11.2: at most one dtbl box, at the top level.
+--   T.801 M.11.2 (JPX): at most one dtbl box, at the top level.
 --   T.801 M.11.1: a JPX file has exactly one rreq box immediately after
 --     ftyp. The profile parser deliberately ignores this writer requirement.
 --   T.801 M.11.6: if any jpch box is present, the number of codestreams

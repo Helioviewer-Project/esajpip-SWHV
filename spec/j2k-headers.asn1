@@ -21,7 +21,9 @@
 -- decode error rather than a hand-written rule.
 --
 -- Cross-field rules that ASN.1 cannot state are listed at the end and are
--- implemented once in harness/crossfield.c (and, for the server, in C++).
+-- implemented once, in ../lib/hv_rules.c, which the harness
+-- (harness/crossfield_impl.h) and the reader in ../lib share; the server
+-- implements them in C++ (FileManager).
 --
 -- CORPUS BOUNDS: some SIZE upper bounds are smaller than the standard's
 -- (marked "corpus bound"). asn1scc allocates every SEQUENCE OF / OCTET
@@ -218,8 +220,8 @@ Plt-Profile ::= Plt
 END
 
 -- ===========================================================================
--- Cross-field constraints for the bodies (harness/crossfield.c; C++ in
--- FileManager). Segment-length consistency is NOT listed: it is enforced by
+-- Cross-field constraints for the bodies (../lib/hv_rules.c, shared by the
+-- harness and the reader; C++ in FileManager). Segment-length consistency is NOT listed: it is enforced by
 -- the CONTAINING framing plus `size deduced` in the .acn.
 -- ===========================================================================
 --

@@ -91,7 +91,8 @@ typedef struct {
 
 /* hv_codestream_open flags. Without HV_PROFILE_HEADERS or HV_PROFILE, the
  * reader checks T.800. Error messages that name a rule (siz.single-tile)
- * come from the shared rules in hv_rules.c. */
+ * use the names of the corpus manifest, whether hv_rules.c or the reader
+ * applies the rule. */
 enum {
     /* Accept zero-valued PLT entries after the last packet of a tile-part.
      * T.800 forbids them (a packet has at least one byte); deployed files
@@ -149,12 +150,12 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item);
 
 void hv_codestream_close(hv_codestream *cs);
 
-/* Decoded main-header SIZ and COD; COD is valid once the first tile-part
- * has been reported. */
 /* The value of one PLT entry (7-bit groups, most significant first);
  * saturates at UINT64_MAX. */
 uint64_t hv_iplt_value(const Iplt *entry);
 
+/* Decoded main-header SIZ, and COD once the reader has reported it (NULL
+ * before). */
 const Siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
 

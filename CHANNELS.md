@@ -121,7 +121,7 @@ These are all HTTP status codes emitted by the server:
 | --- | --- | --- |
 | `200 OK` | A channel is created, a channel request is served, or `cclose` succeeds. Image responses use `Transfer-Encoding: chunked` and `Content-Type: image/jpp-stream`; `cclose` has `Content-Length: 0`. | The channel remains available after an image response. A successful `cclose` ends it. |
 | `400 Bad Request` | The HTTP request head, body framing, supported JPIP fields, cache model, codestream selection, or window is invalid. The response body identifies the invalid field or constraint. | The connection and any referenced channel are closed. The rejected request does not modify the channel cache before termination. |
-| `404 Not Found` | A `cnew` request names a target that is missing, has an invalid client-supplied path, uses an unsupported file type, or is not accepted by the supported JPEG 2000 source profile. | No usable channel is created; the connection is closed. Correct the requested target or repository source. |
+| `404 Not Found` | A `cnew` request names a target that is missing, has an invalid client-supplied path, uses an unsupported file type, or is not accepted by the supported JPEG 2000 served profile. | No usable channel is created; the connection is closed. Correct the requested target or repository source. |
 | `431 Request Header Fields Too Large` | An identified connection sends more than 4 KiB for one complete HTTP request head. | The connection and any channel identified by the request target are closed. |
 | `501 Not Implemented` | A valid `cnew` request lists no transport the server implements. The response has no `JPIP-cnew` header. | No usable channel is created; the connection is closed. Retry with `http` in the transport list. |
 | `500 Internal Server Error` | The selected source is unreadable, or the server encounters another internal failure such as being unable to generate a channel ID. The response body identifies the failure category. | The connection and channel are closed. An unreadable source normally requires correcting repository access or storage. |
@@ -253,7 +253,7 @@ replace its underlying connection without losing the JPIP channel.
 
 ## Source layout
 
-The source responsibilities are:
+The source responsibilities are (paths under `src/`):
 
 | Source | Responsibility |
 | --- | --- |
