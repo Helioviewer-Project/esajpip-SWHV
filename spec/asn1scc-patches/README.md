@@ -15,6 +15,23 @@ Applied now:
   check on test case 001 is added to `v4Tests/scripts/runWireTests.sh`.
   Report and reproducer:
   [`../asn1scc-issues/deferred-determinant-uninit/`](../asn1scc-issues/deferred-determinant-uninit/).
+- `deferred-sequence-of-arguments.patch`: with `--acn-v2`, a determinant
+  passed as an argument to the elements of a SEQUENCE OF child was not
+  deferred: the encoder computed it from `arr[i1]` outside the element loop,
+  with `i1` uninitialized. The two collectors of deferred determinants in
+  `BackendAst/DAstACNDeferred.fs` now look through SEQUENCE OF to the
+  element's reference type. Test case `25-ACNV2-BOUNDARIES/016` and its
+  wire test in `v4Tests/scripts/runWireTests.sh`.
+- `deferred-sibling-consumers.patch`: a deferred determinant that a sibling
+  also consumes (`head [size len]` beside `payload <len> []`): the decoder
+  now keeps the ordinary variable the sibling reads (it did not compile),
+  and the encoder patches the determinant from the sibling too, or fails on
+  a mismatch (it wrote a wrong encoding). Test cases `017` and `018` (the
+  JPEG 2000 Reader Requirements box, which needs both patches) and their
+  wire tests.
+
+  Report and reproducers for both:
+  [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
 
 ## Reference: the former fixes for deferred ACN
 

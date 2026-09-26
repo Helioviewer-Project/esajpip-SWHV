@@ -1,0 +1,8 @@
+Sibling DEFINITIONS ::= BEGIN
+    Item <INTEGER:len> [] { data [size len] }
+    Msg [] {
+        len INTEGER [encoding pos-int, size 8],
+        head [size len],
+        payload <len> []
+    }
+END

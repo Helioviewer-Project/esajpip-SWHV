@@ -1,1 +1,3 @@
 deferred-determinant-uninit.patch
+deferred-sequence-of-arguments.patch
+deferred-sibling-consumers.patch

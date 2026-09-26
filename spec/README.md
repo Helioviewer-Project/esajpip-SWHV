@@ -637,6 +637,11 @@ each until the model does:
 - Reader Requirements contents are opaque. Layer 1 checks the mandatory count
   and position, and the harness writes accurate base-box contents, but it does
   not generate field-level `rreq` mutants because the server ignores them.
+  Modelling them needs ML to size the masks of FUAM, DCM and every flag, which
+  the pinned compiler mishandles; `asn1scc-patches/deferred-sequence-of-arguments.patch`
+  and `deferred-sibling-consumers.patch` fix it (see
+  `asn1scc-issues/deferred-sequence-of-determinant/`), so the model can type
+  `rreq` once the compiler is rebuilt with them.
 - Marker codes outside the listed set are rejected at layer 1 only; layer 2
   has an `other` alternative and skips them exactly as the server does. A
   vector with e.g. a `CAP` segment is `standard=invalid, profile=valid` until
