@@ -9,7 +9,8 @@ it rewrites the codestream in RPCL order with the given precincts and PLT
 markers, without recompressing it: every code-block keeps its coding passes,
 bytes and zero bit-planes, and only the packet headers change. It reads and
 writes headers, and lays out precincts and packets, with `jpeg2000_io`
-(`../lib/`: `hv_reader`, `hv_writer`, `hv_geometry`).
+(`../lib/`: `hv_reader` with the shared rules of `hv_rules`, `hv_writer`,
+`hv_geometry`).
 
 ## Usage
 
@@ -20,9 +21,8 @@ writes headers, and lays out precincts and packets, with `jpeg2000_io`
 - `-x`: rewrite the first top-level XML box as its root element alone, as
   hvJP2K's `--xml-rewrite` does (see below).
 
-The input is mapped into memory. The file keeps its boxes: the `jp2c` box
-is transcoded, the others are copied as read (a box with LBox = 0 gets an
-explicit length). The output is written to a temporary file next to it with
+The input is mapped into memory. The file keeps its boxes, in order: the
+`jp2c` box is transcoded, the others are copied as read. The output is written to a temporary file next to it with
 the input's mode and renamed into place, so input and output may be the
 same file; on error nothing is written. Exit status: 0, 1 on error, 2 on
 usage errors.
@@ -33,12 +33,15 @@ The output is for the JPIP server, so the input must be a JP2 file within
 the server's profile (`../JPIP_PROFILE.md`) except for its tile-parts,
 which are rewritten. The reader checks this with the rules shared with the
 model (`../lib/`): the file rules of `hv_check_jp2` (signature, file type
-with the `jp2 ` brand, exactly one `jp2c`, at most `INT_MAX` bytes; JPX
-files and raw codestreams fail) and the main-header rules of
-`HV_PROFILE_HEADERS` (zero origins, unit sampling, one tile, dimensions up
-to `INT32_MAX`, no COC, POC or PPM). Errors name the rule, as in
-`siz.zero-origin`. The output is at most `INT_MAX` bytes and passes the
-whole profile (`HV_PROFILE`); the tests and the fuzz target check that.
+with the `jp2 ` brand and compatibility entry, exactly one `jp2c`, at most
+`INT_MAX` bytes; JPX files and raw codestreams fail) and the main-header
+rules of `HV_PROFILE_HEADERS` (zero origins, unit sampling, one tile,
+dimensions up to `INT32_MAX`, no COC, POC or PPM). What else the profile
+asks for, the transcoder writes: the tile-parts and a COD without SOP.
+Errors from the shared rules name the rule, as in `siz.zero-origin`. The
+output is at most `INT_MAX` bytes and passes the whole profile
+(`HV_PROFILE`): the tests check every file they transcode, and the fuzz
+target every codestream whose main header is within the profile.
 
 Within that, as in hvJP2K: any number of tile-parts (Psot = 0 allowed on
 the last one), any progression order, only PLT and COM in tile-part
@@ -46,9 +49,11 @@ headers, and code-block styles without selective arithmetic coding bypass
 or termination on each coding pass. RGN, which hvJP2K rejects, is kept:
 it changes neither the packets nor their headers. The new precincts must
 keep the code-block partition. SOP and EPH markers are checked and not
-written; TLM and PLM are dropped; the input's PLT is ignored (so its
-trailing zero entries are accepted); every other main-header segment,
-COM included, is copied as read.
+written; the input's PLT is checked as the reader does (Zplt order,
+lengths adding up to each tile-part's data, zero entries only after the
+last packet of a tile-part) but not used; TLM and PLM are dropped; every
+other main-header segment, COM and RGN included, is copied as read.
+Tile-part COM is dropped with the tile-part headers.
 
 `hv_transcode_codestream`, the codestream level that the tests and the
 fuzz target also use, does not apply the profile: it takes nonzero origins
@@ -96,7 +101,7 @@ declarations), so the two can differ for XML that lxml would rewrite.
 | `transcode_file.c` | `hv_transcode_file`: boxes (the codestream is transcoded straight into its `jp2c` box) and `-x`. |
 | `transcode.h` / `.c` | `hv_transcode_codestream` (`transcode_codestream`): reads the codestream and writes its main header with the new COD, lays out the tile twice with `hv_geometry` (input and new precincts), checks the memory limits and the code-block partition, and writes the tile as one tile-part. |
 | `tier2.h` / `.c` | Packets (T.800 B.9, B.10) on an `hv_geometry` and its packet order. `hv_read_packets` decodes the headers in place, tile-part by tile-part, and records each code-block's contributions per layer; `hv_write_packets` encodes them, either for the lengths only (for the PLT) or into the output, copying the code-block bytes from the input. |
-| `fuzz_transcode.c` | libFuzzer target: an accepted input's output must transcode to itself. |
+| `fuzz_transcode.c` | libFuzzer target for the codestream level: an accepted input's output must transcode to itself, and pass `HV_PROFILE` when its main header passes `HV_PROFILE_HEADERS`. |
 
 ## Build and test
 
@@ -126,7 +131,9 @@ TRANSCODE_ARCHIVE=~/AIA:~/EUI transcode/test/run.sh
 transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
 (COM aside), that each output is within the served profile and transcodes
 to itself (the origin-129 file is rejected, and only its codestream is
-compared); what the profile accepts and rejects; tile-parts split
+compared); what the profile accepts and rejects; the boxes around the
+codestream (LBox = 0 on a superbox and its child, a malformed child, `-x`
+on malformed XML); tile-parts split
 every way T.800 allows and broken in the ways it does not; malformed main
 headers; 2,000 corrupted tiles, each rejected or giving a stable output;
 the SOP, EPH and bit-stuffing rules; and the memory bounds. `cli_test.sh`

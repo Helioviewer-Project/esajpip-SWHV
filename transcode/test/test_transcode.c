@@ -705,7 +705,7 @@ static void expect_file_output(const char *name, const bytes *file, const bytes 
     bytes_free(&r.out);
 }
 
-static void test_profile(void) {
+static void test_served_profile(void) {
     static const uint8_t rgn[] = {0xFF, 0x5E, 0x00, 0x05, 0x00, 0x00, 0x07};
     static const struct {
         const char *name;
@@ -777,6 +777,62 @@ static void test_profile(void) {
     bytes_free(&plain.out);
     bytes_free(&with_rgn.out);
     bytes_free(&b);
+    bytes_free(&file);
+}
+
+/* The boxes around the codestream: copied as read and in order, LBox = 0
+ * included; superboxes' children checked; the XML box with -x. */
+static void test_boxes(void) {
+    /* A last superbox with LBox = 0 whose last child has LBox = 0 too. */
+    static const uint8_t to_end[] = {0, 0, 0, 0, 'a', 's', 'o', 'c',
+                                     0, 0, 0, 0, 'l', 'b', 'l', ' ', 'x'};
+    static const uint8_t bad_child[] = {0, 0, 0, 17, 'j', 'p', '2', 'h',
+                                        0, 0, 0, 7, 'i', 'h', 'd', 'r', 'x'};
+    static const uint8_t bad_xml[] = {0, 0, 0, 11, 'x', 'm', 'l', ' ', '<', 'a', '>'};
+    bytes file, cs = fixture_codestream("input", "solo_fsi174_127x129_RLCP_PLT.jp2", &file);
+    bytes f = jp2_file(&cs, "jp2 "), g;
+    hv_out once, twice;
+    char error[256];
+
+    g = bytes_copy(f.data, f.size);
+    append(&g, to_end, sizeof to_end);
+    hv_out_init(&once);
+    hv_out_init(&twice);
+    if (hv_transcode_file(g.data, g.size, 7, 7, 0, &once, error, sizeof error) != 0) {
+        check(0, "LBox = 0 superbox: rejected: %s", error);
+    } else {
+        expect_served("LBox = 0 superbox", once.data, once.size);
+        check(once.size >= sizeof to_end &&
+              memcmp(once.data + once.size - sizeof to_end, to_end, sizeof to_end) == 0,
+              "LBox = 0 superbox: not copied as read");
+        error[0] = 0;
+        check(hv_transcode_file(once.data, once.size, 7, 7, 0, &twice, error, sizeof error) == 0 &&
+              twice.size == once.size && memcmp(twice.data, once.data, once.size) == 0,
+              "LBox = 0 superbox: output does not transcode to itself: %s", error);
+    }
+    hv_out_free(&once);
+    hv_out_free(&twice);
+    bytes_free(&g);
+
+    g = bytes_copy(f.data, f.size);
+    append(&g, bad_child, sizeof bad_child);
+    expect_file_error("jp2h child with LBox 7", &g, "invalid or truncated box header at ");
+    bytes_free(&g);
+
+    g = bytes_copy(f.data, f.size);
+    append(&g, bad_xml, sizeof bad_xml);
+    hv_out_init(&once);
+    check(hv_transcode_file(g.data, g.size, 7, 7, 1, &once, error, sizeof error) != 0 &&
+          strncmp(error, "XML box at ", 11) == 0 && once.size == 0,
+          "-x, unterminated XML: \"%s\"", once.size ? "accepted" : error);
+    hv_out_free(&once);
+    hv_out_init(&once);
+    check(hv_transcode_file(g.data, g.size, 7, 7, 0, &once, error, sizeof error) == 0,
+          "unterminated XML without -x: rejected: %s", error);
+    hv_out_free(&once);
+    bytes_free(&g);
+
+    bytes_free(&f);
     bytes_free(&file);
 }
 
@@ -1055,7 +1111,8 @@ int main(void) {
         {"Kakadu references", test_references},
         {"tile-parts and packets", test_tile_parts},
         {"main headers", test_headers},
-        {"served profile", test_profile},
+        {"served profile", test_served_profile},
+        {"boxes", test_boxes},
         {"corrupted tile data", test_corruption},
         {"SOP, EPH and bit stuffing", test_packet_rules},
         {"memory bounds", test_memory_bounds},

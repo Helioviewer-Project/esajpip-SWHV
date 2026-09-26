@@ -57,7 +57,7 @@ grep -q "cut.jp2" "$work/stderr" || fail "the message does not name the input"
     fail "nonzero origins: expected 1"
 grep -q "siz.zero-origin" "$work/stderr" || fail "nonzero origins: the message does not name the rule"
 [ ! -e "$work/origin-out.jp2" ] || fail "a rejected input wrote its output"
-leftover=$(ls "$work" | grep -c 'out\.jp2\.' || true)
+leftover=$(ls "$work" | grep -c '\.jp2\.' || true)
 [ "$leftover" = 0 ] || fail "temporary files left behind: $(ls "$work")"
 
 rm -rf "$work"

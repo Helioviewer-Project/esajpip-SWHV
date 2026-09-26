@@ -102,6 +102,7 @@ int main(int argc, char **argv) {
     char error[512];
     struct stat st;
     uint8_t *buf;
+    static uint8_t empty[1];
     size_t size;
     hv_out out;
 
@@ -131,13 +132,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "hv_transcode: cannot open %s: %s\n", input, strerror(errno));
         return 1;
     }
-    if (!S_ISREG(st.st_mode) || st.st_size < 2) {
-        fprintf(stderr, "hv_transcode: %s: not a JPEG 2000 file\n", input);
+    if (!S_ISREG(st.st_mode)) {
+        fprintf(stderr, "hv_transcode: %s: not a regular file\n", input);
         close(fd);
         return 1;
     }
+    /* An empty file cannot be mapped; hv_check_jp2 rejects it unread. */
     size = (size_t)st.st_size;
-    buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    buf = size ? mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0) : empty;
     close(fd);
     if (buf == MAP_FAILED) {
         fprintf(stderr, "hv_transcode: cannot map %s: %s\n", input, strerror(errno));
@@ -146,7 +148,8 @@ int main(int argc, char **argv) {
 
     hv_out_init(&out);
     status = hv_transcode_file(buf, size, ppx, ppy, xml_rewrite, &out, error, sizeof error);
-    munmap(buf, size);
+    if (size)
+        munmap(buf, size);
     if (status == 0)
         status = write_file(output, &out, st.st_mode & 07777, error, sizeof error);
     hv_out_free(&out);

@@ -155,7 +155,10 @@ static int check_children(const uint8_t *buf, const hv_box *parent, char *error,
     return status < 0 ? -1 : 0;
 }
 
-/* Transcodes a JP2 file that passed hv_check_jp2 into out. */
+/* Transcodes a JP2 file that passed hv_check_jp2 into out. The boxes come
+ * out in the order they went in, so a box with LBox = 0, the last one, is
+ * still last and is copied as read; so are the children of a superbox. The
+ * codestream and XML boxes, rewritten, get explicit lengths. */
 static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
                            hv_out *out, char *error, size_t error_size) {
     hv_boxes it;
@@ -191,18 +194,10 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
         }
         if (hv_is_superbox(box.type) && check_children(buf, &box, error, error_size) != 0)
             return -1;
-        /* LBox = 0 becomes an explicit length: the box may no longer be
-         * the last one. */
-        if (box.to_end) {
-            if (hv_begin_box(out, box.type, 0, &start) != 0 ||
-                hv_write_bytes(out, buf + box.payload, box.end - box.payload) != 0 ||
-                hv_end_box(out, start) != 0)
-                return -1;
-        } else if (hv_write_bytes(out, buf + box.start, box.end - box.start) != 0) {
+        if (hv_write_bytes(out, buf + box.start, box.end - box.start) != 0)
             return -1;
-        }
     }
-    if (status < 0) {
+    if (status < 0) {       /* not reached: hv_check_jp2 read the same boxes */
         snprintf(error, error_size, "%s at %zu", message, at);
         return -1;
     }
@@ -223,7 +218,7 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml
     }
     status = transcode_boxes(buf, size, ppx, ppy, xml_rewrite, out, error, error_size);
     if (status == 0 && out->size - out_start > INT_MAX) {
-        snprintf(error, error_size, "output larger than INT_MAX bytes (file.size-limit)");
+        snprintf(error, error_size, "file.size-limit: output larger than INT_MAX bytes");
         status = -1;
     }
     if (status != 0) {

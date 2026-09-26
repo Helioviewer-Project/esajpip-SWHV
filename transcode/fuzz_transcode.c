@@ -3,8 +3,9 @@
  * must be accepted again and transcode to itself, and if its main header
  * is within the served profile, so must the rest (HV_PROFILE).
  *
- *   cmake -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON ..
- *   make fuzz_transcode && ./transcode/fuzz_transcode corpus/ */
+ *   cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON
+ *   cmake --build fuzz --target fuzz_transcode
+ *   fuzz/transcode/fuzz_transcode -max_len=131072 corpus/ */
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

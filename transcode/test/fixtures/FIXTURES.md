@@ -5,6 +5,7 @@ Kakadu's `kdu_transcode` made of each with
 `Corder=RPCL ORGgen_plt=yes Cprecincts={128,128}`, wrapped as JP2 with the
 XML box reduced to its root element. `hv_transcode -x` must give the same
 files, except for the codestream's COM segments: Kakadu writes its own.
+The origin-129 file is the exception: see below.
 
 | Input | Content | Progression | Input PLT |
 | --- | --- | --- | --- |
