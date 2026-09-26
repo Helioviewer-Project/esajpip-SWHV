@@ -220,7 +220,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `asn1scc-patches/` | Local compiler fixes that upstream does not have yet, applied to `VERSION` in `series` order, and a reference archive of the former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs upstream ACN v2 regressions. |
-| `check-model.sh` | Generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
+| `check-model.sh` | Checks that the C names of marker codes and box types (`../lib/hv_codes.h`) and the harness's box-type mapping agree with the ACN values; generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. The rules on marker segment bodies (SIZ, COD, PLT entries, packet count) are `../lib/hv_rules.c`, shared with the reader. |
@@ -594,7 +594,11 @@ preserves only `jP`, `ftyp` and `jp2c`. The model uses the normalized type for v
 checks; the server retains the original bytes. The model encoder writes
 `'abcd'` for `other`, so the corpus generator patches encoded TBox values to
 exercise other unknown types. `check-model.sh` verifies that the mappings'
-known-type lists together match the ACN choices.
+known-type lists together match the ACN choices, and that each marker code
+and box type named in `../lib/hv_codes.h` is the value the model states for
+the field of that name (a `present-when` value, a fixed INTEGER field or a
+termination pattern); the script lists the few it names that the model does
+not state (SOP, EPH, the FF30 to FF3F range, four box types and the brands).
 
 Before decoding, the corpus harness checks physical LBox boundaries. The
 generated `CONTAINING` decoder uses LBox as a temporary stream size, which

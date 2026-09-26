@@ -1,7 +1,8 @@
 /* hv_codes.h: the JPEG 2000 marker codes (T.800 Table A.2) and box types
  * (T.800 Table I.2, T.801 Table M.8; the big-endian value of the
  * four-character code) the code refers to, in one place. The model states
- * them as the `present-when` values and ranges of the ACN files in ../spec. */
+ * them as the `present-when` values and ranges of the ACN files in ../spec;
+ * ../spec/check-model.sh checks that the two agree. */
 #ifndef HV_CODES_H
 #define HV_CODES_H
 
