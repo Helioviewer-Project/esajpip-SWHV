@@ -67,7 +67,7 @@ static int reserve(hv_out *out, size_t more) {
 /* Runs a generated encoder at `at`, with room for its largest encoding:
  * the generated encoders do not check the room themselves. Every type
  * here is small, a fixed part or one element of a list (at most 197 bytes,
- * QcdSegment-Std), so the room costs nothing. They also skip zero bits
+ * QcdSegment), so the room costs nothing. They also skip zero bits
  * instead of writing them (BitStream_AppendNBitZero only moves on), so the
  * bytes they write must be zero first. Past out->size they are (see
  * hv_out_rewind), so an append (`at` = out->size) clears nothing; an
@@ -107,8 +107,8 @@ DEFINE_ENCODE(SegmentLength, "marker segment length")
 DEFINE_ENCODE(SotSegment, "SOT segment")
 DEFINE_ENCODE(SizFixed, "SIZ segment")
 DEFINE_ENCODE(Component, "SIZ segment")
-DEFINE_ENCODE(CodSegment_Std, "COD segment")
-DEFINE_ENCODE(QcdSegment_Std, "QCD segment")
+DEFINE_ENCODE(CodSegment, "COD segment")
+DEFINE_ENCODE(QcdSegment, "QCD segment")
 DEFINE_ENCODE(Zplt, "PLT segment")
 DEFINE_ENCODE(Iplt, "PLT segment")
 DEFINE_ENCODE(Rcom, "COM segment")
@@ -160,8 +160,8 @@ DEFINE_APPEND(SegmentLength)
 DEFINE_APPEND(SotSegment)
 DEFINE_APPEND(SizFixed)
 DEFINE_APPEND(Component)
-DEFINE_APPEND(CodSegment_Std)
-DEFINE_APPEND(QcdSegment_Std)
+DEFINE_APPEND(CodSegment)
+DEFINE_APPEND(QcdSegment)
 DEFINE_APPEND(Zplt)
 DEFINE_APPEND(Iplt)
 DEFINE_APPEND(Rcom)
@@ -236,12 +236,12 @@ int hv_write_siz(hv_out *out, const hv_siz *siz) {
     return end_segment(out, start);
 }
 
-int hv_write_cod(hv_out *out, const CodSegment_Std *cod) {
-    return hv_write_marker(out, HV_COD) != 0 ? -1 : APPEND(CodSegment_Std, cod, out);
+int hv_write_cod(hv_out *out, const CodSegment *cod) {
+    return hv_write_marker(out, HV_COD) != 0 ? -1 : APPEND(CodSegment, cod, out);
 }
 
-int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd) {
-    return hv_write_marker(out, HV_QCD) != 0 ? -1 : APPEND(QcdSegment_Std, qcd, out);
+int hv_write_qcd(hv_out *out, const QcdSegment *qcd) {
+    return hv_write_marker(out, HV_QCD) != 0 ? -1 : APPEND(QcdSegment, qcd, out);
 }
 
 int hv_write_com(hv_out *out, Rcom rcom, const uint8_t *text, size_t size) {

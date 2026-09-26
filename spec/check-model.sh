@@ -17,9 +17,9 @@
 #     field of that name;
 #   * each marker-code value set selects exactly one field of its segment
 #     SEQUENCE for every code in it;
-#   * the ACN encodings the model restates (profile types, -Std types,
-#     parameterized instances, the box wrappers) and the ASN.1 types it
-#     copies (Cod-Profile, CodSegment-Std) agree;
+#   * the ACN encodings the model restates (profile subtypes, the segment
+#     and box wrappers) agree;
+#   * SotSegment (jpeg2000-io.asn1) is TilePart's SOT but for Psot;
 #   * the parts of Rreq that the reader and writer handle one at a time
 #     (jpeg2000-io.asn1) are Rreq's: RreqHeader its ML, FUAM, DCM and NSF,
 #     FeatureCount its NSF and NVF, and RreqStandardFeature and
@@ -355,10 +355,11 @@ check_markers MainMarkerCode-Profile MainSegment-Profile
 check_markers TileMarkerCode-Profile TileSegment-Profile
 
 # ---------------------------------------------------------------------------
-# Repeated encodings and copied types. ACN is not inherited through WITH
-# COMPONENTS or parameterization, so each instance restates its template's
-# encoding; each group must agree. The box wrappers differ only in the name
-# of their TBox determinant and its mapping function.
+# Repeated encodings. ACN is not inherited through WITH COMPONENTS, so each
+# profile subtype restates its base type's encoding, and the segment and
+# box wrappers restate one layout; each group must agree. The box wrappers
+# differ only in the name of their TBox determinant and its mapping
+# function.
 # ---------------------------------------------------------------------------
 wrapper_body() {
     acn_body "$1" | awk '{
@@ -396,12 +397,9 @@ compare_group acn Siz Siz-Profile
 compare_group acn SizFixed SizFixed-Profile
 compare_group acn Component Component-Profile
 compare_group acn Cod Cod-Profile
-compare_group acn QcdBody Qcd Qcd-Profile Qcd-Std
-compare_group acn PltBody Plt Plt-Profile
-compare_group acn ComBody Com Com-Profile
-compare_group acn SizSegment SizSegment-Profile CodSegment CodSegment-Profile CodSegment-Std \
-    QcdSegment QcdSegment-Profile QcdSegment-Std PltSegment PltSegment-Profile ComSegment \
-    ComSegment-Profile
+compare_group acn Scod Scod-Profile
+compare_group acn SizSegment SizSegment-Profile CodSegment CodSegment-Profile QcdSegment \
+    PltSegment ComSegment
 compare_group acn Codestream Codestream-Profile
 compare_group acn TilePart TilePart-Profile
 compare_group acn TilePartRest TilePartRest-Profile
@@ -415,8 +413,24 @@ compare_group acn InnerPayload InnerPayload-Profile
 compare_group acn DataEntryUrl DataEntryUrl-Profile
 compare_group acn FragmentList FragmentList-Profile
 compare_group wrapper TopBox InnerBox ResBox Jp2Box-Profile TopBox-Profile InnerBox-Profile
-compare_group asn1 Cod Cod-Profile
-compare_group asn1 CodSegment CodSegment-Std
+
+# SOT: the reader's SotSegment has Psot as a field (0 is "to the EOC"), the
+# whole-file TilePart as a determinant with a mapping function, and the
+# tile-part after it. The other four fields agree.
+tile_part=$(asn1_body TilePart)
+sot=$(asn1_body SotSegment)
+[ -n "$tile_part" ] && [ -n "$sot" ] ||
+    fail "check-model.sh: no asn1 definition of TilePart or SotSegment"
+[ "$(printf '%s\n' "$sot" | sed 's/ psot INTEGER ([^)]*),//')" = \
+  "$(printf '%s\n' "$tile_part" | sed 's/, rest OCTET STRING (CONTAINING TilePartRest) }$/ }/')" ] ||
+    fail "asn1 definition of SotSegment differs from TilePart but for Psot"
+tile_part=$(acn_body TilePart)
+sot=$(acn_body SotSegment)
+[ -n "$tile_part" ] && [ -n "$sot" ] ||
+    fail "check-model.sh: no acn definition of TilePart or SotSegment"
+[ "$sot" = "$(printf '%s\n' "$tile_part" | sed -e 's/ psot INTEGER \[/ psot [/' \
+    -e 's/, mapping-function psot\]/]/' -e 's/, rest \[size psot\] }$/ }/')" ] ||
+    fail "acn definition of SotSegment differs from TilePart but for Psot"
 
 # ---------------------------------------------------------------------------
 # Rreq in parts (jpeg2000-io.asn1). The whole-file model's features take ML
@@ -543,6 +557,7 @@ docker run --rm --entrypoint sh \
             /project/spec/harness/crossfield.c \
             /project/spec/harness/mapping.c \
             /project/lib/hv_rules.c \
+            /project/lib/hv_mapping.c \
             /generated/*.c \
             -o /tmp/vectors
         /tmp/vectors /corpus

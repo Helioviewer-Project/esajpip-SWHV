@@ -27,7 +27,7 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 image=${ASN1SCC_IMAGE:-esajpip-asn1scc}
 out=$repo/lib/generated
 pdus=BoxHeader,MarkerCode,SegmentLength,SotSegment
-pdus=$pdus,CodSegment-Std,QcdSegment-Std,SizFixed,Component,Zplt,Iplt,Rcom
+pdus=$pdus,CodSegment,QcdSegment,SizFixed,Component,Zplt,Iplt,Rcom
 # The served profile (layer 2) types the reader checks decoded values against.
 pdus=$pdus,SizFixed-Profile,Component-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
 # JPX boxes.

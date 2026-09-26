@@ -80,7 +80,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 for (j = 0; j < tp->rest.headers.nCount; ++j) {
                     const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
                     if (ts->exist.plt) {
-                        const CF_T(Plt) *plt = &ts->plt.body;
+                        const Plt *plt = &ts->plt.body;
                         int e;
                         if ((int) plt->zplt != expected_zplt++)
                             return "plt.zplt-sequence";
@@ -204,7 +204,7 @@ static const char *CF_CAT3(cf_url, CF_S, )(const CF_T(DataEntryUrl) *url, cf_lay
     if (layer < CF_PROFILE) return hv_rule_extent(HV_BOX_URL, (uint64_t) extra);
     memcpy(raw, url->loc, n);
     memcpy(raw + n, url->extra.arr, extra);
-    return hv_rule_url(url->vers, url->flag, raw, n + extra);
+    return hv_rule_url(url->header.vers, url->header.flag, raw, n + extra);
 }
 
 const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {

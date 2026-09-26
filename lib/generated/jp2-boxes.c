@@ -66,6 +66,125 @@ flag Brand_ACN_Decode(Brand* pVal, BitStream* pBitStrm, int* pErrCode)
 }
 
 
+flag FtypHeader_minor_IsConstraintValid(const FtypHeader_minor* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 4294967295UL);
+    *pErrCode = ret ? 0 :  ERR_FTYPHEADER_MINOR;
+
+	return ret;
+}
+
+flag FtypHeader_IsConstraintValid(const FtypHeader* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Brand_IsConstraintValid((&(pVal->brand)), pErrCode);
+    if (ret) {
+        ret = FtypHeader_minor_IsConstraintValid((&(pVal->minor)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void FtypHeader_minor_Initialize(FtypHeader_minor* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+void FtypHeader_Initialize(FtypHeader* pVal)
+{
+	(void)pVal;
+
+
+	/*set brand */
+	Brand_Initialize((&(pVal->brand)));
+	/*set minor */
+	FtypHeader_minor_Initialize((&(pVal->minor)));
+}
+
+flag FtypHeader_ACN_Encode(const FtypHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? FtypHeader_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode brand */
+	    ret = Brand_ACN_Encode((&(pVal->brand)), pBitStrm, pErrCode, FALSE);
+	    if (ret) {
+	        /*Encode minor */
+	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->minor);
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag FtypHeader_ACN_Decode(FtypHeader* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	/*Decode brand */
+	ret = Brand_ACN_Decode((&(pVal->brand)), pBitStrm, pErrCode);
+	if (ret) {
+	    /*Decode minor */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->minor)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_FTYPHEADER_MINOR;
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && FtypHeader_IsConstraintValid(pVal, pErrCode);
+}
+
+
+
+
+flag DataReferenceCount_IsConstraintValid(const DataReferenceCount* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 65535UL);
+    *pErrCode = ret ? 0 :  ERR_DATAREFERENCECOUNT;
+
+	return ret;
+}
+
+void DataReferenceCount_Initialize(DataReferenceCount* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+
+flag DataReferenceCount_ACN_Encode(const DataReferenceCount* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? DataReferenceCount_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (*(pVal)));
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag DataReferenceCount_ACN_Decode(DataReferenceCount* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_DATAREFERENCECOUNT;
+
+    return ret && DataReferenceCount_IsConstraintValid(pVal, pErrCode);
+}
 
 
 
@@ -594,10 +713,6 @@ flag Resolution_ACN_Decode(Resolution* pVal, BitStream* pBitStrm, int* pErrCode)
 
     return ret && Resolution_IsConstraintValid(pVal, pErrCode);
 }
-
-
-
-
 
 
 
@@ -1260,12 +1375,55 @@ flag VendorId_ACN_Decode(VendorId* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 
+flag FragmentCount_IsConstraintValid(const FragmentCount* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 65535UL);
+    *pErrCode = ret ? 0 :  ERR_FRAGMENTCOUNT;
+
+	return ret;
+}
+
+void FragmentCount_Initialize(FragmentCount* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+
+flag FragmentCount_ACN_Encode(const FragmentCount* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? FragmentCount_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (*(pVal)));
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag FragmentCount_ACN_Decode(FragmentCount* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENTCOUNT;
+
+    return ret && FragmentCount_IsConstraintValid(pVal, pErrCode);
+}
+
+
 flag Fragment_off_IsConstraintValid(const Fragment_off* pVal, int* pErrCode)
 {
     flag ret = TRUE;
-	(void)pVal;
-    ret = TRUE;
-    *pErrCode = 0;
+    ret = (12UL <= (*(pVal)));
+    *pErrCode = ret ? 0 :  ERR_FRAGMENT_OFF;
 
 	return ret;
 }
@@ -1273,7 +1431,7 @@ flag Fragment_off_IsConstraintValid(const Fragment_off* pVal, int* pErrCode)
 flag Fragment_len_IsConstraintValid(const Fragment_len* pVal, int* pErrCode)
 {
     flag ret = TRUE;
-    ret = ((1UL <= (*(pVal))) && ((*(pVal)) <= 4294967295UL));
+    ret = ((*(pVal)) <= 4294967295UL);
     *pErrCode = ret ? 0 :  ERR_FRAGMENT_LEN;
 
 	return ret;
@@ -1307,14 +1465,14 @@ void Fragment_off_Initialize(Fragment_off* pVal)
 	(void)pVal;
 
 
-	(*(pVal)) = 0UL;
+	(*(pVal)) = 12UL;
 }
 void Fragment_len_Initialize(Fragment_len* pVal)
 {
 	(void)pVal;
 
 
-	(*(pVal)) = 1UL;
+	(*(pVal)) = 0UL;
 }
 void Fragment_dr_Initialize(Fragment_dr* pVal)
 {
@@ -1380,6 +1538,102 @@ flag Fragment_ACN_Decode(Fragment* pVal, BitStream* pBitStrm, int* pErrCode)
 	}   /*COVERAGE_IGNORE*/
 
     return ret && Fragment_IsConstraintValid(pVal, pErrCode);
+}
+
+
+
+
+
+
+flag UrlHeader_vers_IsConstraintValid(const UrlHeader_vers* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 0UL);
+    *pErrCode = ret ? 0 :  ERR_URLHEADER_VERS;
+
+	return ret;
+}
+
+flag UrlHeader_flag_IsConstraintValid(const UrlHeader_flag* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 0UL);
+    *pErrCode = ret ? 0 :  ERR_URLHEADER_FLAG;
+
+	return ret;
+}
+
+flag UrlHeader_IsConstraintValid(const UrlHeader* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = UrlHeader_vers_IsConstraintValid((&(pVal->vers)), pErrCode);
+    if (ret) {
+        ret = UrlHeader_flag_IsConstraintValid((&(pVal->flag)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void UrlHeader_vers_Initialize(UrlHeader_vers* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+void UrlHeader_flag_Initialize(UrlHeader_flag* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+void UrlHeader_Initialize(UrlHeader* pVal)
+{
+	(void)pVal;
+
+
+	/*set vers */
+	UrlHeader_vers_Initialize((&(pVal->vers)));
+	/*set flag */
+	UrlHeader_flag_Initialize((&(pVal->flag)));
+}
+
+flag UrlHeader_ACN_Encode(const UrlHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? UrlHeader_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode vers */
+	    Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->vers);
+	    if (ret) {
+	        /*Encode flag */
+	        Acn_Enc_Int_PositiveInteger_ConstSize(pBitStrm, pVal->flag, 24);
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag UrlHeader_ACN_Decode(UrlHeader* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	/*Decode vers */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->vers)));
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_URLHEADER_VERS;
+	if (ret) {
+	    /*Decode flag */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->flag)), 24);
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_URLHEADER_FLAG;
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && UrlHeader_IsConstraintValid(pVal, pErrCode);
 }
 
 

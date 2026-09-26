@@ -65,9 +65,11 @@ Superbox [] {
 }
 
 DataReferences [] {
-    ndr         [encoding pos-int, size 16, endianness big],
+    ndr         [],
     references  [size deduced]
 }
+
+DataReferenceCount [encoding pos-int, size 16, endianness big]
 
 OpaqueBox [] {
     data        [size deduced]
@@ -76,9 +78,13 @@ OpaqueBox [] {
 Brand [encoding pos-int, size 32, endianness big]
 
 Ftyp [] {
-    brand       [],
-    minor       [encoding pos-int, size 32, endianness big],
+    header      [],
     compat      [size deduced]
+}
+
+FtypHeader [] {
+    brand       [],
+    minor       [encoding pos-int, size 32, endianness big]
 }
 
 InnerBox [] {
@@ -233,9 +239,11 @@ Rreq [] {
 }
 
 FragmentList [] {
-    nf          [encoding pos-int, size 16, endianness big],
+    nf          [],
     fragments   [size deduced]
 }
+
+FragmentCount [encoding pos-int, size 16, endianness big]
 
 Fragment [] {
     off         [encoding pos-int, size 64, endianness big],
@@ -244,10 +252,14 @@ Fragment [] {
 }
 
 DataEntryUrl [] {
-    vers        [encoding pos-int, size 8],
-    flag        [encoding pos-int, size 24, endianness big],
+    header      [],
     loc         [encoding ASCII, size null-terminated, termination-pattern '00'H],
     extra       [size deduced]                    -- after the NUL: empty in a valid box
+}
+
+UrlHeader [] {
+    vers        [encoding pos-int, size 8],
+    flag        [encoding pos-int, size 24, endianness big]
 }
 
 -- ---------------------------------------------------------------------------
@@ -305,18 +317,17 @@ Superbox-Profile [] {
 }
 
 DataReferences-Profile [] {
-    ndr         [encoding pos-int, size 16, endianness big],
+    ndr         [],
     references  [size deduced]
 }
 
 FragmentList-Profile [] {
-    nf          [encoding pos-int, size 16, endianness big],
+    nf          [],
     fragments   [size deduced]
 }
 
 DataEntryUrl-Profile [] {
-    vers        [encoding pos-int, size 8],
-    flag        [encoding pos-int, size 24, endianness big],
+    header      [],
     loc         [encoding ASCII, size null-terminated, termination-pattern '00'H],
     extra       [size deduced]
 }

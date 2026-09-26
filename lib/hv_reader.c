@@ -43,8 +43,8 @@ DEFINE_DECODE(SegmentLength)
 DEFINE_DECODE(SotSegment)
 DEFINE_DECODE(SizFixed)
 DEFINE_DECODE(Component)
-DEFINE_DECODE(CodSegment_Std)
-DEFINE_DECODE(QcdSegment_Std)
+DEFINE_DECODE(CodSegment)
+DEFINE_DECODE(QcdSegment)
 DEFINE_DECODE(Zplt)
 DEFINE_DECODE(Iplt)
 DEFINE_DECODE(Rcom)
@@ -261,8 +261,12 @@ static const char *check_url(const uint8_t *buf, const hv_box *box, hv_link *url
     UrlHeader h;
     const char *error;
     size_t n = box->end - box->payload, used;
-    if (DECODE_USED(UrlHeader, &h, buf, box->payload, n, &used) != 0)
+    if (n < HV_FIXED(UrlHeader))
         return "url: shorter than VERS and FLAG";
+    /* UrlHeader holds VERS and FLAG 0 only (T.800 I.7.3.2), so with its
+     * bytes present the decoder fails on nothing else. */
+    if (DECODE_USED(UrlHeader, &h, buf, box->payload, n, &used) != 0)
+        return "url.version-flags";
     if ((error = hv_rule_url(h.vers, h.flag, buf + box->payload + used, n - used)) != NULL)
         return error;
     url->loc = buf + box->payload + used;
@@ -290,11 +294,11 @@ static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *li
     }
     if ((error = hv_rule_flst(nf, fragments)) != NULL)
         return error;
-    /* NF is 1 and the box holds one whole fragment. Of its fields, OFF and
-     * DR take every value their bytes can hold (Fragment), so the decoder
-     * can only fail on LEN 0. */
+    /* NF is 1 and the box holds one whole fragment. Of its fields, LEN and
+     * DR take every value their bytes can hold (Fragment, T.801 Table
+     * M.17), so the decoder can only fail on OFF below 12. */
     if (DECODE(Fragment, &f, buf, box->payload + used, HV_FIXED(Fragment)) != 0)
-        return "flst: fragment length (LEN) 0";
+        return "flst: fragment offset (OFF) below 12";
     link->offset = f.off;
     link->length = f.len;
     link->dr = f.dr;
@@ -1073,7 +1077,7 @@ const hv_siz *hv_codestream_siz(const hv_codestream *cs) {
 const Cod *hv_codestream_cod(const hv_codestream *cs) {
     return cs->cods ? &cs->cod.body : NULL;
 }
-const Qcd_Std *hv_codestream_qcd(const hv_codestream *cs) {
+const Qcd *hv_codestream_qcd(const hv_codestream *cs) {
     return cs->qcds ? &cs->qcd.body : NULL;
 }
 
@@ -1172,7 +1176,7 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_COD:
         if (cs->cods > 0)
             return fail(cs, "codestream.one-cod-before-sot", pos);
-        if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + MARKER, len) != 0)
+        if (DECODE(CodSegment, &cs->cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->cod.body)) != NULL)
             return fail(cs, error, pos);
@@ -1182,7 +1186,7 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_QCD:
         if (cs->qcds > 0)
             return fail(cs, "codestream.one-qcd-before-sot", pos);
-        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
+        if (DECODE(QcdSegment, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
         cs->qcds++;
         item->qcd = &cs->qcd;
@@ -1225,7 +1229,7 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_COD:
         if (cs->sot.tpsot != 0 || cs->tp_cod++)
             return fail(cs, "tile.cod-once", pos);
-        if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + MARKER, len) != 0)
+        if (DECODE(CodSegment, &cs->tile_cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->tile_cod.body)) != NULL)
             return fail(cs, error, pos);
@@ -1234,7 +1238,7 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_QCD:
         if (cs->sot.tpsot != 0 || cs->tp_qcd++)
             return fail(cs, "tile.qcd-once", pos);
-        if (DECODE(QcdSegment_Std, &cs->tile_qcd, cs->buf, pos + MARKER, len) != 0)
+        if (DECODE(QcdSegment, &cs->tile_qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
         item->qcd = &cs->tile_qcd;
         break;

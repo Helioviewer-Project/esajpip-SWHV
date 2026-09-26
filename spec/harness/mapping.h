@@ -7,6 +7,7 @@
  * with asn1SccUint; check it when upgrading asn1scc.
  *
  *   lxxx : Lxxx counts its own two bytes         wire = n + 2
+ *          (defined in ../../lib/hv_mapping.c, which the reader shares)
  *   psot : Psot counts from the SOT marker code  wire = n + 12
  *   lbox : LBox counts LBox and TBox             wire = n + 8
  *   boxtype : unknown wire type to opaque `other` on decode only

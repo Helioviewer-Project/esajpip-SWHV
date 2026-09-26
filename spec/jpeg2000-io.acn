@@ -2,9 +2,10 @@
 --
 -- Bit-level encoding for jpeg2000-io.asn1. Unsigned big-endian throughout
 -- (T.800 A.1.3, I.4). The lengths the walker needs (LBox, XLBox, Lxxx of a
--- skipped segment, Psot) are ASN.1 fields. Only the *Segment-Std wrappers
--- insert Lxxx, because their body is decoded with them. The element types
--- from j2k-headers.acn and jp2-boxes.acn keep their own encodings.
+-- skipped segment, Psot) are ASN.1 fields. The types the reader and writer
+-- share with the whole-file model (CodSegment and QcdSegment, which insert
+-- Lxxx, and the elements) keep their encodings in j2k-codestream.acn,
+-- j2k-headers.acn and jp2-boxes.acn.
 
 JPEG2000-IO DEFINITIONS ::= BEGIN
 
@@ -14,33 +15,9 @@ BoxHeader [] {
     xlbox       [encoding pos-int, size 64, endianness big, present-when (lbox == 1)]
 }
 
-FtypHeader [] {
-    brand       [],                                -- Brand: jp2-boxes.acn
-    minor       [encoding pos-int, size 32, endianness big]
-}
-
 MarkerCode [encoding pos-int, size 16, endianness big]
 
 SegmentLength [encoding pos-int, size 16, endianness big]
-
-CodSegment-Std [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-QcdSegment-Std [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-DataReferenceCount [encoding pos-int, size 16, endianness big]
-
-UrlHeader [] {
-    vers        [encoding pos-int, size 8],
-    flag        [encoding pos-int, size 24, endianness big]
-}
-
-FragmentCount [encoding pos-int, size 16, endianness big]
 
 -- PclrHeader of jp2-boxes.acn without its depths: NE, NPC.
 PclrCounts [] {

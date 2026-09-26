@@ -50,6 +50,18 @@ while letting HTTP connections be pooled or replaced independently of channels.
   subtypes inside `CONTAINING` fields. Regenerated corpus labels now report
   those profile failures at decode time. Keep the reader's named C errors for
   the same constraints.
+- Model: VERS and FLAG of a Data Entry URL box must be 0 at the standard
+  layer too (T.800 I.7.3.2), so `jpx-linked-rule-url.version-flags-7.jpx`
+  is invalid at both layers. The Fragment List box takes the ranges of
+  T.801 Table M.17 (NF and LEN from 0, OFF from 12), with three new
+  vectors at those edges. No SOP markers is a constraint of the profile's
+  COD type, as the other profile narrowings are.
+- Model: the reader and writer share the whole-file model's types instead
+  of copies (`CodSegment`, `QcdSegment`, `FtypHeader`, `UrlHeader`,
+  `DataReferenceCount`, `FragmentCount`), and the profile framing uses the
+  standard QCD, PLT and COM segments; the `-Std` types, the parameterized
+  bodies and the profile aliases that narrowed nothing are gone.
+  `spec/check-model.sh` compares `SotSegment` with `TilePart`.
 - Keep channels alive across replacement connections, and allow one persistent
   connection to carry requests for different channels. This permits ordinary
   browser and reverse-proxy connection pooling. Random, opaque channel IDs

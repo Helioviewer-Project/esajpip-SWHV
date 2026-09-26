@@ -2,7 +2,8 @@
 --
 -- Bit-level encoding for j2k-headers.asn1: marker segment bodies, starting
 -- at the byte after Lxxx. One encoding serves both layers; asn1scc does
--- not inherit it through the *-Profile types, so they restate it (below).
+-- not inherit it through the *-Profile subtypes, so they restate it
+-- (below).
 --
 -- Conventions (T.800 A.1.3): unsigned big-endian integers; BOOLEAN is one
 -- bit, '1'B = TRUE; where the standard packs sub-fields into one byte the
@@ -83,26 +84,9 @@ PrecinctSize [] {
     ppx         [encoding pos-int, size 4]        -- bits 3..0
 }
 
--- Parameterized bodies: the encoding is stated on the template and repeated
--- on every instance (asn1scc generates each instance separately).
-QcdBody [] {
-    sqcd        [encoding pos-int, size 8],
-    spqcd       [size deduced]
-}
-
 Qcd [] {
     sqcd        [encoding pos-int, size 8],
     spqcd       [size deduced]
-}
-
-Qcd-Std [] {
-    sqcd        [encoding pos-int, size 8],
-    spqcd       [size deduced]
-}
-
-PltBody [] {
-    zplt        [],
-    entries     [size deduced]
 }
 
 Plt [] {
@@ -135,11 +119,6 @@ IpltByte [] {
 IpltByteLast [] {
     end     NULL [pattern '0'B],                  -- tenth byte must terminate
     bits    [encoding pos-int, size 7]
-}
-
-ComBody [] {
-    rcom        [],
-    ccom        [size deduced]
 }
 
 Com [] {
@@ -181,19 +160,11 @@ Cod-Profile [] {
     spcod       []
 }
 
-Qcd-Profile [] {
-    sqcd        [encoding pos-int, size 8],
-    spqcd       [size deduced]
-}
-
-Plt-Profile [] {
-    zplt        [],
-    entries     [size deduced]
-}
-
-Com-Profile [] {
-    rcom        [],
-    ccom        [size deduced]
+Scod-Profile [] {
+    reserved        [encoding pos-int, size 5],
+    ephMarkers      [true-value '1'B],
+    sopMarkers      [true-value '1'B],
+    customPrecincts [true-value '1'B]
 }
 
 END

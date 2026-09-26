@@ -424,13 +424,13 @@ static void add_signature_and_ftyp(Jp2Family *f, Brand brand) {
     b = &f->boxes.arr[f->boxes.nCount++];
     b->payload.kind = TopPayload_ftyp_PRESENT;
     ftyp = &b->payload.u.ftyp;
-    ftyp->brand = brand;
+    ftyp->header.brand = brand;
     /* MinV: T.800 I.5.2 requires 0 in a JP2 file, T.801 Annex M requires 1
      * in a JPX file. Readers shall parse the file whatever the value, and
      * esajpip ignores it, so neither layer constrains it; the base vectors
      * carry the conforming value so that a valid vector is valid to a strict
      * reader. */
-    ftyp->minor = brand == HV_BRAND_JPX ? 1 : 0;
+    ftyp->header.minor = brand == HV_BRAND_JPX ? 1 : 0;
     ftyp->compat.nCount = 1;
     ftyp->compat.arr[0] = brand;
 }
@@ -544,8 +544,8 @@ static void add_dtbl(Jp2Family *f, const char *const *urls, int n) {
     for (i = 0; i < n; ++i) {
         InnerBox *c = &b->payload.u.dtbl.references.arr[i];
         c->payload.kind = InnerPayload_url_PRESENT;
-        c->payload.u.url.vers = 0;
-        c->payload.u.url.flag = 0;
+        c->payload.u.url.header.vers = 0;
+        c->payload.u.url.header.flag = 0;
         strncpy((char *) c->payload.u.url.loc, urls[i], sizeof c->payload.u.url.loc - 1);
     }
 }
@@ -901,7 +901,7 @@ static const FieldMutant field_mutants[] = {
     { "siz.component.yrsiz", set_siz_yrsiz, 0, "min-1", 0, X_STD, "decode" },
     { "cod.scod.reserved", set_cod_reserved, 1, "reserved bit set", 0, X_STD, "decode" },
     { "cod.scod.sopMarkers", set_cod_sop, 1, "SOP markers outside served packet representation", 0,
-      X_PROF, "cod.sop-markers" },
+      X_PROF, "decode" },
     { "cod.sgcod.progression", set_cod_progression, 5, "max+1", 0, X_STD, "decode" },
     { "cod.sgcod.progression", set_cod_progression, 3, "PCRL with unit sampling: valid", 0, X_VALID,
       NULL },
@@ -1297,7 +1297,7 @@ static Ftyp *ftyp_of(Jp2Family *f) {
 }
 static void rule_ftyp_brand(Jp2Family *f, int box) {
     (void) box;
-    ftyp_of(f)->brand = be32((const unsigned char *) "abcd");          /* wrong brand */
+    ftyp_of(f)->header.brand = be32((const unsigned char *) "abcd");          /* wrong brand */
 }
 static void rule_ftyp_compat(Jp2Family *f, int box) {
     (void) box;
@@ -1519,7 +1519,7 @@ static void rule_url_jpx_target(Jp2Family *f, int box) {
     (void) box;
     strcpy((char *) url_of(f, 0)->loc, "file://./frame1.jpx");
 }
-static void rule_url_version(Jp2Family *f, int box) { (void) box; url_of(f, 0)->vers = 1; }
+static void rule_url_version(Jp2Family *f, int box) { (void) box; url_of(f, 0)->header.vers = 1; }
 /* A third codestream as jp2c beside the two ftbl ones, with its own jpch so
  * that the codestream count still matches and mixing is the only violation. */
 static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
@@ -1581,6 +1581,21 @@ static void rule_url_terminator(Jp2Family *f, int box) {
 }
 /* NF 2 in the first flst, which holds one fragment. */
 static void rule_flst_nf(Jp2Family *f, int box) { (void) box; flst_of(f, 0)->nf = 2; }
+/* The first flst at the edges of T.801 Table M.17: OFF 11 (below its 12),
+ * LEN 0, and NF 0 with no fragment. */
+static void rule_flst_off_low(Jp2Family *f, int box) {
+    (void) box;
+    flst_of(f, 0)->fragments.arr[0].off = 11;
+}
+static void rule_flst_len_zero(Jp2Family *f, int box) {
+    (void) box;
+    flst_of(f, 0)->fragments.arr[0].len = 0;
+}
+static void rule_flst_no_fragment(Jp2Family *f, int box) {
+    (void) box;
+    flst_of(f, 0)->nf = 0;
+    flst_of(f, 0)->fragments.nCount = 0;
+}
 /* A mutant whose violation no field of the structs can hold sets this; the
  * driver applies it to the encoded file. */
 static Bytes (*wire_patch)(Bytes valid);
@@ -1610,8 +1625,8 @@ static const RuleMutant linked_rule_mutants[] = {
       "dtbl.ndr-count", NULL },
     { "url.file-scheme", rule_url_scheme, "http URL: profile invalid", CF_JPX, 0, X_PROF,
       "url.file-scheme", NULL },
-    { "url.version-flags", rule_url_version, "VERS = 1: profile invalid", CF_JPX, 0, X_PROF,
-      "decode", NULL },
+    { "url.version-flags", rule_url_version, "VERS = 1 (T.800 I.7.3.2: 0)", CF_JPX, 0, X_STD,
+      "decode", "decode" },
     { "url.jp2-target", rule_url_jpx_target, "link to a .jpx: profile invalid", CF_JPX, 0, X_PROF,
       "url.jp2-target", NULL },
     { "jpx.mixed-sources", rule_mixed_linked_embedded, "jp2c next to ftbl: profile invalid", CF_JPX,
@@ -1644,6 +1659,12 @@ static const RuleMutant linked_rule_mutants[] = {
     { "flst.one-fragment", rule_flst_trailing_byte,
       "a byte after the only fragment, inside the flst box (T.801 M.11.3.1)", CF_JPX, 0, X_STD,
       "decode", "decode" },
+    { "flst.off", rule_flst_off_low, "OFF 11 (Table M.17: 12 or more)", CF_JPX, 0, X_STD, "decode",
+      "decode" },
+    { "flst.source-extent", rule_flst_len_zero, "LEN 0 (Table M.17: valid): profile invalid",
+      CF_JPX, 0, X_PROF, "flst.source-extent", NULL },
+    { "flst.one-fragment", rule_flst_no_fragment, "NF 0, no fragment (Table M.17: valid)", CF_JPX,
+      0, X_PROF, "decode", NULL },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -2040,7 +2061,7 @@ static void hdr_flst_in_jp2h(Jp2Family *f, int box) {
     c->payload.kind = InnerPayload_flst_PRESENT;                 /* one fragment, this file */
     flst->nf = 1;
     flst->fragments.nCount = 1;
-    flst->fragments.arr[0].off = 0;
+    flst->fragments.arr[0].off = 12;
     flst->fragments.arr[0].len = 1;
     flst->fragments.arr[0].dr = 0;
 }
@@ -2659,6 +2680,7 @@ static void check_profile_rule_parity(void) {
     asn1SccUint *origins[] = {&siz->fixed.xosiz, &siz->fixed.yosiz};
     asn1SccUint *sampling[] = {&siz->components.arr[0].xrsiz,
                             &siz->components.arr[0].yrsiz};
+    Cod cod;
     DataEntryUrl url;
     FragmentList flst;
     size_t i;
@@ -2682,34 +2704,47 @@ static void check_profile_rule_parity(void) {
     }
     free(base.file);
 
+    Cod_Initialize(&cod);                   /* layer 1 minima: no precincts, 1 layer */
+    if (!Cod_Profile_IsConstraintValid(&cod, &err) ||
+        hv_rule_cod(&cod.scod, &cod.spcod, 1) != NULL)
+        die("COD profile rules disagree on the base");
+    cod.scod.sopMarkers = TRUE;
+    if (Cod_Profile_IsConstraintValid(&cod, &err) ||
+        strcmp(hv_rule_cod(&cod.scod, &cod.spcod, 1), "cod.sop-markers") != 0 ||
+        hv_rule_cod(&cod.scod, &cod.spcod, 0) != NULL)
+        die("COD SOP rules disagree");
+
+    /* VERS and FLAG: layer 1 (UrlHeader). */
     DataEntryUrl_Initialize(&url);
-    url.vers = 0;
-    url.flag = 0;
+    url.header.vers = 0;
+    url.header.flag = 0;
     strcpy(url.loc, "file://a.jp2");
     if (!DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
-        hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc, strlen(url.loc) + 1) != NULL)
+        hv_rule_url(url.header.vers, url.header.flag, (const uint8_t *)url.loc,
+                    strlen(url.loc) + 1) != NULL)
         die("URL profile rules disagree on the base");
-    url.vers = 1;
-    if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
-        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+    url.header.vers = 1;
+    if (DataEntryUrl_IsConstraintValid(&url, &err) ||
+        strcmp(hv_rule_url(url.header.vers, url.header.flag, (const uint8_t *)url.loc,
                            strlen(url.loc) + 1), "url.version-flags") != 0)
         die("URL version rules disagree");
-    url.vers = 0;
-    url.flag = 1;
-    if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
-        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+    url.header.vers = 0;
+    url.header.flag = 1;
+    if (DataEntryUrl_IsConstraintValid(&url, &err) ||
+        strcmp(hv_rule_url(url.header.vers, url.header.flag, (const uint8_t *)url.loc,
                            strlen(url.loc) + 1), "url.version-flags") != 0)
         die("URL flag rules disagree");
-    url.flag = 0;
+    url.header.flag = 0;
     strcpy(url.loc, "file://");
     if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
-        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+        strcmp(hv_rule_url(url.header.vers, url.header.flag, (const uint8_t *)url.loc,
                            strlen(url.loc) + 1), "url.length") != 0)
         die("URL length rules disagree");
 
     FragmentList_Initialize(&flst);
     flst.nf = 1;
     flst.fragments.nCount = 1;
+    flst.fragments.arr[0].off = 12;
     flst.fragments.arr[0].len = 1;
     flst.fragments.arr[0].dr = 1;
     if (!FragmentList_Profile_IsConstraintValid(&flst, &err) ||

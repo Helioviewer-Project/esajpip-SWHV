@@ -23,8 +23,10 @@
 --   * The type graph is not recursive (asn1scc requirement): main-header
 --     segments and tile-part-header segments are different SEQUENCEs, which
 --     also encodes T.800 Table A.1's placement rules.
---   * The profile layer repeats the framing with *-Profile bodies, because a
---     WITH COMPONENTS subtype cannot swap the type inside a CONTAINING.
+--   * The profile layer repeats the framing where a body narrows (SIZ,
+--     COD: *-Profile segments), because a WITH COMPONENTS subtype cannot
+--     swap the type inside a CONTAINING; QCD, PLT and COM segments are
+--     layer 1's.
 --
 -- Not modelled: Psot = 0 ("tile-part extends to EOC", A.4.2), because a
 -- region cannot be both determinant-sized and deduced; the server accepts
@@ -37,8 +39,7 @@ J2K-Codestream DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 EXPORTS ALL;
 
 IMPORTS
-    Siz, Cod, Qcd, Plt, Com,
-    Siz-Profile, Cod-Profile, Qcd-Profile, Plt-Profile, Com-Profile
+    Siz, Cod, Qcd, Plt, Com, Siz-Profile, Cod-Profile
         FROM J2K-Headers;
 
 -- ===========================================================================
@@ -75,6 +76,8 @@ Codestream ::= SEQUENCE {
 }
 
 -- One wrapper per segment kind: the ACN-inserted Lxxx lives in the wrapper.
+-- The reader/writer decodes and encodes COD and QCD whole with CodSegment
+-- and QcdSegment (jpeg2000-io.asn1).
 SizSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Siz) }
 CodSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Cod) }
 QcdSegment ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd) }
@@ -132,7 +135,7 @@ TileSegment ::= SEQUENCE {
 }
 
 -- ===========================================================================
--- Layer 2: esajpip served profile (same framing, profile bodies)
+-- Layer 2: esajpip served profile (same framing, profile SIZ and COD)
 -- ===========================================================================
 
 -- Any marker code the server tolerates in that position; the listed
@@ -164,20 +167,17 @@ Codestream-Profile ::= SEQUENCE {
 
 SizSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Siz-Profile) }
 CodSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Cod-Profile) }
-QcdSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Profile) }
-PltSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Profile) }
-ComSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Profile) }
 
 MainSegment-Profile ::= SEQUENCE {
     code        MainMarkerCode-Profile,
     cod         CodSegment-Profile OPTIONAL,
-    qcd         QcdSegment-Profile OPTIONAL,
+    qcd         QcdSegment OPTIONAL,
     qcc         OpaqueSegment OPTIONAL,
     rgn         OpaqueSegment OPTIONAL,
     tlm         OpaqueSegment OPTIONAL,
     plm         OpaqueSegment OPTIONAL,
     crg         OpaqueSegment OPTIONAL,
-    com         ComSegment-Profile OPTIONAL,
+    com         ComSegment OPTIONAL,
     tilePart    TilePart-Profile OPTIONAL,
     other       OpaqueSegment OPTIONAL        -- any other code: skipped by length
 }
@@ -197,7 +197,7 @@ TilePartRest-Profile ::= SEQUENCE {
 
 TileSegment-Profile ::= SEQUENCE {
     code        TileMarkerCode-Profile,
-    plt         PltSegment-Profile OPTIONAL   -- the only code TileMarkerCode-Profile admits
+    plt         PltSegment OPTIONAL           -- the only code TileMarkerCode-Profile admits
 }
 
 END
@@ -238,7 +238,8 @@ END
 --     codes T.800 defines for other positions and FF30 to FF3F, and
 --     TileMarkerCode-Profile / TileSegment-Profile admit only PLT, so a tile
 --     header carrying COD, QCD, COM or anything else fails to decode at
---     layer 2.)
+--     layer 2; Siz-Profile and Cod-Profile narrow SIZ and COD,
+--     j2k-headers.asn1.)
 --   1..64 tile-parts in total (single tile, so per tile == total). In the
 --     harness TilePart-Profile's TPsot (0..63) and TNsot (0..64) reject a
 --     65th tile-part first (reason `decode`); the reader names it

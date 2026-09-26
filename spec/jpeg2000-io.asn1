@@ -24,17 +24,20 @@
 -- length it wrote. So no C struct is sized by the standard's bound on a
 -- list (16,384 components, 65,532 packet lengths, 65,535 features), no
 -- encoder needs more room than one element, and no length in C depends on
--- how the model states a count. The elements are the whole-file model's
--- own types (SizFixed, Component, Zplt, Iplt, Rcom, Fragment, BitDepth), or,
--- where the whole-file model passes an ACN parameter the element cannot
--- take on its own (the Reader Requirements masks, sized by ML) or holds a
--- count only as an ACN determinant (the palette's NPC), a copy that
--- spec/check-model.sh compares with it.
+-- how the model states a count.
 --
--- The -Std suffix. CodSegment-Std and QcdSegment-Std are whole segments,
--- Lxxx included, at the standard's bounds: COD and QCD are small enough
--- (at most 45 and 197 bytes) to decode in one piece. A type with no
--- counterpart in the whole-file model has no suffix.
+-- Shared, not copied. The fixed parts and elements are the whole-file
+-- model's own types (SizFixed, Component, Zplt, Iplt, Rcom, FtypHeader,
+-- Brand, DataReferenceCount, UrlHeader, FragmentCount, Fragment, BitDepth
+-- and the header box entries), and COD and QCD, at most 45 and 197 bytes,
+-- are decoded whole as j2k-codestream.asn1's CodSegment and QcdSegment,
+-- Lxxx included. This module defines only what the whole-file model cannot
+-- lend: the forms of a length it cannot state (BoxHeader, SotSegment), a
+-- marker code and Lxxx on their own, and copies where the whole-file model
+-- passes an ACN parameter the element cannot take on its own (the Reader
+-- Requirements masks, sized by ML) or holds a count only as an ACN
+-- determinant (the palette's NPC). spec/check-model.sh compares each copy
+-- with its original, SotSegment with TilePart included.
 --
 -- Struct sizes (asn1scc 4.9.3.0, C, 64-bit): see README.md, "Struct sizes".
 
@@ -43,10 +46,7 @@ JPEG2000-IO DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 EXPORTS ALL;
 
 IMPORTS
-    SizFixed, Component, SizFixed-Profile, Component-Profile, Cod, Qcd-Std,
-    Zplt, Iplt, Rcom
-        FROM J2K-Headers
-    Brand, RreqMask, FeatureCode, VendorId, Fragment
+    RreqMask, FeatureCode, VendorId
         FROM JP2-Boxes;
 
 -- ---------------------------------------------------------------------------
@@ -61,14 +61,6 @@ BoxHeader ::= SEQUENCE {
     xlbox       INTEGER (16..18446744073709551615) OPTIONAL   -- present iff lbox = 1
 }
 
--- File Type box, T.800 I.5.2 / T.801 Annex M: BR and MinV, then the
--- compatibility list, entries of the same kind as BR (Brand, in
--- jp2-boxes.asn1), filling the box.
-FtypHeader ::= SEQUENCE {
-    brand       Brand,
-    minor       INTEGER (0..4294967295)
-}
-
 -- ---------------------------------------------------------------------------
 -- Codestream markers, T.800 A.1.1
 -- ---------------------------------------------------------------------------
@@ -79,31 +71,23 @@ MarkerCode ::= INTEGER (65281..65534)
 -- Lxxx of any marker segment. It counts its own two bytes.
 SegmentLength ::= INTEGER (2..65535)
 
--- COD and QCD after their code: Lxxx (ACN-inserted, counts itself: +2,
--- mapping function lxxx) and the body it sizes.
-CodSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Cod) }       -- Lcod 12 to 45
-QcdSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Std) }   -- Lqcd 4 to 197
-
--- SIZ, PLT and COM are read after SegmentLength, one element at a time
--- (j2k-headers.asn1): SIZ as SizFixed, then Csiz Components (checked in
--- the profile as SizFixed-Profile and Component-Profile, the two parts of
--- Siz-Profile); PLT as Zplt, then Iplts to the end of the segment; COM as
--- Rcom, then the text, which stays in place.
+-- COD and QCD are decoded whole with j2k-codestream.asn1's CodSegment and
+-- QcdSegment (Lxxx, then the body it sizes). SIZ, PLT and COM are read
+-- after SegmentLength, one element at a time (j2k-headers.asn1): SIZ as
+-- SizFixed, then Csiz Components (checked in the profile as
+-- SizFixed-Profile and Component-Profile, the two parts of Siz-Profile);
+-- PLT as Zplt, then Iplts to the end of the segment; COM as Rcom, then the
+-- text, which stays in place.
 
 -- ---------------------------------------------------------------------------
 -- JPX boxes, T.801 Annex M, read one box at a time
 -- ---------------------------------------------------------------------------
 
--- Data Reference box (M.11.2): NDR, then NDR Data Entry URL boxes, which
--- the walker steps through.
-DataReferenceCount ::= INTEGER (0..65535)
-
--- Data Entry URL box: VERS and FLAG. LOC, a NUL-terminated string, fills
--- the rest of the box; the walker checks it (hv_rule_url).
-UrlHeader ::= SEQUENCE {
-    vers        INTEGER (0..255),
-    flag        INTEGER (0..16777215)
-}
+-- The Data Reference box (M.11.2), the Data Entry URL box and the Fragment
+-- List box (M.11.3.1) are read with jp2-boxes.asn1's types: NDR
+-- (DataReferenceCount), then the url boxes; UrlHeader (VERS, FLAG), then
+-- LOC, a NUL-terminated string filling the rest of the box, which the
+-- walker checks (hv_rule_url); NF (FragmentCount), then the Fragments.
 
 -- Reader Requirements box (M.11.1), one part at a time: RreqHeader (ML,
 -- FUAM, DCM, NSF), NSF standard features, NVF (FeatureCount), NVF vendor
@@ -130,11 +114,6 @@ RreqVendorFeature ::= SEQUENCE {
 
 -- NSF and NVF.
 FeatureCount ::= INTEGER (0..65535)
-
--- Fragment List box (M.11.3.1): NF, then NF Fragments (jp2-boxes.asn1),
--- which the walker reads one at a time. NF is FragmentList's nf, at least
--- 1; the served profile's box has one fragment (FragmentList-Profile).
-FragmentCount ::= INTEGER (1..65535)
 
 -- Palette box (T.800 I.5.3.4), one part at a time: PclrCounts (NE, NPC),
 -- NPC BitDepths (jp2-boxes.asn1), then the entries, whose length is a rule

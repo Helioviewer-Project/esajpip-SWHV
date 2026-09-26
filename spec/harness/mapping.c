@@ -4,9 +4,6 @@
  * the corpus wants for invalid-length vectors. */
 #include "mapping.h"
 
-asn1SccUint MAPPING_ENCODE_NAME(lxxx)(asn1SccUint n) { return n + 2; }
-asn1SccUint MAPPING_DECODE_NAME(lxxx)(asn1SccUint n) { return n - 2; }
-
 asn1SccUint MAPPING_ENCODE_NAME(psot)(asn1SccUint n) { return n + 12; }
 asn1SccUint MAPPING_DECODE_NAME(psot)(asn1SccUint n) { return n - 12; }
 

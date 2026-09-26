@@ -73,7 +73,7 @@ jp2-siz.component.depthMinus1-38.jp2	jp2	invalid	invalid	decode	siz.component.de
 jp2-siz.component.xrsiz-0.jp2	jp2	invalid	invalid	decode	siz.component.xrsiz	min-1	-
 jp2-siz.component.yrsiz-0.jp2	jp2	invalid	invalid	decode	siz.component.yrsiz	min-1	-
 jp2-cod.scod.reserved-1.jp2	jp2	invalid	invalid	decode	cod.scod.reserved	reserved bit set	-
-jp2-cod.scod.sopMarkers-1.jp2	jp2	valid	invalid	cod.sop-markers	cod.scod.sopMarkers	SOP markers outside served packet representation	-
+jp2-cod.scod.sopMarkers-1.jp2	jp2	valid	invalid	decode	cod.scod.sopMarkers	SOP markers outside served packet representation	-
 jp2-cod.sgcod.progression-5.jp2	jp2	invalid	invalid	decode	cod.sgcod.progression	max+1	-
 jp2-cod.sgcod.progression-3.jp2	jp2	valid	valid	-	cod.sgcod.progression	PCRL with unit sampling: valid	-
 jp2-cod.sgcod.layers-0.jp2	jp2	invalid	invalid	decode	cod.sgcod.layers	min-1	-
@@ -374,7 +374,7 @@ jpx-embedded-siz.component.depthMinus1-38.jpx	jpx	invalid	invalid	decode	siz.com
 jpx-embedded-siz.component.xrsiz-0.jpx	jpx	invalid	invalid	decode	siz.component.xrsiz	min-1	-
 jpx-embedded-siz.component.yrsiz-0.jpx	jpx	invalid	invalid	decode	siz.component.yrsiz	min-1	-
 jpx-embedded-cod.scod.reserved-1.jpx	jpx	invalid	invalid	decode	cod.scod.reserved	reserved bit set	-
-jpx-embedded-cod.scod.sopMarkers-1.jpx	jpx	valid	invalid	cod.sop-markers	cod.scod.sopMarkers	SOP markers outside served packet representation	-
+jpx-embedded-cod.scod.sopMarkers-1.jpx	jpx	valid	invalid	decode	cod.scod.sopMarkers	SOP markers outside served packet representation	-
 jpx-embedded-cod.sgcod.progression-5.jpx	jpx	invalid	invalid	decode	cod.sgcod.progression	max+1	-
 jpx-embedded-cod.sgcod.progression-3.jpx	jpx	valid	valid	-	cod.sgcod.progression	PCRL with unit sampling: valid	-
 jpx-embedded-cod.sgcod.layers-0.jpx	jpx	invalid	invalid	decode	cod.sgcod.layers	min-1	-
@@ -529,7 +529,7 @@ jpx-linked-rule-flst.dr-range-3.jpx	jpx	invalid	invalid	flst.dr-range	flst.dr-ra
 jpx-linked-rule-ftbl.one-flst-4.jpx	jpx	invalid	invalid	ftbl.one-flst	ftbl.one-flst	two flst in one ftbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-dtbl.ndr-count-5.jpx	jpx	invalid	invalid	dtbl.ndr-count	dtbl.ndr-count	NDR = 3 with 2 url boxes	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.file-scheme-6.jpx	jpx	valid	invalid	url.file-scheme	url.file-scheme	http URL: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
-jpx-linked-rule-url.version-flags-7.jpx	jpx	valid	invalid	decode	url.version-flags	VERS = 1: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.version-flags-7.jpx	jpx	invalid	invalid	decode	url.version-flags	VERS = 1 (T.800 I.7.3.2: 0)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.jp2-target-8.jpx	jpx	valid	invalid	url.jp2-target	url.jp2-target	link to a .jpx: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.mixed-sources-9.jpx	jpx	valid	invalid	jpx.mixed-sources	jpx.mixed-sources	jp2c next to ftbl: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.linked-shape-10.jpx	jpx	valid	invalid	jpx.linked-shape	jpx.linked-shape	no dtbl, fragments in this file (DR 0): profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
@@ -544,6 +544,9 @@ jpx-linked-rule-box.url-placement-18.jpx	jpx	invalid	invalid	box.url-placement	b
 jpx-linked-rule-url.terminator-19.jpx	jpx	invalid	invalid	box.extent	url.terminator	a byte after LOC's NUL, inside the url box	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.nf-count-20.jpx	jpx	invalid	invalid	flst.nf-count	flst.nf-count	NF 2 with one fragment (T.801 M.11.3.1)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.one-fragment-21.jpx	jpx	invalid	invalid	decode	flst.one-fragment	a byte after the only fragment, inside the flst box (T.801 M.11.3.1)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.off-22.jpx	jpx	invalid	invalid	decode	flst.off	OFF 11 (Table M.17: 12 or more)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.source-extent-23.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	LEN 0 (Table M.17: valid): profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.one-fragment-24.jpx	jpx	valid	invalid	decode	flst.one-fragment	NF 0, no fragment (Table M.17: valid)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

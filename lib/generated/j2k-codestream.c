@@ -21,14 +21,305 @@ extern asn1SccUint psot_decode(asn1SccUint);
 
 
 
+flag CodSegment_IsConstraintValid(const CodSegment* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Cod_IsConstraintValid((&(pVal->body)), pErrCode);
+
+	return ret;
+}
+
+void CodSegment_Initialize(CodSegment* pVal)
+{
+	(void)pVal;
 
 
+	/*set body */
+	Cod_Initialize((&(pVal->body)));
+}
+
+#define ERR_ACN_ENCODE_CODSEGMENT_BODY_2		720  /**/
+#define ERR_ACN_ENCODE_CODSEGMENT_BODY		715  /**/
+#define ERR_ACN_ENCODE_CODSEGMENT_BODY_SCOD		700  /**/
+#define ERR_ACN_ENCODE_CODSEGMENT_BODY_SGCOD		705  /**/
+#define ERR_ACN_ENCODE_CODSEGMENT_BODY_SPCOD		710  /**/
+
+flag CodSegment_body_Containing_ACN_Encode(const Cod* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* CodSegment_body_length);
+
+flag CodSegment_body_Containing_ACN_Encode(const Cod* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* CodSegment_body_length)
+{
+    flag ret = TRUE;
+
+	(void)CodSegment_body_length;
+    *pErrCode = 0;
+    (void)bCheckConstraints;
+
+    {
+        AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+        /*Encode scod */
+        ret = Scod_ACN_Encode((&(pVal->scod)), pBitStrm, pErrCode, FALSE);
+        if (ret) {
+            /*Encode sgcod */
+            ret = Sgcod_ACN_Encode((&(pVal->sgcod)), pBitStrm, pErrCode, FALSE);
+            if (ret) {
+                /*Encode spcod */
+                ret = Spcod_ACN_Encode((&(pVal->spcod)), pBitStrm, pErrCode, FALSE);
+            }   /*COVERAGE_IGNORE*/
+        }   /*COVERAGE_IGNORE*/
+        if (ret) {
+            /*pad the contained encoding to the next byte boundary (see the
+              ext-field variant above)*/
+            if (pBitStrm->currentBit != 0) {
+                BitStream_AppendNBitZero(pBitStrm, 8 - pBitStrm->currentBit); /*COVERAGE_IGNORE*/
+            }
+            AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+            asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+            ret = Acn_PatchDet_U16_BE((asn1SccUint)lxxx_encode(acn_nCount), pBitStrm, CodSegment_body_length, pErrCode);
+            if (!ret) {
+                *pErrCode = ERR_ACN_ENCODE_CODSEGMENT_BODY_2; /*COVERAGE_IGNORE*/
+                return FALSE; /*COVERAGE_IGNORE*/
+            }
+        }
+    }
 
 
+    return ret;
+}
+
+flag CodSegment_ACN_Encode(const CodSegment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+	AcnInsertedFieldRef length = {0};
+    *pErrCode = 0;
+	ret = bCheckConstraints ? CodSegment_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode CodSegment_length */
+	    Acn_InitDet_U16_BE(pBitStrm, &length);
+	    if (ret) {
+	        /*Encode body */
+	        ret = CodSegment_body_Containing_ACN_Encode((&(pVal->body)), pBitStrm, pErrCode, FALSE, &length);
+	        if (ret) {
+
+	            if (!length.is_set) {
+	                Acn_PatchDet_U16_BE((asn1SccUint)0, pBitStrm, &length, pErrCode); /*COVERAGE_IGNORE*/
+	            }
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
 
 
+    return ret;
+}
+
+#define ERR_ACN_DECODE_CODSEGMENT_BODY_2		722  /**/
+#define ERR_ACN_DECODE_CODSEGMENT_BODY		716  /**/
+#define ERR_ACN_DECODE_CODSEGMENT_BODY_SCOD		701  /**/
+#define ERR_ACN_DECODE_CODSEGMENT_BODY_SGCOD		706  /**/
+#define ERR_ACN_DECODE_CODSEGMENT_BODY_SPCOD		711  /**/
+flag CodSegment_body_Containing_ACN_Decode(Cod* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* CodSegment_body_length);
+
+flag CodSegment_body_Containing_ACN_Decode(Cod* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* CodSegment_body_length)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	(void)CodSegment_body_length;
+
+	{
+	    long acn_saved_count = pBitStrm->count;
+	    long acn_expected_end = pBitStrm->currentByte + (long)CodSegment_body_length->value;
+	    pBitStrm->count = acn_expected_end;
+	    /*Decode scod */
+	    ret = Scod_ACN_Decode((&(pVal->scod)), pBitStrm, pErrCode);
+	    if (ret) {
+	        /*Decode sgcod */
+	        ret = Sgcod_ACN_Decode((&(pVal->sgcod)), pBitStrm, pErrCode);
+	        if (ret) {
+	            /*Decode spcod */
+	            ret = Spcod_ACN_Decode((&(pVal->spcod)), pBitStrm, pErrCode);
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+	    pBitStrm->count = acn_saved_count;
+	    pBitStrm->currentByte = acn_expected_end;
+	    pBitStrm->currentBit = 0;
+	}
+
+    return ret;
+}
+
+flag CodSegment_ACN_Decode(CodSegment* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	AcnInsertedFieldRef length = {0};
+
+	/*Decode CodSegment_length */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(length.value)));
+	if (ret) {
+	    *(&(length.value)) = lxxx_decode(*(&(length.value)));
+	}
+
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_CODSEGMENT_LENGTH;
+	if (ret) {
+	    /*Decode body */
+	    ret = CodSegment_body_Containing_ACN_Decode((&(pVal->body)), pBitStrm, pErrCode, &length);
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && CodSegment_IsConstraintValid(pVal, pErrCode);
+}
 
 
+flag QcdSegment_IsConstraintValid(const QcdSegment* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Qcd_IsConstraintValid((&(pVal->body)), pErrCode);
+
+	return ret;
+}
+
+void QcdSegment_Initialize(QcdSegment* pVal)
+{
+	(void)pVal;
+
+
+	/*set body */
+	Qcd_Initialize((&(pVal->body)));
+}
+
+#define ERR_ACN_ENCODE_QCDSEGMENT_BODY_2		764  /**/
+#define ERR_ACN_ENCODE_QCDSEGMENT_BODY		759  /**/
+#define ERR_ACN_ENCODE_QCDSEGMENT_BODY_SQCD		749  /**/
+#define ERR_ACN_ENCODE_QCDSEGMENT_BODY_SPQCD		754  /**/
+
+flag QcdSegment_body_Containing_ACN_Encode(const Qcd* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* QcdSegment_body_length);
+
+flag QcdSegment_body_Containing_ACN_Encode(const Qcd* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* QcdSegment_body_length)
+{
+    flag ret = TRUE;
+
+	(void)QcdSegment_body_length;
+    *pErrCode = 0;
+    (void)bCheckConstraints;
+
+    {
+        AcnBitStreamPos acn_data_start = Acn_BitStream_GetPos(pBitStrm);
+        /*Encode sqcd */
+        Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->sqcd);
+        if (ret) {
+            /*Encode spqcd */
+            ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->spqcd.arr, pVal->spqcd.nCount);
+        }   /*COVERAGE_IGNORE*/
+        if (ret) {
+            /*pad the contained encoding to the next byte boundary (see the
+              ext-field variant above)*/
+            if (pBitStrm->currentBit != 0) {
+                BitStream_AppendNBitZero(pBitStrm, 8 - pBitStrm->currentBit); /*COVERAGE_IGNORE*/
+            }
+            AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+            asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+            ret = Acn_PatchDet_U16_BE((asn1SccUint)lxxx_encode(acn_nCount), pBitStrm, QcdSegment_body_length, pErrCode);
+            if (!ret) {
+                *pErrCode = ERR_ACN_ENCODE_QCDSEGMENT_BODY_2; /*COVERAGE_IGNORE*/
+                return FALSE; /*COVERAGE_IGNORE*/
+            }
+        }
+    }
+
+
+    return ret;
+}
+
+flag QcdSegment_ACN_Encode(const QcdSegment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+	AcnInsertedFieldRef length = {0};
+    *pErrCode = 0;
+	ret = bCheckConstraints ? QcdSegment_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode QcdSegment_length */
+	    Acn_InitDet_U16_BE(pBitStrm, &length);
+	    if (ret) {
+	        /*Encode body */
+	        ret = QcdSegment_body_Containing_ACN_Encode((&(pVal->body)), pBitStrm, pErrCode, FALSE, &length);
+	        if (ret) {
+
+	            if (!length.is_set) {
+	                Acn_PatchDet_U16_BE((asn1SccUint)0, pBitStrm, &length, pErrCode); /*COVERAGE_IGNORE*/
+	            }
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+#define ERR_ACN_DECODE_QCDSEGMENT_BODY_2		766  /**/
+#define ERR_ACN_DECODE_QCDSEGMENT_BODY		760  /**/
+#define ERR_ACN_DECODE_QCDSEGMENT_BODY_SQCD		750  /**/
+#define ERR_ACN_DECODE_QCDSEGMENT_BODY_SPQCD		755  /**/
+flag QcdSegment_body_Containing_ACN_Decode(Qcd* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* QcdSegment_body_length);
+
+flag QcdSegment_body_Containing_ACN_Decode(Qcd* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* QcdSegment_body_length)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	(void)QcdSegment_body_length;
+
+	{
+	    long acn_saved_count = pBitStrm->count;
+	    long acn_expected_end = pBitStrm->currentByte + (long)QcdSegment_body_length->value;
+	    pBitStrm->count = acn_expected_end;
+	    /*Decode sqcd */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->sqcd)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_QCDSEGMENT_BODY_SQCD;
+	    if (ret) {
+	        /*Decode spqcd */
+	        {
+	        	long ded_avail_bits = (pBitStrm->count * 8L - 0) - (pBitStrm->currentByte * 8L + pBitStrm->currentBit);
+	        	asn1SccSint ded_count = ded_avail_bits / 8;
+	        	ret = (ded_avail_bits >= 0) && (1 <= ded_count) && (ded_count <= 194);
+	        	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCDSEGMENT_BODY_SPQCD;
+	        	if (ret) {
+	        		pVal->spqcd.nCount = (int)ded_count;
+	        		ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->spqcd.arr, pVal->spqcd.nCount);
+	        		*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCDSEGMENT_BODY_SPQCD;
+	        	}
+	        }
+	    }   /*COVERAGE_IGNORE*/
+	    pBitStrm->count = acn_saved_count;
+	    pBitStrm->currentByte = acn_expected_end;
+	    pBitStrm->currentBit = 0;
+	}
+
+    return ret;
+}
+
+flag QcdSegment_ACN_Decode(QcdSegment* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	AcnInsertedFieldRef length = {0};
+
+	/*Decode QcdSegment_length */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(length.value)));
+	if (ret) {
+	    *(&(length.value)) = lxxx_decode(*(&(length.value)));
+	}
+
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCDSEGMENT_LENGTH;
+	if (ret) {
+	    /*Decode body */
+	    ret = QcdSegment_body_Containing_ACN_Decode((&(pVal->body)), pBitStrm, pErrCode, &length);
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && QcdSegment_IsConstraintValid(pVal, pErrCode);
+}
 
 
 

@@ -34,17 +34,11 @@
 -- generated file structs gigabytes large. A vector exceeding a corpus bound
 -- is not a standard-invalid file; the harness never generates one.
 --
--- Bodies with a corpus bound are parameterized types: the instance the
--- whole-file model uses (Plt, Com) carries the corpus bound. The
--- reader/writer (jpeg2000-io.asn1) reads PLT and COM one element at a time
--- (Zplt, Iplt, Rcom), so no instance needs the standard's bound for them
--- (Table A.37: Lplt 4 to 65,535; Table A.43: Lcom 5 to 65,535); it decodes
--- QCD whole, as Qcd-Std, which is small enough for the standard's bound in
--- both (Qcd and Qcd-Std are two instances with the same arguments). A
--- WITH COMPONENTS subtype would not do: asn1scc keeps the base type's
--- allocation, while each instance of a parameterized type gets its own. The -Std suffix means the same in every module: the
--- reader/writer's version of a type, at the standard's bounds
--- (jpeg2000-io.asn1, "The -Std suffix").
+-- Only Plt and Com have a corpus bound among the bodies (Table A.37: Lplt
+-- 4 to 65,535; Table A.43: Lcom 5 to 65,535). The reader/writer
+-- (jpeg2000-io.asn1) reads those one element at a time (Zplt, Iplt, Rcom),
+-- and decodes COD and QCD whole as j2k-codestream.asn1's CodSegment and
+-- QcdSegment, whose bodies (Cod, Qcd) are at the standard's bounds.
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -135,26 +129,21 @@ PrecinctSize ::= SEQUENCE {
 -- the model keeps the guard byte and treats the rest as opaque.
 -- ---------------------------------------------------------------------------
 
-QcdBody {INTEGER:minSpqcd, INTEGER:maxSpqcd} ::= SEQUENCE {
+Qcd ::= SEQUENCE {
     sqcd        INTEGER (0..255),             -- Sqcd: guard bits and quantization style
-    spqcd       OCTET STRING (SIZE (minSpqcd..maxSpqcd))  -- fills the segment
+    spqcd       OCTET STRING (SIZE (1..194))  -- fills the segment; Table A.27: Lqcd 4 to 197
 }
-
-Qcd ::= QcdBody {1, 194}                      -- Table A.27: Lqcd 4 to 197
-Qcd-Std ::= QcdBody {1, 194}                  -- Table A.27: Lqcd 4 to 197
 
 -- ---------------------------------------------------------------------------
 -- PLT body, A.7.3: packet lengths, tile-part header (Lplt = 3 + entries)
 -- ---------------------------------------------------------------------------
 
-PltBody {INTEGER:maxEntries} ::= SEQUENCE {
+Plt ::= SEQUENCE {
     zplt        Zplt,
-    entries     SEQUENCE (SIZE (1..maxEntries)) OF Iplt   -- fills the segment
+    entries     SEQUENCE (SIZE (1..128)) OF Iplt   -- fills the segment (corpus bound)
 }
 
 Zplt ::= INTEGER (0..255)                     -- index of this PLT segment
-
-Plt ::= PltBody {128}                         -- corpus bound
 
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
 -- byte follows. T.800 does not bound the byte count; the model stops at ten
@@ -187,14 +176,12 @@ IpltByteLast ::= SEQUENCE {
 -- carry a segment the server merely skips.
 -- ---------------------------------------------------------------------------
 
-ComBody {INTEGER:minCcom, INTEGER:maxCcom} ::= SEQUENCE {
+Com ::= SEQUENCE {
     rcom        Rcom,
-    ccom        OCTET STRING (SIZE (minCcom..maxCcom))  -- fills the segment
+    ccom        OCTET STRING (SIZE (1..4096)) -- fills the segment (corpus bound); Lcom >= 5
 }
 
 Rcom ::= INTEGER (0..1)                       -- 0 binary, 1 Latin-1
-
-Com ::= ComBody {1, 4096}                     -- corpus bound; Lcom >= 5 (Table A.43)
 
 -- ===========================================================================
 -- Layer 2: esajpip served profile (JPIP_PROFILE.md)
@@ -224,21 +211,23 @@ Component-Profile ::= Component (WITH COMPONENTS {
     yrsiz (1..1)                              -- (ReadSIZMarker)
 })
 
--- A distinct SEQUENCE keeps the profile's ACN encoding explicit. ASN1SCC
--- does not inherit ACN properties through a WITH COMPONENTS subtype.
-Cod-Profile ::= SEQUENCE {
-    scod        Scod,
-    sgcod       Sgcod,
-    spcod       Spcod
-}
-Qcd-Profile ::= Qcd
-Com-Profile ::= Com
+-- No SOP markers: they are outside the served packet representation. The
+-- reader names this cod.sop-markers (hv_rules.c).
+Cod-Profile ::= Cod (WITH COMPONENTS {
+    ...,
+    scod        (Scod-Profile)
+})
 
--- The server bounds a packet length by its *value* (it must lie within the
--- tile-part data, ImageIndex::GetOffsetPacket). Within Iplt's ten bytes, a
--- value written in more groups than needed is accepted. The value rule is
--- cross-field.
-Plt-Profile ::= Plt
+Scod-Profile ::= Scod (WITH COMPONENTS {
+    ...,
+    sopMarkers  (FALSE)
+})
+
+-- QCD, PLT and COM are served as layer 1 has them: the framing of the
+-- profile (j2k-codestream.asn1) uses Qcd, Plt and Com. The server bounds a
+-- packet length by its *value* (it must lie within the tile-part data,
+-- ImageIndex::GetOffsetPacket); within Iplt's ten bytes, a value written
+-- in more groups than needed is accepted. The value rule is cross-field.
 
 END
 
@@ -288,5 +277,5 @@ END
 --         Siz-Profile constraints, which the corpus decoder applies (reason
 --         `decode`); the reader names them siz.zero-origin and
 --         siz.component-sampling (hv_rules.c)
---   Cod:  no SOP markers: scod.sopMarkers is clear (cod.sop-markers; SOP
---         markers are outside the served packet representation)
+--   Cod:  no SOP markers is a Cod-Profile constraint (reason `decode`); the
+--         reader names it cod.sop-markers (hv_rules.c)

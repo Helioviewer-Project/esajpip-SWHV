@@ -116,14 +116,18 @@ TopPayload ::= CHOICE {
 -- compatibility list filling the box (so the box is >= 12 bytes and a
 -- multiple of 4 by construction). Which brand is required and that the
 -- list contains it depend on the file extension: cross-field rules. A
--- brand is a four-character code, as a box type is: its big-endian value
--- (the reader decodes it with the same type, ../lib/hv_reader.c).
+-- brand is a four-character code, as a box type is: its big-endian value.
+-- The reader decodes FtypHeader, then the Brands one at a time.
 Brand ::= INTEGER (0..4294967295)
 
 Ftyp ::= SEQUENCE {
-    brand       Brand,
-    minor       INTEGER (0..4294967295),
+    header      FtypHeader,
     compat      SEQUENCE (SIZE (1..16)) OF Brand      -- corpus bound
+}
+
+FtypHeader ::= SEQUENCE {
+    brand       Brand,
+    minor       INTEGER (0..4294967295)
 }
 
 Superbox ::= SEQUENCE {
@@ -137,9 +141,11 @@ Association ::= SEQUENCE {
 
 -- T.801 Annex M, Data Reference box: NDR then NDR url boxes.
 DataReferences ::= SEQUENCE {
-    ndr         INTEGER (0..65535),
+    ndr         DataReferenceCount,
     references  SEQUENCE (SIZE (0..64)) OF InnerBox     -- fill the box; count == ndr, each url (corpus bound)
 }
+
+DataReferenceCount ::= INTEGER (0..65535)               -- NDR (Table M.16)
 
 OpaqueBox ::= SEQUENCE {
     data        OCTET STRING (SIZE (0..4096))           -- fills the box (corpus bound)
@@ -179,17 +185,21 @@ InnerPayload ::= CHOICE {
 
 -- ---------------------------------------------------------------------------
 -- JP2 header boxes, T.800 I.5.3 (in JPX: T.801 M.11.5 to M.11.7, in jp2h,
--- jpch and jplh). Field values are T.800's; where T.801 admits more (C,
--- METH, EnumCS), the JPX files modelled here carry JPEG 2000 codestreams
--- only, and the other values are rules of the file kind (listed at the end).
+-- jpch and jplh). Field values are T.800's. Where T.801 admits more: C is
+-- 7 (JPEG 2000) in the type, as the JPX files modelled here carry JPEG
+-- 2000 codestreams only; METH and EnumCS take the wider range, and what a
+-- JP2 file may hold is a rule (colr.method, colr.enumcs, listed at the
+-- end).
 -- ---------------------------------------------------------------------------
 
 -- A CONTAINING region's decoder skips to the region's end whatever the
 -- contents left unread, so a type whose layout does not end in a deduced
 -- size ends in `extra`, the bytes after its fields, which a rule requires
--- to be empty (<box>.extent). The bound is a corpus bound that the reader
--- inherits: it decodes Ihdr and Resolution with it, so 1 to 64
--- bytes after the fields give <box>.extent there and more fail to decode.
+-- to be empty (<box>.extent). The bound is a corpus bound: in the whole-file
+-- model more than 64 bytes after the fields fail to decode (reason
+-- `decode`). The reader decodes Ihdr and Resolution from at most their
+-- largest encoding, so any number of bytes after the fields gives
+-- <box>.extent there.
 Extra ::= OCTET STRING (SIZE (0..64))                     -- corpus bound
 
 -- Image Header box, I.5.3.1: 14 bytes (the box 22, ihdr.extent).
@@ -264,7 +274,8 @@ CdefCount ::= INTEGER (1..65535)
 
 CdefEntry ::= SEQUENCE {
     cn          INTEGER (0..65535),        -- channel index
-    typ         INTEGER (0..2 | 65535),    -- colour, opacity, premultiplied opacity, unspecified
+    typ         INTEGER (0..2 | 65535),    -- colour, opacity, premultiplied opacity, unspecified;
+                                           -- 3 to 65,534 are reserved (I.5.3.6) and rejected
     asoc        INTEGER (0..65535)         -- 0 whole image, colour index, 65535 none
 }
 
@@ -329,28 +340,40 @@ Rreq ::= SEQUENCE {
     extra       Extra
 }
 
--- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR
--- u16). NF is at least 1; FragmentCount in jpeg2000-io.asn1, the reader's
--- NF, has the same range.
+-- T.801 M.11.3.1, Fragment List box: NF fragments of (OFF u64, LEN u32, DR
+-- u16), with the ranges of Table M.17. The reader reads NF, then the
+-- fragments one at a time.
 FragmentList ::= SEQUENCE {
-    nf          INTEGER (1..65535),
-    fragments   SEQUENCE (SIZE (1..16)) OF Fragment     -- count == nf (corpus bound)
+    nf          FragmentCount,
+    fragments   SEQUENCE (SIZE (0..16)) OF Fragment     -- count == nf (corpus bound)
 }
 
+FragmentCount ::= INTEGER (0..65535)                     -- NF
+
 Fragment ::= SEQUENCE {
-    off         INTEGER (0..18446744073709551615),   -- offset of the fragment in the referenced file
-    len         INTEGER (1..4294967295),             -- length of the fragment
+    off         INTEGER (12..18446744073709551615),  -- offset in the referenced file, from its
+                                                     -- first byte: past the 12-byte signature box
+    len         INTEGER (0..4294967295),             -- length of the fragment
     dr          INTEGER (0..65535)                   -- 0: this file; else 1-based index into dtbl
 }
 
--- T.801 Annex M, Data Entry URL box: VERS (1 byte), FLAG (3 bytes), LOC
--- (NUL-terminated), and nothing after it: `extra` holds any bytes between
--- the NUL and the end of the box, which a rule requires to be empty.
+-- T.800 I.7.3.2, Data Entry URL box (in JPX also the entries of dtbl,
+-- T.801 M.11.2): UrlHeader (VERS, FLAG), LOC (NUL-terminated), and
+-- nothing after it: `extra` holds any bytes between the NUL and the end of
+-- the box, which a rule requires to be empty. LOC is UTF-8 (I.7.3.2). The
+-- type is IA5String because asn1scc's ACN encodes a NUL-terminated string
+-- only as that; the generated code copies the bytes without checking that
+-- they are 7-bit, so any UTF-8 decodes.
 DataEntryUrl ::= SEQUENCE {
-    vers        INTEGER (0..255),
-    flag        INTEGER (0..16777215),
+    header      UrlHeader,
     loc         IA5String (SIZE (1..1024)),          -- URL, NUL terminated on the wire (corpus bound)
     extra       Extra
+}
+
+-- I.7.3.2: "The value of this field shall be 0", for both.
+UrlHeader ::= SEQUENCE {
+    vers        INTEGER (0..0),
+    flag        INTEGER (0..0)
 }
 
 -- ===========================================================================
@@ -413,7 +436,7 @@ Superbox-Profile ::= SEQUENCE {
 }
 
 DataReferences-Profile ::= SEQUENCE {
-    ndr         INTEGER (0..65535),
+    ndr         DataReferenceCount,
     references  SEQUENCE (SIZE (0..64)) OF InnerBox-Profile
 }
 
@@ -447,22 +470,21 @@ InnerPayload-Profile ::= CHOICE {
 }
 
 -- One fragment describing the complete codestream in the referenced file
--- (ReadFlstBox: box length 16, NF == 1). NF is 1 here, and the list,
--- `size deduced` as FragmentList's, must hold NF fragments (flst.nf-count),
--- so the box holds exactly one fragment; a byte after it fails to decode.
--- (A SIZE (1..1) list would be fixed-size, and asn1scc refuses `size
--- deduced` on a fixed-size list.)
+-- (ReadFlstBox: box length 16, NF == 1). NF is 1 here and the list is not
+-- empty; the list, `size deduced` as FragmentList's, must hold NF
+-- fragments (flst.nf-count), so the box holds exactly one fragment; a byte
+-- after it fails to decode. (A SIZE (1..1) list would be fixed-size, and
+-- asn1scc refuses `size deduced` on a fixed-size list.)
 FragmentList-Profile ::= FragmentList (WITH COMPONENTS {
     ...,
-    nf (1..1)
+    nf (1..1),
+    fragments (SIZE (1..16))
 })
 
--- Version-zero file:// URLs (ReadUrlBox). The 1,024-character bound on LOC
--- is DataEntryUrl's corpus bound; the server has no such limit.
+-- file:// URLs (ReadUrlBox). The 1,024-character bound on LOC is
+-- DataEntryUrl's corpus bound; the server has no such limit.
 DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
     ...,
-    vers (0..0),
-    flag (0..0),
     loc (SIZE (8..1024))                             -- "file://" plus at least one character
 })
 
@@ -513,6 +535,8 @@ END
 --     only: the reader reads JPX boxes for the profile, where
 --     FragmentList-Profile rejects any NF but 1 first, and names it
 --     flst.one-fragment).
+--   UrlHeader's VERS and FLAG are 0 (I.7.3.2): a type constraint, reason
+--     `decode`; the reader names it url.version-flags (hv_rules.c).
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of
 --     loc), and the box ends right after the terminator: `extra` is empty
 --     (box.extent at layer 1; at layer 2 hv_rule_url sees the bytes after
@@ -592,12 +616,12 @@ END
 --     resolve to .jp2 files only, never to another JPX): url.file-scheme,
 --     url.jp2-target; the harness resolves it against the corpus companion
 --     files (url.missing-companion, harness/vectors.c).
---   Types, not rules, in the harness: DataEntryUrl-Profile (VERS and FLAG
---     0, LOC of 8 or more characters) and FragmentList-Profile (one
---     fragment) reject first, with reason `decode`; the reader names these
---     url.version-flags, url.length and flst.one-fragment (hv_rules.c), and
---     the harness checks that the rules and the types agree
---     (check_profile_rule_parity).
+--   Types, not rules, in the harness: DataEntryUrl-Profile (LOC of 8 or
+--     more characters) and FragmentList-Profile (one fragment) reject
+--     first, with reason `decode`; the reader names these url.length and
+--     flst.one-fragment (hv_rules.c), and the harness checks that the rules
+--     and the types agree (check_profile_rule_parity), as it does for
+--     url.version-flags at layer 1.
 --   Fragment (off, len) equal to the referenced file's codestream extent is
 --     checked by the server against the linked file, and by the harness
 --     against the companion's measured extent (flst.source-extent,

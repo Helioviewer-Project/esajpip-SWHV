@@ -216,7 +216,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`) in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`, each a fixed part or one element of a list: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, the COD and QCD segments at the standard's bounds (`CodSegment-Std`, `QcdSegment-Std`), the `ftyp` header, the `dtbl`, `url` and fragment counts, the Reader Requirements box in parts (`RreqHeader`, `RreqStandardFeature`, `RreqVendorFeature`, `FeatureCount`), and the palette's NE and NPC (`PclrCounts`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, the elements of SIZ, PLT and COM in `j2k-headers.asn1` (`SizFixed`, `Component`, `Zplt`, `Iplt`, `Rcom`), the profile types `SizFixed-Profile`, `Component-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile`, and `Fragment`, `Brand` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
+| `jpeg2000-io.asn1` / `.acn` | The types only the reader/writer in `../lib/` needs: the box header (LBox, TBox, XLBox), a marker code, Lxxx, SOT, the Reader Requirements box in parts (`RreqHeader`, `RreqStandardFeature`, `RreqVendorFeature`, `FeatureCount`) and the palette's NE and NPC (`PclrCounts`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. Everything else the reader and writer decode or encode is the whole-file model's own type (see "The reader/writer handles one element at a time"). `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, `CodSegment` and `QcdSegment` of `j2k-codestream.asn1`, the elements of SIZ, PLT and COM in `j2k-headers.asn1` (`SizFixed`, `Component`, `Zplt`, `Iplt`, `Rcom`), the profile types `SizFixed-Profile`, `Component-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile`, and `FtypHeader`, `Brand`, `DataReferenceCount`, `UrlHeader`, `FragmentCount`, `Fragment` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
 | `modules` | The four modules, in import order: the one list that `../lib/generate.sh`, `check-model.sh` and `../lib/CMakeLists.txt` read. |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
 | `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
@@ -226,7 +226,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` here only. |
-| `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8), and the decode-only box-type mappings `boxtype`, `resboxtype` and `jp2boxtype`. |
+| `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8; `lxxx` is `../lib/hv_mapping.c`'s, which the harness links), and the decode-only box-type mappings `boxtype`, `resboxtype` and `jp2boxtype`. |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 
 ## How the pieces fit
@@ -349,13 +349,10 @@ Conventions worth knowing before you edit:
   so standard-sized bounds would make a `Jp2Family` far larger than its
   877 MB with the corpus bounds. A file
   that exceeds a corpus bound is not standard-invalid; the harness never
-  generates one. The bodies with a corpus bound (`Plt`, `Com`) are
-  instances of parameterized types (`PltBody`, `ComBody`); the
-  reader/writer reads those segments one element at a time (below), so
-  they need no instance at the standard's bounds.
-  `Qcd` and `Qcd-Std` both use the standard's bound (Lqcd 4 to 197). A
-  `WITH COMPONENTS` subtype cannot do this: asn1scc keeps the base type's
-  allocation for it.
+  generates one. Of the marker segment bodies only `Plt` and `Com` have a
+  corpus bound; the reader/writer reads those segments one element at a
+  time (below), so no type needs their standard bound. `Cod` and `Qcd`
+  are at the standard's bounds (Lcod 12 to 45, Lqcd 4 to 197).
 - **Layer 2 normally narrows layer 1.** A `*-Profile` type is either a `WITH
   COMPONENTS` subtype (ranges narrowed) or, where framing has to be repeated
   with profile bodies inside `CONTAINING`, a copy with profile types
@@ -399,16 +396,18 @@ Conventions worth knowing before you edit:
   element takes an ACN parameter from its list (a Reader Requirements mask
   is ML bytes), `jpeg2000-io.asn1` has a copy whose mask is `size deduced`
   instead (`RreqStandardFeature`, `RreqVendorFeature`), and `RreqHeader`
-  restates Rreq's head; `check-model.sh` checks both against `Rreq`.
-  Only COD and QCD, at most 45 and 197 bytes, are decoded whole.
-- **The `-Std` suffix** means one thing: `X-Std` is the reader/writer's
-  version of the whole-file model's type `X`, with the same encoding and
-  the standard's bounds where `X` has a corpus bound. It is an instance of
-  `X`'s parameterized body (`Qcd-Std`) or, where `X` has no corpus bound, the
-  same definition (`CodSegment-Std`); `check-model.sh` checks that the
-  copies agree. A reader/writer type with no whole-file counterpart
-  (`BoxHeader`, `SotSegment`, the counts, the parts of `Rreq`) has no
-  suffix (`jpeg2000-io.asn1`, "The -Std suffix").
+  restates Rreq's head; `check-model.sh` checks both against `Rreq`, and
+  `PclrCounts` against `PclrHeader`. Only COD and QCD, at most 45 and 197
+  bytes, are decoded whole, as `CodSegment` and `QcdSegment`.
+- **Shared, not copied.** A fixed part the reader/writer decodes on its
+  own is a type of the whole-file model that the whole-file type uses as
+  a field (`SizFixed` in `Siz`, `FtypHeader` in `Ftyp`, `UrlHeader` in
+  `DataEntryUrl`, `FragmentCount` in `FragmentList`, `DataReferenceCount`
+  in `DataReferences`), so there is one definition. `jpeg2000-io.asn1`
+  defines only what the whole-file model cannot lend: `BoxHeader` and
+  `SotSegment`, whose lengths are fields there (`check-model.sh` compares
+  `SotSegment` with `TilePart` but for Psot), a marker code and Lxxx on
+  their own, and the copies above.
 - **ACN properties are explicit on profile structures.** asn1scc does not
   inherit field encodings through `WITH COMPONENTS` constraints. Profile
   structures that must be encoded independently therefore repeat the base
@@ -728,8 +727,8 @@ The reader/writer decodes one header or one list element at a time (see
 
 | Type | Bytes |
 | --- | ---: |
-| `CodSegment-Std` | 616 |
-| `QcdSegment-Std` (194 bytes) | 208 |
+| `CodSegment` | 616 |
+| `QcdSegment` (194 bytes) | 208 |
 | `SizFixed` | 80 |
 | `Component` | 32 |
 | `Zplt`, `Rcom` | 8 |
@@ -744,23 +743,25 @@ The reader/writer decodes one header or one list element at a time (see
 | `Resolution` | 120 |
 | `PclrCounts` | 16 |
 
-The largest type in `../lib/generate.sh`'s `pdus` list is `CodSegment-Std`.
+The largest type in `../lib/generate.sh`'s `pdus` list is `CodSegment`.
 None is sized by a list's bound: the palette's column depths, like SIZ's
 components, are decoded one at a time.
 
 The harness, the library in `../lib/` (`hv_reader.c`, `hv_writer.c`,
 `hv_rules.c`, `hv_geometry.c`, `hv_walk.c`, and `hv_mapping.c`, which
-provides the `lxxx` mapping for `lib/generated/`), and the tools in
-`../transcode/` and `../merge/`, which use the generated struct types,
-depend on the generated API, so they are what to touch when regenerating
-with a newer asn1scc. The server and `jpeg2000_test` never see generated
+provides the `lxxx` mapping for `lib/generated/` and the harness), and the
+tools in `../transcode/` and `../merge/`, which use the generated struct
+types, depend on the generated API, so they are what to touch when
+regenerating with a newer asn1scc. The server and `jpeg2000_test` never see generated
 code.
 
 ### Mapping functions
 
-`harness/mapping.c` provides three length mappings in both directions.
-ACN's length determinants count payload bytes, while the wire length fields
-also count themselves and their neighbours:
+Three length mappings work in both directions: `psot` and `lbox` in
+`harness/mapping.c`, and `lxxx` in `../lib/hv_mapping.c`, which the reader,
+the writer and the harness share. ACN's length determinants count payload
+bytes, while the wire length fields also count themselves and their
+neighbours:
 
 | Name | Where | Encode (model → wire) | Decode (wire → model) |
 | --- | --- | --- | --- |

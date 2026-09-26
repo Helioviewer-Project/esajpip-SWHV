@@ -77,8 +77,8 @@ static int same_partition(const hv_geometry *a, const hv_geometry *b) {
 
 /* The new COD: the input's, with the given precincts at every resolution,
  * RPCL order, and no SOP or EPH markers. */
-static CodSegment_Std new_cod(const CodSegment_Std *in, int ppx, int ppy) {
-    CodSegment_Std cod = *in;
+static CodSegment new_cod(const CodSegment *in, int ppx, int ppy) {
+    CodSegment cod = *in;
     int r;
     cod.body.scod.customPrecincts = TRUE;
     cod.body.scod.sopMarkers = FALSE;
@@ -102,7 +102,7 @@ typedef struct {
     hv_span *parts;             /* the tile-parts' data */
     size_t nparts, parts_cap;
     int zero_psot;
-    CodSegment_Std cod;         /* the new COD */
+    CodSegment cod;         /* the new COD */
     hv_geometry in, out;        /* the input's and the new layout */
     hv_packet *in_packets, *out_packets;
     size_t in_count, out_count;

@@ -840,6 +840,8 @@ flag Scod_ACN_Decode(Scod* pVal, BitStream* pBitStrm, int* pErrCode)
 }
 
 
+
+
 flag Sgcod_progression_IsConstraintValid(const Sgcod_progression* pVal, int* pErrCode)
 {
     flag ret = TRUE;
@@ -1368,47 +1370,43 @@ flag Cod_ACN_Decode(Cod* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 
-
-
-
-
-flag Qcd_Std_sqcd_IsConstraintValid(const Qcd_Std_sqcd* pVal, int* pErrCode)
+flag Qcd_sqcd_IsConstraintValid(const Qcd_sqcd* pVal, int* pErrCode)
 {
     flag ret = TRUE;
     ret = ((*(pVal)) <= 255UL);
-    *pErrCode = ret ? 0 :  ERR_QCD_STD_SQCD;
+    *pErrCode = ret ? 0 :  ERR_QCD_SQCD;
 
 	return ret;
 }
 
-flag Qcd_Std_spqcd_IsConstraintValid(const Qcd_Std_spqcd* pVal, int* pErrCode)
+flag Qcd_spqcd_IsConstraintValid(const Qcd_spqcd* pVal, int* pErrCode)
 {
     flag ret = TRUE;
     ret = ((1 <= pVal->nCount) && (pVal->nCount <= 194));
-    *pErrCode = ret ? 0 :  ERR_QCD_STD_SPQCD;
+    *pErrCode = ret ? 0 :  ERR_QCD_SPQCD;
 
 	return ret;
 }
 
-flag Qcd_Std_IsConstraintValid(const Qcd_Std* pVal, int* pErrCode)
+flag Qcd_IsConstraintValid(const Qcd* pVal, int* pErrCode)
 {
     flag ret = TRUE;
-    ret = Qcd_Std_sqcd_IsConstraintValid((&(pVal->sqcd)), pErrCode);
+    ret = Qcd_sqcd_IsConstraintValid((&(pVal->sqcd)), pErrCode);
     if (ret) {
-        ret = Qcd_Std_spqcd_IsConstraintValid((&(pVal->spqcd)), pErrCode);
+        ret = Qcd_spqcd_IsConstraintValid((&(pVal->spqcd)), pErrCode);
     }   /*COVERAGE_IGNORE*/
 
 	return ret;
 }
 
-void Qcd_Std_sqcd_Initialize(Qcd_Std_sqcd* pVal)
+void Qcd_sqcd_Initialize(Qcd_sqcd* pVal)
 {
 	(void)pVal;
 
 
 	(*(pVal)) = 0UL;
 }
-void Qcd_Std_spqcd_Initialize(Qcd_Std_spqcd* pVal)
+void Qcd_spqcd_Initialize(Qcd_spqcd* pVal)
 {
 	(void)pVal;
 
@@ -1417,23 +1415,23 @@ void Qcd_Std_spqcd_Initialize(Qcd_Std_spqcd* pVal)
 	pVal->nCount = 1;
 
 }
-void Qcd_Std_Initialize(Qcd_Std* pVal)
+void Qcd_Initialize(Qcd* pVal)
 {
 	(void)pVal;
 
 
 	/*set sqcd */
-	Qcd_Std_sqcd_Initialize((&(pVal->sqcd)));
+	Qcd_sqcd_Initialize((&(pVal->sqcd)));
 	/*set spqcd */
-	Qcd_Std_spqcd_Initialize((&(pVal->spqcd)));
+	Qcd_spqcd_Initialize((&(pVal->spqcd)));
 }
 
-flag Qcd_Std_ACN_Encode(const Qcd_Std* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+flag Qcd_ACN_Encode(const Qcd* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
 {
     flag ret = TRUE;
 
     *pErrCode = 0;
-	ret = bCheckConstraints ? Qcd_Std_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	ret = bCheckConstraints ? Qcd_IsConstraintValid(pVal, pErrCode) : TRUE ;
 	if (ret && *pErrCode == 0) {
 	    /*Encode sqcd */
 	    Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->sqcd);
@@ -1447,7 +1445,7 @@ flag Qcd_Std_ACN_Encode(const Qcd_Std* pVal, BitStream* pBitStrm, int* pErrCode,
     return ret;
 }
 
-flag Qcd_Std_ACN_Decode(Qcd_Std* pVal, BitStream* pBitStrm, int* pErrCode)
+flag Qcd_ACN_Decode(Qcd* pVal, BitStream* pBitStrm, int* pErrCode)
 {
     flag ret = TRUE;
 	*pErrCode = 0;
@@ -1455,23 +1453,23 @@ flag Qcd_Std_ACN_Decode(Qcd_Std* pVal, BitStream* pBitStrm, int* pErrCode)
 
 	/*Decode sqcd */
 	ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->sqcd)));
-	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_STD_SQCD;
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_SQCD;
 	if (ret) {
 	    /*Decode spqcd */
 	    {
 	    	long ded_avail_bits = (pBitStrm->count * 8L - 0) - (pBitStrm->currentByte * 8L + pBitStrm->currentBit);
 	    	asn1SccSint ded_count = ded_avail_bits / 8;
 	    	ret = (ded_avail_bits >= 0) && (1 <= ded_count) && (ded_count <= 194);
-	    	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_STD_SPQCD;
+	    	*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_SPQCD;
 	    	if (ret) {
 	    		pVal->spqcd.nCount = (int)ded_count;
 	    		ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->spqcd.arr, pVal->spqcd.nCount);
-	    		*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_STD_SPQCD;
+	    		*pErrCode = ret ? 0 : ERR_ACN_DECODE_QCD_SPQCD;
 	    	}
 	    }
 	}   /*COVERAGE_IGNORE*/
 
-    return ret && Qcd_Std_IsConstraintValid(pVal, pErrCode);
+    return ret && Qcd_IsConstraintValid(pVal, pErrCode);
 }
 
 
@@ -1676,9 +1674,9 @@ void Iplt_Initialize(Iplt* pVal)
 	IpltByteLast_Initialize((&(pVal->b9)));
 }
 
-#define ERR_ACN_ENCODE_IPLT_B0_2		865  /**/
-#define ERR_ACN_ENCODE_IPLT_B0		860  /**/
-#define ERR_ACN_ENCODE_IPLT_B0_BITS		855  /**/
+#define ERR_ACN_ENCODE_IPLT_B0_2		817  /**/
+#define ERR_ACN_ENCODE_IPLT_B0		812  /**/
+#define ERR_ACN_ENCODE_IPLT_B0_BITS		807  /**/
 
 flag Iplt_b0_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b0_more);
 
@@ -1701,9 +1699,9 @@ flag Iplt_b0_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B1_2		884  /**/
-#define ERR_ACN_ENCODE_IPLT_B1		879  /**/
-#define ERR_ACN_ENCODE_IPLT_B1_BITS		874  /**/
+#define ERR_ACN_ENCODE_IPLT_B1_2		836  /**/
+#define ERR_ACN_ENCODE_IPLT_B1		831  /**/
+#define ERR_ACN_ENCODE_IPLT_B1_BITS		826  /**/
 
 flag Iplt_b1_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b1_more);
 
@@ -1726,9 +1724,9 @@ flag Iplt_b1_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B2_2		903  /**/
-#define ERR_ACN_ENCODE_IPLT_B2		898  /**/
-#define ERR_ACN_ENCODE_IPLT_B2_BITS		893  /**/
+#define ERR_ACN_ENCODE_IPLT_B2_2		855  /**/
+#define ERR_ACN_ENCODE_IPLT_B2		850  /**/
+#define ERR_ACN_ENCODE_IPLT_B2_BITS		845  /**/
 
 flag Iplt_b2_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b2_more);
 
@@ -1751,9 +1749,9 @@ flag Iplt_b2_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B3_2		922  /**/
-#define ERR_ACN_ENCODE_IPLT_B3		917  /**/
-#define ERR_ACN_ENCODE_IPLT_B3_BITS		912  /**/
+#define ERR_ACN_ENCODE_IPLT_B3_2		874  /**/
+#define ERR_ACN_ENCODE_IPLT_B3		869  /**/
+#define ERR_ACN_ENCODE_IPLT_B3_BITS		864  /**/
 
 flag Iplt_b3_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b3_more);
 
@@ -1776,9 +1774,9 @@ flag Iplt_b3_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B4_2		941  /**/
-#define ERR_ACN_ENCODE_IPLT_B4		936  /**/
-#define ERR_ACN_ENCODE_IPLT_B4_BITS		931  /**/
+#define ERR_ACN_ENCODE_IPLT_B4_2		893  /**/
+#define ERR_ACN_ENCODE_IPLT_B4		888  /**/
+#define ERR_ACN_ENCODE_IPLT_B4_BITS		883  /**/
 
 flag Iplt_b4_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b4_more);
 
@@ -1801,9 +1799,9 @@ flag Iplt_b4_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B5_2		960  /**/
-#define ERR_ACN_ENCODE_IPLT_B5		955  /**/
-#define ERR_ACN_ENCODE_IPLT_B5_BITS		950  /**/
+#define ERR_ACN_ENCODE_IPLT_B5_2		912  /**/
+#define ERR_ACN_ENCODE_IPLT_B5		907  /**/
+#define ERR_ACN_ENCODE_IPLT_B5_BITS		902  /**/
 
 flag Iplt_b5_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b5_more);
 
@@ -1826,9 +1824,9 @@ flag Iplt_b5_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B6_2		979  /**/
-#define ERR_ACN_ENCODE_IPLT_B6		974  /**/
-#define ERR_ACN_ENCODE_IPLT_B6_BITS		969  /**/
+#define ERR_ACN_ENCODE_IPLT_B6_2		931  /**/
+#define ERR_ACN_ENCODE_IPLT_B6		926  /**/
+#define ERR_ACN_ENCODE_IPLT_B6_BITS		921  /**/
 
 flag Iplt_b6_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b6_more);
 
@@ -1851,9 +1849,9 @@ flag Iplt_b6_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B7_2		998  /**/
-#define ERR_ACN_ENCODE_IPLT_B7		993  /**/
-#define ERR_ACN_ENCODE_IPLT_B7_BITS		988  /**/
+#define ERR_ACN_ENCODE_IPLT_B7_2		950  /**/
+#define ERR_ACN_ENCODE_IPLT_B7		945  /**/
+#define ERR_ACN_ENCODE_IPLT_B7_BITS		940  /**/
 
 flag Iplt_b7_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b7_more);
 
@@ -1876,9 +1874,9 @@ flag Iplt_b7_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode
     return ret;
 }
 
-#define ERR_ACN_ENCODE_IPLT_B8_2		1017  /**/
-#define ERR_ACN_ENCODE_IPLT_B8		1012  /**/
-#define ERR_ACN_ENCODE_IPLT_B8_BITS		1007  /**/
+#define ERR_ACN_ENCODE_IPLT_B8_2		969  /**/
+#define ERR_ACN_ENCODE_IPLT_B8		964  /**/
+#define ERR_ACN_ENCODE_IPLT_B8_BITS		959  /**/
 
 flag Iplt_b8_ACN_Encode(const IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints, AcnInsertedFieldRef* Iplt_b8_more);
 
@@ -2082,10 +2080,10 @@ flag Iplt_ACN_Encode(const Iplt* pVal, BitStream* pBitStrm, int* pErrCode, flag 
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B0_2		867  /**/
-#define ERR_ACN_DECODE_IPLT_B0		861  /**/
-#define ERR_ACN_DECODE_IPLT_B0_MORE		851  /**/
-#define ERR_ACN_DECODE_IPLT_B0_BITS		856  /**/
+#define ERR_ACN_DECODE_IPLT_B0_2		819  /**/
+#define ERR_ACN_DECODE_IPLT_B0		813  /**/
+#define ERR_ACN_DECODE_IPLT_B0_MORE		803  /**/
+#define ERR_ACN_DECODE_IPLT_B0_BITS		808  /**/
 flag Iplt_b0_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b0_more);
 
 flag Iplt_b0_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b0_more)
@@ -2111,10 +2109,10 @@ flag Iplt_b0_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B1_2		886  /**/
-#define ERR_ACN_DECODE_IPLT_B1		880  /**/
-#define ERR_ACN_DECODE_IPLT_B1_MORE		870  /**/
-#define ERR_ACN_DECODE_IPLT_B1_BITS		875  /**/
+#define ERR_ACN_DECODE_IPLT_B1_2		838  /**/
+#define ERR_ACN_DECODE_IPLT_B1		832  /**/
+#define ERR_ACN_DECODE_IPLT_B1_MORE		822  /**/
+#define ERR_ACN_DECODE_IPLT_B1_BITS		827  /**/
 flag Iplt_b1_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b1_more);
 
 flag Iplt_b1_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b1_more)
@@ -2140,10 +2138,10 @@ flag Iplt_b1_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B2_2		905  /**/
-#define ERR_ACN_DECODE_IPLT_B2		899  /**/
-#define ERR_ACN_DECODE_IPLT_B2_MORE		889  /**/
-#define ERR_ACN_DECODE_IPLT_B2_BITS		894  /**/
+#define ERR_ACN_DECODE_IPLT_B2_2		857  /**/
+#define ERR_ACN_DECODE_IPLT_B2		851  /**/
+#define ERR_ACN_DECODE_IPLT_B2_MORE		841  /**/
+#define ERR_ACN_DECODE_IPLT_B2_BITS		846  /**/
 flag Iplt_b2_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b2_more);
 
 flag Iplt_b2_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b2_more)
@@ -2169,10 +2167,10 @@ flag Iplt_b2_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B3_2		924  /**/
-#define ERR_ACN_DECODE_IPLT_B3		918  /**/
-#define ERR_ACN_DECODE_IPLT_B3_MORE		908  /**/
-#define ERR_ACN_DECODE_IPLT_B3_BITS		913  /**/
+#define ERR_ACN_DECODE_IPLT_B3_2		876  /**/
+#define ERR_ACN_DECODE_IPLT_B3		870  /**/
+#define ERR_ACN_DECODE_IPLT_B3_MORE		860  /**/
+#define ERR_ACN_DECODE_IPLT_B3_BITS		865  /**/
 flag Iplt_b3_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b3_more);
 
 flag Iplt_b3_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b3_more)
@@ -2198,10 +2196,10 @@ flag Iplt_b3_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B4_2		943  /**/
-#define ERR_ACN_DECODE_IPLT_B4		937  /**/
-#define ERR_ACN_DECODE_IPLT_B4_MORE		927  /**/
-#define ERR_ACN_DECODE_IPLT_B4_BITS		932  /**/
+#define ERR_ACN_DECODE_IPLT_B4_2		895  /**/
+#define ERR_ACN_DECODE_IPLT_B4		889  /**/
+#define ERR_ACN_DECODE_IPLT_B4_MORE		879  /**/
+#define ERR_ACN_DECODE_IPLT_B4_BITS		884  /**/
 flag Iplt_b4_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b4_more);
 
 flag Iplt_b4_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b4_more)
@@ -2227,10 +2225,10 @@ flag Iplt_b4_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B5_2		962  /**/
-#define ERR_ACN_DECODE_IPLT_B5		956  /**/
-#define ERR_ACN_DECODE_IPLT_B5_MORE		946  /**/
-#define ERR_ACN_DECODE_IPLT_B5_BITS		951  /**/
+#define ERR_ACN_DECODE_IPLT_B5_2		914  /**/
+#define ERR_ACN_DECODE_IPLT_B5		908  /**/
+#define ERR_ACN_DECODE_IPLT_B5_MORE		898  /**/
+#define ERR_ACN_DECODE_IPLT_B5_BITS		903  /**/
 flag Iplt_b5_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b5_more);
 
 flag Iplt_b5_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b5_more)
@@ -2256,10 +2254,10 @@ flag Iplt_b5_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B6_2		981  /**/
-#define ERR_ACN_DECODE_IPLT_B6		975  /**/
-#define ERR_ACN_DECODE_IPLT_B6_MORE		965  /**/
-#define ERR_ACN_DECODE_IPLT_B6_BITS		970  /**/
+#define ERR_ACN_DECODE_IPLT_B6_2		933  /**/
+#define ERR_ACN_DECODE_IPLT_B6		927  /**/
+#define ERR_ACN_DECODE_IPLT_B6_MORE		917  /**/
+#define ERR_ACN_DECODE_IPLT_B6_BITS		922  /**/
 flag Iplt_b6_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b6_more);
 
 flag Iplt_b6_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b6_more)
@@ -2285,10 +2283,10 @@ flag Iplt_b6_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B7_2		1000  /**/
-#define ERR_ACN_DECODE_IPLT_B7		994  /**/
-#define ERR_ACN_DECODE_IPLT_B7_MORE		984  /**/
-#define ERR_ACN_DECODE_IPLT_B7_BITS		989  /**/
+#define ERR_ACN_DECODE_IPLT_B7_2		952  /**/
+#define ERR_ACN_DECODE_IPLT_B7		946  /**/
+#define ERR_ACN_DECODE_IPLT_B7_MORE		936  /**/
+#define ERR_ACN_DECODE_IPLT_B7_BITS		941  /**/
 flag Iplt_b7_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b7_more);
 
 flag Iplt_b7_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b7_more)
@@ -2314,10 +2312,10 @@ flag Iplt_b7_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnI
     return ret;
 }
 
-#define ERR_ACN_DECODE_IPLT_B8_2		1019  /**/
-#define ERR_ACN_DECODE_IPLT_B8		1013  /**/
-#define ERR_ACN_DECODE_IPLT_B8_MORE		1003  /**/
-#define ERR_ACN_DECODE_IPLT_B8_BITS		1008  /**/
+#define ERR_ACN_DECODE_IPLT_B8_2		971  /**/
+#define ERR_ACN_DECODE_IPLT_B8		965  /**/
+#define ERR_ACN_DECODE_IPLT_B8_MORE		955  /**/
+#define ERR_ACN_DECODE_IPLT_B8_BITS		960  /**/
 flag Iplt_b8_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b8_more);
 
 flag Iplt_b8_ACN_Decode(IpltByte* pVal, BitStream* pBitStrm, int* pErrCode, AcnInsertedFieldRef* Iplt_b8_more)
@@ -2443,8 +2441,6 @@ flag Iplt_ACN_Decode(Iplt* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 
-
-
 flag Rcom_IsConstraintValid(const Rcom* pVal, int* pErrCode)
 {
     flag ret = TRUE;
@@ -2487,8 +2483,6 @@ flag Rcom_ACN_Decode(Rcom* pVal, BitStream* pBitStrm, int* pErrCode)
 
     return ret && Rcom_IsConstraintValid(pVal, pErrCode);
 }
-
-
 
 
 

@@ -22,7 +22,7 @@ static int cf_signature(const OpaqueBox *box) {
 static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
     Brand expected = kind == CF_JP2 ? HV_BRAND_JP2 : HV_BRAND_JPX;
     int i, compatible = 0;
-    if (ftyp->brand != expected) return "file.ftyp-brand";
+    if (ftyp->header.brand != expected) return "file.ftyp-brand";
     for (i = 0; i < ftyp->compat.nCount; ++i)
         compatible |= ftyp->compat.arr[i] == expected;
     return compatible ? NULL : "file.ftyp-compatibility";

@@ -120,7 +120,7 @@ TileSegment [] {
 }
 
 -- ---------------------------------------------------------------------------
--- Layer 2: identical layout, profile bodies
+-- Layer 2: identical layout, profile SIZ and COD bodies
 -- ---------------------------------------------------------------------------
 
 Codestream-Profile [] {
@@ -136,21 +136,6 @@ SizSegment-Profile [] {
 }
 
 CodSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-QcdSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-PltSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-ComSegment-Profile [] {
     length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
     body        [size length]
 }

@@ -34,8 +34,8 @@ static int spare_zero(const hv_out *out) {
 static int write_codestream(hv_out *out, size_t count) {
     static SizFixed fixed;
     static Component component;
-    static CodSegment_Std cod;
-    static QcdSegment_Std qcd;
+    static CodSegment cod;
+    static QcdSegment qcd;
     hv_siz siz = {&fixed, &component, 1};
     uint64_t *lengths = malloc(count * sizeof *lengths);
     size_t i, start;

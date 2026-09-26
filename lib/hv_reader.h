@@ -203,8 +203,8 @@ typedef struct {
      * form hv_rules and hv_geometry take). Valid until the next
      * hv_codestream_next call; siz as long as hv_codestream_siz. */
     const hv_siz *siz;
-    const CodSegment_Std *cod;
-    const QcdSegment_Std *qcd;
+    const CodSegment *cod;
+    const QcdSegment *qcd;
     const hv_plt *plt;
     const hv_com *com;
 } hv_item;
@@ -256,10 +256,10 @@ typedef struct {
     SizFixed siz_fixed;     /* decoded SIZ: its fixed part, */
     Component *components;  /* its components (allocated), */
     hv_siz siz;             /* and the two as hv_rules takes them */
-    CodSegment_Std cod;     /* decoded main-header COD */
-    CodSegment_Std tile_cod;/* decoded tile-part COD */
-    QcdSegment_Std qcd;     /* decoded main-header QCD */
-    QcdSegment_Std tile_qcd;/* decoded tile-part QCD */
+    CodSegment cod;     /* decoded main-header COD */
+    CodSegment tile_cod;/* decoded tile-part COD */
+    QcdSegment qcd;     /* decoded main-header QCD */
+    QcdSegment tile_qcd;/* decoded tile-part QCD */
     hv_com com;             /* last decoded COM */
     hv_plt plt;             /* last decoded PLT */
     uint32_t tiles;         /* tiles Isot can address: min(grid, 65,535) */
@@ -303,7 +303,7 @@ const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, un
  * give the whole COD and QCD segments, for hv_writer. */
 const hv_siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
-const Qcd_Std *hv_codestream_qcd(const hv_codestream *cs);
+const Qcd *hv_codestream_qcd(const hv_codestream *cs);
 
 #ifdef __cplusplus
 }

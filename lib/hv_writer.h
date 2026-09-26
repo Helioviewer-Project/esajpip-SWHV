@@ -54,8 +54,8 @@ int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t siz
  * written as SizFixed and then its components, one at a time; COM as Rcom
  * and `size` bytes of text. Lxxx is measured. */
 int hv_write_siz(hv_out *out, const hv_siz *siz);
-int hv_write_cod(hv_out *out, const CodSegment_Std *cod);
-int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd);
+int hv_write_cod(hv_out *out, const CodSegment *cod);
+int hv_write_qcd(hv_out *out, const QcdSegment *qcd);
 int hv_write_com(hv_out *out, Rcom rcom, const uint8_t *text, size_t size);
 
 /* The PLT segments of one tile-part, listing all `count` packet lengths of
