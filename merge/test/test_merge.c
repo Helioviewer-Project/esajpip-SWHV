@@ -5,11 +5,15 @@
  * (fixtures/FIXTURES.md); TRANSCODE_FIXTURES the Kakadu references of the
  * transcoder's tests, which are inputs too. */
 #define _XOPEN_SOURCE 700
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE 1
+#endif
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "hv_reader.h"
@@ -428,23 +432,104 @@ static void test_errors(void) {
     bytes_free(&origin);
 }
 
+static void test_long_link_urls(void) {
+    char dir[] = "/tmp/test_merge_url.XXXXXX";
+    char *root = mkdtemp(dir), *canonical = NULL;
+    char path[1100] = "", short_path[1100] = "", long_path[1100] = "";
+    hv_merge_input in = inputs[0];
+    bytes out = {NULL, 0};
+    char error[2048];
+    FILE *file;
+    size_t length;
+
+    if (root == NULL || (canonical = realpath(root, NULL)) == NULL) {
+        check(0, "cannot create a link-limit test directory");
+        goto done;
+    }
+    strcpy(path, canonical);
+    if (strlen(canonical) >= 1011) {
+        check(0, "link-limit test directory is too long");
+        goto done;
+    }
+    while ((length = strlen(path)) < 1011) {
+        size_t remaining = 1011 - length;
+        size_t chars = remaining - 1 < 100 ? remaining - 1 : 100;
+        if (remaining - 1 - chars == 1)
+            chars--;
+        path[length++] = '/';
+        memset(path + length, 'a', chars);
+        path[length + chars] = 0;
+        if (mkdir(path, 0700) != 0) {
+            check(0, "cannot create a link-limit test path");
+            goto done;
+        }
+    }
+    snprintf(short_path, sizeof short_path, "%s/f.jp2", path);
+    snprintf(long_path, sizeof long_path, "%s/ff.jp2", path);
+    file = fopen(short_path, "wb");
+    if (file == NULL) {
+        check(0, "cannot create a 1024-character link");
+        goto done;
+    }
+    fclose(file);
+    file = fopen(long_path, "wb");
+    if (file == NULL) {
+        check(0, "cannot create a 1025-character link");
+        goto done;
+    }
+    fclose(file);
+
+    in.path = short_path;
+    if (merge(&in, 1, 1, &out, error, sizeof error) != 0) {
+        check(0, "1024-character link: %s", error);
+    } else {
+        expect_served("1024-character link", &out, &in);
+    }
+    bytes_free(&out);
+    in.path = long_path;
+    if (merge(&in, 1, 1, &out, error, sizeof error) != 0) {
+        check(0, "1025-character link: %s", error);
+    } else {
+        expect_served("1025-character link", &out, &in);
+    }
+    bytes_free(&out);
+
+done:
+    if (short_path[0]) unlink(short_path);
+    if (long_path[0]) unlink(long_path);
+    if (canonical != NULL) {
+        while (strcmp(path, canonical) != 0) {
+            char *slash;
+            rmdir(path);
+            slash = strrchr(path, '/');
+            if (slash == NULL) break;
+            *slash = 0;
+        }
+        free(canonical);
+    }
+    if (root != NULL) rmdir(root);
+}
+
 /* Inputs opened on demand: counts what hv_merge_files opens, and can
- * fail an open or change a size. */
+ * fail an open or change an input between passes. */
 typedef struct {
     int opens[NINPUTS], open, most;
-    size_t fail_at, shrink_at;          /* NINPUTS: never */
+    size_t fail_at, fail_second_at, shrink_at, change_at;  /* NINPUTS: never */
+    const uint8_t *changed;
 } counting;
 
 static int counting_open(void *context, size_t i, hv_merge_input *in, char *error,
                          size_t error_size) {
     counting *c = context;
-    if (i == c->fail_at) {
+    if (i == c->fail_at || (i == c->fail_second_at && c->opens[i] > 0)) {
         snprintf(error, error_size, "cannot open %s", names[i]);
         return -1;
     }
     *in = inputs[i];
     if (i == c->shrink_at && c->opens[i] > 0)
         in->size--;
+    if (i == c->change_at && c->opens[i] > 0)
+        in->buf = c->changed;
     c->opens[i]++;
     if (++c->open > c->most)
         c->most = c->open;
@@ -474,8 +559,10 @@ static int merge_counting(counting *c, int links, char *error, size_t error_size
 
 static void test_opening(void) {
     counting c;
+    bytes changed = {NULL, 0};
+    hv_box jp2c;
     char error[512];
-    size_t i;
+    size_t i, at;
     int links;
 
     for (i = 0; i < NINPUTS; i++)
@@ -483,7 +570,7 @@ static void test_opening(void) {
             return;
     for (links = 0; links < 2; links++) {
         memset(&c, 0, sizeof c);
-        c.fail_at = c.shrink_at = NINPUTS;
+        c.fail_at = c.fail_second_at = c.shrink_at = c.change_at = NINPUTS;
         check(merge_counting(&c, links, error, sizeof error) == 0, "on demand: %s", error);
         check(c.most <= 2 && c.open == 0, "on demand: at most %d open, %d left open", c.most,
               c.open);
@@ -493,16 +580,45 @@ static void test_opening(void) {
     }
     memset(&c, 0, sizeof c);
     c.fail_at = 3;
-    c.shrink_at = NINPUTS;
+    c.fail_second_at = c.shrink_at = c.change_at = NINPUTS;
     check(merge_counting(&c, 0, error, sizeof error) != 0 && strstr(error, "cannot open") != NULL &&
               c.open == 0,
           "failed open: \"%s\", %d left open", error, c.open);
     memset(&c, 0, sizeof c);
-    c.fail_at = NINPUTS;
+    c.fail_at = c.fail_second_at = c.change_at = NINPUTS;
     c.shrink_at = 2;
     check(merge_counting(&c, 0, error, sizeof error) != 0 &&
               strstr(error, "changed while merging") != NULL && c.open == 0,
           "changed input: \"%s\", %d left open", error, c.open);
+
+    memset(&c, 0, sizeof c);
+    c.fail_at = c.shrink_at = c.change_at = NINPUTS;
+    c.fail_second_at = 2;
+    check(merge_counting(&c, 0, error, sizeof error) != 0 &&
+              strstr(error, "cannot open") != NULL && c.open == 0,
+          "failed second open: \"%s\", %d left open", error, c.open);
+
+    changed.data = malloc(files[2].size);
+    if (changed.data == NULL ||
+        hv_check_jp2(files[2].data, files[2].size, &jp2c, &at) != NULL) {
+        check(0, "cannot prepare a changed input");
+        bytes_free(&changed);
+        return;
+    }
+    changed.size = files[2].size;
+    memcpy(changed.data, files[2].data, changed.size);
+    changed.data[jp2c.payload + 7] ^= 1;       /* Rsiz, same size and valid SIZ */
+    for (links = 0; links < 2; links++) {
+        memset(&c, 0, sizeof c);
+        c.fail_at = c.fail_second_at = c.shrink_at = NINPUTS;
+        c.change_at = 2;
+        c.changed = changed.data;
+        check(merge_counting(&c, links, error, sizeof error) != 0 &&
+                  strstr(error, "changed while merging") != NULL && c.open == 0,
+              "same-size changed input, links=%d: \"%s\", %d left open", links, error,
+              c.open);
+    }
+    bytes_free(&changed);
 }
 
 int main(void) {
@@ -516,6 +632,7 @@ int main(void) {
         {"header boxes", test_headers},
         {"rejected inputs", test_errors},
         {"inputs opened on demand", test_opening},
+        {"long linked URLs", test_long_link_urls},
     };
     size_t i;
     load_inputs();

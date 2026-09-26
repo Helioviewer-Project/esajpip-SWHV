@@ -3,3 +3,4 @@
 0003-deferred-sibling-consumers.patch
 0004-icdpdus-reference-init.patch
 0005-deferred-fixed-size-determinant.patch
+0006-containing-subtype-constraints.patch

@@ -418,35 +418,44 @@ static int hex(int c) {
 }
 
 int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size) {
-    const uint8_t *p = link->loc + HV_FILE_SCHEME_LENGTH, *end = link->loc + link->loc_size;
+    const uint8_t *p, *end;
     size_t n = 0;
+    if (out_size == 0)
+        return -1;
+    out[0] = 0;
     if (link->loc_size <= HV_FILE_SCHEME_LENGTH)
         return -1;
-    if (*p != '/' && jpx_path != NULL) {
-        const char *slash = strrchr(jpx_path, '/');
-        size_t dir = slash ? (size_t)(slash - jpx_path) + 1 : 0;
-        if (dir >= out_size)
-            return -1;
-        memcpy(out, jpx_path, dir);
-        n = dir;
-    }
+    p = link->loc + HV_FILE_SCHEME_LENGTH;
+    end = link->loc + link->loc_size;
     for (; p < end; p++) {
         int c = *p;
         if (c == '%') {
             int hi, lo;
             if (end - p < 3 || (hi = hex(p[1])) < 0 || (lo = hex(p[2])) < 0 || hi * 16 + lo == 0)
-                return -1;
+                goto fail;
             c = hi * 16 + lo;
             p += 2;
         }
-        if (n + 1 >= out_size)
-            return -1;
+        if (c == 0 || n + 1 >= out_size)
+            goto fail;
         out[n++] = (char)c;
     }
     if (n == 0)
-        return -1;
+        goto fail;
     out[n] = 0;
+    if (out[0] != '/' && jpx_path != NULL) {
+        const char *slash = strrchr(jpx_path, '/');
+        size_t dir = slash ? (size_t)(slash - jpx_path) + 1 : 0;
+        if (dir > out_size - n - 1)
+            goto fail;
+        memmove(out + dir, out, n + 1);
+        memcpy(out, jpx_path, dir);
+    }
     return 0;
+
+fail:
+    out[0] = 0;
+    return -1;
 }
 
 const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,

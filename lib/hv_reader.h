@@ -94,8 +94,9 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
 void hv_jpx_free(hv_jpx *jpx);
 
 /* The file a link names, as the server resolves it: LOC without "file://",
- * percent-decoded (no %00), and, unless absolute, relative to the directory
- * of jpx_path. 0, or -1 if LOC cannot be decoded or out is too small. */
+ * percent-decoded (no %00), and, unless the decoded path is absolute,
+ * relative to the directory of jpx_path. 0, or -1 if LOC cannot be decoded
+ * or out is too small. On failure out is empty when out_size is nonzero. */
 int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size);
 
 /* A linked file, held in buf, against its link: hv_check_jp2, its

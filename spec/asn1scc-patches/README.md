@@ -50,6 +50,14 @@ Applied now, in `series` order:
   generated C and checks its exact wire bytes and round trip in
   `v4Tests/scripts/runWireTests.sh`. Report and reproducer:
   [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
+- `0006-containing-subtype-constraints.patch`: the validator of an
+  `OCTET STRING (CONTAINING Subtype)` called the base type's validator when
+  `Subtype` was a constrained reference type. The wrapper now calls the
+  subtype validator, so validation and decoding enforce its constraints.
+  Generated C changes only at the three affected profile checks in this
+  model. Test case `25-ACNV2-BOUNDARIES/020` checks both rejection and an
+  accepted value. Report and reproducer:
+  [`../asn1scc-issues/containing-subtype-constraints/`](../asn1scc-issues/containing-subtype-constraints/).
 
 ## Reference: the former fixes for deferred ACN
 

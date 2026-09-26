@@ -1,0 +1,106 @@
+diff --git a/BackendAst/DastValidate2.fs b/BackendAst/DastValidate2.fs
+index 97fe68f..693d5c0 100644
+--- a/BackendAst/DastValidate2.fs
++++ b/BackendAst/DastValidate2.fs
+@@ -1043,8 +1043,22 @@ let createReferenceTypeFunction (r:Asn1AcnAst.AstRoot) (l:LanguageMacros) (t:Asn
+             | false -> Some typeDefinitionName
+         | _         -> None
+ 
+-    let baseTypeDefinitionName: string = getBaseTypeDefName l typeDefinitionName0 moduleName t o 
+-    let baseFncName = l.lg.constructReferenceFuncName baseTypeDefinitionName "" (l.isvalid.methodNameSuffix())
++    let baseTypeDefinitionName: string = getBaseTypeDefName l typeDefinitionName0 moduleName t o
++    let rec containsSubtypeConstraints (resolved:Asn1AcnAst.Asn1Type) =
++        match resolved.Kind with
++        | Asn1AcnAst.ReferenceType refType ->
++            refType.refCons.Length > 0 || containsSubtypeConstraints refType.resolvedType
++        | _ -> false
++    let checkedTypeDefinitionName =
++        // CONTAINING has the base type's C layout, but a referenced subtype
++        // must still use its own validator after the contained value is read.
++        if o.encodingOptions.IsSome && containsSubtypeConstraints o.resolvedType then
++            let targetName = ToC2(r.args.TypePrefix + o.tasName.Value)
++            if l.lg.hasModules && ToC t.id.ModName <> ToC o.modName.Value then
++                ToC o.modName.Value + "." + targetName
++            else targetName
++        else baseTypeDefinitionName
++    let baseFncName = l.lg.constructReferenceFuncName checkedTypeDefinitionName "" (l.isvalid.methodNameSuffix())
+ 
+     let ns =
+         match resolvedType.isValidFunction with
+diff --git a/v4Tests/scripts/runWireTests.sh b/v4Tests/scripts/runWireTests.sh
+index fecac13..d5daa91 100755
+--- a/v4Tests/scripts/runWireTests.sh
++++ b/v4Tests/scripts/runWireTests.sh
+@@ -23,7 +23,7 @@ run_compiler() {
+     esac
+ }
+ 
+-for n in 004 010 011 016 017 018 019; do
++for n in 004 010 011 016 017 018 019 020; do
+     out=$work/$n
+     mkdir "$out"
+     run_compiler -c -ACN --acn-v2 -fp AUTO -equal -o "$out" "$cases/$n.asn1" "$cases/$n.acn"
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.acn b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.acn
+new file mode 100644
+index 0000000..1efabf8
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.acn
+@@ -0,0 +1,7 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++X [] { field [encoding pos-int, size 8] }
++X-P [] { field [encoding pos-int, size 8] }
++W [] { length INTEGER [encoding pos-int, size 8], body [size length] }
++
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.asn1 b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.asn1
+new file mode 100644
+index 0000000..864a368
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020.asn1
+@@ -0,0 +1,11 @@
++-- ACNV2_ONLY C_ONLY NO_AUTOMATIC_TEST_CASES
++-- A CONTAINING reference to a constrained subtype must validate the subtype.
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++X ::= SEQUENCE { field INTEGER (0..1) }
++X-P ::= X (WITH COMPONENTS { field (0..0) })
++W ::= SEQUENCE { body OCTET STRING (CONTAINING X-P) }
++
++END
++
++--TCFS   020.acn
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020_wire_test.c b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020_wire_test.c
+new file mode 100644
+index 0000000..b115d63
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/020_wire_test.c
+@@ -0,0 +1,28 @@
++#include <assert.h>
++
++#include "020.h"
++
++int main(void)
++{
++    byte invalid_wire[] = {1, 1};
++    byte valid_wire[] = {1, 0};
++    BitStream stream;
++    W value;
++    int error = 0;
++
++    W_Initialize(&value);
++    value.body.field = 1;
++    assert(!W_IsConstraintValid(&value, &error));
++
++    W_Initialize(&value);
++    BitStream_AttachBuffer(&stream, invalid_wire, sizeof invalid_wire);
++    error = 0;
++    assert(!W_ACN_Decode(&value, &stream, &error));
++
++    W_Initialize(&value);
++    BitStream_AttachBuffer(&stream, valid_wire, sizeof valid_wire);
++    error = 0;
++    assert(W_ACN_Decode(&value, &stream, &error));
++
++    return 0;
++}

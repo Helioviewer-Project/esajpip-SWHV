@@ -111,6 +111,32 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     return 0;
 }
 
+static int same_box_location(const hv_box *a, const hv_box *b) {
+    return a->type == b->type && a->start == b->start && a->payload == b->payload &&
+           a->end == b->end && a->to_end == b->to_end;
+}
+
+/* Every pass-1 value used to write the output, excluding the input mapping. */
+static int same_source_record(const source *a, const source *b) {
+    int i;
+    if (!same_box_location(&a->jp2h, &b->jp2h) ||
+        !same_box_location(&a->jp2c, &b->jp2c) ||
+        !same_box_location(&a->xml, &b->xml) ||
+        !same_box_location(&a->ihdr, &b->ihdr) ||
+        !same_box_location(&a->bpcc, &b->bpcc) ||
+        !same_box_location(&a->pclr, &b->pclr) ||
+        !same_box_location(&a->cmap, &b->cmap) ||
+        !same_box_location(&a->cdef, &b->cdef) ||
+        !same_box_location(&a->res, &b->res) ||
+        a->ncolr != b->ncolr || a->rsiz != b->rsiz || a->nc != b->nc ||
+        a->opacity != b->opacity || a->premultiplied != b->premultiplied)
+        return 0;
+    for (i = 0; i < a->ncolr; i++)
+        if (!same_box_location(&a->colr[i], &b->colr[i]))
+            return 0;
+    return 1;
+}
+
 /* The same contents, or both absent. */
 static int same_box(const source *a, const hv_box *x, const source *b, const hv_box *y) {
     size_t n = x->end - x->payload;
@@ -348,15 +374,16 @@ static char *link_url(const char *path, char *error, size_t size) {
     return url;
 }
 
-/* Opens input i into s->in, or with `check`, checks it against what was
- * read of it before. */
-static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int check, char *error,
+/* Reopens a later input and checks it against the first-pass record. */
+static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, char *error,
                       size_t error_size) {
     hv_merge_input in;
+    source again;
     memset(&in, 0, sizeof in);
     if (inputs->open(inputs->context, i, &in, error, error_size) != 0)
         return -1;
-    if (check && in.size != s->in.size) {
+    if (in.size != s->in.size || read_source(&in, &again, error, error_size) != 0 ||
+        !same_source_record(s, &again)) {
         inputs->close(inputs->context, i, &in);
         return fail(error, error_size, "%s: changed while merging", s->in.path);
     }
@@ -450,7 +477,7 @@ int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *fil
         goto done;
     for (i = 0; i < n; i++) {
         const hv_box *cs = &s[i].jp2c, *xml = &s[i].xml;
-        if (i > 0 && open_input(inputs, i, &s[i], 1, error, error_size) != 0)
+        if (i > 0 && open_input(inputs, i, &s[i], error, error_size) != 0)
             goto done;
         if (write_headers(&w.out, &s[i], &s[0]) != 0)
             goto done;

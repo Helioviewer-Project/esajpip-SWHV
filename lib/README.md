@@ -20,7 +20,7 @@ payload starts and ends.
 | `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (not with `-P`), `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
 | `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's profile mode (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid; the header box checks must accept every standard-valid vector and reject, by name, each one a header rule makes standard-invalid. `run.sh` builds and runs it with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types in `../spec/jpeg2000-io.asn1`, the profile types the reader checks against, and what they use. |
-| `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`). |
+| `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it. |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TOOL_TESTS`. |
 
 ## Build

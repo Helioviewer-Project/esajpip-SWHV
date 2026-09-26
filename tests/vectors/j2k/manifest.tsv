@@ -53,13 +53,13 @@ jp2-plt-iplt-eleven-bytes.jp2	jp2	invalid	invalid	decode	plt.iplt-length	11-byte
 jp2-siz.rsiz-2.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jp2-siz.rsiz-32768.jp2	jp2	valid	valid	-	siz.rsiz	extension capability flag	-
 jp2-siz.xsiz-0.jp2	jp2	invalid	invalid	decode	siz.xsiz	min-1	-
-jp2-siz.xsiz-2147483648.jp2	jp2	valid	invalid	siz.single-tile	siz.xsiz	profile max+1	-
-jp2-siz.xsiz-4294967295.jp2	jp2	valid	invalid	siz.single-tile	siz.xsiz	standard max (tile smaller: single-tile rule)	-
+jp2-siz.xsiz-2147483648.jp2	jp2	valid	invalid	decode	siz.xsiz	profile max+1	-
+jp2-siz.xsiz-4294967295.jp2	jp2	valid	invalid	decode	siz.xsiz	standard max (tile smaller: single-tile rule)	-
 jp2-siz.ysiz-0.jp2	jp2	invalid	invalid	decode	siz.ysiz	min-1	-
-jp2-siz.ysiz-2147483648.jp2	jp2	valid	invalid	siz.single-tile	siz.ysiz	profile max+1	-
-jp2-siz.xosiz-1.jp2	jp2	valid	invalid	siz.zero-origin	siz.xosiz	profile max+1; standard valid	-
+jp2-siz.ysiz-2147483648.jp2	jp2	valid	invalid	decode	siz.ysiz	profile max+1	-
+jp2-siz.xosiz-1.jp2	jp2	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-
 jp2-siz.xosiz-4.jp2	jp2	invalid	invalid	siz.origin-inside	siz.xosiz	== xsiz: empty image	-
-jp2-siz.yosiz-1.jp2	jp2	valid	invalid	siz.zero-origin	siz.yosiz	profile max+1; standard valid	-
+jp2-siz.yosiz-1.jp2	jp2	valid	invalid	decode	siz.yosiz	profile max+1; standard valid	-
 jp2-siz.xtsiz-0.jp2	jp2	invalid	invalid	decode	siz.xtsiz	min-1	-
 jp2-siz.xtsiz-3.jp2	jp2	valid	invalid	siz.single-tile	siz.xtsiz	below xsiz: two tiles	-
 jp2-siz.ytsiz-3.jp2	jp2	valid	invalid	siz.single-tile	siz.ytsiz	below ysiz: two tiles	-
@@ -120,7 +120,7 @@ jp2-rule-tile.cod-once-27.jp2	jp2	invalid	invalid	tile.cod-once	tile.cod-once	tw
 jp2-rule-tile.cod-first-part-28.jp2	jp2	invalid	invalid	tile.cod-once	tile.cod-first-part	COD in the second tile-part	-
 jp2-rule-codestream.packet-count-29.jp2	jp2	valid	invalid	codestream.packet-count	codestream.packet-count	2^32 packets: profile invalid	-
 jp2-rule-plt.iplt-six-bytes-30.jp2	jp2	valid	valid	-	plt.iplt-six-bytes	6-byte Iplt encoding value 1: valid	-
-jp2-rule-siz.component-sampling-31.jp2	jp2	valid	invalid	siz.component-sampling	siz.component-sampling	2:1 sampling: profile invalid	-
+jp2-rule-siz.component-sampling-31.jp2	jp2	valid	invalid	decode	siz.component-sampling	2:1 sampling: profile invalid	-
 jp2-rule-main.packet-layout-override-32.jp2	jp2	valid	invalid	decode	main.packet-layout-override	COC in the main header: profile invalid	-
 jp2-rule-main.packet-layout-override-33.jp2	jp2	valid	invalid	decode	main.packet-layout-override	POC in the main header: profile invalid	-
 jp2-rule-file.ftyp-brand-34.jp2	jp2	invalid	invalid	file.ftyp-brand	file.ftyp-brand	ftyp brand 'abcd'	-
@@ -138,6 +138,7 @@ jp2-rule-main.packet-headers-moved-48.jp2	jp2	valid	invalid	decode	main.packet-h
 jp2-rule-sot.two-tiles-49.jp2	jp2	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
 jp2-rule-siz.mct-components-50.jp2	jp2	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
 jp2-rule-ftbl.one-flst-51.jp2	jp2	invalid	valid	ftbl.one-flst	ftbl.one-flst	empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)	-
+jp2-rule-siz.xsiz-52.jp2	jp2	valid	invalid	decode	siz.xsiz	profile max+1 with one tile	-
 jp2-header-jp2h.palette-0.jp2	jp2	valid	valid	-	jp2h.palette	pclr (2 entries) and cmap through it: valid	-
 jp2-header-jp2h.resolution-1.jp2	jp2	valid	valid	-	jp2h.resolution	res with resc and resd: valid	-
 jp2-header-jp2h.other-box-2.jp2	jp2	valid	valid	-	jp2h.other-box	xml box in jp2h after colr: valid and skipped (T.800 I.5.3)	-
@@ -350,13 +351,13 @@ jpx-embedded-header-rreq.extent.jpx	jpx	invalid	valid	rreq.extent	rreq.extent	a 
 jpx-embedded-siz.rsiz-2.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	extension capability flag	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-
-jpx-embedded-siz.xsiz-2147483648.jpx	jpx	valid	invalid	siz.single-tile	siz.xsiz	profile max+1	-
-jpx-embedded-siz.xsiz-4294967295.jpx	jpx	valid	invalid	siz.single-tile	siz.xsiz	standard max (tile smaller: single-tile rule)	-
+jpx-embedded-siz.xsiz-2147483648.jpx	jpx	valid	invalid	decode	siz.xsiz	profile max+1	-
+jpx-embedded-siz.xsiz-4294967295.jpx	jpx	valid	invalid	decode	siz.xsiz	standard max (tile smaller: single-tile rule)	-
 jpx-embedded-siz.ysiz-0.jpx	jpx	invalid	invalid	decode	siz.ysiz	min-1	-
-jpx-embedded-siz.ysiz-2147483648.jpx	jpx	valid	invalid	siz.single-tile	siz.ysiz	profile max+1	-
-jpx-embedded-siz.xosiz-1.jpx	jpx	valid	invalid	siz.zero-origin	siz.xosiz	profile max+1; standard valid	-
+jpx-embedded-siz.ysiz-2147483648.jpx	jpx	valid	invalid	decode	siz.ysiz	profile max+1	-
+jpx-embedded-siz.xosiz-1.jpx	jpx	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-
 jpx-embedded-siz.xosiz-4.jpx	jpx	invalid	invalid	siz.origin-inside	siz.xosiz	== xsiz: empty image	-
-jpx-embedded-siz.yosiz-1.jpx	jpx	valid	invalid	siz.zero-origin	siz.yosiz	profile max+1; standard valid	-
+jpx-embedded-siz.yosiz-1.jpx	jpx	valid	invalid	decode	siz.yosiz	profile max+1; standard valid	-
 jpx-embedded-siz.xtsiz-0.jpx	jpx	invalid	invalid	decode	siz.xtsiz	min-1	-
 jpx-embedded-siz.xtsiz-3.jpx	jpx	valid	invalid	siz.single-tile	siz.xtsiz	below xsiz: two tiles	-
 jpx-embedded-siz.ytsiz-3.jpx	jpx	valid	invalid	siz.single-tile	siz.ytsiz	below ysiz: two tiles	-
@@ -422,7 +423,7 @@ jpx-embedded-rule-tile.cod-once-27.jpx	jpx	invalid	invalid	tile.cod-once	tile.co
 jpx-embedded-rule-tile.cod-first-part-28.jpx	jpx	invalid	invalid	tile.cod-once	tile.cod-first-part	COD in the second tile-part	-
 jpx-embedded-rule-codestream.packet-count-29.jpx	jpx	valid	invalid	codestream.packet-count	codestream.packet-count	2^32 packets: profile invalid	-
 jpx-embedded-rule-plt.iplt-six-bytes-30.jpx	jpx	valid	valid	-	plt.iplt-six-bytes	6-byte Iplt encoding value 1: valid	-
-jpx-embedded-rule-siz.component-sampling-31.jpx	jpx	valid	invalid	siz.component-sampling	siz.component-sampling	2:1 sampling: profile invalid	-
+jpx-embedded-rule-siz.component-sampling-31.jpx	jpx	valid	invalid	decode	siz.component-sampling	2:1 sampling: profile invalid	-
 jpx-embedded-rule-main.packet-layout-override-32.jpx	jpx	valid	invalid	decode	main.packet-layout-override	COC in the main header: profile invalid	-
 jpx-embedded-rule-main.packet-layout-override-33.jpx	jpx	valid	invalid	decode	main.packet-layout-override	POC in the main header: profile invalid	-
 jpx-embedded-rule-file.ftyp-brand-34.jpx	jpx	invalid	invalid	file.ftyp-brand	file.ftyp-brand	ftyp brand 'abcd'	-
@@ -437,6 +438,7 @@ jpx-embedded-rule-plt.value-overflow-46.jpx	jpx	invalid	invalid	plt.value-overfl
 jpx-embedded-rule-main.packet-headers-moved-48.jpx	jpx	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
 jpx-embedded-rule-sot.two-tiles-49.jpx	jpx	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
 jpx-embedded-rule-siz.mct-components-50.jpx	jpx	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
+jpx-embedded-rule-siz.xsiz-52.jpx	jpx	valid	invalid	decode	siz.xsiz	profile max+1 with one tile	-
 jpx-embedded-header-jpx.header-defaults-50.jpx	jpx	valid	valid	-	jpx.header-defaults	jp2h ihdr and colr as the default for both codestreams, empty jpch: valid	-
 jpx-embedded-header-jpch.palette-51.jpx	jpx	valid	valid	-	jpch.palette	pclr and cmap in a jpch: valid	-
 jpx-embedded-header-jpx.no-jp2h-52.jpx	jpx	valid	valid	-	jpx.no-jp2h	no jp2h, an ihdr in each jpch (T.801: jp2h optional)	-
@@ -519,7 +521,7 @@ jpx-linked-rule-flst.dr-range-3.jpx	jpx	invalid	invalid	flst.dr-range	flst.dr-ra
 jpx-linked-rule-ftbl.one-flst-4.jpx	jpx	invalid	invalid	ftbl.one-flst	ftbl.one-flst	two flst in one ftbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-dtbl.ndr-count-5.jpx	jpx	invalid	invalid	dtbl.ndr-count	dtbl.ndr-count	NDR = 3 with 2 url boxes	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.file-scheme-6.jpx	jpx	valid	invalid	url.file-scheme	url.file-scheme	http URL: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
-jpx-linked-rule-url.version-7.jpx	jpx	valid	invalid	url.version-flags	url.version	VERS = 1: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.version-7.jpx	jpx	valid	invalid	decode	url.version	VERS = 1: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.jp2-target-8.jpx	jpx	valid	invalid	url.jp2-target	url.jp2-target	link to a .jpx: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.mixed-sources-9.jpx	jpx	valid	invalid	jpx.mixed-sources	jpx.mixed-sources	jp2c next to ftbl: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.linked-shape-10.jpx	jpx	invalid	invalid	flst.dr-range	jpx.linked-shape	no dtbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2

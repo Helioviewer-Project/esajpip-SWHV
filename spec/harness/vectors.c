@@ -1088,6 +1088,39 @@ static void rule_packet_count_overflow(Jp2Family *f, int box) {
     s->xsiz = s->xtsiz = 2147483647;
     s->ysiz = s->ytsiz = 2147483647;
 }
+static void rule_xsiz_profile_limit(Jp2Family *f, int box) {
+    Codestream *cs = cs_of(f, box);
+    Siz *s = &cs->siz.body;
+    int part, marker, entry;
+
+    s->xsiz = s->xtsiz = 2147483648u;
+    /* At level 0 the default 2^15-wide precincts need 65 536 packets.
+     * Keep the standard layer valid with 64 tile-parts of 1 024 packets. */
+    cs->segments.nCount = 66;
+    for (part = 0; part < 64; part++) {
+        MainSegment *segment = &cs->segments.arr[2 + part];
+        TilePart *tile;
+        if (part > 0) *segment = cs->segments.arr[2];
+        tile = &segment->tilePart;
+        tile->tpsot = part;
+        tile->tnsot = 64;
+        tile->rest.headers.nCount = 8;
+        for (marker = 0; marker < 8; marker++) {
+            Plt *plt = &tile->rest.headers.arr[marker].plt.body;
+            tile->rest.headers.arr[marker].code = HV_PLT;
+            tile->rest.headers.arr[marker].exist.plt = 1;
+            plt->zplt = marker;
+            plt->entries.nCount = 128;
+            for (entry = 0; entry < 128; entry++) {
+                Iplt *e = &plt->entries.arr[entry];
+                memset(e, 0, sizeof *e);
+                e->b0.bits = 1;
+            }
+        }
+        tile->rest.data.nCount = 1024;
+        memset(tile->rest.data.arr, 0, 1024);
+    }
+}
 static void rule_iplt_too_long(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
     e->b0.bits = 2;                                        /* data holds 1 byte */
@@ -1242,6 +1275,7 @@ static const RuleMutant rule_mutants[] = {
     { "sot.two-tiles", rule_two_tiles, "two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid", 0, 0, X_PROF },
     { "siz.mct-components", rule_tile_cod_mct, "MCT in a tile-part COD with one component", 0, 0, X_STD },
     { "ftbl.one-flst", rule_jp2_empty_ftbl, "empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)", CF_JP2, 0, X_LENIENT },
+    { "siz.xsiz", rule_xsiz_profile_limit, "profile max+1 with one tile", 0, 0, X_PROF },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -2136,6 +2170,81 @@ static void emit_associations(void) {
     free(base.file);
 }
 
+/* These named C rules remain in the reader. Check their overlapping cases
+ * against the subtype validators that the corpus decoder now calls. */
+static void check_profile_rule_parity(void) {
+    Base base = base_jp2(0, 0);
+    Siz *siz = &base.file->boxes.arr[base.jp2c_box].payload.u.jp2c.siz.body;
+    asn1SccUint *origins[] = {&siz->xosiz, &siz->yosiz};
+    asn1SccUint *sampling[] = {&siz->components.arr[0].xrsiz,
+                            &siz->components.arr[0].yrsiz};
+    DataEntryUrl url;
+    FragmentList flst;
+    size_t i;
+    int err = 0;
+
+    if (!Siz_Profile_IsConstraintValid(siz, &err) || hv_rule_siz(siz, NULL, 1) != NULL)
+        die("SIZ profile rules disagree on the base");
+    for (i = 0; i < sizeof origins / sizeof *origins; i++) {
+        *origins[i] = 1;
+        if (Siz_Profile_IsConstraintValid(siz, &err) ||
+            hv_rule_siz(siz, NULL, 1) == NULL)
+            die("SIZ origin rules disagree");
+        *origins[i] = 0;
+    }
+    for (i = 0; i < sizeof sampling / sizeof *sampling; i++) {
+        *sampling[i] = 2;
+        if (Siz_Profile_IsConstraintValid(siz, &err) ||
+            strcmp(hv_rule_siz(siz, NULL, 1), "siz.component-sampling") != 0)
+            die("SIZ sampling rules disagree");
+        *sampling[i] = 1;
+    }
+    free(base.file);
+
+    DataEntryUrl_Initialize(&url);
+    url.vers = 0;
+    url.flag = 0;
+    strcpy(url.loc, "file://a.jp2");
+    if (!DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
+        hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc, strlen(url.loc) + 1) != NULL)
+        die("URL profile rules disagree on the base");
+    url.vers = 1;
+    if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
+        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+                           strlen(url.loc) + 1), "url.version-flags") != 0)
+        die("URL version rules disagree");
+    url.vers = 0;
+    url.flag = 1;
+    if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
+        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+                           strlen(url.loc) + 1), "url.version-flags") != 0)
+        die("URL flag rules disagree");
+    url.flag = 0;
+    strcpy(url.loc, "file://");
+    if (DataEntryUrl_Profile_IsConstraintValid(&url, &err) ||
+        strcmp(hv_rule_url(url.vers, url.flag, (const uint8_t *)url.loc,
+                           strlen(url.loc) + 1), "url.length") != 0)
+        die("URL length rules disagree");
+
+    FragmentList_Initialize(&flst);
+    flst.nf = 1;
+    flst.fragments.nCount = 1;
+    flst.fragments.arr[0].len = 1;
+    flst.fragments.arr[0].dr = 1;
+    if (!FragmentList_Profile_IsConstraintValid(&flst, &err) ||
+        hv_rule_flst(flst.nf, flst.fragments.nCount) != NULL)
+        die("fragment-list profile rules disagree on the base");
+    flst.nf = 0;
+    if (FragmentList_Profile_IsConstraintValid(&flst, &err) ||
+        strcmp(hv_rule_flst(flst.nf, flst.fragments.nCount), "flst.one-fragment") != 0)
+        die("fragment count rules disagree");
+    flst.nf = 1;
+    flst.fragments.nCount = 0;
+    if (FragmentList_Profile_IsConstraintValid(&flst, &err) ||
+        strcmp(hv_rule_flst(flst.nf, flst.fragments.nCount), "flst.one-fragment") != 0)
+        die("fragment-list length rules disagree");
+}
+
 int main(int argc, char **argv) {
     char path[1024];
     if (argc != 2) {
@@ -2156,6 +2265,7 @@ int main(int argc, char **argv) {
     /* Sanity: the box-type constants in the model are the four-cc values. */
     if (be32((const unsigned char *) "jp2c") != HV_BOX_JP2C || be32((const unsigned char *) "flst") != HV_BOX_FLST)
         die("box type constants do not match four-cc values");
+    check_profile_rule_parity();
 
     run_base(base_jp2(0, 0), NULL);
     run_base(base_jp2(1, 1), NULL);

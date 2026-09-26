@@ -27,10 +27,13 @@ while letting HTTP connections be pooled or replaced independently of channels.
   inputs whose header boxes are invalid or disagree with the codestream; the
   server, which does not read them, is unchanged. The JPX Reader
   Requirements box too, which `hv_merge` now writes with the model's encoder
-  (after two local asn1scc fixes, `spec/asn1scc-patches/`).
+  (using the pinned compiler and local patches in `spec/asn1scc-patches/`).
 
 ### Changed
 
+- Fix ASN1SCC validation of constrained subtypes inside `CONTAINING` fields.
+  Regenerated corpus labels now report those profile failures at decode time.
+  Keep the reader's named C errors for the same constraints.
 - Keep channels alive across replacement connections, and allow one persistent
   connection to carry requests for different channels. This permits ordinary
   browser and reverse-proxy connection pooling. Random, opaque channel IDs

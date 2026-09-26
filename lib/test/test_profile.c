@@ -268,6 +268,55 @@ static void check_jpx_rules(const char *dir) {
     }
 }
 
+static void check_link_paths(void) {
+    static const struct {
+        const char *loc, *expected;
+    } valid[] = {
+        {"file://%2Ftmp/a.jp2", "/tmp/a.jp2"},
+        {"file://a%20b.jp2", "d/a b.jp2"},
+        {"file://localhost/a.jp2", "d/localhost/a.jp2"},
+    };
+    static const char *invalid[] = {"file://%00.jp2", "file://%4.jp2"};
+    hv_link link = {0};
+    char out[64];
+    size_t i;
+
+    for (i = 0; i < sizeof valid / sizeof *valid; i++) {
+        link.loc = (const uint8_t *)valid[i].loc;
+        link.loc_size = strlen(valid[i].loc);
+        check(hv_link_path(&link, "d/x.jpx", out, sizeof out) == 0 &&
+              strcmp(out, valid[i].expected) == 0, "link path", valid[i].loc);
+    }
+    for (i = 0; i < sizeof invalid / sizeof *invalid; i++) {
+        link.loc = (const uint8_t *)invalid[i];
+        link.loc_size = strlen(invalid[i]);
+        memset(out, 'X', sizeof out);
+        check(hv_link_path(&link, "d/x.jpx", out, sizeof out) != 0 && out[0] == 0,
+              "invalid link path", invalid[i]);
+    }
+    link.loc = (const uint8_t *)valid[1].loc;
+    link.loc_size = strlen(valid[1].loc);
+    memset(out, 'X', sizeof out);
+    check(hv_link_path(&link, "d/x.jpx", out, 4) != 0 && out[0] == 0,
+          "link path too long", valid[1].loc);
+}
+
+static void check_long_url(void) {
+    uint8_t loc[1026];
+    memset(loc, 'a', sizeof loc);
+    memcpy(loc, "file://", HV_FILE_SCHEME_LENGTH);
+    memcpy(loc + 1019, ".jp2", 4);
+    loc[1023] = 0;
+    check(hv_rule_url(0, 0, loc, 1024) == NULL, "1023-character URL", NULL);
+    memcpy(loc + 1020, ".jp2", 4);
+    loc[1024] = 0;
+    check(hv_rule_url(0, 0, loc, 1025) == NULL, "1024-character URL", NULL);
+    memcpy(loc + 1021, ".jp2", 4);
+    loc[1025] = 0;
+    check(hv_rule_url(0, 0, loc, 1026) == NULL,
+          "1025-character URL", NULL);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: test_profile <vector directory>\n");
@@ -277,6 +326,8 @@ int main(int argc, char **argv) {
     check_headers_scope(argv[1]);
     check_file_rules(argv[1]);
     check_jpx_rules(argv[1]);
+    check_link_paths();
+    check_long_url();
     printf(failures ? "%d failures\n" : "all checks passed\n", failures);
     return failures != 0;
 }

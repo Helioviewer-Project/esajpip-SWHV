@@ -24,10 +24,10 @@ typedef struct {
 
 /* The inputs, opened when needed: open fills *in for input i, whose path
  * stays valid until hv_merge_files returns and whose bytes stay valid until
- * close; 0, or -1 with a message in error. hv_merge_files opens each input
- * twice, to check it and to copy it, and has at most two open at a time:
- * the first input, which every later one is compared with, and the one at
- * hand. An input must have the same size both times. */
+ * close; 0, or -1 with a message in error. hv_merge_files opens the first
+ * input once and keeps it open. It opens every later input twice, checking
+ * the size and parsed structure again before writing from the second open.
+ * At most two inputs are open at a time. */
 typedef struct {
     int (*open)(void *context, size_t i, hv_merge_input *in, char *error, size_t error_size);
     void (*close)(void *context, size_t i, hv_merge_input *in);

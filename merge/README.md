@@ -22,13 +22,14 @@ The options are hvJP2K's:
 - `-s`: more arguments from a file, split as Python's `shlex.split` does
   (quotes and backslashes), after those of the command line.
 
-The inputs are read in two passes, as hvJP2K does: each is mapped into
-memory, checked and unmapped, then mapped again while its codestream is
-copied to the output. Only the first input, which every other one is
-compared with, stays mapped throughout, so at most two are mapped at a
-time; an input whose size changed in between is an error. The output is written to a temporary file next to it and
-renamed into place; on error nothing is written. Exit status: 0, 1 on
-error, 2 on usage errors.
+The inputs are read in two passes, as hvJP2K does. The first is checked once
+and stays mapped throughout. Each later input is checked, unmapped, then
+mapped and checked again before its bytes are used. Its size and parsed
+structure must match the first pass. At most two inputs are mapped at a
+time. With `-links`, the second open supplies header and XML boxes; the
+codestream stays in the input JP2 file. The output is written to a temporary
+file next to it and renamed into place; on error nothing is written. Exit
+status: 0, 1 on error, 2 on usage errors.
 
 ## The output
 

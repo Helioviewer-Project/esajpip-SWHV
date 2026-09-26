@@ -220,7 +220,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs ACN v2 and `-icdPdus` regressions. |
-| `check-model.sh` | Checks that the C names of marker codes and box types (`../lib/hv_codes.h`) and the harness's box-type mapping agree with the ACN values; generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
+| `check-model.sh` | Checks `../lib/hv_codes.h` and the harness's box-type mapping against ACN values, repeated ACN encodings, the profile tile-part limit, and `../lib/generated/` against the model; generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. The rules on marker segment bodies (SIZ, COD, PLT entries, packet count) are `../lib/hv_rules.c`, shared with the reader. |
@@ -270,11 +270,19 @@ root.
 
    Advance the pin only deliberately, then regenerate and review the corpus
    in the same change.
-2. Run the complete generation and harness gate:
+2. Regenerate the reader's code with the same compiler:
+
+   ```sh
+   ASN1SCC_IMAGE=esajpip-asn1scc lib/generate.sh
+   ```
+3. Run the complete generation and harness gate:
 
    ```sh
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh
    ```
+
+   This checks that `lib/generated/` matches the model, so regenerate it
+   before running the gate.
 
    To retain the generated corpus, pass an empty output directory.
    It reports how many vectors were written and how many are valid at both
@@ -289,12 +297,6 @@ root.
    values impractical, and it cannot replace the JPEG 2000 cross-field and
    mutation checks. Small compiler regressions cover the backend mechanisms;
    `check-model.sh` covers their composition in the real model.
-3. Regenerate the reader's code, which the build compiles, with the same
-   compiler:
-
-   ```sh
-   ASN1SCC_IMAGE=esajpip-asn1scc lib/generate.sh
-   ```
 4. Run the server tests, and the reader and transcoder tests, which check
    the JP2 labels too; read "When a vector fails" for anything red:
 
@@ -450,6 +452,16 @@ that owns the value, and preserves mapping functions when patching measured
 lengths. `build-asn1scc.sh` runs the upstream C cases and byte-exact wire
 checks. `check-model.sh` then generates and runs the complete JP2/JPX model
 under strict C11, ASan and UBSan.
+
+Patch `0006` makes `CONTAINING` wrappers validate constrained referenced
+subtypes. In this model it changes only the validator calls for
+`Siz-Profile`, `FragmentList-Profile`, and `DataEntryUrl-Profile`. The profile
+decoder now reports `decode` for invalid SIZ origins, sampling, or dimensions
+and for a nonzero URL version before the shared C rules run. The reader keeps
+those C rules for named diagnostics; the corpus harness checks representative
+overlapping cases against the subtype validators. The 1,024-character LOC
+maximum in `DataEntryUrl` is a corpus allocation bound, not a served-profile
+limit: the server, reader, and merger impose no 1,024-character cap.
 
 These checks deliberately separate compiler responsibility from model
 responsibility. ASN.1 constraints and ACN regions validate local shape and
@@ -671,11 +683,13 @@ Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 1. update `spec/VERSION` when the upstream compiler revision changes, remove
    from `asn1scc-patches/series` the patches that revision already contains,
    and run its regressions;
-2. rerun Quick start step 2;
+2. regenerate `lib/generated/` (Quick start step 2), then run
+   `check-model.sh` (Quick start step 3), which checks the generated reader
+   code against the model;
 3. diff `manifest.tsv` against the previous one — new or removed rows must be
    explainable by the model, harness, or compiler change; label flips are
    findings;
-4. rerun Quick start steps 3 and 4 (`lib/generate.sh` and both test runners);
+4. rerun Quick start step 4 (the server and tool test runners);
 5. commit the changed inputs, `VERSION`, `lib/generated/`, and corpus together.
 
 Never edit vector files or manifest labels by hand.
