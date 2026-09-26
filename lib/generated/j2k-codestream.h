@@ -299,7 +299,6 @@ typedef struct {
     unsigned long rgn:1;
     unsigned long tlm:1;
     unsigned long plm:1;
-    unsigned long ppm:1;
     unsigned long crg:1;
     unsigned long com:1;
     unsigned long tilePart:1;
@@ -313,7 +312,6 @@ typedef struct {
     OpaqueSegment rgn;
     OpaqueSegment tlm;
     OpaqueSegment plm;
-    OpaqueSegment ppm;
     OpaqueSegment crg;
     ComSegment_Profile com;
     TilePart_Profile tilePart;

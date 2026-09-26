@@ -129,6 +129,7 @@ jp2-rule-plt.second-part-long-41.jp2	jp2	invalid	invalid	plt.coverage	plt.second
 jp2-rule-plt.zero-length-44.jp2	jp2	invalid	invalid	plt.zero-length	plt.zero-length	zero Iplt for the only logical packet	-
 jp2-rule-plt.packet-count-45.jp2	jp2	invalid	invalid	plt.packet-count	plt.packet-count	nonzero Iplt beyond the only logical packet	-
 jp2-rule-plt.value-overflow-46.jp2	jp2	invalid	invalid	plt.value-overflow	plt.value-overflow	Iplt value 2^64+1 wraps to data length 1	-
+jp2-rule-main.packet-headers-moved-48.jp2	jp2	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -342,6 +343,7 @@ jpx-embedded-rule-plt.second-part-long-41.jpx	jpx	invalid	invalid	plt.coverage	p
 jpx-embedded-rule-plt.zero-length-44.jpx	jpx	invalid	invalid	plt.zero-length	plt.zero-length	zero Iplt for the only logical packet	-
 jpx-embedded-rule-plt.packet-count-45.jpx	jpx	invalid	invalid	plt.packet-count	plt.packet-count	nonzero Iplt beyond the only logical packet	-
 jpx-embedded-rule-plt.value-overflow-46.jpx	jpx	invalid	invalid	plt.value-overflow	plt.value-overflow	Iplt value 2^64+1 wraps to data length 1	-
+jpx-embedded-rule-main.packet-headers-moved-48.jpx	jpx	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-

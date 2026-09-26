@@ -156,7 +156,6 @@ MainSegment-Profile [] {
     rgn         [present-when (code == 65374)],
     tlm         [present-when (code == 65365)],
     plm         [present-when (code == 65367)],
-    ppm         [present-when (code == 65376)],
     crg         [present-when (code == 65379)],
     com         [present-when (code == 65380)],
     tilePart    [present-when (code == 65424)],

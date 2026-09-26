@@ -319,7 +319,7 @@ Two conventions worth knowing before you edit:
   with profile bodies inside `CONTAINING`, a copy with profile types
   substituted. It has fewer `CHOICE` alternatives or a smaller marker-code
   value set where the server rejects a whole class (`TileBody-Profile` is
-  `plt` only; `MainMarkerCode-Profile` excludes COC and POC). The deliberate
+  `plt` only; `MainMarkerCode-Profile` excludes COC, POC and PPM). The deliberate
   type-level exception is an `other` alternative for marker codes the profile
   parser skips as opaque data. Cross-field rules also express the two deployed
   leniencies: missing JPX `rreq` and trailing zero-valued PLT entries. An
@@ -475,8 +475,8 @@ From each base:
    structural change per cross-field rule — a second COD or QCD, no QCD, a
    QCD after the tile-part, no PLT, contradictory TNsot, 65 tile-parts, a
    packet length beyond or short of the data, COD twice in a tile header or
-   in a second tile-part, COD, QCD or COM in a tile header, COC or POC in
-   the main header, 2:1 component sampling, a packet count above 2^31, no
+   in a second tile-part, COD, QCD or COM in a tile header, COC, POC or PPM
+   in the main header, 2:1 component sampling, a packet count above 2^31, no
    `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` inside a
    `jpch`, fewer `jp2c` than `jpch`, no `jpch`, `jp2c` and `ftbl` in one
    JPX, two `dtbl`, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a

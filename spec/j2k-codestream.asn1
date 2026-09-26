@@ -133,9 +133,12 @@ TileSegment ::= SEQUENCE {
 -- Any marker code the server tolerates in that position; the listed
 -- alternatives are interpreted, everything else is `other` (skipped).
 -- COC (FF53) and POC (FF5F) are outside the value set: the server rejects
--- them because packet indexing is derived from the main COD alone.
-MainMarkerCode-Profile ::= INTEGER (65281..65362 | 65364..65374 | 65376..65534)
-                                                    -- FF01..FFFE minus COC/POC; SOC/SIZ excluded by rule
+-- them because packet indexing is derived from the main COD alone. PPM
+-- (FF60) is outside it too: it moves the packet headers into the main
+-- header, so the precinct data-bins, built from the tile-part data, would
+-- hold packet bodies without their headers.
+MainMarkerCode-Profile ::= INTEGER (65281..65362 | 65364..65374 | 65377..65534)
+                                                    -- FF01..FFFE minus COC/POC/PPM; SOC/SIZ excluded by rule
 -- PLT is the only tile-header segment the server accepts (the served
 -- tile-header data-bin is empty, so nothing else could reach the client).
 TileMarkerCode-Profile ::= INTEGER (65368..65368)
@@ -161,7 +164,6 @@ MainSegment-Profile ::= SEQUENCE {
     rgn         OpaqueSegment OPTIONAL,
     tlm         OpaqueSegment OPTIONAL,
     plm         OpaqueSegment OPTIONAL,
-    ppm         OpaqueSegment OPTIONAL,
     crg         OpaqueSegment OPTIONAL,
     com         ComSegment-Profile OPTIONAL,
     tilePart    TilePart-Profile OPTIONAL,

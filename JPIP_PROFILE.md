@@ -144,11 +144,14 @@ expectations, not that it conforms completely to JP2 or JPX.
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
   marker and must contain all information needed to decode every tile-part.
-  `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers
-  are rejected because tile-part headers are not delivered to the client.
-  Main-header `COC` and `POC` markers are rejected because packet indexing is
-  derived from the main `COD` marker. Main-header component quantization and
-  region markers are preserved but do not affect packet indexing.
+  `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers,
+  `PPT` included, are rejected because tile-part headers are not delivered to
+  the client. Main-header `COC` and `POC` markers are rejected because packet
+  indexing is derived from the main `COD` marker. A main-header `PPM` marker is
+  rejected because it moves the packet headers into the main header: precinct
+  data-bins, built from the tile-part data, would hold packet bodies without
+  their headers. Main-header component quantization and region markers are
+  preserved but do not affect packet indexing.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - SOP marker segments are outside the served profile because they precede the

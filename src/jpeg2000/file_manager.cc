@@ -60,6 +60,7 @@ namespace jpeg2000 {
 #define COC_MARKER 0xFF53
 #define QCD_MARKER 0xFF5C
 #define POC_MARKER 0xFF5F
+#define PPM_MARKER 0xFF60
 #define SOT_MARKER 0xFF90
 #define PLT_MARKER 0xFF58
 #define COM_MARKER 0xFF64
@@ -307,6 +308,12 @@ namespace jpeg2000 {
                     // Packet indexing is derived from the main COD marker.
                     // Component-specific coding and progression changes need
                     // their own indexing model and cannot be skipped safely.
+                    return false;
+
+                case PPM_MARKER:
+                    // PPM moves the packet headers into the main header, so
+                    // the precinct data-bins, built from the tile-part data,
+                    // would hold packet bodies without their headers.
                     return false;
 
                 case SOT_MARKER: {

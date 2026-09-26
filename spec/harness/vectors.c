@@ -53,7 +53,7 @@
 /* Marker codes and box types (decimal, as in the .asn1). */
 enum {
     MC_SOC = 65359, MC_SIZ = 65361, MC_COD = 65362, MC_QCD = 65372,
-    MC_COC = 65363, MC_POC = 65375,
+    MC_COC = 65363, MC_POC = 65375, MC_PPM = 65376,
     MC_PLT = 65368, MC_COM = 65380, MC_SOT = 65424, MC_SOD = 65427, MC_EOC = 65497
 };
 enum {
@@ -1086,14 +1086,18 @@ static void add_main_opaque(Jp2Family *f, int box, int code) {
     if (code == MC_COC) {
         seg->exist.coc = 1;
         OCTETS(seg->coc.body.data, "\x00\x00\x00", 3);
-    } else {
+    } else if (code == MC_POC) {
         seg->exist.poc = 1;
         OCTETS(seg->poc.body.data, "\x00\x00\x00", 3);
+    } else {
+        seg->exist.ppm = 1;                                /* Zppm 0, Nppm 0 */
+        OCTETS(seg->ppm.body.data, "\x00\x00\x00\x00\x00", 5);
     }
     cs->segments.nCount = 4;
 }
 static void rule_main_coc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_COC); }
 static void rule_main_poc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_POC); }
+static void rule_main_ppm(Jp2Family *f, int box) { add_main_opaque(f, box, MC_PPM); }
 static void rule_ftyp_brand(Jp2Family *f, int box) {
     (void) box;
     memcpy(f->boxes.arr[1].payload.u.ftyp.brand.arr, "abcd", 4);           /* wrong brand */
@@ -1198,6 +1202,7 @@ static const RuleMutant rule_mutants[] = {
     { "plt.packet-count", rule_extra_nonzero_iplt, "nonzero Iplt beyond the only logical packet", 0, 0, X_STD },
     { "plt.value-overflow", rule_iplt_value_overflow, "Iplt value 2^64+1 wraps to data length 1", 0, 0, X_STD },
     { "plt.sum-overflow", rule_iplt_sum_overflow, "Iplt lengths UINT64_MAX+3 wrap to data length 2", 0, 1, X_STD },
+    { "main.packet-headers-moved", rule_main_ppm, "PPM in the main header: profile invalid", 0, 0, X_PROF },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
