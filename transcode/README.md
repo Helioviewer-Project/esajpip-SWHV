@@ -77,7 +77,8 @@ declarations), so the two can differ for XML that lxml would rewrite.
 
 | File | Role |
 | --- | --- |
-| `hv_transcode.c` | The command: options, mapping, boxes (the codestream is transcoded straight into its `jp2c` box), `-x`, output file. |
+| `hv_transcode.c` | The command: options, mapping the input, writing the output file. |
+| `transcode_file.c` | `hv_transcode_file`: boxes (the codestream is transcoded straight into its `jp2c` box) and `-x`. |
 | `transcode.h` / `.c` | `hv_transcode_codestream` (`transcode_codestream`): reads the codestream and writes its main header with the new COD, lays out the tile twice with `hv_geometry` (input and new precincts), checks the memory limits and the code-block partition, and writes the tile as one tile-part. |
 | `tier2.h` / `.c` | Packets (T.800 B.9, B.10) on an `hv_geometry` and its packet order. `hv_read_packets` decodes the headers in place, tile-part by tile-part, and records each code-block's contributions per layer; `hv_write_packets` encodes them, either for the lengths only (for the PLT) or into the output, copying the code-block bytes from the input. |
 | `fuzz_transcode.c` | libFuzzer target: an accepted input's output must transcode to itself. |
@@ -99,7 +100,21 @@ cmake --build fuzz --target fuzz_transcode
 fuzz/transcode/fuzz_transcode -max_len=131072 corpus/
 ```
 
-Against hvJP2K's fixtures (`hvJP2K/jp2/test/transcode`): with `-x`, every
-file in `orig/` and `sop_eph/` gives its `trans/` file byte for byte, except COM
-(the input's comment is kept, while Kakadu writes its own). hvJP2K's `integrity.py` cases are all rejected; packet-level
-messages match.
+Tests, separate from the server's (`test/`):
+
+```sh
+transcode/test/run.sh             # or: transcode/test/run.sh sanitize
+TRANSCODE_ARCHIVE=~/AIA:~/EUI transcode/test/run.sh
+```
+
+`test_transcode` checks that every file in `test/fixtures/input/`
+transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
+(COM aside) and that each output transcodes to itself; tile-parts split
+every way T.800 allows and broken in the ways it does not; malformed main
+headers; 2,000 corrupted tiles, each rejected or giving a stable output;
+the SOP, EPH and bit-stuffing rules; and the memory bounds. `cli_test.sh`
+checks the command: options, exit status, in-place replacement keeping the
+mode, and nothing written or left behind on failure. With
+`TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
+transcoded and checked for a stable output too. The fixtures are described
+in `test/fixtures/FIXTURES.md`.

@@ -1,9 +1,15 @@
 # hv_transcode: the C port of hvJP2K's transcoder, on the jpeg2000_io
 # library in ../lib.
 
-add_executable(hv_transcode hv_transcode.c transcode.c tier2.c)
+add_executable(hv_transcode hv_transcode.c transcode_file.c transcode.c tier2.c)
 esajpip_configure_target(hv_transcode)
 target_link_libraries(hv_transcode PRIVATE jpeg2000_io)
+
+# Tests (test/), separate from the server's.
+option(ESAJPIP_TRANSCODE_TESTS "Build and register the hv_transcode tests" OFF)
+if(ESAJPIP_TRANSCODE_TESTS)
+    add_subdirectory(test)
+endif()
 
 # fuzz_transcode: a libFuzzer target (Clang only).
 option(ESAJPIP_FUZZ "Build the libFuzzer target fuzz_transcode" OFF)
