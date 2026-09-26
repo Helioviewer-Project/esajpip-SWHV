@@ -27,9 +27,9 @@ patches them (`Acn_PatchDet_*`), and the decoder decodes it into the
    It then writes `len` directly, while each element encoder still calls
    `Acn_PatchDet_U8` on an `AcnInsertedFieldRef` that no `InitDet` set up
    (position 0 of the stream). With optimization gcc reports
-   `'i1' may be used uninitialized`; at run time the read lands anywhere,
-   typically a crash. A list that may be empty has no element to take
-   `len` from at all.
+   `'i1' may be used uninitialized`; at run time the read can crash or
+   produce a wrong determinant. A list that may be empty has no element to
+   take `len` from at all.
 
 2. **The determinant is also consumed by a sibling** (`head [size len]`
    beside `payload <len> []`). The SEQUENCE treats `len` as deferred and
@@ -97,7 +97,8 @@ END
 
 `repro.c` encodes and decodes a `Msg` of `min` with two 2-byte items;
 `repro-sibling.c` encodes and decodes a `Msg` of `sibling` with a 2-byte
-`head` and `data`, then expects a 3-byte `head` to be rejected. `run.sh`
+`head` and `data`, prints the encoder's error code, then expects a 3-byte
+`head` to be rejected. `run.sh`
 generates both, builds them with ASan and UBSan and runs them:
 
 ```sh
@@ -114,14 +115,14 @@ SUMMARY: AddressSanitizer: SEGV .../min/min.c:135 in Msg_ACN_Encode
 .../sibling/sibling.c:180:23: error: 'Msg_len' undeclared (first use in this function)
 ```
 
-Expected:
+With the two determinant fixes, including the error output discussed below:
 
 ```
 == min
 encode ok=1: 02 02 A0 A0 A1 A1
 decode ok=1
 == sibling
-encode ok=1: 02 AA AA BB BB
+encode ok=1 err=203: 02 AA AA BB BB
 decode ok=1
 head 3, data 2: encode rejected
 ```
@@ -218,7 +219,7 @@ if (ret) {
     ...
 ```
 
-## Verification
+## Verification in the initial investigation
 
 The pinned 4.9.3.0 build with `BackendAst.dll` rebuilt from the patched
 source (`fsc` against the other prebuilt assemblies; NuGet was not
@@ -232,22 +233,49 @@ reachable, so the compiler was not rebuilt as a whole):
   018 do not (`'Msg_len'` / `'Requirements_ml' undeclared`).
 - The regression's command line (`-c -x ast.xml -uPER -ACN --acn-v2
   -typePrefix ASN1SCC_ -renamePolicy 3 -fp AUTO -equal -atc -fpWordSize 8
-  -wordSize 8`) on all 331 cases of `v4Tests/test-cases/acn` (each `.acn`
+  -wordSize 8`) on the ACN cases of that `v4Tests` snapshot (each `.acn`
   file and each `--TCLS` line): byte-identical output with and without the
   patches. 016 to 018 then build with the generated Makefile (`-Wall
   -Wextra -Werror`); without the patches they do not.
 - A JPEG 2000 model (esajpip's `spec/`): identical output.
 
-Not run: `regression` itself and the rest of `v4Tests`, and backends other
-than C (the change is in the shared backend, but the new cases are
-`C_ONLY`).
+At that point `regression` itself and the other backends had not been run
+(the new cases are `C_ONLY`).
 
-## Also noticed (separate)
+## Revalidation against the pinned source (2026-09-26)
+
+The complete pinned compiler was built with no patches, the first two
+patches, the first three patches, and all four patches. With GCC 13.3.0,
+the unpatched `min` encoder emits `02 02 A0 A0 A1 A1`, but its decoder
+returns false; the unpatched `sibling` generated C does not compile because
+`Msg_len` is undeclared. The first two patches make `min` round-trip, but
+`sibling` still does not compile. Adding `deferred-sibling-consumers.patch`
+makes both reproducers pass and rejects the mismatched sizes. The complete
+patched build passes `25-ACNV2-BOUNDARIES`, `runWireTests.sh`, and
+`spec/check-model.sh`. The AddressSanitizer crash above is the outcome
+recorded with GCC 11.4.0, not a repeatable outcome on GCC 13.3.0.
+
+## Other confirmed behavior (separate from these patches)
 
 - A consumer's `PatchDet` is followed by
   `*pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;` whether or not it
-  failed, so a successful encode can return with `*pErrCode` 203.
-- An element or reference type whose determinant-sized field has a fixed
-  size (`OCTET STRING (SIZE (2))`) gets
-  `Acn_PatchDet_U8((asn1SccUint)pVal->data.nCount, ...)`, but a fixed-size
-  OCTET STRING has no `nCount`: the generated code does not compile.
+  failed. `repro-sibling.c` now prints `encode ok=1 err=203` on a successful
+  encode with the fully patched compiler. The return flag is true and the
+  wire bytes are correct. `lib/hv_writer.c` checks that flag, so this has no
+  observed effect on esajpip. The compiler's intended meaning for
+  `pErrCode` on success is not documented here; this is a status-output
+  inconsistency, not a demonstrated encoding failure.
+- `fixed.asn1` / `fixed.acn` give the same determinant relationship with
+  `OCTET STRING (SIZE (2))`. The fully patched compiler emits both
+  `pVal->data.nCount` and `pVal->head.nCount` in `fixed.c`, although these
+  fixed-size fields have no `nCount`; compiling it fails on both references.
+  This is not covered by the variable-size cases 016 to 018.
+
+To reproduce the fixed-size failure from this directory with the pinned
+compiler (including the patches), set `ASN1SCC` as in the main reproducer:
+
+```sh
+out=$(mktemp -d)
+$ASN1SCC -c -ACN --acn-v2 -o "$out" fixed.asn1 fixed.acn
+cc -std=c11 -I "$out" -c "$out/fixed.c" -o "$out/fixed.o"
+```

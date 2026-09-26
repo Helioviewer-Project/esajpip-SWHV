@@ -24,7 +24,7 @@ git -C "$source_repo" cat-file -e "$version^{commit}"
 mkdir "$source_tree"
 git -C "$source_repo" archive "$version" | tar -x -C "$source_tree"
 
-# Local fixes not yet upstream, in series order (asn1scc-patches/README.md).
+# Fixes absent from the pinned upstream revision, in series order.
 while IFS= read -r patch_name; do
     [ -n "$patch_name" ] || continue
     patch -s -d "$source_tree" -p1 < "$patch_dir/$patch_name"

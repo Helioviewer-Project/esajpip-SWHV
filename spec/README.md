@@ -217,9 +217,9 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`) in full, other boxes opaque. Imports the codestream. |
 | `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. The reader also checks values against the profile types `Siz-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile` (`../lib/generate.sh`). |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
-| `asn1scc-patches/` | Local compiler fixes that upstream does not have yet, applied to `VERSION` in `series` order, and a reference archive of the former fixes (not applied). |
+| `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
-| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs upstream ACN v2 regressions. |
+| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs ACN v2 and `-icdPdus` regressions. |
 | `check-model.sh` | Checks that the C names of marker codes and box types (`../lib/hv_codes.h`) and the harness's box-type mapping agree with the ACN values; generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |

@@ -110,7 +110,7 @@ An alternative fix in `DAstACNDeferred.fs` would give the temporary an
 initializer, but that needs a per-type initial value (a valid enumerant
 for enumerated types), while the guard needs none.
 
-## Verification
+## Verification in the initial investigation
 
 With the pinned 4.9.3.0 build, using the patched `acn_c.stg` (asn1scc loads
 `.stg` files from the current directory before its own):
@@ -131,13 +131,32 @@ With the pinned 4.9.3.0 build, using the patched `acn_c.stg` (asn1scc loads
   that reproduces the report at once with the unpatched code runs clean
   with the patched code.
 
-Not run: `regression` with `-acnv2` and the rest of `v4Tests` (the
-compiler was not rebuilt; only the template changes).
+At that point the compiler had not been rebuilt as a whole, and
+`regression` with `-acnv2` had not been run.
 
-## Also noticed (separate, not verified by compiling)
+## Revalidation against the pinned source (2026-09-26)
 
-In the Rust output for the same input, `Msg_a_ACN_Decode` declares
+The unmodified `161cc246` compiler still reports the Boolean load under
+`-fsanitize=bool`. A complete Docker build with all patches in `series`
+prints `0 byte(s): decode ok=0 err=24` without a sanitizer report. Its
+`25-ACNV2-BOUNDARIES` regression, `runWireTests.sh`, and the full model gate
+in `spec/check-model.sh` pass. The model gate also confirms that
+`lib/generated/` matches this compiler.
+
+## Also noticed in Rust (separate)
+
+The pinned compiler still generates a Rust `Msg_a_ACN_Decode` that declares
 `let mut Msg_a_more: bool = false;`, which shadows its
 `Msg_a_more: &mut acn::AcnInsertedFieldRef` parameter, and never writes
 the parameter. `Msg_ACN_Decode` then reads `Msg_a_more.value` from its
-default, so `b` would never be decoded.
+default, so it would not decode `b`. This was verified in generated source;
+the Rust output was not compiled or run.
+
+The same `min.asn1` and `min.acn` reproduce the generated source from this
+directory, with `ASN1SCC` set as in the C reproducer:
+
+```sh
+out=$(mktemp -d)
+$ASN1SCC -Rust -ACN --acn-v2 -o "$out" min.asn1 min.acn
+grep -n 'Msg_a_more' "$out/min.rs"
+```

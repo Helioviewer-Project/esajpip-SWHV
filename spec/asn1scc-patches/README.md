@@ -2,9 +2,9 @@
 
 [`../build-asn1scc.sh`](../build-asn1scc.sh) applies the patches listed in
 [`series`](series), in that order, to the upstream revision pinned in
-[`../VERSION`](../VERSION) before building the compiler. Each one is a local
-fix that upstream does not have yet. Remove it from `series` (and the file)
-when `VERSION` moves to an upstream revision that contains the fix.
+[`../VERSION`](../VERSION) before building the compiler. Each one fixes a
+bug still present in that pinned upstream revision. When updating `VERSION`,
+retest each bug against the new revision and remove any patch it supersedes.
 
 Applied now:
 
@@ -49,7 +49,11 @@ deferred ACN (`--acn-v2`) generation and apply, in that order, to the
 unmodified ASN1SCC commit `4434cad8bbcc436183ce4cc15721392be1466e36`, not to
 `VERSION`. `VERSION` now pins the upstream fix for
 [issue #415](https://github.com/esa/asn1scc/issues/415), which replaces them.
-They are retained as a reference.
+They are retained as a reference. Revalidation on 2026-09-26 confirmed that
+all three apply in order to an archive of `4434cad8`, and that
+`sh v4Tests/scripts/runDeferredAcnRegressions.sh` passes after a complete
+build of that patched archive. The unmodified pinned `VERSION` also passes
+the former issue #415 cases in `25-ACNV2-BOUNDARIES`, without these patches.
 
 Each contains one fix and the regression that demonstrates it:
 

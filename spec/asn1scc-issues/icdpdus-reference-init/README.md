@@ -65,7 +65,7 @@ of the call graph for init functions. Regression check:
 `v4Tests/test-cases/icd-pdus/001.asn1` and `001_test.c`, run by the new
 `v4Tests/scripts/runIcdPdusTests.sh` (`spec/build-asn1scc.sh` runs it).
 
-## Verification
+## Verification in the initial investigation
 
 `BackendAst.dll` rebuilt from the patched source against the prebuilt
 4.9.3.0 assemblies (with the other three patches):
@@ -77,4 +77,14 @@ of the call graph for init functions. Regression check:
   code differs from the workaround's only in the standalone ACN functions of
   those two types, which the workaround had made PDUs.
 
-Not run: the upstream `regression` tool (it does not use `-icdPdus`).
+The upstream `regression` tool does not use `-icdPdus`.
+
+## Revalidation against the pinned source (2026-09-26)
+
+The complete unmodified `161cc246` compiler still generates a call to
+`Mask_Initialize` without its definition, so `run.sh` fails to link. The
+same failure remains with the first three patches. Adding
+`icdpdus-reference-init.patch` makes `run.sh` print
+`Rec initialized, valid=1`, and the dedicated `runIcdPdusTests.sh`
+regression passes. `spec/check-model.sh` also confirms that the committed
+reader code in `lib/generated/` matches the fully patched compiler.
