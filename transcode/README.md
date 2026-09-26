@@ -16,7 +16,7 @@ writes headers, and lays out precincts and packets, with `jpeg2000_io`
 
     hv_transcode [-x] [-p W,H] input output
 
-- `-p W,H`: precinct width and height, powers of 2 from 2 to 32768; default
+- `-p W,H`: precinct width and height, powers of 2 from 2 to 32,768; default
   `128,128`.
 - `-x`: rewrite the first top-level XML box as its root element alone, as
   hvJP2K's `--xml-rewrite` does (see below).
@@ -24,11 +24,16 @@ writes headers, and lays out precincts and packets, with `jpeg2000_io`
 The input is mapped into memory. The file keeps its boxes, in order: the
 `jp2c` box is transcoded, the others are copied as read. The output is
 written to a temporary file next to it with the input's permissions
-(without the setuid, setgid and sticky bits) and renamed into place, so
-input and output may be the same file; an output that is a symbolic link is
-written where the link points. On error nothing is written. Superboxes
+(without the setuid, setgid and sticky bits) and renamed into place
+(`hv_file`, in `../lib/`), so input and output may be the same file; an
+output that is a symbolic link is written where the link points, the file
+it names created if need be. On error nothing is written. Superboxes
 nested more than `HV_BOX_DEPTH_MAX` (32) deep are refused. Exit status: 0,
 1 on error, 2 on usage errors.
+
+A linked JPX file (`hv_merge -links`) records where each codestream is in
+its JP2 file. Transcoding such a file, in place or not, moves its
+codestream: merge the JPX file again from the new files.
 
 ## Supported input
 
@@ -43,11 +48,12 @@ dimensions up to `INT32_MAX`, no COC, POC or PPM). The header boxes, which
 the output keeps as read, must pass `hv_check_jp2h` (T.800 I.5.3: one
 `jp2h` before the codestream, its boxes well formed and in order, and
 `ihdr` and `bpcc` agreeing with SIZ). What else the profile asks for, the
-transcoder writes: the tile-parts and a COD without SOP.
-Errors from the shared rules name the rule, as in `siz.zero-origin`. The
-output is at most `INT_MAX` bytes and passes the whole profile
-(`HV_PROFILE`): the tests check every file they transcode, and the fuzz
-target every codestream whose main header is within the profile.
+transcoder writes: the tile-parts and a COD without SOP. Errors from the
+reader name the rule where a shared one fails, and the offset in the file,
+as in `siz.zero-origin at 410`. The output is at most `INT_MAX` bytes and
+passes the whole profile (`HV_PROFILE`): the tests check every file they
+transcode, and the fuzz target every codestream whose main header is
+within the served profile.
 
 Within that, as in hvJP2K: any number of tile-parts (Psot = 0 allowed on
 the last one), any progression order, only PLT and COM in tile-part
@@ -62,8 +68,11 @@ other main-header segment, COM and RGN included, is copied as read.
 Tile-part COM is dropped with the tile-part headers.
 
 `hv_transcode_codestream`, the codestream level that the tests and the
-fuzz target also use, does not apply the profile: it takes nonzero origins
-and sub-sampled components too, and rejects COC, POC and PPM on its own.
+fuzz target also use, does not apply the profile unless given
+`HV_PROFILE_HEADERS` (its only other flag value is 0): it takes nonzero
+origins and sub-sampled components too, and rejects COC, POC and PPM on
+its own. It reads the input with `HV_ACCEPT_PLT_PADDING`, zero PLT entries
+accepted at the end of each tile-part, as the input's PLT is not used.
 
 Three bounds keep memory in check where a header can declare much more
 than its data holds: at most 65,536 component-resolutions (components
@@ -73,7 +82,9 @@ at most 250,000 code-blocks (under 100 bytes of state each) and at most
 output, and 64 bytes per precinct: 40 to put the packets in order, 24 to
 index its tag trees). The input's packets need no bound of their own: each
 takes at least a byte of its tile's data. Each contribution of a
-code-block to a layer that they signal takes 32 bytes.
+code-block to a layer that they signal takes 32 bytes. A file beyond a
+bound fails with a message that states it, as in "code-block count exceeds
+supported limit (250,000)".
 
 Packet headers are read as T.800 requires, where hvJP2K is lenient: an
 SOP marker segment must have Lsop = 4 and Nsop equal to the packet's index
@@ -152,8 +163,8 @@ on malformed XML); tile-parts split every way T.800 allows and broken in
 the ways it does not; malformed main headers; 2,000 corrupted tiles, each
 rejected or giving a stable output; the SOP, EPH and bit-stuffing rules;
 and the memory bounds. `cli_test.sh` checks the command: options, exit
-status, in-place replacement keeping the mode, and nothing written or left
-behind on failure. With
+status, in-place replacement keeping the mode, output through a symbolic
+link, and nothing written or left behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
 in `test/fixtures/FIXTURES.md`. The same run includes the reader's tests

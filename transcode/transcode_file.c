@@ -1,11 +1,10 @@
 /* transcode_file.c: hv_transcode_file, see transcode.h. */
 #include <limits.h>
-#include <stdio.h>
 #include <string.h>
 
+#include "hv_error.h"
 #include "hv_reader.h"
 #include "transcode.h"
-
 
 /* ------------------------------------------------------------------------
  * XML (-x)
@@ -151,17 +150,13 @@ static int check_children(const uint8_t *buf, const hv_box *parent, int depth, c
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
         if (!hv_is_superbox(box.type))
             continue;
-        if (depth + 1 > HV_BOX_DEPTH_MAX) {
-            snprintf(error, size, "boxes nested deeper than %d at %zu", HV_BOX_DEPTH_MAX,
-                     box.start);
-            return -1;
-        }
+        if (depth + 1 > HV_BOX_DEPTH_MAX)
+            return hv_fail(error, size, "boxes nested deeper than %d at %zu", HV_BOX_DEPTH_MAX,
+                           box.start);
         if (check_children(buf, &box, depth + 1, error, size) != 0)
             return -1;
     }
-    if (status < 0)
-        snprintf(error, size, "%s at %zu", message, at);
-    return status < 0 ? -1 : 0;
+    return status < 0 ? hv_fail(error, size, "%s at %zu", message, at) : 0;
 }
 
 /* Transcodes a JP2 file that passed hv_check_jp2 into out. The boxes come
@@ -189,11 +184,9 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
         }
         if (box.type == HV_BOX_XML && !done_xml) {
             size_t x0, x1;
-            if (xml_root(buf + box.payload, box.end - box.payload, &x0, &x1) != 0) {
-                snprintf(error, error_size, "XML box at %zu has no well-formed root element",
-                         box.start);
-                return -1;
-            }
+            if (xml_root(buf + box.payload, box.end - box.payload, &x0, &x1) != 0)
+                return hv_fail(error, error_size,
+                               "XML box at %zu has no well-formed root element", box.start);
             if (hv_begin_box(out, HV_BOX_XML, 0, &start) != 0 ||
                 hv_write_bytes(out, buf + box.payload + x0, x1 - x0) != 0 ||
                 hv_end_box(out, start) != 0)
@@ -206,11 +199,8 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
         if (hv_write_bytes(out, buf + box.start, box.end - box.start) != 0)
             return -1;
     }
-    if (status < 0) {       /* not reached: hv_check_jp2 read the same boxes */
-        snprintf(error, error_size, "%s at %zu", message, at);
-        return -1;
-    }
-    return 0;
+    /* status < 0 is not reached: hv_check_jp2 read the same boxes. */
+    return status < 0 ? hv_fail(error, error_size, "%s at %zu", message, at) : 0;
 }
 
 int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
@@ -221,23 +211,17 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml
     int status;
 
     error[0] = 0;
-    if (out->error != NULL) {                   /* an earlier write failed */
-        snprintf(error, error_size, "%s", out->error);
-        return -1;
-    }
+    if (out->error != NULL)                     /* an earlier write failed */
+        return hv_fail(error, error_size, "%s", out->error);
     if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL ||
-        (rule = hv_check_jp2h(buf, size, &at)) != NULL) {
-        snprintf(error, error_size, "%s at %zu", rule, at);
-        return -1;
-    }
+        (rule = hv_check_jp2h(buf, size, &at)) != NULL)
+        return hv_fail(error, error_size, "%s at %zu", rule, at);
     status = transcode_boxes(buf, size, ppx, ppy, xml_rewrite, out, error, error_size);
-    if (status == 0 && out->size - out_start > INT_MAX) {
-        snprintf(error, error_size, "file.size-limit: output larger than INT_MAX bytes");
-        status = -1;
-    }
+    if (status == 0 && out->size - out_start > INT_MAX)
+        status = hv_fail(error, error_size, "file.size-limit: output larger than INT_MAX bytes");
     if (status != 0) {
         if (error[0] == 0)
-            snprintf(error, error_size, "%s", out->error ? out->error : "out of memory");
+            hv_fail(error, error_size, "%s", out->error ? out->error : "out of memory");
         hv_out_rewind(out, out_start);
     }
     return status;

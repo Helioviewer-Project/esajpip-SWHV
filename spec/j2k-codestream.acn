@@ -25,6 +25,12 @@
 
 J2K-Codestream DEFINITIONS ::= BEGIN
 
+-- Marker codes: the `code` of every segment list element.
+MainMarkerCode [encoding pos-int, size 16, endianness big]
+TileMarkerCode [encoding pos-int, size 16, endianness big]
+MainMarkerCode-Profile [encoding pos-int, size 16, endianness big]
+TileMarkerCode-Profile [encoding pos-int, size 16, endianness big]
+
 -- ---------------------------------------------------------------------------
 -- Layer 1
 -- ---------------------------------------------------------------------------
@@ -71,7 +77,7 @@ Opaque [] {
 }
 
 MainSegment [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],   -- FF52
     coc         [present-when (code == 65363)],   -- FF53
     qcd         [present-when (code == 65372)],   -- FF5C
@@ -101,7 +107,7 @@ TilePartRest [] {
 }
 
 TileSegment [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],
     coc         [present-when (code == 65363)],
     qcd         [present-when (code == 65372)],
@@ -150,7 +156,7 @@ ComSegment-Profile [] {
 }
 
 MainSegment-Profile [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],
     qcd         [present-when (code == 65372)],
     qcc         [present-when (code == 65373)],
@@ -178,7 +184,7 @@ TilePartRest-Profile [] {
 }
 
 TileSegment-Profile [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     plt         [present-when (code == 65368)]
 }
 

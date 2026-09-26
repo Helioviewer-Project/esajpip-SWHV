@@ -9,7 +9,7 @@ The origin-129 file is the exception: see below.
 
 | Input | Content | Progression | Input PLT |
 | --- | --- | --- | --- |
-| `2015_12_21__00_10_34_34__SDO_AIA_AIA_171.jp2` | SDO/AIA 171, 4096×4096 | RPCL | No |
+| `2015_12_21__00_10_34_34__SDO_AIA_AIA_171.jp2` | SDO/AIA 171, 4,096×4,096 | RPCL | No |
 | `solo_fsi174_510x514_LRCP.jp2` | EUI FSI 174 crop `[1200:1714, 1200:1710]` | LRCP | No |
 | `solo_fsi174_511x513_LRCP_PLT.jp2` | EUI FSI 174 crop `[1200:1713, 1200:1711]` | LRCP | Yes |
 | `solo_fsi174_509x513_PCRL.jp2` | EUI FSI 174 crop `[1200:1713, 1200:1709]` | PCRL | No |

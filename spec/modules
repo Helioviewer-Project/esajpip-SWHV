@@ -1,0 +1,8 @@
+# The modules of the model, in import order: spec/<name>.asn1 and
+# spec/<name>.acn each, generated into <name>.c and <name>.h. Read by
+# lib/generate.sh, spec/check-model.sh and lib/CMakeLists.txt; one name per
+# line, `#` starts a comment.
+j2k-headers
+j2k-codestream
+jp2-boxes
+jpeg2000-io

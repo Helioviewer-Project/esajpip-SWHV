@@ -1,5 +1,5 @@
 # The transcoder's tests, separate from the server's: built and registered
-# only with ESAJPIP_TOOL_TESTS, labelled "tools". Run them with
+# only with ESAJPIP_TOOL_TESTS, labeled "tools". Run them with
 # lib/test/run.sh.
 
 add_executable(test_transcode test_transcode.c ../transcode_file.c ../transcode.c ../tier2.c)

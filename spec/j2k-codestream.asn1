@@ -53,7 +53,11 @@ IMPORTS
 -- Layer 1 admits only the codes T.800 defines for each position. Layer 2
 -- skips unknown codes by length, as the server does, through an `other`
 -- alternative selected by a negated present-when (ACN 4.9 boolean
--- expressions); MainMarkerCode-Profile limits which codes get there.
+-- expressions); MainMarkerCode-Profile limits which codes get there. Each
+-- value set is the codes whose field ACN makes present: spec/check-model.sh
+-- checks that every code of it selects exactly one field. The four types
+-- have their own ACN encoding (16 bits, big-endian), so their generated
+-- decoders, which the reader could call, read a marker code.
 
 MainMarkerCode ::= INTEGER (65362 | 65363 | 65372 | 65373 | 65374 | 65375 |
                             65365 | 65367 | 65376 | 65379 | 65380 | 65424)
@@ -219,10 +223,11 @@ END
 --   COD and QCD appear in a tile-part header at most once each, and only in
 --     the first tile-part of the tile (A.6.1, A.6.4).
 --   The OPTIONAL that is present is the one `code` selects (automatic:
---     present-when). A code with no field of its own decodes with none
---     present; the decoder's constraint check on the MainMarkerCode or
---     TileMarkerCode value set rejects it, so main.marker-code
---     (harness/crossfield_impl.h) cannot fire at layer 1.
+--     present-when). A code with no field of its own would decode with
+--     none present, but no such code is in the MainMarkerCode or
+--     TileMarkerCode value set (spec/check-model.sh), so the decoder's
+--     constraint check rejects it: reason `decode`, where the reader says
+--     main.marker-code. The harness has no C rule for it.
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
 --   Where a single unsubsampled tile with zero image and tile origins uses
 --     COD without packet-layout overrides and every tile-part has PLT, the
@@ -234,7 +239,11 @@ END
 --     TileMarkerCode-Profile / TileSegment-Profile admit only PLT, so a tile
 --     header carrying COD, QCD, COM or anything else fails to decode at
 --     layer 2.)
---   1..64 tile-parts in total (single tile, so per tile == total).
+--   1..64 tile-parts in total (single tile, so per tile == total). In the
+--     harness TilePart-Profile's TPsot (0..63) and TNsot (0..64) reject a
+--     65th tile-part first (reason `decode`); the reader names it
+--     codestream.tile-part-limit (HV_PROFILE_TILE_PARTS, which
+--     spec/check-model.sh compares with TilePart-Profile).
 --   Every tile-part header holds at least one PLT segment (ReadSODMarker).
 --   Each COD-derived packet has a nonzero Iplt; only zero entries after the
 --     final packet are accepted as deployed-file padding.

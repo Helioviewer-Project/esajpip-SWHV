@@ -13,10 +13,8 @@ BoxHeader [] {
     xlbox       [encoding pos-int, size 64, endianness big, present-when (lbox == 1)]
 }
 
-Brand [encoding pos-int, size 32, endianness big]
-
 FtypHeader [] {
-    brand       [],
+    brand       [],                                -- Brand: jp2-boxes.acn
     minor       [encoding pos-int, size 32, endianness big]
 }
 

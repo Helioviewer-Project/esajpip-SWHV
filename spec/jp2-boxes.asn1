@@ -2,26 +2,32 @@
 --
 -- JP2 / JPX file structure (ITU-T T.800 Annex I, T.801 Annex M): the box
 -- tree, with the boxes esajpip interprets and the JP2 header boxes (T.800
--- I.5.3) modelled in full, and everything else opaque. Together with j2k-codestream.asn1 this makes a generated
--- vector a complete .jp2 or .jpx file.
+-- I.5.3) modelled in full, and everything else opaque. Together with
+-- j2k-codestream.asn1 this makes a generated vector a complete .jp2 or .jpx
+-- file.
 --
 -- Design (encodings in jp2-boxes.acn):
 --   * LBox is an ACN-inserted determinant with mapping function `lbox`
---     (wire = payload bytes + 8). TBox selects the payload through an ACN
---     parameter.
+--     (wire = payload bytes + 8). TBox is an ACN-inserted determinant of
+--     type BoxType, named after its box (topType in TopBox, innerType in
+--     InnerBox, resType in ResBox, jp2Type, profileTopType and
+--     profileInnerType in the profile boxes); it selects the payload
+--     through an ACN parameter.
 --   * A superbox's children are a `SEQUENCE OF` with `size deduced` inside
---     the CONTAINING region of the superbox — the nested-container case the
+--     the CONTAINING region of the superbox -- the nested-container case the
 --     deduced-size specification was written for.
 --   * asn1scc forbids recursive types, so nesting is two levels: TopBox
---     (may be a superbox) contains InnerBox (never a superbox). This covers
+--     (may be a superbox) contains InnerBox, whose superbox alternatives
+--     (jpch, ftbl, dtbl, asoc, and jp2h and jplh) are opaque. This covers
 --     the children of jp2h/jpch/jplh/ftbl/dtbl/uinf and of a top-level
---     asoc in the standard model. InnerPayload has no asoc, jpch, ftbl or
---     dtbl alternative and harness/mapping.c keeps those types, so a
---     nested asoc, like a nested jpch, ftbl or dtbl, fails to decode. The
---     server preserves asoc contents without interpreting them. The one
---     third level modelled is the Resolution box (res, in jp2h or jplh),
---     whose children are a type of their own (ResBox). A Colour Group box
---     (cgrp, in jplh) is opaque.
+--     asoc in the standard model. A jpch, ftbl or dtbl below the top level
+--     decodes, and hv_rule_child names its placement (box.nested-superbox);
+--     a nested asoc is valid, its contents unchecked, as the server
+--     preserves asoc contents without interpreting them. A box type with no
+--     alternative at its level (a header box, flst or url at the top level)
+--     fails to decode. The one third level modelled is the Resolution box
+--     (res, in jp2h or jplh), whose children are a type of their own
+--     (ResBox). A Colour Group box (cgrp, in jplh) is opaque.
 --   * jp2c carries a full Codestream (CONTAINING), so a JP2 vector exercises
 --     the codestream framing and the marker bodies in one file.
 --
@@ -45,8 +51,9 @@
 -- hv_rule_url, hv_rule_flst, hv_rule_fragment_dr, hv_rule_jpx) and the
 -- header box rules are ../lib/hv_rules.c, shared by the harness
 -- (harness/crossfield_impl.h, harness/crossfield.c) and the reader; the
--- file rules (signature, ftyp, one flst per ftbl, the NDR count) are
--- implemented in both, the harness's and ../lib/hv_reader.c.
+-- file rules (signature, ftyp, one flst per ftbl, the NDR and NF counts)
+-- are implemented in both, the harness's and ../lib/hv_reader.c (the NF
+-- count in the harness only; see the end).
 
 JP2-Boxes DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -73,9 +80,9 @@ IMPORTS Codestream, Codestream-Profile FROM J2K-Codestream;
 
 -- T.800 I.8 and T.801 M.12 require readers to skip box types they do not
 -- understand, so both layers admit every four-cc and decode unlisted types
--- through an opaque `other` alternative.
-TopBoxType ::= INTEGER (0..4294967295)
-InnerBoxType ::= INTEGER (0..4294967295)
+-- through an opaque `other` alternative (the mapping functions of
+-- harness/mapping.c map them to one value, 'abcd').
+BoxType ::= INTEGER (0..4294967295)
 
 -- A JP2-family file is a sequence of top-level boxes filling the file
 -- (the file is the decode region).
@@ -108,11 +115,15 @@ TopPayload ::= CHOICE {
 -- T.800 I.5.2 / T.801 Annex M, File Type box: brand, minor version, then a
 -- compatibility list filling the box (so the box is >= 12 bytes and a
 -- multiple of 4 by construction). Which brand is required and that the
--- list contains it depend on the file extension: cross-field rules.
+-- list contains it depend on the file extension: cross-field rules. A
+-- brand is a four-character code, as a box type is: its big-endian value
+-- (the reader decodes it with the same type, ../lib/hv_reader.c).
+Brand ::= INTEGER (0..4294967295)
+
 Ftyp ::= SEQUENCE {
-    brand       OCTET STRING (SIZE (4)),
+    brand       Brand,
     minor       INTEGER (0..4294967295),
-    compat      SEQUENCE (SIZE (1..16)) OF OCTET STRING (SIZE (4))   -- corpus bound
+    compat      SEQUENCE (SIZE (1..16)) OF Brand      -- corpus bound
 }
 
 Superbox ::= SEQUENCE {
@@ -138,9 +149,16 @@ InnerBox ::= SEQUENCE {
     payload     InnerPayload
 }
 
+-- The superboxes below the top level are opaque: jpch, ftbl and dtbl so
+-- that a rule names their placement (box.nested-superbox), asoc because
+-- T.801 M.11.11 lets associations nest; jp2h and jplh are opaque there too.
 InnerPayload ::= CHOICE {
     flst        OCTET STRING (CONTAINING FragmentList),
     url         OCTET STRING (CONTAINING DataEntryUrl),
+    jpch        OCTET STRING (CONTAINING OpaqueBox),
+    ftbl        OCTET STRING (CONTAINING OpaqueBox),
+    dtbl        OCTET STRING (CONTAINING OpaqueBox),
+    asoc        OCTET STRING (CONTAINING OpaqueBox),
     jp2h        OCTET STRING (CONTAINING OpaqueBox),
     jplh        OCTET STRING (CONTAINING OpaqueBox),
     uuid        OCTET STRING (CONTAINING OpaqueBox),
@@ -169,7 +187,9 @@ InnerPayload ::= CHOICE {
 -- A CONTAINING region's decoder skips to the region's end whatever the
 -- contents left unread, so a type whose layout does not end in a deduced
 -- size ends in `extra`, the bytes after its fields, which a rule requires
--- to be empty (<box>.extent).
+-- to be empty (<box>.extent). The bound is a corpus bound that the reader
+-- inherits: it decodes Ihdr, Resolution and Rreq-Std with it, so 1 to 64
+-- bytes after the fields give <box>.extent there and more fail to decode.
 Extra ::= OCTET STRING (SIZE (0..64))                     -- corpus bound
 
 -- Image Header box, I.5.3.1: 14 bytes (the box 22, ihdr.extent).
@@ -192,7 +212,7 @@ BitDepth ::= INTEGER (0..37 | 128..165)
 -- Bits Per Component box, I.5.3.2: one BitDepth per component, filling
 -- the box; the count is NC.
 Bpcc ::= SEQUENCE {
-    depths      SEQUENCE (SIZE (1..16)) OF BitDepth     -- corpus bound; the standard's is 16 384
+    depths      SEQUENCE (SIZE (1..16)) OF BitDepth     -- corpus bound; the standard's is 16,384
 }
 
 -- Colour Specification box, I.5.3.3: METH, PREC, APPROX, then EnumCS when
@@ -247,7 +267,7 @@ CdefEntry ::= SEQUENCE {
 }
 
 Cdef ::= SEQUENCE {
-    entries     SEQUENCE (SIZE (1..16)) OF CdefEntry,   -- corpus bound; the standard's is 65 535
+    entries     SEQUENCE (SIZE (1..16)) OF CdefEntry,   -- corpus bound; the standard's is 65,535
     extra       Extra
 }
 
@@ -256,8 +276,6 @@ Cdef ::= SEQUENCE {
 Res ::= SEQUENCE {
     children    SEQUENCE (SIZE (1..4)) OF ResBox        -- fill the box (corpus bound)
 }
-
-ResBoxType ::= INTEGER (0..4294967295)
 
 ResBox ::= SEQUENCE {
     payload     ResPayload
@@ -301,12 +319,14 @@ VendorFeature ::= SEQUENCE {
 Rreq ::= SEQUENCE {
     fuam        RreqMask,
     dcm         RreqMask,
-    standard    SEQUENCE (SIZE (0..16)) OF StandardFeature,  -- corpus bound; the standard's is 65 535
-    vendor      SEQUENCE (SIZE (0..4)) OF VendorFeature,     -- corpus bound; the standard's is 65 535
+    standard    SEQUENCE (SIZE (0..16)) OF StandardFeature,  -- corpus bound; the standard's is 65,535
+    vendor      SEQUENCE (SIZE (0..4)) OF VendorFeature,     -- corpus bound; the standard's is 65,535
     extra       Extra
 }
 
--- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR u16).
+-- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR
+-- u16). NF is at least 1; FragmentCount in jpeg2000-io.asn1, the reader's
+-- NF, has the same range.
 FragmentList ::= SEQUENCE {
     nf          INTEGER (1..65535),
     fragments   SEQUENCE (SIZE (1..16)) OF Fragment     -- count == nf (corpus bound)
@@ -318,11 +338,14 @@ Fragment ::= SEQUENCE {
     dr          INTEGER (0..65535)                   -- 0: this file; else 1-based index into dtbl
 }
 
--- T.801 Annex M, Data Entry URL box: VERS (1 byte), FLAG (3 bytes), LOC (NUL-terminated).
+-- T.801 Annex M, Data Entry URL box: VERS (1 byte), FLAG (3 bytes), LOC
+-- (NUL-terminated), and nothing after it: `extra` holds any bytes between
+-- the NUL and the end of the box, which a rule requires to be empty.
 DataEntryUrl ::= SEQUENCE {
     vers        INTEGER (0..255),
     flag        INTEGER (0..16777215),
-    loc         IA5String (SIZE (1..1024))           -- URL, NUL terminated on the wire (corpus bound)
+    loc         IA5String (SIZE (1..1024)),          -- URL, NUL terminated on the wire (corpus bound)
+    extra       Extra
 }
 
 -- ===========================================================================
@@ -357,8 +380,6 @@ Jp2Payload-Profile ::= CHOICE {
 JpxFile-Profile ::= SEQUENCE {
     boxes       SEQUENCE (SIZE (1..32)) OF TopBox-Profile
 }
-
-BoxType-Profile ::= INTEGER (0..4294967295)  -- any four-cc; unlisted ones are `other`
 
 TopBox-Profile ::= SEQUENCE {
     payload     TopPayload-Profile
@@ -398,6 +419,10 @@ InnerBox-Profile ::= SEQUENCE {
 InnerPayload-Profile ::= CHOICE {
     flst        OCTET STRING (CONTAINING FragmentList-Profile),
     url         OCTET STRING (CONTAINING DataEntryUrl-Profile),
+    jpch        OCTET STRING (CONTAINING OpaqueBox),
+    ftbl        OCTET STRING (CONTAINING OpaqueBox),
+    dtbl        OCTET STRING (CONTAINING OpaqueBox),
+    asoc        OCTET STRING (CONTAINING OpaqueBox),
     jp2h        OCTET STRING (CONTAINING OpaqueBox),
     jplh        OCTET STRING (CONTAINING OpaqueBox),
     uuid        OCTET STRING (CONTAINING OpaqueBox),
@@ -417,14 +442,19 @@ InnerPayload-Profile ::= CHOICE {
 }
 
 -- One fragment describing the complete codestream in the referenced file
--- (ReadFlstBox: box length 16, NF == 1).
+-- (ReadFlstBox: box length 16, NF == 1). asn1scc refuses `size deduced`
+-- on this fixed-size list, so a byte after the fragment is skipped by the
+-- CONTAINING decoder at layer 2 (layer 1's FragmentList rejects it); the
+-- reader rejects it too, counting whole fragments (flst.one-fragment).
 FragmentList-Profile ::= FragmentList (WITH COMPONENTS {
     nf (1..1),
     fragments (SIZE (1..1))
 })
 
--- Version-zero file:// URLs (ReadUrlBox).
+-- Version-zero file:// URLs (ReadUrlBox). The 1,024-character bound on LOC
+-- is DataEntryUrl's corpus bound; the server has no such limit.
 DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
+    ...,
     vers (0..0),
     flag (0..0),
     loc (SIZE (8..1024))                             -- "file://" plus at least one character
@@ -462,33 +492,43 @@ END
 --     (jp2c and ftbl boxes) equals the number of codestream headers; each is
 --     numbered by source-box order. A file with no jpch box inherits its
 --     header information from jp2h and is unconstrained here.
---   DataReferences.references has exactly ndr elements and every one is url.
+--   DataReferences.references has exactly ndr elements (dtbl.ndr-count)
+--     and every one is url (dtbl.non-url).
 --   jp2c, jpch, ftbl and dtbl only at the top level; flst only in an ftbl,
---     url only in a dtbl (M.11.2, M.11.3, M.11.6; ReadJPX). The harness
---     checks the children of the top-level jpch, ftbl and dtbl only
---     (hv_rule_child); a jpch, ftbl, dtbl or asoc below the top level fails
---     to decode, and a jp2c, flst or url inside jp2h, jplh, uinf or asoc
---     passes layer 1.
---   FragmentList.fragments has exactly nf elements. Checked at layer 2 only
---     (FragmentList-Profile and flst.one-fragment); layer 1 does not check it.
---   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
---   Every Fragment.dr is 0 or <= the file's ndr.
---   T.801 Annex M, Fragment Table box: it contains exactly one flst box.
+--     url only in a dtbl (M.11.2, M.11.3, M.11.6; ReadJPX), or in a uinf
+--     (T.800 I.7.3, where it locates UUID data). hv_rule_child checks the
+--     children of every top-level superbox: at both layers those of jpch,
+--     ftbl and dtbl, which the server walks (jpch.nested-jp2c,
+--     box.nested-jp2c, box.nested-superbox, box.flst-placement,
+--     box.url-placement, dtbl.non-url); at layer 1 also those of jp2h,
+--     jplh, uinf and asoc, for jp2c, jpch, ftbl, dtbl and flst but not url.
+--     Deeper boxes are opaque and unchecked.
+--   FragmentList.fragments has exactly nf elements (flst.nf-count, harness
+--     only: the reader reads JPX boxes for the profile, where
+--     FragmentList-Profile rejects any NF but 1 first, and names it
+--     flst.one-fragment).
+--   DataEntryUrl.loc contains no NUL (the wire terminator is not part of
+--     loc), and the box ends right after the terminator: `extra` is empty
+--     (box.extent at layer 1; at layer 2 hv_rule_url sees the bytes after
+--     the NUL and names it url.terminator, as the reader does).
+--   Every Fragment.dr is 0 or <= the file's ndr (flst.dr-range). Checked
+--     after the count rules (hv_rule_jpx), in the reader's order.
+--   T.801 Annex M, Fragment Table box: it contains exactly one flst box
+--     (ftbl.one-flst).
 --   Every CONTAINING region is exactly filled. Where the type ends in a
---     deduced size this is automatic; Ihdr, Cdef, Resolution and Rreq end
---     in `extra`, which must be empty (<box>.extent: the decoder skips to
---     the end of a region whatever its contents left unread). The url box
---     must end right after LOC's terminator: the reader checks this
---     (url.terminator), the harness cannot, as the decoder skips the bytes
---     after the NUL; its url check (hv_rule_url) runs at layer 2 only.
+--     deduced size this is automatic; Ihdr, Cdef, Resolution, Rreq and
+--     DataEntryUrl end in `extra`, which must be empty (<box>.extent: the
+--     decoder skips to the end of a region whatever its contents left
+--     unread).
 --
 -- Header boxes, standard layer only (hv_rules.c; the reader's
 -- hv_check_jp2h and hv_check_jpx_headers). The server reads none of them:
 -- Jp2Payload-Profile and TopPayload-Profile keep jp2h and jplh opaque, and
 -- jpch's children are InnerBox-Profile, whose header boxes are opaque.
 --   JP2 file (T.800 I.2, I.5.3, I.5.4): one or more jp2c
---     (jp2.codestream); exactly one jp2h (jp2.one-jp2h), before the first
---     jp2c (jp2h.position).
+--     (jp2.one-codestream, the profile's name for its stricter "exactly
+--     one"); exactly one jp2h (jp2.one-jp2h), before the first jp2c
+--     (jp2h.position).
 --   JPX file (T.801 M.11.5): jp2h optional, before the first jp2c, ftbl,
 --     jpch or jplh (jp2h.position).
 --   jp2h starts with ihdr (jp2h.ihdr-first) and holds its colr boxes
@@ -528,21 +568,33 @@ END
 --     of a linked codestream against the linked file's SIZ.
 --
 -- Profile only (ReadJP2 / ReadJPX):
---   Jp2File-Profile: exactly one jp2c among the top-level boxes.
---   JpxFile-Profile: at least one jpch box, where the standard lets a JPX
---     file fall back on jp2h. jp2c boxes and ftbl boxes do not both occur
---     (no mixed sources); the standard allows a file to hold some codestreams
---     inline and others by reference. Linked: exactly one top-level dtbl and
---     every flst's dr in 1..ndr.
+--   Jp2File-Profile: exactly one jp2c among the top-level boxes
+--     (jp2.one-codestream).
+--   JpxFile-Profile: at least one jpch box (jpx.no-jpch), where the
+--     standard lets a JPX file fall back on jp2h. jp2c boxes and ftbl boxes
+--     do not both occur (jpx.mixed-sources); the standard allows a file to
+--     hold some codestreams inline and others by reference. Linked: exactly
+--     one top-level dtbl (jpx.linked-shape) and every flst's dr in 1..ndr
+--     (flst.dr-external, and flst.dr-range above). A linked file without a
+--     dtbl breaks one of the dr rules too, so jpx.linked-shape comes first
+--     only because the count rules are checked before the dr rules, as in
+--     the reader; its vector has DR 0, standard-valid.
 --     (ReadJPX; the order of jp2c relative to jpch is not constrained.)
 --   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
 --     jp2c boxes.
 --   Every url loc begins with "file://" and ends with ".jp2" (ReadJPX: links
---     resolve to .jp2 files only, never to another JPX); the harness
---     resolves it against the corpus companion files (url.missing-companion,
---     harness/vectors.c).
+--     resolve to .jp2 files only, never to another JPX): url.file-scheme,
+--     url.jp2-target; the harness resolves it against the corpus companion
+--     files (url.missing-companion, harness/vectors.c).
+--   Types, not rules, in the harness: DataEntryUrl-Profile (VERS and FLAG
+--     0, LOC of 8 or more characters) and FragmentList-Profile (one
+--     fragment) reject first, with reason `decode`; the reader names these
+--     url.version-flags, url.length and flst.one-fragment (hv_rules.c), and
+--     the harness checks that the rules and the types agree
+--     (check_profile_rule_parity).
 --   Fragment (off, len) equal to the referenced file's codestream extent is
 --     checked by the server against the linked file, and by the harness
 --     against the companion's measured extent (flst.source-extent,
 --     harness/vectors.c).
---   The whole file is <= INT_MAX bytes.
+--   The whole file is <= INT_MAX bytes (file.size-limit, reader only: the
+--     corpus has no such file).

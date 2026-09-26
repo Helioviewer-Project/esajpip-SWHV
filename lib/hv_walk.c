@@ -1,24 +1,36 @@
 /* hv_walk: checks JPEG 2000 files with hv_reader and prints one line per
- * file. Exit status: 0 if every file is valid (and, with -w, rewritten
- * identically), 1 otherwise, 2 on usage errors.
+ * file: "valid", "invalid" with the error and its offset, "differs" when
+ * the file is valid but -w rewrote it differently, or "ERROR" when it
+ * cannot be read. Exit status: 0 if every file is valid (and, with -w,
+ * rewritten identically), 1 otherwise, 2 on usage errors.
  *
  *   -v  print every box and codestream item
  *   -p  accept trailing zero PLT entries of each tile-part
  *       (HV_ACCEPT_PLT_PADDING), as deployed files carry them; not with -P,
  *       whose profile accepts them after the last packet only
- *   -P  check the served profile: the file rules (hv_check_jp2, or
- *       hv_check_jpx for a .jpx, with every linked file), and HV_PROFILE for
- *       the codestreams
- *   -H  check the header boxes (hv_check_jp2h, or hv_check_jpx_headers for
- *       a .jpx), as the tools do for the files they write
+ *   -P  check the served profile (hv_check_served): the file rules, and
+ *       HV_PROFILE for every codestream, embedded or in a linked file
+ *   -H  check the header boxes (hv_check_jp2h, or hv_check_jpx_headers), as
+ *       the tools do for the files they write
  *   -w  rewrite the whole file with hv_writer from what the reader decoded,
- *       and compare it with the input */
+ *       and compare it with the input
+ *
+ * A file whose name ends in .jpx, in any case, is a JPX file, as the
+ * server decides; any other is a JP2 file, or, if it starts with SOC, a
+ * raw codestream. Without -P and -H a raw codestream is read as such; -P
+ * and -H check files, and fail it with file.signature. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "hv_reader.h"
+#include "hv_served.h"
 #include "hv_writer.h"
+
+/* A marker code, and the marker and length that start a marker segment
+ * (T.800 A.1). */
+#define MARKER HV_FIXED(MarkerCode)
+#define SEGMENT_START (HV_FIXED(MarkerCode) + HV_FIXED(SegmentLength))
 
 static int verbose, rewrite, profile, headers;
 static unsigned flags;
@@ -37,6 +49,7 @@ typedef struct {
     unsigned long plt_padding;
     const char *error;
     size_t at;
+    char message[64];       /* error, when it is formatted here */
     hv_out out;             /* -w: the rewritten file */
     const char *uncomparable;   /* -w: why the rewrite cannot match the input */
     uint64_t *lengths;      /* -w: PLT entries of the current tile-part */
@@ -104,10 +117,10 @@ static int rewrite_item(const uint8_t *buf, const hv_item *item, walk_result *r,
             }
             return 0;
         }
-        if (item->end - item->start == 2)
+        if (item->end - item->start == MARKER)
             return hv_write_marker(out, item->code);
-        return hv_write_segment(out, item->code, buf + item->start + 4,
-                                item->end - item->start - 4);
+        return hv_write_segment(out, item->code, buf + item->start + SEGMENT_START,
+                                item->end - item->start - SEGMENT_START);
     }
     return -1;
 }
@@ -115,20 +128,21 @@ static int rewrite_item(const uint8_t *buf, const hv_item *item, walk_result *r,
 static int walk_codestream(const uint8_t *buf, size_t start, size_t end, walk_result *r) {
     hv_codestream cs;
     hv_item item;
-    size_t tp_start = 0;
+    size_t tp_start = 0, at = start;     /* at: the item being rewritten */
     int status = hv_codestream_open(&cs, buf, start, end, flags);
 
     if (status == 0 && rewrite && hv_write_marker(&r->out, HV_SOC) != 0)
         status = -2;
     while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1) {
+        static const char *kinds[] = {"segment", "tile-part", "tile-segment", "data", "end"};
+        at = item.start;
         if (item.kind == HV_TILE_PART)
             r->tile_parts++;
         if (item.kind == HV_TILE_DATA)
             r->plt_padding += item.plt_padding;
-        if (verbose) {
-            static const char *kinds[] = {"segment", "tile-part", "tile-segment", "data", "end"};
-            printf("    %-12s %04X [%zu, %zu)\n", kinds[item.kind], item.code, item.start, item.end);
-        }
+        if (verbose)
+            printf("    %-12s %04X [%zu, %zu)\n", kinds[item.kind], item.code, item.start,
+                   item.end);
         if (rewrite && rewrite_item(buf, &item, r, &tp_start) != 0) {
             status = -2;
             break;
@@ -142,7 +156,7 @@ static int walk_codestream(const uint8_t *buf, size_t start, size_t end, walk_re
         r->at = cs.error_at;
     } else if (status == -2) {
         r->error = r->out.error ? r->out.error : "out of memory";
-        r->at = item.start;
+        r->at = at;
     } else {
         r->codestreams++;
     }
@@ -166,7 +180,8 @@ static int walk_boxes(const uint8_t *buf, hv_boxes *it, int depth, walk_result *
         if (rewrite) {
             if (box.to_end)
                 r->uncomparable = "LBox = 0 is written as an explicit length";
-            if (hv_begin_box(&r->out, box.type, box.payload - box.start == 16, &start) != 0)
+            if (hv_begin_box(&r->out, box.type, box.payload - box.start == HV_BOX_HEADER_XL,
+                             &start) != 0)
                 goto write_failed;
         }
         if (box.type == HV_BOX_JP2C) {
@@ -175,7 +190,9 @@ static int walk_boxes(const uint8_t *buf, hv_boxes *it, int depth, walk_result *
         } else if (hv_is_superbox(box.type)) {
             hv_boxes children;
             if (depth + 1 > HV_BOX_DEPTH_MAX) {       /* depth 0 is the top level */
-                r->error = "boxes nested too deep";
+                snprintf(r->message, sizeof r->message, "superboxes nested deeper than %d",
+                         HV_BOX_DEPTH_MAX);
+                r->error = r->message;
                 r->at = box.start;
                 return -1;
             }
@@ -197,81 +214,44 @@ write_failed:
     return -1;
 }
 
-/* The whole file, or NULL. */
-static uint8_t *read_whole(const char *path, size_t *size) {
-    FILE *f = fopen(path, "rb");
-    uint8_t *buf = NULL;
-    long n;
-    if (f == NULL || fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 ||
-        fseek(f, 0, SEEK_SET) != 0 || (buf = malloc(n ? (size_t)n : 1)) == NULL ||
-        fread(buf, 1, (size_t)n, f) != (size_t)n) {
-        free(buf);
-        buf = NULL;
-    } else {
-        *size = (size_t)n;
-    }
-    if (f)
-        fclose(f);
-    return buf;
-}
-
-/* The file rules of the served profile; for a .jpx, also the linked files,
- * named in *linked when one fails. */
-static const char *check_profile(const char *path, const uint8_t *buf, size_t size, size_t *at,
-                                 char *linked, size_t linked_size) {
-    size_t n = strlen(path), i;
-    const char *error;
-    hv_jpx jpx;
-    hv_box jp2c;
-
-    if (n < 4 || strcmp(path + n - 4, ".jpx") != 0)
-        return hv_check_jp2(buf, size, &jp2c, at);
-    if ((error = hv_check_jpx(buf, size, &jpx, at)) != NULL)
-        return error;
-    for (i = 0; i < jpx.count && error == NULL && jpx.links != NULL; i++) {
-        size_t link_size = 0;
-        uint8_t *link;
-        if (hv_link_path(&jpx.links[i], path, linked, linked_size) != 0) {
-            error = "url: cannot decode the path";
-            *at = 0;
-        } else if ((link = read_whole(linked, &link_size)) == NULL) {
-            error = "url.missing-companion";
-            *at = 0;
-        } else {
-            error = hv_check_link(link, link_size, &jpx.links[i], at);
-            free(link);
-        }
-    }
-    if (error == NULL)
-        linked[0] = 0;
-    hv_jpx_free(&jpx);
-    return error;
+/* Nonzero when the file starts with SOC: a raw codestream. */
+static int raw_codestream(const uint8_t *buf, size_t size) {
+    return size >= MARKER && buf[0] == HV_SOC >> 8 && buf[1] == (HV_SOC & 0xFF);
 }
 
 static int walk_file(const char *path) {
     uint8_t *buf;
-    size_t size = 0;
+    size_t size = 0, linked = 0, i, n;
     walk_result r;
-    int status;
-    char linked[4096] = "";
+    hv_served served;
+    int status, jpx = hv_is_jpx_name(path), raw;
 
     memset(&r, 0, sizeof r);
+    served.linked_path[0] = 0;
+    served.at_linked = 0;
     hv_out_init(&r.out);
-    if ((buf = read_whole(path, &size)) == NULL) {
+    if ((buf = hv_load_file(path, &size)) == NULL) {
         printf("ERROR   %s: cannot read\n", path);
         return -1;
     }
-    if (profile)
-        r.error = check_profile(path, buf, size, &r.at, linked, sizeof linked);
+    raw = raw_codestream(buf, size);
+    if (profile) {
+        r.error = hv_check_served(path, buf, size, jpx, &served);
+        r.at = served.at;
+        linked = served.linked;
+    }
     if (headers && r.error == NULL) {
-        size_t n = strlen(path);
-        r.error = n >= 4 && strcmp(path + n - 4, ".jpx") == 0
-                      ? hv_check_jpx_headers(buf, size, &r.at)
-                      : hv_check_jp2h(buf, size, &r.at);
+        if (raw) {
+            r.error = "file.signature";
+            r.at = 0;
+        } else {
+            r.error = jpx ? hv_check_jpx_headers(buf, size, &r.at)
+                          : hv_check_jp2h(buf, size, &r.at);
+        }
     }
     if (r.error != NULL) {
         status = -1;
-    } else if (size >= 2 && buf[0] == 0xFF && buf[1] == 0x4F) {
+    } else if (raw) {
         status = walk_codestream(buf, 0, size, &r);
     } else {
         hv_boxes it;
@@ -279,26 +259,31 @@ static int walk_file(const char *path) {
         status = walk_boxes(buf, &it, 0, &r);
     }
     if (status != 0) {
-        printf("invalid %s: %s at %zu%s%s\n", path, r.error, r.at, linked[0] ? " of " : "",
-               linked);
+        if (served.linked_path[0] == 0)
+            printf("invalid %s: %s at %zu\n", path, r.error, r.at);
+        else if (served.at_linked)
+            printf("invalid %s: %s at %zu of %s\n", path, r.error, r.at, served.linked_path);
+        else
+            printf("invalid %s: %s at %zu (linked file %s)\n", path, r.error, r.at,
+                   served.linked_path);
+    } else if (rewrite && r.uncomparable == NULL &&
+               (r.out.size != size || (size != 0 && memcmp(r.out.data, buf, size) != 0))) {
+        n = r.out.size < size ? r.out.size : size;
+        for (i = 0; i < n && r.out.data[i] == buf[i]; i++)
+            ;
+        printf("differs %s: valid, but the rewrite differs at %zu\n", path, i);
+        status = -1;
     } else {
         printf("valid   %s: %d boxes, %d codestreams, %d tile-parts", path, r.boxes,
                r.codestreams, r.tile_parts);
+        if (linked != 0)
+            printf(", %zu linked codestreams", linked);
         if (r.plt_padding != 0)
             printf(", %lu zero PLT entries", r.plt_padding);
-        if (rewrite) {
-            size_t i = 0, n = r.out.size < size ? r.out.size : size;
-            while (i < n && r.out.data[i] == buf[i])
-                i++;
-            if (r.uncomparable != NULL)
-                printf("; rewrite not compared: %s", r.uncomparable);
-            else if (i == n && r.out.size == size)
-                printf("; rewritten identically");
-            else {
-                printf("; rewrite differs at %zu", i);
-                status = -1;
-            }
-        }
+        if (rewrite && r.uncomparable != NULL)
+            printf("; rewrite not compared: %s", r.uncomparable);
+        else if (rewrite)
+            printf("; rewritten identically");
         printf("\n");
     }
     hv_out_free(&r.out);

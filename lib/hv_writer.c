@@ -8,12 +8,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The largest box LBox can state; tests lower it to exercise XLBox. */
+/* The largest box LBox can state. test/test_writer.c includes this file
+ * with a lower value to exercise the switch to XLBox. */
 #ifndef HV_LBOX_MAX
 #define HV_LBOX_MAX UINT32_MAX
 #endif
 
-static int fail(hv_out *out, const char *error) {
+/* Records the first error; every later write then does nothing. */
+static int out_fail(hv_out *out, const char *error) {
     if (out->error == NULL)
         out->error = error;
     return -1;
@@ -28,12 +30,18 @@ void hv_out_free(hv_out *out) {
     memset(out, 0, sizeof *out);
 }
 
+/* The bytes from out->size to out->capacity are always zero: reserve zeroes
+ * what it adds, hv_out_rewind what it drops, and a failed encoder what it
+ * wrote there (ENCODE). The generated encoders rely on it. */
 void hv_out_rewind(hv_out *out, size_t size) {
-    if (size < out->size)
+    if (size < out->size) {
+        memset(out->data + size, 0, out->size - size);
         out->size = size;
+    }
     out->error = NULL;
 }
 
+/* Room for `more` bytes after out->size. */
 static int reserve(hv_out *out, size_t more) {
     size_t need, capacity;
     uint8_t *data;
@@ -41,7 +49,7 @@ static int reserve(hv_out *out, size_t more) {
     if (out->error != NULL)
         return -1;
     if (more > SIZE_MAX - out->size)
-        return fail(out, "output too large");
+        return out_fail(out, "output larger than SIZE_MAX bytes");
     need = out->size + more;
     if (need <= out->capacity)
         return 0;
@@ -49,69 +57,80 @@ static int reserve(hv_out *out, size_t more) {
     while (capacity < need)
         capacity = capacity > SIZE_MAX / 2 ? need : capacity * 2;
     if ((data = realloc(out->data, capacity)) == NULL)
-        return fail(out, "out of memory");
+        return out_fail(out, "out of memory");
+    memset(data + out->capacity, 0, capacity - out->capacity);
     out->data = data;
     out->capacity = capacity;
     return 0;
 }
 
-/* Runs a generated encoder at `at`, with room for its largest encoding
- * (the generated encoders do not check the room themselves). They also
- * skip zero bits instead of writing them, so the `clear` bytes at `at` are
- * zeroed first: all of the room when appending, exactly the header being
- * replaced when patching one in place. */
+/* Runs a generated encoder at `at`, with room for its largest encoding:
+ * the generated encoders do not check the room themselves. They also skip
+ * zero bits instead of writing them, so the bytes they write must be zero
+ * first. Past out->size they are (see hv_out_rewind), so an append (`at` =
+ * out->size) clears nothing; an in-place patch clears exactly the `clear`
+ * bytes of the header it replaces, which lie below out->size. What an
+ * encoder that fails wrote past out->size is zeroed again. `what` names
+ * the type in the error message. */
 #define ENCODE(T, value, out, at, clear, written)                            \
     encode_##T((value), (out), (at), (clear), (written))
 
-#define DEFINE_ENCODE(T)                                                     \
+#define DEFINE_ENCODE(T, what)                                               \
     static int encode_##T(const T *value, hv_out *out, size_t at,           \
                           size_t clear, size_t *written) {                  \
         BitStream s;                                                         \
         int err = 0;                                                         \
-        size_t room = T##_REQUIRED_BYTES_FOR_ACN_ENCODING;                   \
-        if (at > out->size || (at + room > out->size &&                      \
-                               reserve(out, at + room - out->size) != 0))   \
+        size_t room = HV_LARGEST(T);                                         \
+        if (out->error != NULL)                                              \
             return -1;                                                       \
-        memset(out->data + at, 0, clear < room ? clear : room);              \
+        if (at > out->size || clear > out->size - at)                        \
+            return out_fail(out, "no " what " at the given offset");         \
+        if (room > out->size - at && reserve(out, room - (out->size - at)) != 0) \
+            return -1;                                                       \
+        memset(out->data + at, 0, clear);                                    \
         BitStream_AttachBuffer(&s, out->data + at, (long)room);              \
-        if (!T##_ACN_Encode(value, &s, &err, TRUE))                         \
-            return fail(out, "invalid " #T);                                 \
+        if (!T##_ACN_Encode(value, &s, &err, TRUE)) {                       \
+            if (at + room > out->size)                                       \
+                memset(out->data + out->size, 0, at + room - out->size);     \
+            return out_fail(out, "invalid " what);                           \
+        }                                                                    \
         *written = (size_t)BitStream_GetLength(&s);                          \
         return 0;                                                            \
     }
 
-DEFINE_ENCODE(BoxHeader)
-DEFINE_ENCODE(MarkerCode)
-DEFINE_ENCODE(SegmentLength)
-DEFINE_ENCODE(SotSegment)
-DEFINE_ENCODE(Rreq_Std)
-DEFINE_ENCODE(SizSegment_Std)
-DEFINE_ENCODE(CodSegment_Std)
-DEFINE_ENCODE(QcdSegment_Std)
-DEFINE_ENCODE(PltSegment_Std)
-DEFINE_ENCODE(ComSegment_Std)
-DEFINE_ENCODE(FragmentList_Profile)
-DEFINE_ENCODE(DataReferenceCount)
-DEFINE_ENCODE(UrlHeader)
+DEFINE_ENCODE(BoxHeader, "box header")
+DEFINE_ENCODE(MarkerCode, "marker code")
+DEFINE_ENCODE(SegmentLength, "marker segment length")
+DEFINE_ENCODE(SotSegment, "SOT segment")
+DEFINE_ENCODE(Rreq_Std, "Reader Requirements box contents")
+DEFINE_ENCODE(SizSegment_Std, "SIZ segment")
+DEFINE_ENCODE(CodSegment_Std, "COD segment")
+DEFINE_ENCODE(QcdSegment_Std, "QCD segment")
+DEFINE_ENCODE(PltSegment_Std, "PLT segment")
+DEFINE_ENCODE(ComSegment_Std, "COM segment")
+DEFINE_ENCODE(FragmentList_Profile, "Fragment List box contents")
+DEFINE_ENCODE(DataReferenceCount, "NDR")
+DEFINE_ENCODE(UrlHeader, "URL box VERS and FLAG")
 
-/* Reads back a header this writer wrote, with the generated decoder. */
-#define DECODE(T, value, out, at, size)                                      \
-    decode_##T((value), (out), (at), (size))
+/* Reads back a header this writer wrote, with the generated decoder, before
+ * patching it in place. */
+#define READ_BACK(T, value, out, at, size)                                   \
+    read_back_##T((value), (out), (at), (size))
 
-#define DEFINE_DECODE(T)                                                     \
-    static int decode_##T(T *value, hv_out *out, size_t at, size_t size) {  \
+#define DEFINE_READ_BACK(T, what)                                            \
+    static int read_back_##T(T *value, hv_out *out, size_t at, size_t size) { \
         BitStream s;                                                         \
         int err = 0;                                                         \
         if (at > out->size || size > out->size - at)                         \
-            return fail(out, "no " #T " at the given offset");               \
+            return out_fail(out, "no " what " at the given offset");         \
         BitStream_AttachBuffer(&s, out->data + at, (long)size);              \
         if (!T##_ACN_Decode(value, &s, &err))                               \
-            return fail(out, "no " #T " at the given offset");               \
+            return out_fail(out, "no " what " at the given offset");         \
         return 0;                                                            \
     }
 
-DEFINE_DECODE(BoxHeader)
-DEFINE_DECODE(SotSegment)
+DEFINE_READ_BACK(BoxHeader, "box header")
+DEFINE_READ_BACK(SotSegment, "SOT segment")
 
 /* Appends a generated encoding. */
 #define APPEND(T, value, out)                                                \
@@ -120,8 +139,7 @@ DEFINE_DECODE(SotSegment)
 #define DEFINE_APPEND(T)                                                     \
     static int append_##T(const T *value, hv_out *out) {                    \
         size_t written;                                                      \
-        if (ENCODE(T, value, out, out->size,                                 \
-                   T##_REQUIRED_BYTES_FOR_ACN_ENCODING, &written) != 0)      \
+        if (ENCODE(T, value, out, out->size, 0, &written) != 0)              \
             return -1;                                                       \
         out->size += written;                                                \
         return 0;                                                            \
@@ -161,7 +179,7 @@ int hv_write_marker(hv_out *out, uint16_t code) {
 int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size) {
     SegmentLength l;
     if (size > UINT16_MAX - HV_FIXED(SegmentLength))      /* Lxxx counts itself */
-        return fail(out, "marker segment body longer than 65 533 bytes");
+        return out_fail(out, "marker segment body longer than 65,533 bytes");
     l = size + 2;
     if (hv_write_marker(out, code) != 0 || APPEND(SegmentLength, &l, out) != 0)
         return -1;
@@ -223,21 +241,21 @@ int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
     if (out->error != NULL)
         return -1;
     if ((plt = malloc(sizeof *plt)) == NULL)
-        return fail(out, "out of memory");
+        return out_fail(out, "out of memory");
     while (status == 0 && i < count) {
         size_t bytes = 0;
         if (zplt > UINT8_MAX) {                           /* Zplt, A.7.3 */
-            status = fail(out, "more than 256 PLT segments in a tile-part");
+            status = out_fail(out, "more than 256 PLT segments in a tile-part");
             break;
         }
         plt->body.zplt = zplt++;
         plt->body.entries.nCount = 0;
-        /* Lplt = its own 2 bytes + Zplt + entry bytes <= 65 535. */
+        /* Lplt = its own 2 bytes + Zplt + entry bytes <= 65,535. */
         while (i < count) {
             Iplt entry;
             int n;
             if (lengths[i] == 0) {
-                status = fail(out, "zero packet length");
+                status = out_fail(out, "zero packet length");
                 break;
             }
             n = set_iplt(&entry, lengths[i]);
@@ -280,11 +298,11 @@ int hv_end_tile_part(hv_out *out, size_t start) {
     if (out->error != NULL)
         return -1;
     if (start > out->size || out->size - start < MARKER + HV_FIXED(SotSegment) + MARKER)
-        return fail(out, "tile-part shorter than SOT and SOD");
+        return out_fail(out, "tile-part shorter than SOT and SOD");
     length = out->size - start;
     if (length > UINT32_MAX)
-        return fail(out, "tile-part longer than Psot can state");
-    if (DECODE(SotSegment, &sot, out, start + MARKER, HV_FIXED(SotSegment)) != 0)
+        return out_fail(out, "tile-part longer than 4,294,967,295 bytes (Psot)");
+    if (READ_BACK(SotSegment, &sot, out, start + MARKER, HV_FIXED(SotSegment)) != 0)
         return -1;
     sot.psot = length;
     return ENCODE(SotSegment, &sot, out, start + MARKER, HV_FIXED(SotSegment), &written);
@@ -308,9 +326,10 @@ int hv_end_box(hv_out *out, size_t start) {
     if (out->error != NULL)
         return -1;
     if (start > out->size || out->size - start < HV_BOX_HEADER)
-        return fail(out, "box shorter than its header");
+        return out_fail(out, "box shorter than its header");
     length = out->size - start;
-    if (DECODE(BoxHeader, &h, out, start, length < HV_BOX_HEADER_XL ? length : HV_BOX_HEADER_XL) != 0)
+    if (READ_BACK(BoxHeader, &h, out, start, length < HV_BOX_HEADER_XL ? length : HV_BOX_HEADER_XL)
+        != 0)
         return -1;
     if (h.exist.xlbox) {
         h.xlbox = length;

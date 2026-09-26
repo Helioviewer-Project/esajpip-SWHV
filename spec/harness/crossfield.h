@@ -10,7 +10,9 @@
  * otherwise a short rule name (the same names the manifest uses). The two
  * layers share their common structural rules, while the profile adds server
  * restrictions and explicitly omits documented standard rules that esajpip
- * does not enforce.
+ * does not enforce. Layer 1 alone checks what layer 2 keeps opaque: the
+ * JP2 header boxes and the placement of boxes in jp2h, jplh, uinf and asoc
+ * (crossfield.c).
  */
 #ifndef J2K_HARNESS_CROSSFIELD_H
 #define J2K_HARNESS_CROSSFIELD_H

@@ -2,8 +2,8 @@
  * files: a 4-byte big-endian length L, the first L bytes (modulo what
  * remains), then the second file. They are merged in that order, embedded,
  * so an input with a palette and one without exercise the generated cmap.
- * An accepted merge must be a JPX file the server serves (hv_check_jpx,
- * every codestream with HV_PROFILE) with valid header boxes
+ * An accepted merge must be a JPX file within the served profile
+ * (hv_check_jpx, every codestream with HV_PROFILE) with valid header boxes
  * (hv_check_jpx_headers).
  *
  *   cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON

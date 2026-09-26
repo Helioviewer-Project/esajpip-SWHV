@@ -2,7 +2,6 @@
 #include "hv_rules.h"
 
 #include <stddef.h>
-#include <stdlib.h>
 #include <string.h>
 
 const char *hv_rule_siz(const Siz *s, const Sgcod *sgcod, int profile) {
@@ -71,8 +70,8 @@ const char *hv_rule_tile_parts_end(const hv_tile_parts *t) {
     return NULL;
 }
 
-const char *hv_rule_tile_part_count(uint64_t parts, int profile) {
-    return profile && parts > HV_PROFILE_TILE_PARTS ? "codestream.tile-part-limit" : NULL;
+const char *hv_rule_tile_part_count(uint64_t parts) {
+    return parts > HV_PROFILE_TILE_PARTS ? "codestream.tile-part-limit" : NULL;
 }
 
 const char *hv_rule_iplt(const Iplt *e, uint64_t *value) {
@@ -144,15 +143,47 @@ const char *hv_rule_child(uint32_t parent, uint32_t child) {
 }
 
 const char *hv_rule_url(uint64_t vers, uint64_t flag, const uint8_t *loc, size_t n) {
+    static const char jp2[] = ".jp2";
     if (vers != 0 || flag != 0) return "url.version-flags";
     if (n == 0 || memchr(loc, 0, n) != loc + n - 1) return "url.terminator";
-    static const char jp2[] = ".jp2";
     n--;                                           /* the characters */
     if (n <= HV_FILE_SCHEME_LENGTH) return "url.length";   /* the scheme and a path */
     if (memcmp(loc, HV_FILE_SCHEME, HV_FILE_SCHEME_LENGTH) != 0) return "url.file-scheme";
+    if (hv_url_path(loc + HV_FILE_SCHEME_LENGTH, n - HV_FILE_SCHEME_LENGTH, NULL, 0) != 0)
+        return "url.percent-encoding";
     if (n < sizeof jp2 - 1 || memcmp(loc + n - (sizeof jp2 - 1), jp2, sizeof jp2 - 1) != 0)
         return "url.jp2-target";
     return NULL;
+}
+
+static int hex_digit(int c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+         : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+int hv_url_path(const uint8_t *path, size_t n, char *out, size_t out_size) {
+    size_t i, k = 0;
+    for (i = 0; i < n; i++) {
+        int c = path[i], hi, lo;
+        if (c == '%') {
+            if (n - i < 3 || (hi = hex_digit(path[i + 1])) < 0 ||
+                (lo = hex_digit(path[i + 2])) < 0 || (c = hi * 16 + lo) == 0)
+                return -1;
+            i += 2;
+        }
+        if (out != NULL) {
+            if (k + 1 >= out_size)
+                return -2;
+            out[k] = (char)c;
+        }
+        k++;
+    }
+    if (out != NULL) {
+        if (out_size == 0)
+            return -2;
+        out[k] = 0;
+    }
+    return 0;
 }
 
 const char *hv_rule_flst(uint64_t nf, int fragments) {
@@ -185,18 +216,18 @@ const char *hv_rule_jpx(const hv_jpx_boxes *b, int profile) {
  * ------------------------------------------------------------------------ */
 
 const char *hv_rule_jp2h_place(int jp2h, int late, int jp2c, int jpx) {
-    if (!jpx && jp2c == 0) return "jp2.codestream";
+    if (!jpx && jp2c == 0) return "jp2.one-codestream";
     if (!jpx && jp2h != 1) return "jp2.one-jp2h";
+    if (jpx && jp2h > 1) return "jpx.one-jp2h";
     if (late) return "jp2h.position";
     return NULL;
 }
 
+/* bpcc_depth is left as it is: only its first bpcc_count entries are read. */
 void hv_header_init(hv_header *h, uint32_t parent, int jpx) {
     memset(h, 0, offsetof(hv_header, bpcc_depth));
     h->parent = parent;
     h->jpx = jpx;
-    h->npc = h->cmap_count = h->cmap_cmp = h->cmap_pcol = h->cdef_cn = 0;
-    h->cmap_palette = h->resc = h->resd = 0;
 }
 
 const char *hv_rule_header_child(hv_header *h, uint32_t type) {
@@ -283,25 +314,23 @@ const char *hv_rule_cmap_entry(hv_header *h, const CmapEntry *entry) {
     return NULL;
 }
 
-static int compare_pairs(const void *a, const void *b) {
-    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
-    return x < y ? -1 : x > y;
-}
-
+/* Typ is 0, 1, 2 or 65,535 and Asoc at most 65,535 (CdefEntry): a pair
+ * where neither is 65,535 has Typ 0 to 2 and Asoc 0 to 65,534, one bit of
+ * `seen` each. */
 const char *hv_rule_cdef(hv_header *h, const CdefEntry *entries, size_t n) {
-    uint32_t *pairs = n ? malloc(n * sizeof *pairs) : NULL;
-    size_t i, m = 0;
+    uint8_t seen[3][65535 / 8 + 1];
     const char *error = NULL;
-    if (n && pairs == NULL) return "out of memory";
+    size_t i;
+    memset(seen, 0, sizeof seen);
     for (i = 0; i < n; i++) {
-        if (entries[i].typ != 65535 && entries[i].asoc != 65535)
-            pairs[m++] = (uint32_t)entries[i].typ << 16 | (uint32_t)entries[i].asoc;
+        uint64_t typ = entries[i].typ, asoc = entries[i].asoc;
         if (h->cdef == 1 && entries[i].cn > h->cdef_cn) h->cdef_cn = (uint32_t)entries[i].cn;
+        if (typ < 3 && asoc < 65535 && error == NULL) {
+            uint8_t *byte = &seen[typ][asoc / 8], bit = (uint8_t)(1u << (asoc % 8));
+            if (*byte & bit) error = "cdef.pairs";
+            *byte |= bit;
+        }
     }
-    qsort(pairs, m, sizeof *pairs, compare_pairs);
-    for (i = 1; i < m && error == NULL; i++)
-        if (pairs[i] == pairs[i - 1]) error = "cdef.pairs";
-    free(pairs);
     return error;
 }
 

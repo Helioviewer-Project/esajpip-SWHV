@@ -20,27 +20,50 @@ The options are hvJP2K's:
 - `-links`: link to the codestreams (`ftbl`, and `url` boxes naming each
   input by absolute, resolved path) instead of copying them (`jp2c`).
 - `-s`: more arguments from a file, or from standard input for `-`, split as
-  Python's `shlex.split` does (quotes and backslashes), after those of the
-  command line.
+  Python's `shlex.split` does (quotes and backslashes).
+- `-h`: the usage, on standard output.
 
-The inputs are read in two passes, as hvJP2K does. The first is checked
-once and stays mapped throughout. Each later input is checked, unmapped,
+They are parsed as hvJP2K's `argparse` parser does. With `-s`, the command
+line and the file's words after it are parsed again, once: a later `-i`
+or `-o` replaces an earlier one, the command line's included; a `-s` in
+the file is parsed but not read; words in the file continue a `-i` that
+ends the command line, and are an error otherwise. `-i` takes the words up
+to the next one that looks like an option: one starting with `-`, other
+than `-` alone, a negative number such as `-1`, or a word with a space
+that names no option. An option's value may be attached (`-ofile.jpx`,
+`-o=file.jpx`, `-i` then taking that one name), and an option may be
+abbreviated (`-lin`). `--` is an error. Names that leave nothing once the
+commas are dropped fail with hvJP2K's "no JP2 input files". `cli_test.sh`
+checks these cases. Deliberate differences: the argument file is read as
+bytes, where hvJP2K decodes it as text and fails on bytes the locale's
+encoding rejects; a NUL byte in it is an error (it would end the text
+early); and `-h` prints hv_merge's own usage text.
+
+The inputs are read in two passes, as hvJP2K does. The first input is
+checked once and stays mapped throughout. Each later input is checked, unmapped,
 then mapped and checked again before its bytes are used. Its size and
 parsed structure must match the first pass. At most two inputs are mapped
-at a time. With `-links`, the second open supplies header and XML boxes;
-the codestream stays in the input JP2 file. The output is written to a
-temporary file next to it and renamed into place; on error nothing is
-written. An existing output keeps its permissions, and one that is a
-symbolic link is written where the link points, as when hvJP2K opens it
-for writing. Exit status: 0, 1 on error, 2 on usage errors.
+at a time. With `-links`, the second open supplies the header and XML
+boxes; the codestream stays in the input JP2 file. The output is written
+to a temporary file next to it and renamed into place (`hv_file`, in
+`../lib/`); on error nothing is written. An existing output keeps its
+permissions, and one that is a symbolic link is written where the link
+points, the file it names created if need be, as when hvJP2K opens it for
+writing. Exit status: 0 (also for `-h`), 1 on error, 2 on usage errors.
+
+A linked JPX file records each input's path and its codestream's offset
+and length, so the inputs must stay as they are: rewriting one, as
+`hv_transcode` does in place, moves its codestream and breaks the link.
+Merge again after changing an input.
 
 ## The output
 
 As hvJP2K writes it:
 
-- the signature, `ftyp` (brand `jpx `, compatible with `jpx `, `jp2 ` and
-  `jpxb`, or `jpx ` alone when linked) and `rreq`, written with the model's
-  encoder (`hv_write_rreq`; T.801 M.11.1: features 1, 2 for more than one
+- the signature, `ftyp` (brand `jpx `, MinV 1, compatible with `jpx `,
+  `jp2 ` and `jpxb`, or `jpx ` alone when linked; the model's `FtypHeader`
+  and `Brand`) and `rreq`, written with the model's encoder
+  (`hv_write_rreq`; T.801 M.11.1: features 1, 2 for more than one
   codestream, 4 and 5 from the codestreams' Rsiz, 9 and 10 for opacity
   channels in `cdef`, 15 when linked);
 - `jp2h`, the first input's, with each `colr`'s APPROX of 0 written as 1
@@ -61,18 +84,23 @@ and its codestream with `HV_PROFILE`), so the JPX file is within it too
 (`hv_check_jpx`), and must have valid header boxes (`hv_check_jp2h`: T.800
 I.5.3, with `ihdr` and `bpcc` agreeing with SIZ), which the JPX headers are
 made of, so theirs are valid too (`hv_check_jpx_headers`). The tests check
-both of every JPX file they write. An input without a `cdef` or `res` box
-cannot follow a first input with one: its `jplh` would inherit the first
-input's from `jp2h` (T.801 M.11.7). hvJP2K checks neither the profile, nor
-the header boxes, nor the link targets, nor the inheritance: it merges files
-without PLT, which the server then rejects. Errors about an input name the
-file and, where a shared rule fails, the rule, as in `siz.zero-origin`;
-the others, such as those on `cdef` or `res` inheritance and on the count
-of `colr` boxes, are described in words. The output must be at most
-`INT_MAX` bytes (`file.size-limit`), a link must name a `.jp2` file
-(`url.jp2-target`), a linked JPX file holds at most 65,535 links, an
-input's `jp2h` at most 16 `colr` boxes, and a JPX file at most 16,777,215
-inputs.
+both of every JPX file they write. Two things valid in a JP2 file are not
+in the JPX file, and are rejected: more than one `colr` box with the same
+METH in the first input, whose `jp2h` the JPX file's is
+(`colr.one-method`, T.801 M.11.7.1); and a later input without a `cdef` or
+`res` box after a first input with one, as its `jplh` would inherit the
+first input's from `jp2h` (T.801 M.11.7). hvJP2K checks neither the
+profile, nor the header boxes, nor the link targets, nor these two: it
+merges files without PLT, which the server then rejects.
+
+Errors about an input name the file and, where a shared rule fails, the
+rule and its offset, as in `siz.zero-origin at 410`. The others are
+described in words: a missing `cdef` or `res`, too many `colr` boxes, a
+file that changed between the passes, and the limits. The output must be
+at most `INT_MAX` bytes (`file.size-limit`), and a link must name a `.jp2`
+file (`url.jp2-target`). Limits: an input's `jp2h` holds at most 16 `colr`
+boxes, a JPX file at most 16,777,215 inputs, and a linked one at most
+65,535.
 
 Differences from hvJP2K, beyond these checks: an XML box running to the
 end of its file (LBox = 0) gets an explicit length inside the `asoc`,
@@ -85,7 +113,7 @@ fresh header, as glymur writes it, where only an XLBox form would differ.
 | --- | --- |
 | `hv_merge.c` | The command: options, `-s`, mapping the inputs, writing the output file. |
 | `merge.h` / `.c` | `hv_merge_files`: checks the inputs, and writes the JPX file box by box to a stream, opening each input when it needs it (`hv_merge_buffers` for inputs already in memory). |
-| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and served, the reader requirement cases of hvJP2K's tests, rejected inputs, header boxes included, and inputs opened on demand (`test_opening`: how often each is opened, at most two at a time, failed opens, an input changed between the passes); `cli_test.sh`: the command. |
+| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and within the served profile, the reader requirement cases of hvJP2K's tests, rejected inputs (header boxes, `colr` counts and methods, the limits), inputs opened on demand (`test_opening`: how often each is opened, at most two at a time, a failed first or second open, an input changed between the passes, in size or in content), and 1,024- and 1,025-character links; `cli_test.sh`: the command (options as `argparse` parses them, `-s`, permissions, symbolic links, failures). |
 | `fuzz_merge.c` | libFuzzer target: two JP2 files from one input, merged; an accepted merge must pass `hv_check_jpx`, `hv_check_jpx_headers` and `HV_PROFILE` for each codestream. |
 
 ## Build and test

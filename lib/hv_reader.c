@@ -60,6 +60,10 @@ DEFINE_DECODE(CmapEntry)
 DEFINE_DECODE(CdefCount)
 DEFINE_DECODE(CdefEntry)
 DEFINE_DECODE(Resolution)
+DEFINE_DECODE(Rreq_Std)
+
+/* hv_codes.h's box header sizes are the model's. */
+_Static_assert(HV_LARGEST(BoxHeader) == HV_BOX_HEADER_XL, "BoxHeader is LBox, TBox, XLBox");
 
 static size_t min_size(size_t a, size_t b) { return a < b ? a : b; }
 
@@ -85,39 +89,36 @@ void hv_boxes_children(hv_boxes *it, const uint8_t *buf, const hv_box *parent) {
 
 int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at) {
     BoxHeader h;
-    size_t avail, header, size;
+    size_t avail, header = 0, size = 0;
+    const char *fault = NULL;
 
     if (it->done || it->pos == it->end)
         return 0;
     avail = it->end - it->pos;
-    *at = it->pos;
-    if (DECODE_USED(BoxHeader, &h, it->buf, it->pos, min_size(avail, HV_FIXED(BoxHeader)),
+    if (DECODE_USED(BoxHeader, &h, it->buf, it->pos, min_size(avail, HV_BOX_HEADER_XL),
                     &header) != 0) {
-        *error = "invalid or truncated box header";
-        return -1;
-    }
-    if (h.lbox == 1) {
-        if (h.xlbox > avail) {
-            *error = "box overruns its container";
-            return -1;
-        }
+        fault = "invalid or truncated box header";
+    } else if (h.lbox == 1) {
+        if (h.xlbox > avail)
+            fault = "box overruns its container";
         size = (size_t)h.xlbox;
     } else if (h.lbox == 0) {
         /* I.4: LBox = 0 only for the last box, and a box inside a superbox
          * may use it only if the superbox does too. */
-        if (!it->to_end) {
-            *error = "LBox = 0 inside a box that does not run to the end of the file";
-            return -1;
-        }
+        if (!it->to_end)
+            fault = "LBox = 0 inside a box that does not run to the end of the file";
         size = avail;
-        it->done = 1;
     } else {
-        if (h.lbox > avail) {
-            *error = "box overruns its container";
-            return -1;
-        }
+        if (h.lbox > avail)
+            fault = "box overruns its container";
         size = (size_t)h.lbox;
     }
+    if (fault != NULL) {
+        *error = fault;
+        *at = it->pos;
+        return -1;
+    }
+    it->done = h.lbox == 0;
     box->type = (uint32_t)h.tbox;
     box->start = it->pos;
     box->payload = it->pos + header;
@@ -150,14 +151,18 @@ int hv_is_superbox(uint32_t type) {
  * File rules of the served profile: JP2 and JPX
  * ------------------------------------------------------------------------ */
 
-/* The size and the signature box, before any box is read: the whole box,
- * header included, is fixed (T.800 I.5.1). */
+/* The size and the signature box, before any box is read: the whole box
+ * is fixed (T.800 I.5.1), LBox 12 and TBox HV_BOX_JP, then these
+ * contents. */
 static const char *check_start(const uint8_t *buf, size_t size) {
-    static const uint8_t signature[] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
-                                        0x0D, 0x0A, 0x87, 0x0A};
+    static const uint8_t contents[] = HV_SIGNATURE_BYTES;
+    BoxHeader h;
+    size_t used;
     if (size > INT_MAX)
         return "file.size-limit";
-    if (size < sizeof signature || memcmp(buf, signature, sizeof signature) != 0)
+    if (DECODE_USED(BoxHeader, &h, buf, 0, min_size(size, HV_BOX_HEADER_XL), &used) != 0 ||
+        h.tbox != HV_BOX_JP || h.lbox != HV_BOX_HEADER + sizeof contents ||
+        size - used < sizeof contents || memcmp(buf + used, contents, sizeof contents) != 0)
         return "file.signature";
     return NULL;
 }
@@ -188,7 +193,7 @@ static const char *check_ftyp(const uint8_t *buf, const hv_box *box, uint32_t br
 /* The file rules, as ../spec/harness/crossfield.c names them (the harness
  * implements them on the decoded model), except file.size-limit, which the
  * corpus cannot exercise. */
-const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
+static const char *check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
     hv_boxes it;
     hv_box box;
     const char *error;
@@ -209,15 +214,20 @@ const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *
     }
     if (status < 0)
         return error;
-    if (n < 2) {
-        *at = size;
+    *at = size;
+    if (n < 2)
         return "file.two-boxes";
-    }
-    if (codestreams != 1) {
-        *at = size;
+    if (codestreams != 1)
         return "jp2.one-codestream";
-    }
     return NULL;
+}
+
+const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
+    size_t pos;
+    const char *error = check_jp2(buf, size, jp2c, &pos);
+    if (error != NULL)
+        *at = pos;
+    return error;
 }
 
 /* Grows *p (elements of `size` bytes, *cap of them) to hold n + 1. */
@@ -241,7 +251,7 @@ void hv_jpx_free(hv_jpx *jpx) {
     jpx->count = 0;
 }
 
-/* One url box of a dtbl: LOC recorded in urls. */
+/* One url box of a dtbl: LOC recorded in url. */
 static const char *check_url(const uint8_t *buf, const hv_box *box, hv_link *url) {
     UrlHeader h;
     const char *error;
@@ -269,8 +279,11 @@ static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *li
         fragments = (int)((n - used) / HV_FIXED(Fragment));
     if ((error = hv_rule_flst(nf, fragments)) != NULL)
         return error;
+    /* NF is 1 and the box holds one whole fragment. Of its fields, OFF and
+     * DR take every value their bytes can hold (Fragment), so the decoder
+     * can only fail on LEN 0. */
     if (DECODE(FragmentList_Profile, &f, buf, box->payload, n) != 0)
-        return "flst.one-fragment";
+        return "flst: fragment length (LEN) 0";
     link->offset = f.fragments.arr[0].off;
     link->length = f.fragments.arr[0].len;
     link->dr = f.fragments.arr[0].dr;
@@ -279,12 +292,13 @@ static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *li
 
 /* The rules of hv_rules.c, and the file rules as
  * ../spec/harness/crossfield_impl.h names them. */
-const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at) {
+static const char *check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at) {
     hv_boxes it, children;
     hv_box box, child;
     hv_jpx_boxes count = {0, 0, 0, 0, 0, 0};
     hv_link *urls = NULL;
-    size_t n = 0, nurls = 0, url_cap = 0, jp2c_cap = 0, link_cap = 0, i;
+    size_t *flst_at = NULL;     /* the flst box of each link, for flst.dr-* */
+    size_t n = 0, nurls = 0, url_cap = 0, jp2c_cap = 0, link_cap = 0, flst_cap = 0, i;
     uint64_t ndr = 0;
     const char *error;
     int status;
@@ -319,16 +333,19 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
                 count.ftbl++;
             hv_boxes_children(&children, buf, &box);
             while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
+                size_t k = (size_t)count.ftbl - 1;
                 *at = child.start;
                 if ((error = hv_rule_child(box.type, child.type)) != NULL)
                     goto fail;
                 if (child.type != HV_BOX_FLST)
                     continue;
                 if (flsts++ == 0) {
-                    if (grow(&jpx->links, &link_cap, count.ftbl - 1, sizeof *jpx->links) != 0)
+                    if (grow(&jpx->links, &link_cap, k, sizeof *jpx->links) != 0 ||
+                        grow(&flst_at, &flst_cap, k, sizeof *flst_at) != 0)
                         goto oom;
-                    if ((error = check_flst(buf, &child, &jpx->links[count.ftbl - 1])) != NULL)
+                    if ((error = check_flst(buf, &child, &jpx->links[k])) != NULL)
                         goto fail;
+                    flst_at[k] = child.start;
                 }
             }
             if (status < 0)
@@ -352,6 +369,8 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
             }
             ndr = c;
             nurls = 0;          /* a second dtbl is jpx.one-dtbl, below */
+            /* The url boxes follow NDR: walk them as the children of a box
+             * whose payload starts after it. */
             refs.payload += used;
             hv_boxes_children(&children, buf, &refs);
             while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
@@ -388,6 +407,7 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
     if (count.ftbl > 0) {
         jpx->count = (size_t)count.ftbl;
         for (i = 0; i < jpx->count; i++) {
+            *at = flst_at[i];
             if ((error = hv_rule_fragment_dr(jpx->links[i].dr, ndr, 1)) != NULL)
                 goto fail;
             jpx->links[i].loc = urls[jpx->links[i].dr - 1].loc;
@@ -400,62 +420,59 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
         jpx->links = NULL;
     }
     free(urls);
+    free(flst_at);
     return NULL;
 
 oom:
     error = "out of memory";
 fail:
     free(urls);
+    free(flst_at);
     hv_jpx_free(jpx);
     return error;
 }
 
-/* RFC 3986 percent-decoding of LOC after "file://", as the server does
- * (g_uri_unescape_string): no %00, and every % followed by two hex digits. */
-static int hex(int c) {
-    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
-         : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at) {
+    size_t pos;
+    const char *error = check_jpx(buf, size, jpx, &pos);
+    if (error != NULL)
+        *at = pos;
+    return error;
 }
 
-int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size) {
-    const uint8_t *p, *end;
-    size_t n = 0;
+const char *hv_link_path(const hv_link *link, const char *jpx_path, char *out,
+                         size_t out_size) {
+    size_t n;
     if (out_size == 0)
-        return -1;
+        return "no room for the linked path";
     out[0] = 0;
     if (link->loc_size <= HV_FILE_SCHEME_LENGTH)
-        return -1;
-    p = link->loc + HV_FILE_SCHEME_LENGTH;
-    end = link->loc + link->loc_size;
-    for (; p < end; p++) {
-        int c = *p;
-        if (c == '%') {
-            int hi, lo;
-            if (end - p < 3 || (hi = hex(p[1])) < 0 || (lo = hex(p[2])) < 0 || hi * 16 + lo == 0)
-                goto fail;
-            c = hi * 16 + lo;
-            p += 2;
-        }
-        if (c == 0 || n + 1 >= out_size)
-            goto fail;
-        out[n++] = (char)c;
+        return "url.length";
+    if (memcmp(link->loc, HV_FILE_SCHEME, HV_FILE_SCHEME_LENGTH) != 0)
+        return "url.file-scheme";
+    switch (hv_url_path(link->loc + HV_FILE_SCHEME_LENGTH,
+                        link->loc_size - HV_FILE_SCHEME_LENGTH, out, out_size)) {
+    case 0:
+        break;
+    case -1:
+        out[0] = 0;
+        return "url.percent-encoding";
+    default:
+        out[0] = 0;
+        return "linked path longer than the caller's buffer";
     }
-    if (n == 0)
-        goto fail;
-    out[n] = 0;
+    n = strlen(out);
     if (out[0] != '/' && jpx_path != NULL) {
         const char *slash = strrchr(jpx_path, '/');
         size_t dir = slash ? (size_t)(slash - jpx_path) + 1 : 0;
-        if (dir > out_size - n - 1)
-            goto fail;
+        if (dir > out_size - n - 1) {
+            out[0] = 0;
+            return "linked path longer than the caller's buffer";
+        }
         memmove(out + dir, out, n + 1);
         memcpy(out, jpx_path, dir);
     }
-    return 0;
-
-fail:
-    out[0] = 0;
-    return -1;
+    return NULL;
 }
 
 const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,
@@ -464,8 +481,9 @@ const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, un
     hv_item item;
     const char *error = NULL;
     int status = hv_codestream_open(&cs, buf, start, end, flags);
-    while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1)
-        status = item.kind == HV_END ? 1 : 0;
+    if (status == 0)
+        while ((status = hv_codestream_next(&cs, &item)) == 1)
+            ;                           /* 0 after HV_END */
     if (status < 0) {
         error = cs.error;
         *at = cs.error_at;
@@ -480,9 +498,10 @@ const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, 
     if ((error = hv_check_jp2(buf, size, &jp2c, at)) != NULL ||
         (error = hv_codestream_check(buf, jp2c.payload, jp2c.end, HV_PROFILE, at)) != NULL)
         return error;
-    *at = jp2c.payload;
-    if (link->offset != jp2c.payload || link->length != jp2c.end - jp2c.payload)
+    if (link->offset != jp2c.payload || link->length != jp2c.end - jp2c.payload) {
+        *at = jp2c.payload;
         return "flst.source-extent";
+    }
     return NULL;
 }
 
@@ -501,7 +520,12 @@ static uint32_t header_type(uint32_t type) {
     }
 }
 
-/* One child of a header box, decoded with the model's types. */
+/* One child of a header box, decoded with the model's types. *at is the
+ * child box (read_header sets it), or the entry at fault in a box of
+ * entries (bpcc, cmap, cdef) or the child at fault in res. The types
+ * that end in `extra` (Ihdr, Resolution) are decoded from at most their
+ * largest encoding, so that any number of bytes after the fields gives
+ * <box>.extent. */
 static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_header *h,
                                      size_t *at) {
     size_t n = box->end - box->payload, p = box->payload, i;
@@ -510,8 +534,8 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     switch (box->type) {
     case HV_BOX_IHDR: {
         Ihdr ihdr;
-        if (DECODE(Ihdr, &ihdr, buf, p, n) != 0)
-            return "ihdr: not 14 bytes of valid fields";
+        if (DECODE(Ihdr, &ihdr, buf, p, min_size(n, HV_LARGEST(Ihdr))) != 0)
+            return "ihdr: shorter than its fields, or a field out of range";
         return hv_rule_ihdr(h, &ihdr);
     }
     case HV_BOX_BPCC:
@@ -519,6 +543,7 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
             return "bpcc: empty";
         for (i = 0; i < n && error == NULL; i += HV_FIXED(BitDepth)) {
             BitDepth depth;
+            *at = p + i;
             if (DECODE(BitDepth, &depth, buf, p + i, HV_FIXED(BitDepth)) != 0)
                 return "bpcc: reserved bit depth";
             error = hv_rule_bpcc_entry(h, depth);
@@ -558,18 +583,22 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
         CdefCount count;
         CdefEntry *entries;
         size_t used;
-        if (DECODE_USED(CdefCount, &count, buf, p, n, &used) != 0 ||
-            (n - used) / HV_FIXED(CdefEntry) < count)
-            return "cdef: N does not match the box";
+        if (DECODE_USED(CdefCount, &count, buf, p, n, &used) != 0)
+            return "cdef: no N, or N is 0";
+        if ((n - used) / HV_FIXED(CdefEntry) < count)
+            return "cdef: shorter than its N entries";
         if ((entries = malloc((size_t)count * sizeof *entries)) == NULL)
             return "out of memory";
-        for (i = 0; i < count && error == NULL; i++, used += HV_FIXED(CdefEntry))
+        for (i = 0; i < count && error == NULL; i++, used += HV_FIXED(CdefEntry)) {
+            *at = p + used;
             if (DECODE(CdefEntry, &entries[i], buf, p + used, HV_FIXED(CdefEntry)) != 0)
                 error = "cdef: invalid entry";
-        if (error == NULL)
-            error = hv_rule_cdef(h, entries, (size_t)count);
-        if (error == NULL)
-            error = hv_rule_extent(HV_BOX_CDEF, n - used);
+        }
+        if (error == NULL) {
+            *at = box->start;
+            if ((error = hv_rule_cdef(h, entries, (size_t)count)) == NULL)
+                error = hv_rule_extent(HV_BOX_CDEF, n - used);
+        }
         free(entries);
         return error;
     }
@@ -580,13 +609,15 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
         hv_boxes_children(&it, buf, box);
         while ((status = hv_boxes_next(&it, &child, &error, at)) == 1) {
             Resolution r;
+            int resolution = child.type == HV_BOX_RESC || child.type == HV_BOX_RESD;
             *at = child.start;
-            if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
-                DECODE(Resolution, &r, buf, child.payload, child.end - child.payload) != 0)
-                return "res: invalid resc or resd";
+            if (resolution && DECODE(Resolution, &r, buf, child.payload,
+                                     min_size(child.end - child.payload,
+                                              HV_LARGEST(Resolution))) != 0)
+                return "res: resc or resd shorter than its fields, or a field out of range";
             if ((error = hv_rule_res_child(h, child.type)) != NULL)
                 return error;
-            if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
+            if (resolution &&
                 (error = hv_rule_extent(child.type, (uint64_t)r.extra.nCount)) != NULL)
                 return error;
         }
@@ -619,24 +650,77 @@ static const char *read_header(const uint8_t *buf, const hv_box *box, uint32_t p
     return status < 0 ? error : NULL;
 }
 
-/* The codestream in buf[start, end): its SIZ against the header. */
+/* The children of the top-level superboxes, at the standard layer, as the
+ * harness checks them at layer 1 (../spec/harness/crossfield_impl.h and
+ * crossfield.c): jp2c, jpch, ftbl and dtbl belong at the top level, flst
+ * in an ftbl, url in a dtbl (hv_rule_child), and an ftbl holds exactly
+ * one flst (ftbl.one-flst, T.801 M.11.3). In jp2h, jplh, uinf and asoc,
+ * which the server does not walk, a url is not checked: T.800 I.7.3 puts
+ * one in uinf. */
+static const char *check_placement(const uint8_t *buf, size_t size, size_t *at) {
+    hv_boxes it, children;
+    hv_box box, child;
+    const char *error;
+    int status, flsts;
+
+    hv_boxes_file(&it, buf, size);
+    while (hv_boxes_next(&it, &box, &error, at) == 1) {
+        hv_box parent = box;
+        int walked = box.type == HV_BOX_JPCH || box.type == HV_BOX_FTBL ||
+                     box.type == HV_BOX_DTBL;
+        if (!walked && box.type != HV_BOX_JP2H && box.type != HV_BOX_JPLH &&
+            box.type != HV_BOX_UINF && box.type != HV_BOX_ASOC)
+            continue;
+        if (box.type == HV_BOX_DTBL) {          /* the url boxes follow NDR */
+            DataReferenceCount c;
+            size_t used;
+            if (DECODE_USED(DataReferenceCount, &c, buf, box.payload, box.end - box.payload,
+                            &used) != 0) {
+                *at = box.start;
+                return "dtbl: shorter than NDR";
+            }
+            parent.payload += used;
+        }
+        hv_boxes_children(&children, buf, &parent);
+        flsts = 0;
+        while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
+            *at = child.start;
+            if ((walked || child.type != HV_BOX_URL) &&
+                (error = hv_rule_child(box.type, child.type)) != NULL)
+                return error;
+            flsts += child.type == HV_BOX_FLST;
+        }
+        if (status < 0)
+            return error;
+        if (box.type == HV_BOX_FTBL && flsts != 1) {
+            *at = box.start;
+            return "ftbl.one-flst";
+        }
+    }
+    return NULL;
+}
+
+/* The codestream in buf[start, end) against its header: h over the
+ * defaults, at the header box at header_at. A codestream whose SIZ does
+ * not open (hv_codestream_open, flags 0) fails with the reader's error at
+ * its offset; a header rule fails at header_at. */
 static const char *check_codestream_header(const uint8_t *buf, size_t start, size_t end,
                                            const hv_header *h, const hv_header *defaults,
-                                           int jpx, size_t *at) {
+                                           int jpx, size_t header_at, size_t *at) {
     hv_codestream cs;
     const char *error;
-    *at = start;
     if (hv_codestream_open(&cs, buf, start, end, 0) != 0) {
         error = cs.error;
         *at = cs.error_at;
     } else {
         error = hv_rule_codestream_header(h, defaults, hv_codestream_siz(&cs), jpx);
+        *at = header_at;
     }
     hv_codestream_close(&cs);
     return error;
 }
 
-const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
+static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     hv_boxes it;
     hv_box box, jp2h = {0}, jp2c = {0};
     hv_header *h;
@@ -656,6 +740,8 @@ const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     }
     if (status < 0)
         return error;
+    if ((error = check_placement(buf, size, at)) != NULL)
+        return error;
     *at = size;
     if ((error = hv_rule_jp2h_place(n, late, codestreams, 0)) != NULL)
         return error;
@@ -663,23 +749,29 @@ const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
         return "out of memory";
     *at = jp2h.start;
     if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, h, at)) == NULL)
-        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, 0, at);
+        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, 0, jp2h.start, at);
     free(h);
     return error;
 }
 
-/* The contents of a Reader Requirements box, decoded with Rreq-Std, and
- * nothing after them (rreq.extent). */
+const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
+    size_t pos;
+    const char *error = check_jp2h(buf, size, &pos);
+    if (error != NULL)
+        *at = pos;
+    return error;
+}
+
+/* The contents of a Reader Requirements box, decoded with Rreq-Std (from at
+ * most its largest encoding, as Ihdr), and nothing after them
+ * (rreq.extent). */
 static const char *check_rreq(const uint8_t *buf, const hv_box *box) {
     Rreq_Std *rreq = malloc(sizeof *rreq);
-    size_t n = box->end - box->payload;
-    const char *error = NULL;
-    BitStream s;
-    int err = 0;
+    const char *error;
     if (rreq == NULL)
         return "out of memory";
-    BitStream_AttachBuffer(&s, (unsigned char *)buf + box->payload, (long)min_size(n, LONG_MAX));
-    if (!Rreq_Std_ACN_Decode(rreq, &s, &err))
+    if (DECODE(Rreq_Std, rreq, buf, box->payload,
+               min_size(box->end - box->payload, HV_LARGEST(Rreq_Std))) != 0)
         error = "rreq: contents are not ML, FUAM, DCM, NSF standard and NVF vendor features";
     else
         error = hv_rule_extent(HV_BOX_RREQ, (uint64_t)rreq->extra.nCount);
@@ -687,85 +779,104 @@ static const char *check_rreq(const uint8_t *buf, const hv_box *box) {
     return error;
 }
 
-const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
-    hv_boxes it;
-    hv_box box, jp2h = {0}, rreq = {0};
-    hv_header *h;
+/* Linear passes over the top-level boxes. The first counts them for the
+ * file rules (hv_rule_jpx at the standard layer, hv_rule_jp2h_place);
+ * check_placement looks into the top-level superboxes. The last reads, in
+ * box order, each jplh for its own rules (its header describes a
+ * compositing layer, which nothing else here checks) and each codestream
+ * against its header: codestream k (jp2c or ftbl) against jpch k, which a
+ * second iterator finds by moving on from jpch k - 1, over the jp2h
+ * defaults. */
+static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
+    hv_boxes it, next_jpch;
+    hv_box box, jpch, jp2h = {0}, rreq = {0};
+    hv_jpx_boxes count = {0, 0, 0, 0, 0, 0};
+    hv_header *h, *defaults;    /* h: the jpch or jplh being read */
     const char *error = NULL;
-    int status, n = 0, late = 0, later = 0, jpchs = 0, codestreams = 0, stream = 0;
-    int boxes = 0, rreqs = 0, rreq_third = 0;
+    int status, boxes = 0, jp2hs = 0, late = 0, later = 0;
 
     *at = 0;
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
         if (++boxes == 3)
-            rreq_third = box.type == HV_BOX_RREQ;
-        if (box.type == HV_BOX_RREQ && rreqs++ == 0)
-            rreq = box;
+            count.rreq_third = box.type == HV_BOX_RREQ;
         switch (box.type) {
+        case HV_BOX_RREQ:
+            if (count.rreq++ == 0)
+                rreq = box;
+            break;
         case HV_BOX_JP2H:
             late |= later;
-            if (n++ == 0)
+            if (jp2hs++ == 0)
                 jp2h = box;
             break;
-        case HV_BOX_JPCH: jpchs++; later = 1; break;
-        case HV_BOX_JP2C: case HV_BOX_FTBL: codestreams++; later = 1; break;
+        case HV_BOX_JPCH: count.jpch++; later = 1; break;
+        case HV_BOX_JP2C: count.jp2c++; later = 1; break;
+        case HV_BOX_FTBL: count.ftbl++; later = 1; break;
         case HV_BOX_JPLH: later = 1; break;
+        case HV_BOX_DTBL: count.dtbl++; break;
         default: break;
         }
     }
     if (status < 0)
         return error;
-    /* T.801 M.11.1: one Reader Requirements box, right after ftyp. */
     *at = size;
-    if (rreqs != 1 || !rreq_third)
-        return "jpx.reader-requirements";
+    if ((error = hv_rule_jpx(&count, 0)) != NULL ||
+        (error = check_placement(buf, size, at)) != NULL)
+        return error;
     *at = rreq.start;
     if ((error = check_rreq(buf, &rreq)) != NULL)
         return error;
     *at = size;
-    if ((error = hv_rule_jp2h_place(n, late, 0, 1)) != NULL)
+    if ((error = hv_rule_jp2h_place(jp2hs, late, 0, 1)) != NULL)
         return error;
-    if (jpchs > 0 && jpchs != codestreams)
-        return "jpx.codestream-count";
-    if ((h = malloc(3 * sizeof *h)) == NULL)       /* jp2h, jpch, jplh */
+    if ((h = malloc(2 * sizeof *h)) == NULL)
         return "out of memory";
-    if (n > 0) {
+    defaults = jp2hs ? &h[1] : NULL;
+    if (defaults != NULL) {
         *at = jp2h.start;
-        error = read_header(buf, &jp2h, HV_BOX_JP2H, 1, &h[0], at);
+        error = read_header(buf, &jp2h, HV_BOX_JP2H, 1, defaults, at);
     }
     hv_boxes_file(&it, buf, size);
-    while (error == NULL && hv_boxes_next(&it, &box, &error, at) == 1)
+    hv_boxes_file(&next_jpch, buf, size);
+    while (error == NULL && hv_boxes_next(&it, &box, &error, at) == 1) {
+        const hv_header *own = NULL;
+        size_t header_at = defaults ? jp2h.start : box.start;
         if (box.type == HV_BOX_JPLH) {
             *at = box.start;
-            error = read_header(buf, &box, HV_BOX_JPLH, 1, &h[2], at);
+            error = read_header(buf, &box, HV_BOX_JPLH, 1, h, at);
+            continue;
         }
-    /* Codestream k and jpch k (T.801 M.11.6), in box order. */
-    hv_boxes_file(&it, buf, size);
-    while (error == NULL && hv_boxes_next(&it, &box, &error, at) == 1) {
-        hv_boxes headers;
-        hv_box jpch;
-        int k = 0;
         if (box.type != HV_BOX_JP2C && box.type != HV_BOX_FTBL)
             continue;
-        if (jpchs > 0) {
-            hv_boxes_file(&headers, buf, size);
-            while (hv_boxes_next(&headers, &jpch, &error, at) == 1)
-                if (jpch.type == HV_BOX_JPCH && k++ == stream)
-                    break;
+        if (count.jpch > 0) {
+            /* As many jpch as codestreams (hv_rule_jpx): there is a next. */
+            while (hv_boxes_next(&next_jpch, &jpch, &error, at) == 1 &&
+                   jpch.type != HV_BOX_JPCH)
+                ;
             *at = jpch.start;
-            if ((error = read_header(buf, &jpch, HV_BOX_JPCH, 1, &h[1], at)) != NULL)
+            if ((error = read_header(buf, &jpch, HV_BOX_JPCH, 1, h, at)) != NULL)
                 break;
+            own = h;
+            header_at = jpch.start;
         }
-        *at = box.start;
-        if (box.type == HV_BOX_JP2C)
-            error = check_codestream_header(buf, box.payload, box.end, jpchs ? &h[1] : NULL,
-                                            n ? &h[0] : NULL, 1, at);
-        else
-            error = hv_rule_codestream_header(jpchs ? &h[1] : NULL, n ? &h[0] : NULL, NULL, 1);
-        stream++;
+        if (box.type == HV_BOX_JP2C) {
+            error = check_codestream_header(buf, box.payload, box.end, own, defaults, 1,
+                                            header_at, at);
+        } else {
+            *at = header_at;
+            error = hv_rule_codestream_header(own, defaults, NULL, 1);
+        }
     }
     free(h);
+    return error;
+}
+
+const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
+    size_t pos;
+    const char *error = check_jpx_headers(buf, size, &pos);
+    if (error != NULL)
+        *at = pos;
     return error;
 }
 
@@ -783,8 +894,12 @@ static int fail(hv_codestream *cs, const char *error, size_t at) {
 }
 
 /* The served profile, in the scope the flags ask for. */
-static int profile_headers(const hv_codestream *cs) { return (cs->flags & HV_PROFILE_HEADERS) != 0; }
-static int profile_full(const hv_codestream *cs) { return (cs->flags & HV_PROFILE) == HV_PROFILE; }
+static int profile_headers(const hv_codestream *cs) {
+    return (cs->flags & HV_PROFILE_HEADERS) != 0;
+}
+static int profile_full(const hv_codestream *cs) {
+    return (cs->flags & HV_PROFILE) == HV_PROFILE;
+}
 
 /* SIZ: the shared cross-field rules (hv_rules.c), and in the profile the
  * model's Siz-Profile type; then the tiles Isot can address. */
@@ -793,9 +908,10 @@ static const char *check_siz(const hv_codestream *cs, const Siz *s, uint32_t *ti
     int err;
     if ((error = hv_rule_siz(s, NULL, profile_headers(cs))) != NULL)
         return error;
+    /* What Siz-Profile adds to the rules: the image extent. */
     if (profile_headers(cs) && !Siz_Profile_IsConstraintValid(s, &err))
-        return "SIZ: outside Siz-Profile";
-    /* Isot (0 to 65 534) can address at most 65 535 tiles; a larger grid
+        return "SIZ: Xsiz or Ysiz above 2,147,483,647 (Siz-Profile)";
+    /* Isot (0 to 65,534) can address at most 65,535 tiles; a larger grid
      * is not an error by itself, its other tiles just cannot appear. */
     *tiles = hv_rule_tiles(s);
     return NULL;
@@ -825,6 +941,8 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
     cs->start = start;
     cs->end = end;
     cs->flags = flags;
+    if (start > end)
+        return fail(cs, "codestream ends before it starts", start);
     if ((flags & HV_ACCEPT_PLT_PADDING) && profile_full(cs))
         return fail(cs, "HV_ACCEPT_PLT_PADDING with HV_PROFILE", start);
     if (DECODE(MarkerCode, &m, buf, start, min_size(end - start, MARKER)) != 0 || m != HV_SOC)
@@ -843,31 +961,42 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
         return fail(cs, "invalid SIZ", cs->pos);
     if ((error = check_siz(cs, &cs->siz->body, &cs->tiles)) != NULL)
         return fail(cs, error, cs->pos);
-    cs->siz_end = cs->pos + MARKER + (size_t)l;
     cs->parts = calloc(cs->tiles, sizeof *cs->parts);
     cs->tnsot = calloc(cs->tiles, sizeof *cs->tnsot);
     if (cs->parts == NULL || cs->tnsot == NULL)
         return fail(cs, "out of memory", cs->pos);
+    cs->siz_end = cs->pos + MARKER + (size_t)l;     /* open succeeded */
     cs->state = ST_SIZ;
     return 0;
 }
 
+/* Everything but the error goes: the accessors return NULL again. */
 void hv_codestream_close(hv_codestream *cs) {
+    const char *error = cs->error;
+    size_t error_at = cs->error_at;
     free(cs->siz);
     free(cs->com);
     free(cs->plt);
     free(cs->parts);
     free(cs->tnsot);
-    cs->siz = NULL;
-    cs->com = NULL;
-    cs->plt = NULL;
-    cs->parts = NULL;
-    cs->tnsot = NULL;
+    memset(cs, 0, sizeof *cs);
+    cs->state = ST_DONE;
+    cs->error = error;
+    cs->error_at = error_at;
 }
 
-/* siz_end is set once SIZ passed its checks. */
-const Siz *hv_codestream_siz(const hv_codestream *cs) { return cs->siz_end ? &cs->siz->body : NULL; }
-const Cod *hv_codestream_cod(const hv_codestream *cs) { return cs->cods ? &cs->cod.body : NULL; }
+/* siz_end is set once hv_codestream_open succeeded, cods and qcds once the
+ * main-header COD or QCD passed its checks; hv_codestream_close clears all
+ * three. */
+const Siz *hv_codestream_siz(const hv_codestream *cs) {
+    return cs->siz_end ? &cs->siz->body : NULL;
+}
+const Cod *hv_codestream_cod(const hv_codestream *cs) {
+    return cs->cods ? &cs->cod.body : NULL;
+}
+const Qcd_Std *hv_codestream_qcd(const hv_codestream *cs) {
+    return cs->qcds ? &cs->qcd.body : NULL;
+}
 
 /* Reads the marker segment at cs->pos: *code, and *end just past it. The
  * codes without a segment (SOC, SOD, EOC, EPH, 0xFF30 to 0xFF3F) end after
@@ -907,7 +1036,8 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     if (DECODE(SotSegment, sot, cs->buf, pos + MARKER,
                min_size(cs->end - pos - MARKER, HV_FIXED(SotSegment))) != 0)
         return fail(cs, "invalid SOT", pos);
-    if ((error = hv_rule_tile_part_count((uint64_t)cs->tile_parts + 1, profile_full(cs))) != NULL)
+    if (profile_full(cs) &&
+        (error = hv_rule_tile_part_count((uint64_t)cs->tile_parts + 1)) != NULL)
         return fail(cs, error, pos);
     if ((error = hv_rule_tile_part(&seen, sot->isot, sot->tpsot, sot->tnsot)) != NULL)
         return fail(cs, error, pos);
@@ -979,7 +1109,8 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
             return -1;
         item->com = cs->com;
         break;
-    case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG:
+    case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_TLM: case HV_PLM: case HV_PPM:
+    case HV_CRG:
         break;                        /* bodies not modelled: skipped by length */
     case HV_SOC: case HV_SIZ: case HV_SOD: case HV_SOP: case HV_EPH:
     case HV_PLT: case HV_PPT:           /* T.800 places them elsewhere (Table A.1) */
@@ -1001,6 +1132,10 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     TileMarkerCode_Profile profile_code = code;
     int err;
 
+    /* A header that runs into the next tile-part or the end gets the same
+     * message with every flag. */
+    if (code == HV_SOT || code == HV_EOC)
+        return fail(cs, "tile-part header without SOD", pos);
     if (profile_full(cs) && !TileMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
         return fail(cs, "tile.marker-code", pos);   /* TileMarkerCode-Profile */
     switch (code) {
@@ -1056,9 +1191,8 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         break;
     case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_PPT:
         break;
-    case HV_SOT: case HV_EOC:
-        return fail(cs, "tile-part header without SOD", pos);
-    case HV_SOC: case HV_SIZ: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG: case HV_SOP: case HV_EPH:
+    case HV_SOC: case HV_SIZ: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG: case HV_SOP:
+    case HV_EPH:
         return fail(cs, "tile.marker-code", pos);
     default:
         break;
@@ -1077,12 +1211,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     size_t end;
     const char *error;
 
-    item->siz = NULL;
-    item->cod = NULL;
-    item->qcd = NULL;
-    item->plt = NULL;
-    item->com = NULL;
-    item->plt_padding = 0;
+    memset(item, 0, sizeof *item);
     switch (cs->state) {
     case ST_DONE:
         return cs->error ? -1 : 0;

@@ -16,6 +16,9 @@
 extern "C" {
 #endif
 
+/* The output: size bytes written, in a buffer of capacity bytes whose
+ * bytes past size are kept zero (the generated encoders need that).
+ * Callers read data and size and never write any field. */
 typedef struct {
     uint8_t *data;
     size_t size, capacity;
@@ -25,12 +28,13 @@ typedef struct {
 void hv_out_init(hv_out *out);
 void hv_out_free(hv_out *out);
 
-/* Back to out->size `size`, taken while out->error was NULL: drops what was
- * written since and the error of those writes. The only way to shorten
- * out; callers do not set out->size. */
+/* Back to out->size `size`, taken while out->error was NULL: drops (and
+ * zeroes) what was written since, and the error of those writes. The only
+ * way to shorten out; callers do not set out->size. */
 void hv_out_rewind(hv_out *out, size_t size);
 
-/* Every write returns 0, or -1 with out->error set. */
+/* Every write returns 0, or -1 with out->error set (and -1 at once when it
+ * already is). Error messages are lowercase prose naming what failed. */
 
 /* Bytes the writer does not interpret: packet data, box payloads. */
 int hv_write_bytes(hv_out *out, const void *bytes, size_t size);
@@ -47,9 +51,15 @@ int hv_write_cod(hv_out *out, const CodSegment_Std *cod);
 int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd);
 int hv_write_com(hv_out *out, const ComSegment_Std *com);
 
-/* PLT segments listing `count` packet lengths, Zplt from 0. Each segment
- * holds as many whole entries as fit in Lplt = 65 535, which is how Kakadu
- * splits them. Zero lengths are rejected (T.800 A.7.3). */
+/* The PLT segments of one tile-part, listing all `count` packet lengths of
+ * it, Zplt from 0. Each segment holds as many whole entries as fit in Lplt
+ * = 65,535, which is how Kakadu splits them; at most 256 segments. Zero
+ * lengths are rejected (T.800 A.7.3). Call it once per tile-part: the
+ * writer keeps no tile-part state (hv_out_rewind can move out anywhere),
+ * so a second call would start Zplt at 0 again, which the reader rejects
+ * (plt.zplt-sequence). The callers know every length before they write
+ * the tile-part header: hv_transcode from its first pass, hv_walk -w by
+ * collecting the entries of the tile-part's PLT segments. */
 int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count);
 
 /* SOT with Psot left to hv_end_tile_part, which sets it to the bytes
@@ -61,7 +71,9 @@ int hv_end_tile_part(hv_out *out, size_t start);
 /* A box header whose length hv_end_box fills in. Begun `extended`, the
  * box has LBox = 1 and XLBox; otherwise LBox, which hv_end_box switches to
  * XLBox if the box outgrew it (above 4 GiB - 1), moving the payload up 8
- * bytes: an offset taken inside the box is then 8 short. */
+ * bytes: an offset taken inside the box is then 8 short. (hv_writer.c
+ * takes the largest LBox from HV_LBOX_MAX, which lib/test/test_writer.c
+ * lowers to exercise the switch.) */
 int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start);
 int hv_end_box(hv_out *out, size_t start);
 

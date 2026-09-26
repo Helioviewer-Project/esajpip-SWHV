@@ -60,8 +60,17 @@ configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 # merge/test), separate from the server's. Run them with lib/test/run.sh.
 option(ESAJPIP_TOOL_TESTS "Build and register the tests of jpeg2000_io, hv_transcode and hv_merge" OFF)
 
+option(ESAJPIP_FUZZ "Build the libFuzzer targets fuzz_transcode and fuzz_merge" OFF)
+if(ESAJPIP_FUZZ AND NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "ESAJPIP_FUZZ requires Clang")
+endif()
+
 # The JPEG 2000 reader/writer (lib/), built as a static library.
 add_subdirectory(lib)
+if(ESAJPIP_FUZZ)
+    # Coverage for the library too, for the fuzz targets of the tools.
+    target_compile_options(jpeg2000_io PRIVATE -fsanitize=fuzzer-no-link)
+endif()
 # hv_transcode (transcode/) and hv_merge (merge/), on that library.
 add_subdirectory(transcode)
 add_subdirectory(merge)

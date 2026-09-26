@@ -1,18 +1,13 @@
 /* hv_geometry.c: see hv_geometry.h. Equation numbers are T.800's. */
 #include "hv_geometry.h"
 
-#include <stdarg.h>
-#include <stdio.h>
+#include "hv_error.h"
+
 #include <stdlib.h>
 #include <string.h>
 
-static int fail(char *error, size_t size, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    vsnprintf(error, size, format, args);
-    va_end(args);
-    return -1;
-}
+/* The most packets hv_geometry_packets lays out (hv_geometry.h). */
+#define MAX_PACKETS 2147483647u
 
 /* b > 0. C division truncates, which is the ceiling for a <= 0. */
 static int64_t ceildiv(int64_t a, int64_t b) {
@@ -41,7 +36,7 @@ int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t ti
     ntx = ceildiv((int64_t)siz->xsiz - (int64_t)siz->xtosiz, (int64_t)siz->xtsiz);
     nty = ceildiv((int64_t)siz->ysiz - (int64_t)siz->ytosiz, (int64_t)siz->ytsiz);
     if (ntx <= 0 || nty <= 0 || (int64_t)tile / ntx >= nty)   /* ntx * nty can overflow */
-        return fail(error, error_size, "tile %u outside the tile grid", (unsigned)tile);
+        return hv_fail(error, error_size, "tile %u outside the tile grid", (unsigned)tile);
     p = (int64_t)tile % ntx;
     q = (int64_t)tile / ntx;
     g->tx0 = max64((int64_t)siz->xtosiz + p * (int64_t)siz->xtsiz, (int64_t)siz->xosiz);
@@ -54,7 +49,7 @@ int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t ti
     g->progression = (int)cod->sgcod.progression;
     g->res = calloc((size_t)g->ncomps * (NL + 1), sizeof *g->res);
     if (g->res == NULL)
-        return fail(error, error_size, "out of memory");
+        return hv_fail(error, error_size, "out of memory");
 
     for (c = 0; c < g->ncomps; c++) {
         int64_t xr = (int64_t)siz->components.arr[c].xrsiz;
@@ -173,10 +168,10 @@ int hv_geometry_packets(const hv_geometry *g, hv_packet **packets, size_t *count
 
     *packets = NULL;
     *count = 0;
-    if (total > 0x7FFFFFFF)
-        return fail(error, error_size, "packet count exceeds supported limit");
+    if (total > MAX_PACKETS)
+        return hv_fail(error, error_size, "more than 2,147,483,647 packets in the tile");
     if ((out = malloc((total ? total : 1) * sizeof *out)) == NULL)
-        return fail(error, error_size, "out of memory");
+        return hv_fail(error, error_size, "out of memory");
 
     if (g->progression == HV_LRCP || g->progression == HV_RLCP) {
         /* Every component has levels + 1 resolutions (no COC). */
@@ -206,7 +201,7 @@ int hv_geometry_packets(const hv_geometry *g, hv_packet **packets, size_t *count
         size_t ri, m = 0;
         if (sorted == NULL) {
             free(out);
-            return fail(error, error_size, "out of memory");
+            return hv_fail(error, error_size, "out of memory");
         }
         for (ri = 0; ri < nres; ri++) {
             const hv_resolution *res = &g->res[ri];

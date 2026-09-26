@@ -5,6 +5,7 @@
  *   CF_FN         function name to define
  *   CF_COD        the COD body type (optional; default CF_T(Cod))
  *   CF_MAIN_OTHER defined when MainSegment has the `other` marker alternative
+ *                 (and so no COC or POC)
  *   CF_TILE_PLT_ONLY defined when TileSegment has the plt alternative only
  * Generated-name assumptions (asn1scc C back end):
  *   SEQUENCE OF / OCTET STRING:  .nCount, .arr[]
@@ -115,12 +116,10 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
             }
             continue;
         }
+        /* Every segment has its field: a code with none is outside the
+         * MainMarkerCode value set and failed to decode (the reader's
+         * main.marker-code; ../check-model.sh checks the value sets). */
 #ifndef CF_MAIN_OTHER
-        if (!(seg->exist.cod || seg->exist.coc || seg->exist.qcd ||
-              seg->exist.qcc || seg->exist.rgn || seg->exist.poc ||
-              seg->exist.tlm || seg->exist.plm || seg->exist.ppm ||
-              seg->exist.crg || seg->exist.com))
-            return "main.marker-code";
         if (seg->exist.coc || seg->exist.poc) packet_layout_override = 1;
 #endif
         if (!seen_tile) {
@@ -155,7 +154,9 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
 #endif
     }
     if (layer >= CF_PROFILE) {
-        if ((r = hv_rule_tile_part_count((uint64_t) tile_parts, 1)) != NULL) return r;
+        /* TilePart-Profile's TPsot and TNsot reject a 65th tile-part
+         * first; this is the reader's name for the same limit. */
+        if ((r = hv_rule_tile_part_count((uint64_t) tile_parts)) != NULL) return r;
         if (plts == 0) return "codestream.no-plt";
     }
     if (layer == CF_STANDARD) {
@@ -183,8 +184,24 @@ static uint32_t CF_CAT3(cf_inner_type, CF_S, _)(const CF_T(InnerBox) *b) {
         case CF_K(InnerPayload, flst): return HV_BOX_FLST;
         case CF_K(InnerPayload, url):  return HV_BOX_URL;
         case CF_K(InnerPayload, jp2c): return HV_BOX_JP2C;
+        case CF_K(InnerPayload, jpch): return HV_BOX_JPCH;
+        case CF_K(InnerPayload, ftbl): return HV_BOX_FTBL;
+        case CF_K(InnerPayload, dtbl): return HV_BOX_DTBL;
         default:                       return 0;
     }
+}
+
+/* A Data Entry URL box of a dtbl: nothing after LOC's NUL. Layer 1 names
+ * that box.extent (hv_rule_extent); layer 2 passes LOC, its NUL and the
+ * bytes after it to hv_rule_url (ReadUrlBox; ReadJPX: links resolve to
+ * .jp2 only), which names it url.terminator, as the reader does. */
+static const char *CF_CAT3(cf_url, CF_S, )(const CF_T(DataEntryUrl) *url, cf_layer layer) {
+    uint8_t raw[sizeof url->loc + sizeof url->extra.arr];
+    size_t n = strlen((const char *) url->loc) + 1, extra = (size_t) url->extra.nCount;
+    if (layer < CF_PROFILE) return hv_rule_extent(HV_BOX_URL, (uint64_t) extra);
+    memcpy(raw, url->loc, n);
+    memcpy(raw + n, url->extra.arr, extra);
+    return hv_rule_url(url->vers, url->flag, raw, n + extra);
 }
 
 const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
@@ -214,14 +231,8 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
                 const CF_T(InnerBox) *u = &d->references.arr[j];
                 if ((r = hv_rule_child(HV_BOX_DTBL, CF_CAT3(cf_inner_type, CF_S, _)(u))) != NULL)
                     return r;
-                if (layer >= CF_PROFILE && kind == CF_JPX) {
-                    /* ReadUrlBox; ReadJPX: links resolve to .jp2 only. The
-                     * decoded LOC ends at its NUL, which it includes here. */
-                    const CF_T(DataEntryUrl) *url = &u->payload.u.url;
-                    if ((r = hv_rule_url(url->vers, url->flag, (const uint8_t *) url->loc,
-                                         strlen((const char *) url->loc) + 1)) != NULL)
-                        return r;
-                }
+                if ((r = CF_CAT3(cf_url, CF_S, )(&u->payload.u.url, layer)) != NULL)
+                    return r;
             }
         }
     }
@@ -251,14 +262,13 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
                         return r;
                     if (c->payload.kind != CF_K(InnerPayload, flst)) continue;
                     flst++;
+                    /* T.801 M.11.3.1: NF fragments. */
+                    if ((int) c->payload.u.flst.nf != c->payload.u.flst.fragments.nCount)
+                        return "flst.nf-count";
                     if (layer >= CF_PROFILE &&
                         (r = hv_rule_flst(c->payload.u.flst.nf,
                                           c->payload.u.flst.fragments.nCount)) != NULL)
                         return r;
-                    for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k)
-                        if ((r = hv_rule_fragment_dr(c->payload.u.flst.fragments.arr[k].dr,
-                                                     (uint64_t) ndr, layer >= CF_PROFILE)) != NULL)
-                            return r;
                 }
                 if (flst != 1) return "ftbl.one-flst";     /* T.801 Annex M, Fragment Table box */
                 break;
@@ -277,6 +287,22 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         count.rreq_third = file->boxes.nCount >= 3 &&
                            file->boxes.arr[2].payload.kind == CF_K(TopPayload, rreq);
         if ((r = hv_rule_jpx(&count, layer >= CF_PROFILE)) != NULL) return r;
+    }
+
+    /* The data references, after the count rules, as the reader checks
+     * them: a linked file without a dtbl is jpx.linked-shape, not a DR out
+     * of range. */
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const CF_T(TopBox) *b = &file->boxes.arr[i];
+        if (b->payload.kind != CF_K(TopPayload, ftbl)) continue;
+        for (j = 0; j < b->payload.u.ftbl.children.nCount; ++j) {
+            const CF_T(InnerBox) *c = &b->payload.u.ftbl.children.arr[j];
+            if (c->payload.kind != CF_K(InnerPayload, flst)) continue;
+            for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k)
+                if ((r = hv_rule_fragment_dr(c->payload.u.flst.fragments.arr[k].dr,
+                                             (uint64_t) ndr, layer >= CF_PROFILE)) != NULL)
+                    return r;
+        }
     }
     return NULL;
 }

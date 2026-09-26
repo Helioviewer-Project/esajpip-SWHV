@@ -11,13 +11,15 @@ header and records where each payload starts and ends.
 | File | Role |
 | --- | --- |
 | `hv_reader.h` / `.c` | Steps through a file in memory: boxes (T.800 I.4) and codestream items (Annex A). Checks framing and decodes marker segments with the generated code, which also gives the bytes a variable-size field takes (`DECODE_USED`). Never copies a payload. |
-| `hv_codes.h` | The marker codes, box types and brands the code refers to, the box header sizes, and `HV_FIXED(T)`: the encoded size of a fixed-size generated type (its `_REQUIRED_BYTES_FOR_ACN_ENCODING`), used instead of hand-counted layout sizes. |
-| `hv_rules.h` / `.c` | The model's cross-field rules, for both layers: on marker segment bodies (SIZ, COD, the tile-parts, the PLT entries and the packet count), the JPX boxes, and the JP2 header boxes (standard layer), and the profile's limit of 64 tile-parts. The corpus harness (`../spec/harness/crossfield_impl.h`, `crossfield.c`) uses the same code, so the reader applies the rules the corpus labels come from. |
-| `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC. |
-| `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box (`Rreq-Std`), with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65 535). |
+| `hv_codes.h` | The marker codes, box types and brands the code refers to, the box header sizes, `HV_LARGEST(T)`, the size of a generated type's largest encoding (its `_REQUIRED_BYTES_FOR_ACN_ENCODING`), and `HV_FIXED(T)`, the same for a fixed-size type: used instead of hand-counted layout sizes. |
+| `hv_rules.h` / `.c` | The model's cross-field rules, for both layers: on marker segment bodies (SIZ, COD, the tile-parts, the PLT entries and the packet count), the JPX boxes, and the JP2 header boxes (standard layer), and the profile's limit of 64 tile-parts. The corpus harness (`../spec/harness/crossfield_impl.h`, `crossfield.c`) uses the same code, so the reader applies the rules the corpus labels come from. A check returns a rule name or NULL, nothing else, and does not allocate; `hv_rule_tiles` and `hv_rule_packets` are the two counts, not checks. |
+| `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC; at most 2,147,483,647 packets. |
+| `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box (`Rreq-Std`), with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65,535), once per tile-part. The buffer's spare capacity is kept zero, because the generated encoders skip zero bits: an append clears nothing, and `hv_out_rewind` zeroes what it drops. |
+| `hv_error.h` / `.c` | `hv_fail`: formats an error message into the caller's buffer and returns -1, for `hv_geometry` and the tools. |
+| `hv_served.h` / `.c` | The served profile's checks of a whole file on disk (`hv_check_served`), the files a JPX file links to included, and the file reader they use: shared by `hv_walk -P` and `test_profile`. |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
-| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (`-p` with `-P` is a usage error), `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. `-P` and `-H` treat a file as JPX when its name ends in `.jpx` (case-sensitive) and as JP2 otherwise; without them a raw codestream is also accepted. |
-| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's checks of the served profile (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid; the header box checks must accept every standard-valid vector and reject, by name, each one a header rule makes standard-invalid. `run.sh` builds and runs it with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
+| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file: `valid`, `invalid` with the error and its offset, `differs` when `-w` rewrote a valid file differently, `ERROR` when it cannot be read. `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (`-p` with `-P` is a usage error), `-P` checks the served profile (`hv_check_served`: a `.jpx` with its linked files, whose codestreams it counts as linked), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. A file is JPX when its name ends in `.jpx` in any case (the server picks the format by the extension), and JP2 otherwise; without `-P` and `-H` a file that starts with SOC is read as a raw codestream, while `-P` and `-H` fail it with `file.signature`. |
+| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's checks of the served profile (`hv_check_served`) exactly when the manifest labels it profile-valid. The header box checks (`hv_check_jp2h`, `hv_check_jpx_headers`) are held to a contract taken from the manifest's labels and their own answers, not from vector names: they accept every standard-valid vector; a vector they reject is standard-invalid by the rule they name (any error for reason `decode`); a rule they name for one vector they name for every vector with that reason; and they reject every standard-invalid, profile-valid vector except the two profile leniencies they do not read, which the test lists (PLT padding, `asoc` contents). Also unit checks the corpus cannot reach (URL decoding, `cdef` pairs, accessors, error offsets). `test_writer`: `hv_writer.c` compiled with `HV_LBOX_MAX` 100, for the XLBox switch, the zeroed spare capacity and the error messages, read back with the reader. `run.sh` builds and runs them with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types its `pdus` list names (those of `../spec/jpeg2000-io.asn1`, the served-profile types the reader checks against, `Fragment`, and the JP2 header box types) and what they use. A type the code here needs that none of them uses must be added to `pdus`. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it (`../spec/check-model.sh` runs it so). |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TOOL_TESTS`. |
@@ -34,8 +36,9 @@ cmake --build build --target hv_walk
 ```
 
 Tests, with the tools' and separate from the server's:
-`lib/test/run.sh [normal|sanitize] [CTest options]`. CTest options go
-after the mode, which must then be given. The build goes to
+`lib/test/run.sh [normal|sanitize] [CTest options]`; without a mode, the
+tests run in normal mode and CTest options may come first
+(`lib/test/run.sh -R merge`). The build goes to
 `build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
 `../tests/run.sh` also reads: set it for one runner at a time.
 
@@ -54,13 +57,19 @@ the PLT decoder reads an uninitialized flag on truncated input.
   the end of the file.
 - Codestream: SOC then SIZ; exactly one COD and one QCD in the main header;
   marker placement per Table A.1; tile-part order, TPsot and TNsot; Psot, or
-  up to the final EOC when Psot = 0; nothing after EOC.
+  up to the final EOC when Psot = 0; nothing after EOC. A tile-part header
+  that reaches SOT or EOC is "tile-part header without SOD" with any flags.
+  The accessors give the main header's SIZ, COD and QCD bodies once read,
+  and NULL before, for a segment the reader rejected, and after
+  `hv_codestream_close`.
 - Bodies, by the generated decoders: SIZ, COD, QCD, PLT and COM at the
   standard's bounds, plus the model's cross-field rules (`hv_rules.c`):
   SIZ, COD, zero packet lengths, and PLT sums against the tile-part data.
 - `HV_ACCEPT_PLT_PADDING` (`hv_walk -p`) accepts zero PLT entries after the
   last packet of each tile-part. T.800 does not allow them, but deployed
-  files carry them: every one of 4,014 EUI files checked has them. Not
+  files carry them: every one of 4,014 EUI files checked has them. A
+  nonzero entry after a zero one fails as `plt.padding-position`, the
+  profile's rule, applied to the tile-part instead of the codestream. Not
   with `HV_PROFILE`, which accepts them after the codestream's last packet
   only: `hv_codestream_open` refuses the pair.
 - The served profile (`JPIP_PROFILE.md`, the model's layer 2), in two
@@ -74,11 +83,16 @@ the PLT decoder reads an uninitialized flag on truncated input.
   nonzero PLT entry per packet of the main COD, with zero entries only after
   the last packet of the codestream; a packet count up to `INT32_MAX`.
   Errors name the rule that fails (`siz.single-tile`,
-  `codestream.one-cod-before-sot`), with the names of the corpus manifest;
-  a main-header or tile-part-header marker out of place is
-  `main.marker-code` or `tile.marker-code`. Failures of the decoders
-  themselves (`invalid SIZ`, `truncated SIZ`) and against a profile type
-  (`SIZ: outside Siz-Profile`) are described in words.
+  `codestream.one-cod-before-sot`), with the names the corpus manifest uses
+  where a vector exercises the rule; a main-header or tile-part-header
+  marker out of place is `main.marker-code` or `tile.marker-code`.
+  Failures of the decoders themselves (`invalid SIZ`, `truncated SIZ`) and
+  against a profile type (`SIZ: Xsiz or Ysiz above 2,147,483,647
+  (Siz-Profile)`) are lowercase prose. Every error comes with the offset of
+  the box, marker segment or entry at fault, or, for a rule on the file's
+  box counts (`file.two-boxes`, `jp2.one-codestream`, `jpx.*`,
+  `jp2h.position`), the end of the file; a function that succeeds leaves
+  the offset alone.
 - `hv_check_jp2` (`hv_walk -P`), the profile's file rules for a JP2 file:
   at most `INT_MAX` bytes, the signature box, then the file type box with
   the `jp2 ` brand and compatibility entry, top-level boxes framed as above,
@@ -87,24 +101,45 @@ the PLT decoder reads an uninitialized flag on truncated input.
   a JPX file, as `ReadJPX` reads it: the signature and a file type box with
   the `jpx ` brand; the children of `jpch`, `ftbl` and `dtbl`, placed as
   T.801 Annex M requires (`hv_rule_child`); the count rules
-  (`hv_rule_jpx`); one fragment per `ftbl`, and version-0 `file://` URLs
-  naming `.jp2` files. It returns the codestreams, embedded or linked;
-  `hv_codestream_check` reads an embedded one, `hv_link_path` resolves a
-  link as the server does, and `hv_check_link` checks the linked file and
-  that the fragment is exactly its codestream. Other boxes, `asoc`
-  included, are opaque, as they are to the server.
+  (`hv_rule_jpx`); one fragment per `ftbl` (a fragment with LEN 0 fails as
+  such, not as `flst.one-fragment`), and version-0 `file://` URLs naming
+  `.jp2` files, whose percent-escapes decode (`url.percent-encoding`). It
+  returns the codestreams, embedded or linked; `hv_codestream_check` reads
+  an embedded one, `hv_link_path` resolves a link as the server does (or
+  says why it cannot), and `hv_check_link` checks the linked file and that
+  the fragment is exactly its codestream. `flst.dr-range` and
+  `flst.dr-external` point at the `flst` box. Other boxes, `asoc`
+  included, are opaque, as they are to the server. `hv_check_served`
+  (`hv_walk -P`) does all of it for a file on disk.
 - `hv_check_jp2h` and `hv_check_jpx_headers` (`hv_walk -H`), the header
   boxes, at the standard layer (the server reads none of them, but a
-  client decodes the image by them): where `jp2h` is; the children of
-  `jp2h`, `jpch` and `jplh`, decoded one box or entry at a time with the
-  model's types (`Ihdr`, `BitDepth`, `ColrHeader`, `PclrHeader`,
-  `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) and checked by the
-  header rules of `hv_rules.c`; and each codestream's header (for a JPX
-  file its `jpch` over the `jp2h` defaults) against its SIZ, where the
-  codestream is embedded. For a JPX file also the Reader Requirements box:
-  one, the third box, its contents decoded with `Rreq-Std` (the model's
-  `Rreq` at the standard's bounds, about 3.4 MB, allocated per check).
-  `hv_transcode` and `hv_merge` require `hv_check_jp2h` of their inputs.
+  client decodes the image by them): where `jp2h` is; the placement of
+  the children of every top-level superbox (`hv_rule_child`, as the
+  harness checks at layer 1: no `jp2c`, `jpch`, `ftbl` or `dtbl` below the
+  top level, `flst` only in `ftbl`, `url` only in `dtbl`, except that a
+  `url` in `jp2h`, `jplh`, `uinf` or `asoc` is not checked), and one
+  `flst` per `ftbl`, in a JP2 file too;
+  the children of `jp2h`, `jpch` and `jplh`, decoded one box or entry at a
+  time with the model's types (`Ihdr`, `BitDepth`, `ColrHeader`,
+  `PclrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) and
+  checked by the header rules of `hv_rules.c`; and each codestream's
+  header (for a JPX file its `jpch` over the `jp2h` defaults) against its
+  SIZ, where the codestream is embedded. A rule comparing boxes points at the
+  codestream's header box (its `jpch`, else `jp2h`); a codestream whose
+  SIZ does not open fails with the reader's error at its offset. For a JPX
+  file also the count rules of `hv_rule_jpx` at the standard layer (the
+  Reader Requirements box, one and the third; at most one `dtbl`; a
+  codestream per `jpch`), at most one `jp2h` (`jpx.one-jp2h`, T.801
+  M.11.5), and the Reader Requirements box's contents, decoded with
+  `Rreq-Std` (the model's `Rreq` at the standard's bounds, about 3.4 MB,
+  allocated per check). The top-level boxes are read a fixed number of
+  times, whatever the number of codestreams. `hv_transcode` and
+  `hv_merge` require `hv_check_jp2h` of their inputs.
+- Bytes after the fields of `ihdr`, `resc`, `resd`, `cdef` and `rreq` are
+  `<box>.extent` however many there are: the reader counts those of
+  `cdef`, and decodes the other types from at most their largest encoding.
+  The model's `Extra` holds 64 bytes (a corpus bound), so the harness
+  labels a box with more `decode`.
 
 Not yet: box bodies other than the box header, `ftyp`, `flst`, `url`, a
 `dtbl`'s NDR, `rreq` and the header boxes, and, outside the profile, PLT

@@ -1,6 +1,6 @@
 # The merger's tests, with the reader's and the transcoder's and separate
 # from the server's: built and registered only with ESAJPIP_TOOL_TESTS,
-# labelled "tools". Run them with lib/test/run.sh.
+# labeled "tools". Run them with lib/test/run.sh.
 
 set(MERGE_TRANSCODE_FIXTURES ${PROJECT_SOURCE_DIR}/transcode/test/fixtures)
 add_executable(test_merge test_merge.c ../merge.c)

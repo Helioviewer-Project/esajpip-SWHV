@@ -741,21 +741,7 @@ void BitStream_EncodeConstraintWholeNumber(BitStream* pBitStrm, asn1SccSint v, a
 	BitStream_EncodeNonNegativeInteger(pBitStrm, (asn1SccUint)v - (asn1SccUint)min);
 }
 
-void BitStream_EncodeConstraintPosWholeNumber(BitStream* pBitStrm, asn1SccUint v, asn1SccUint min, asn1SccUint max)
-{
-	int nRangeBits;
-	int nBits;
-	asn1SccUint range;
-	assert(min <= v);
-	assert(v <= max);
-	range = (asn1SccUint)(max - min);
-	if (!range)
-		return;
-	nRangeBits = GetNumberOfBitsForNonNegativeInteger(range);
-	nBits = GetNumberOfBitsForNonNegativeInteger(v - min);
-	BitStream_AppendNBitZero(pBitStrm, nRangeBits - nBits);
-	BitStream_EncodeNonNegativeInteger(pBitStrm, v - min);
-}
+
 
 
 flag BitStream_DecodeConstraintWholeNumber(BitStream* pBitStrm, asn1SccSint* v, asn1SccSint min, asn1SccSint max)
@@ -803,32 +789,7 @@ flag BitStream_DecodeConstraintWholeNumber(BitStream* pBitStrm, asn1SccSint* v, 
 
 
 
-flag BitStream_DecodeConstraintPosWholeNumber(BitStream* pBitStrm, asn1SccUint* v, asn1SccUint min, asn1SccUint max)
-{
-	asn1SccUint uv;
-	int nRangeBits;
-	asn1SccUint range = max - min;
 
-	ASSERT_OR_RETURN_FALSE(min <= max);
-
-
-	*v = 0;
-	if (!range) {
-		*v = min;
-		return TRUE;
-	}
-
-	nRangeBits = GetNumberOfBitsForNonNegativeInteger(range);
-
-	if (BitStream_DecodeNonNegativeInteger(pBitStrm, &uv, nRangeBits))
-	{
-		if (uv > range)
-			return FALSE;
-		*v = uv + min;
-		return TRUE;
-	}
-	return FALSE;
-}
 
 
 

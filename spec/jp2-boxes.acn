@@ -5,17 +5,22 @@
 --
 -- Inserted determinants and mapping functions (harness/mapping.c):
 --   lbox : wire = payload bytes + 8   (LBox counts LBox and TBox)
---   boxtype : keep listed TBox values; decode all others as 'abcd' so
---             the opaque `other` branch handles every unknown type
+--   boxtype : keep the TBox values listed in TopPayload, InnerPayload and
+--             their -Profile versions; decode all others as 'abcd' so the
+--             opaque `other` branch handles every unknown type
 --   resboxtype : the same inside a Resolution box, keeping resc and resd
+--             (ResPayload)
 --   jp2boxtype : the same for a .jp2 at the profile layer, keeping only jP,
---             ftyp and jp2c
+--             ftyp and jp2c (Jp2Payload-Profile)
+-- spec/check-model.sh checks each list against the CHOICEs it serves, and
+-- that every `other` alternative is 'abcd' (MAPPING_OTHER_BOX).
 -- The payload of every box is a CONTAINING region sized by LBox; superbox
 -- children and opaque data use `size deduced` inside it. The whole file is
 -- the top-level region for Jp2Family.boxes.
 --
 -- The url LOC string is NUL-terminated on the wire (termination-pattern
--- '00'H); the terminator is not part of the ASN.1 value.
+-- '00'H); the terminator is not part of the ASN.1 value, and any bytes
+-- after it are `extra`.
 
 JP2-Boxes DEFINITIONS ::= BEGIN
 
@@ -29,11 +34,11 @@ Jp2Family [] {
 
 TopBox [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    topType     TopBoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
+    topType     BoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <topType, lbox> []
 }
 
-TopPayload <TopBoxType:tbox, INTEGER:length> [] {
+TopPayload <BoxType:tbox, INTEGER:length> [] {
     jpch        [present-when tbox == 1785750376, size length],
     ftbl        [present-when tbox == 1718903404, size length],
     dtbl        [present-when tbox == 1685348972, size length],
@@ -68,6 +73,8 @@ OpaqueBox [] {
     data        [size deduced]
 }
 
+Brand [encoding pos-int, size 32, endianness big]
+
 Ftyp [] {
     brand       [],
     minor       [encoding pos-int, size 32, endianness big],
@@ -76,13 +83,17 @@ Ftyp [] {
 
 InnerBox [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    innerType   InnerBoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
+    innerType   BoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <innerType, lbox> []
 }
 
-InnerPayload <InnerBoxType:tbox, INTEGER:length> [] {
+InnerPayload <BoxType:tbox, INTEGER:length> [] {
     flst        [present-when tbox == 1718383476, size length],
     url         [present-when tbox == 1970433056, size length],
+    jpch        [present-when tbox == 1785750376, size length],
+    ftbl        [present-when tbox == 1718903404, size length],
+    dtbl        [present-when tbox == 1685348972, size length],
+    asoc        [present-when tbox == 1634955107, size length],
     jp2h        [present-when tbox == 1785737832, size length],
     jplh        [present-when tbox == 1785752680, size length],
     uuid        [present-when tbox == 1970628964, size length],
@@ -173,11 +184,11 @@ Res [] {
 
 ResBox [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    resType     ResBoxType [encoding pos-int, size 32, endianness big, mapping-function resboxtype],
+    resType     BoxType [encoding pos-int, size 32, endianness big, mapping-function resboxtype],
     payload     <resType, lbox> []
 }
 
-ResPayload <ResBoxType:tbox, INTEGER:length> [] {
+ResPayload <BoxType:tbox, INTEGER:length> [] {
     resc        [present-when tbox == 1919251299, size length],
     resd        [present-when tbox == 1919251300, size length],
     other       [present-when tbox == 1633837924, size length]
@@ -233,7 +244,8 @@ Fragment [] {
 DataEntryUrl [] {
     vers        [encoding pos-int, size 8],
     flag        [encoding pos-int, size 24, endianness big],
-    loc         [encoding ASCII, size null-terminated, termination-pattern '00'H]
+    loc         [encoding ASCII, size null-terminated, termination-pattern '00'H],
+    extra       [size deduced]                    -- after the NUL: empty in a valid box
 }
 
 -- ---------------------------------------------------------------------------
@@ -246,12 +258,12 @@ Jp2File-Profile [] {
 
 Jp2Box-Profile [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    jp2Type     BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function jp2boxtype],
+    jp2Type     BoxType [encoding pos-int, size 32, endianness big, mapping-function jp2boxtype],
     payload     <jp2Type, lbox> []
 }
 
 -- jp2boxtype maps every type but jp2c, jP and ftyp to `other`.
-Jp2Payload-Profile <BoxType-Profile:tbox, INTEGER:length> [] {
+Jp2Payload-Profile <BoxType:tbox, INTEGER:length> [] {
     jp2c        [present-when tbox == 1785737827, size length],
     jP          [present-when tbox == 1783636000, size length],
     ftyp        [present-when tbox == 1718909296, size length],
@@ -264,11 +276,11 @@ JpxFile-Profile [] {
 
 TopBox-Profile [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    profileTopType BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function boxtype],
+    profileTopType BoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <profileTopType, lbox> []
 }
 
-TopPayload-Profile <BoxType-Profile:tbox, INTEGER:length> [] {
+TopPayload-Profile <BoxType:tbox, INTEGER:length> [] {
     jpch        [present-when tbox == 1785750376, size length],
     ftbl        [present-when tbox == 1718903404, size length],
     dtbl        [present-when tbox == 1685348972, size length],
@@ -297,24 +309,29 @@ DataReferences-Profile [] {
 
 FragmentList-Profile [] {
     nf          [encoding pos-int, size 16, endianness big],
-    fragments   []
+    fragments   []                  -- fixed SIZE (1..1): asn1scc refuses `size deduced`
 }
 
 DataEntryUrl-Profile [] {
     vers        [encoding pos-int, size 8],
     flag        [encoding pos-int, size 24, endianness big],
-    loc         [encoding ASCII, size null-terminated, termination-pattern '00'H]
+    loc         [encoding ASCII, size null-terminated, termination-pattern '00'H],
+    extra       [size deduced]
 }
 
 InnerBox-Profile [] {
     lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
-    profileInnerType BoxType-Profile [encoding pos-int, size 32, endianness big, mapping-function boxtype],
+    profileInnerType BoxType [encoding pos-int, size 32, endianness big, mapping-function boxtype],
     payload     <profileInnerType, lbox> []
 }
 
-InnerPayload-Profile <BoxType-Profile:tbox, INTEGER:length> [] {
+InnerPayload-Profile <BoxType:tbox, INTEGER:length> [] {
     flst        [present-when tbox == 1718383476, size length],
     url         [present-when tbox == 1970433056, size length],
+    jpch        [present-when tbox == 1785750376, size length],
+    ftbl        [present-when tbox == 1718903404, size length],
+    dtbl        [present-when tbox == 1685348972, size length],
+    asoc        [present-when tbox == 1634955107, size length],
     jp2h        [present-when tbox == 1785737832, size length],
     jplh        [present-when tbox == 1785752680, size length],
     uuid        [present-when tbox == 1970628964, size length],

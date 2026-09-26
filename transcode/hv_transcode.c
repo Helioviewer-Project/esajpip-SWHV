@@ -4,7 +4,7 @@
  *
  *   hv_transcode [-x] [-p W,H] input output
  *
- *   -p W,H  precinct width and height, powers of 2 from 2 to 32768
+ *   -p W,H  precinct width and height, powers of 2 from 2 to 32,768
  *           (default 128,128)
  *   -x      rewrite the first top-level XML box as its root element alone
  *           (see hv_transcode_file)
@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "hv_file.h"
 #include "hv_writer.h"
 #include "transcode.h"
 
@@ -36,7 +37,7 @@ static void usage(void) {
     fprintf(stderr, "usage: hv_transcode [-x] [-p W,H] input output\n");
 }
 
-/* The exponent of a power of 2 from 2 to 32768, or -1. */
+/* The exponent of a power of 2 from 2 to 32,768, or -1. */
 static int exponent(const char *s, char **end) {
     long v;
     int e = 0;
@@ -49,59 +50,17 @@ static int exponent(const char *s, char **end) {
     return e;
 }
 
-/* Writes out to a temporary file next to `path` with `mode`, then renames
- * it to `path`. An existing `path` that is a symbolic link is replaced
- * where it points, so the link stays. */
-static int write_file(const char *path, const hv_out *out, mode_t mode, char *error,
+/* Replaces the file `path` with out (hv_file), with permissions `mode`. */
+static int write_file(const char *path, const hv_out *out, int mode, char *error,
                       size_t error_size) {
-    char *real = realpath(path, NULL), *tmp;
-    const char *target = real ? real : path;
-    size_t n = strlen(target), done = 0;
-    int fd;
-
-    if ((tmp = malloc(n + 8)) == NULL) {
-        snprintf(error, error_size, "out of memory");
-        free(real);
+    hv_file f;
+    if (hv_file_create(&f, path, mode, error, error_size) != 0)
+        return -1;
+    if (hv_file_write(&f, out->data, out->size, error, error_size) != 0) {
+        hv_file_abort(&f);
         return -1;
     }
-    memcpy(tmp, target, n);
-    memcpy(tmp + n, ".XXXXXX", 8);
-    if ((fd = mkstemp(tmp)) < 0) {
-        snprintf(error, error_size, "cannot create %s: %s", path, strerror(errno));
-        free(tmp);
-        free(real);
-        return -1;
-    }
-    if (fchmod(fd, mode) != 0)
-        goto failed;
-    while (done < out->size) {
-        ssize_t w = write(fd, out->data + done, out->size - done);
-        if (w < 0) {
-            if (errno == EINTR)
-                continue;
-            goto failed;
-        }
-        done += (size_t)w;
-    }
-    if (close(fd) != 0) {
-        fd = -1;
-        goto failed;
-    }
-    fd = -1;
-    if (rename(tmp, target) != 0)
-        goto failed;
-    free(tmp);
-    free(real);
-    return 0;
-
-failed:
-    snprintf(error, error_size, "cannot write %s: %s", path, strerror(errno));
-    if (fd >= 0)
-        close(fd);
-    unlink(tmp);
-    free(tmp);
-    free(real);
-    return -1;
+    return hv_file_commit(&f, error, error_size);
 }
 
 int main(int argc, char **argv) {
@@ -121,7 +80,7 @@ int main(int argc, char **argv) {
             char *end;
             ppx = exponent(argv[++i], &end);
             if (ppx < 0 || *end != ',' || (ppy = exponent(end + 1, &end)) < 0 || *end) {
-                fprintf(stderr, "hv_transcode: -p takes W,H: powers of 2 from 2 to 32768\n");
+                fprintf(stderr, "hv_transcode: -p takes W,H: powers of 2 from 2 to 32,768\n");
                 return 2;
             }
         } else {
@@ -159,7 +118,7 @@ int main(int argc, char **argv) {
     if (size)
         munmap(buf, size);
     if (status == 0)
-        status = write_file(output, &out, st.st_mode & 0777, error, sizeof error);
+        status = write_file(output, &out, (int)(st.st_mode & 0777), error, sizeof error);
     hv_out_free(&out);
     if (status != 0) {
         fprintf(stderr, "hv_transcode: %s: %s\n", input, error);

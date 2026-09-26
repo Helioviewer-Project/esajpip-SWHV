@@ -2,7 +2,7 @@
 
 `input/` holds two JP2 files from hvJP2K's JPX tests
 (`hvJP2K/jpx/test/swap-ref/000.jp2` and `001.jp2`, renamed `swap_000.jp2`
-and `swap_001.jp2`): 1024×1024, one 8-bit component with a 256-entry
+and `swap_001.jp2`): 1,024×1,024, one 8-bit component with a 256-entry
 palette (`pclr`, `cmap`), FITS headers as XML, and trailing zero PLT
 entries.
 

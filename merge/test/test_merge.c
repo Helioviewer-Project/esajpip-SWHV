@@ -56,8 +56,9 @@ static bytes read_file(const char *path) {
     bytes b = {NULL, 0};
     FILE *f = fopen(path, "rb");
     long n;
-    if (f == NULL || fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 || fseek(f, 0, SEEK_SET) != 0 ||
-        (b.data = malloc(n ? (size_t)n : 1)) == NULL || fread(b.data, 1, (size_t)n, f) != (size_t)n) {
+    if (f == NULL || fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 ||
+        fseek(f, 0, SEEK_SET) != 0 || (b.data = malloc(n ? (size_t)n : 1)) == NULL ||
+        fread(b.data, 1, (size_t)n, f) != (size_t)n) {
         check(0, "cannot read %s", path);
         free(b.data);
         b.data = NULL;
@@ -135,30 +136,31 @@ static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char
     return status;
 }
 
-/* The JPX file is one the server serves: hv_check_jpx, and every
+/* The JPX file is within the served profile: hv_check_jpx, and every
  * codestream with HV_PROFILE, embedded or linked; and its header boxes are
  * valid (hv_check_jpx_headers). */
 static void expect_served(const char *name, const bytes *jpx, const hv_merge_input *in) {
     hv_jpx j;
     size_t at, i;
-    const char *error = hv_check_jpx_headers(jpx->data, jpx->size, &at);
+    const char *error = hv_check_jpx_headers(jpx->data, jpx->size, &at), *file;
     check(error == NULL, "%s: header boxes: %s at %zu", name, error, at);
-    error = hv_check_jpx(jpx->data, jpx->size, &j, &at);
+    file = error = hv_check_jpx(jpx->data, jpx->size, &j, &at);
     check(error == NULL, "%s: %s at %zu", name, error, at);
     for (i = 0; error == NULL && i < j.count; i++) {
         if (j.jp2c != NULL) {
-            error = hv_codestream_check(jpx->data, j.jp2c[i].payload, j.jp2c[i].end, HV_PROFILE, &at);
+            error = hv_codestream_check(jpx->data, j.jp2c[i].payload, j.jp2c[i].end, HV_PROFILE,
+                                        &at);
             check(error == NULL, "%s: codestream %zu: %s at %zu", name, i, error, at);
         } else {
             char path[4096], *real = realpath(in[i].path, NULL);
-            check(hv_link_path(&j.links[i], NULL, path, sizeof path) == 0 && real != NULL &&
+            check(hv_link_path(&j.links[i], NULL, path, sizeof path) == NULL && real != NULL &&
                   strcmp(path, real) == 0, "%s: link %zu does not name %s", name, i, in[i].path);
             error = hv_check_link(in[i].buf, in[i].size, &j.links[i], &at);
             check(error == NULL, "%s: link %zu: %s at %zu", name, i, error, at);
             free(real);
         }
     }
-    if (error == NULL)
+    if (file == NULL)           /* a failing codestream check included */
         hv_jpx_free(&j);
 }
 
@@ -252,11 +254,9 @@ static void test_links(void) {
     bytes_free(&linked);
 }
 
-/* hvJP2K's reader_requirements cases: Rsiz 0, 1 and 2, and opacity
- * channels (cdef types 1 and 2) in two linked inputs. */
-/* A copy of a JP2 file with n bytes of boxes added at the end of its JP2
- * Header box. */
-static bytes add_to_jp2h(const bytes *jp2, const uint8_t *boxes, size_t n) {
+/* A copy of a JP2 file with n bytes of boxes inserted into its JP2 Header
+ * box at offset `where`, or at its end for 0. */
+static bytes insert_in_jp2h(const bytes *jp2, size_t where, const uint8_t *boxes, size_t n) {
     bytes out = {malloc(jp2->size + n), jp2->size + n};
     hv_boxes it;
     hv_box box;
@@ -266,17 +266,26 @@ static bytes add_to_jp2h(const bytes *jp2, const uint8_t *boxes, size_t n) {
     hv_boxes_file(&it, jp2->data, jp2->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
         if (box.type == HV_BOX_JP2H) {
-            memcpy(out.data + box.end, boxes, n);
-            memcpy(out.data + box.end + n, jp2->data + box.end, jp2->size - box.end);
+            if (where == 0)
+                where = box.end;
+            memcpy(out.data + where, boxes, n);
+            memcpy(out.data + where + n, jp2->data + where, jp2->size - where);
             put32(out.data + box.start, (uint32_t)(box.end - box.start + n));
             break;
         }
     return out;
 }
 
+/* The same at the end of the JP2 Header box. */
+static bytes add_to_jp2h(const bytes *jp2, const uint8_t *boxes, size_t n) {
+    return insert_in_jp2h(jp2, 0, boxes, n);
+}
+
 static void expect_error(const char *name, const hv_merge_input *in, size_t n, int links,
                          const char *message);
 
+/* hvJP2K's reader_requirements cases: Rsiz 0, 1 and 2, and opacity
+ * channels (cdef types 1 and 2) in two linked inputs. */
 static void test_rreq(void) {
     static const int only[] = {1}, rsiz2[] = {1, 4}, rsiz0[] = {1, 5}, all[] = {1, 2, 5, 9, 10, 15};
     /* Channel 0 described as opacity and as premultiplied opacity. */
@@ -334,18 +343,22 @@ static void test_rreq(void) {
 
 /* An input whose JP2 Header box its codestream contradicts: NC in the
  * ihdr of a one-component input after one with a palette. hv_merge once
- * sized that input's generated cmap by an NC of up to 65 535 and wrote
+ * sized that input's generated cmap by an NC of up to 65,535 and wrote
  * past the buffer; the reference merge covers the generated cmap itself. */
 static void test_headers(void) {
-    /* A Resolution box holding a Capture Resolution box of 1/1 per metre. */
-    static const uint8_t res[26] = {0, 0, 0, 26, 'r', 'e', 's', ' ', 0, 0, 0, 18, 'r', 'e', 's', 'c',
+    /* A Resolution box holding a Capture Resolution box of 1/1 per meter. */
+    static const uint8_t res[26] = {0, 0, 0, 26, 'r', 'e', 's', ' ',
+                                    0, 0, 0, 18, 'r', 'e', 's', 'c',
                                     0, 1, 0, 1, 0, 1, 0, 1, 0, 0};
     bytes bad = {NULL, 0};
     hv_merge_input in[2];
     hv_boxes it;
-    hv_box box;
+    hv_box box, colr = {0, 0, 0, 0, 0};
+    bytes out = {NULL, 0};
     const char *message;
-    size_t at;
+    char error[512];
+    uint8_t *colrs;
+    size_t at, k;
 
     if (files[0].data == NULL || files[2].data == NULL)
         return;
@@ -360,10 +373,11 @@ static void test_headers(void) {
     in[1] = inputs[2];
     in[1].buf = bad.data;
     in[1].size = bad.size;
-    put16(bad.data + box.payload + 16, 65535);          /* ihdr NC: above Ihdr's 16 384 */
-    expect_error("NC 65 535", in, 2, 0, "ihdr: not 14 bytes of valid fields");
+    put16(bad.data + box.payload + 16, 65535);          /* ihdr NC: above Ihdr's 16,384 */
+    expect_error("NC 65,535", in, 2, 0,
+                 "ihdr: shorter than its fields, or a field out of range");
     put16(bad.data + box.payload + 16, 16384);          /* for Csiz 1 */
-    expect_error("NC 16 384", in, 2, 0, "ihdr.nc");
+    expect_error("NC 16,384", in, 2, 0, "ihdr.nc");
     bytes_free(&bad);
 
     /* A later input without the res of the first would inherit it. */
@@ -373,6 +387,57 @@ static void test_headers(void) {
     in[1] = inputs[0];
     expect_error("no res after one", in, 2, 0, "no res box, but the first input has one");
     bytes_free(&bad);
+
+    /* Colour Specification boxes repeated after the input's one, which
+     * they must follow directly (jp2h.colr-contiguous). */
+    hv_boxes_file(&it, files[0].data, files[0].size);
+    while (hv_boxes_next(&it, &box, &message, &at) == 1)
+        if (box.type == HV_BOX_JP2H)
+            break;
+    hv_boxes_children(&it, files[0].data, &box);
+    while (hv_boxes_next(&it, &colr, &message, &at) == 1)
+        if (colr.type == HV_BOX_COLR)
+            break;
+    if (colr.type != HV_BOX_COLR || (colrs = malloc(16 * (colr.end - colr.start))) == NULL) {
+        check(0, "no colr box to repeat");
+        return;
+    }
+    for (k = 0; k < 16; k++)
+        memcpy(colrs + k * (colr.end - colr.start), files[0].data + colr.start,
+               colr.end - colr.start);
+    /* Two with METH 1 are valid in a JP2 file, not in the JPX file's jp2h,
+     * which is the first input's. */
+    bad = insert_in_jp2h(&files[0], colr.end, colrs, colr.end - colr.start);
+    in[0].buf = bad.data;
+    in[0].size = bad.size;
+    snprintf(error, sizeof error, "colr.one-method at %zu, in the JPX file's jp2h", colr.end);
+    expect_error("two enumerated colr boxes, first input", in, 1, 0, error);
+    /* A later input's go into a cgrp: up to 16. */
+    in[0] = inputs[0];
+    in[1] = in[0];
+    in[1].buf = bad.data;
+    in[1].size = bad.size;
+    if (merge(in, 2, 0, &out, error, sizeof error) != 0)
+        check(0, "two enumerated colr boxes, second input: %s", error);
+    else
+        expect_served("two enumerated colr boxes, second input", &out, in);
+    bytes_free(&out);
+    bytes_free(&bad);
+    bad = insert_in_jp2h(&files[0], colr.end, colrs, 15 * (colr.end - colr.start));
+    in[1].buf = bad.data;
+    in[1].size = bad.size;
+    if (merge(in, 2, 0, &out, error, sizeof error) != 0)
+        check(0, "16 colr boxes: %s", error);
+    else
+        expect_served("16 colr boxes", &out, in);
+    bytes_free(&out);
+    bytes_free(&bad);
+    bad = insert_in_jp2h(&files[0], colr.end, colrs, 16 * (colr.end - colr.start));
+    in[1].buf = bad.data;
+    in[1].size = bad.size;
+    expect_error("17 colr boxes", in, 2, 0, "more than 16 Colour Specification boxes");
+    bytes_free(&bad);
+    free(colrs);
 }
 
 static void expect_error(const char *name, const hv_merge_input *in, size_t n, int links,
@@ -399,6 +464,11 @@ static void test_errors(void) {
     FILE *f;
 
     expect_error("no inputs", inputs, 0, 0, "no JP2 input files");
+    /* The limits, checked before any input is read. */
+    expect_error("65,536 links", inputs, 65536, 1,
+                 "a linked JPX file holds at most 65,535 links");
+    expect_error("16,777,216 inputs", inputs, 16777216, 0,
+                 "a JPX file holds at most 16,777,215 input files");
     expect_error("nonzero origins", &in, 1, 0, "siz.zero-origin");
 
     /* The first input without its JP2 Header box. */
@@ -415,7 +485,7 @@ static void test_errors(void) {
     in.size = no_jp2h.size;
     expect_error("no jp2h", &in, 1, 0, "jp2.one-jp2h");
 
-    /* A link to a file the server would not open. */
+    /* A link outside the served profile: to a file that is not a .jp2. */
     if (mkdtemp(dir) != NULL) {
         snprintf(path, sizeof path, "%s/frame.j2k", dir);
         if ((f = fopen(path, "wb")) != NULL) {
@@ -432,10 +502,14 @@ static void test_errors(void) {
     bytes_free(&origin);
 }
 
+/* Links of 1,024 and 1,025 characters: the model's LOC bound of 1,024 is
+ * a corpus bound only, the server has none, so both merge into a JPX file
+ * within the served profile. */
 static void test_long_link_urls(void) {
     char dir[] = "/tmp/test_merge_url.XXXXXX";
     char *root = mkdtemp(dir), *canonical = NULL;
-    char path[1100] = "", short_path[1100] = "", long_path[1100] = "";
+    /* path is at most 1,011 characters, and "/ff.jp2" adds 7 */
+    char path[1100] = "", short_path[sizeof path + 7] = "", long_path[sizeof path + 7] = "";
     hv_merge_input in = inputs[0];
     bytes out = {NULL, 0};
     char error[2048];
@@ -468,29 +542,29 @@ static void test_long_link_urls(void) {
     snprintf(long_path, sizeof long_path, "%s/ff.jp2", path);
     file = fopen(short_path, "wb");
     if (file == NULL) {
-        check(0, "cannot create a 1024-character link");
+        check(0, "cannot create a 1,024-character link");
         goto done;
     }
     fclose(file);
     file = fopen(long_path, "wb");
     if (file == NULL) {
-        check(0, "cannot create a 1025-character link");
+        check(0, "cannot create a 1,025-character link");
         goto done;
     }
     fclose(file);
 
     in.path = short_path;
     if (merge(&in, 1, 1, &out, error, sizeof error) != 0) {
-        check(0, "1024-character link: %s", error);
+        check(0, "1,024-character link: %s", error);
     } else {
-        expect_served("1024-character link", &out, &in);
+        expect_served("1,024-character link", &out, &in);
     }
     bytes_free(&out);
     in.path = long_path;
     if (merge(&in, 1, 1, &out, error, sizeof error) != 0) {
-        check(0, "1025-character link: %s", error);
+        check(0, "1,025-character link: %s", error);
     } else {
-        expect_served("1025-character link", &out, &in);
+        expect_served("1,025-character link", &out, &in);
     }
     bytes_free(&out);
 
@@ -591,12 +665,15 @@ static void test_opening(void) {
               strstr(error, "changed while merging") != NULL && c.open == 0,
           "changed input: \"%s\", %d left open", error, c.open);
 
-    memset(&c, 0, sizeof c);
-    c.fail_at = c.shrink_at = c.change_at = NINPUTS;
-    c.fail_second_at = 2;
-    check(merge_counting(&c, 0, error, sizeof error) != 0 &&
-              strstr(error, "cannot open") != NULL && c.open == 0,
-          "failed second open: \"%s\", %d left open", error, c.open);
+    for (links = 0; links < 2; links++) {
+        memset(&c, 0, sizeof c);
+        c.fail_at = c.shrink_at = c.change_at = NINPUTS;
+        c.fail_second_at = links ? NINPUTS - 1 : 2;
+        check(merge_counting(&c, links, error, sizeof error) != 0 &&
+                  strstr(error, "cannot open") != NULL && c.open == 0 &&
+                  c.opens[c.fail_second_at] == 1,
+              "failed second open, links=%d: \"%s\", %d left open", links, error, c.open);
+    }
 
     changed.data = malloc(files[2].size);
     if (changed.data == NULL ||

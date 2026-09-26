@@ -32,14 +32,24 @@ enum {
     HV_BOX_J2CX = 0x6A326378
 };
 
-/* File type brands (T.800 I.5.2, T.801 M.11.1.2). */
-enum { HV_BRAND_JP2 = 0x6A703220, HV_BRAND_JPX = 0x6A707820 };
+/* File type brands (T.800 I.5.2, T.801 M.11.1.2); jpxb is baseline JPX. */
+enum { HV_BRAND_JP2 = 0x6A703220, HV_BRAND_JPX = 0x6A707820, HV_BRAND_JPXB = 0x6A707862 };
+
+/* The contents of the JPEG 2000 Signature box (T.800 I.5.1), as an
+ * initializer. */
+#define HV_SIGNATURE_BYTES {0x0D, 0x0A, 0x87, 0x0A}
 
 /* A box header (I.4): LBox and TBox, and XLBox when LBox = 1. */
 enum { HV_BOX_HEADER = 8, HV_BOX_HEADER_XL = 16 };
 
-/* The size of the encoding of a fixed-size type generated from the model:
- * its largest (asn1scc's REQUIRED_BYTES), which is its only one. */
-#define HV_FIXED(T) ((size_t)T##_REQUIRED_BYTES_FOR_ACN_ENCODING)
+/* The size of the largest encoding of a type generated from the model
+ * (asn1scc's REQUIRED_BYTES): the most bytes its decoder reads and its
+ * encoder writes. */
+#define HV_LARGEST(T) ((size_t)T##_REQUIRED_BYTES_FOR_ACN_ENCODING)
+
+/* The size of the encoding of a fixed-size type: its largest, which is its
+ * only one. For a variable-size type (BoxHeader, Ihdr, ...) use
+ * HV_LARGEST, or the sizes above. */
+#define HV_FIXED(T) HV_LARGEST(T)
 
 #endif

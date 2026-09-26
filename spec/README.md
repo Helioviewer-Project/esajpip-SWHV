@@ -198,7 +198,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | Term | Meaning here |
 | --- | --- |
 | **model** | The four `spec/*.asn1` files and their `*.acn` companions, together. |
-| **layer 1 / standard** | Types with the ranges and rules of T.800/T.801. Known stricter cases: an `Iplt` longer than the model's ten bytes (`*-plt-iplt-eleven-bytes`), for which T.800 sets no bound, and a nested `asoc` (see "Gaps"). |
+| **layer 1 / standard** | Types with the ranges and rules of T.800/T.801. Known stricter case: an `Iplt` longer than the model's ten bytes (`*-plt-iplt-eleven-bytes`), for which T.800 sets no bound. |
 | **layer 2 / profile** | `*-Profile` types and rules: normally layer 1 narrowed to what esajpip serves, with explicit documented leniencies matching deployed server behavior. |
 | **vector** | One generated `.jp2`/`.jpx` file in the corpus. |
 | **label** | The vector's verdict at each layer: `valid` or `invalid`. |
@@ -216,15 +216,16 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`) in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`), the `ftyp` header and brand, the `dtbl`, `url` and fragment counts, and `Rreq-Std`. Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, the profile types `Siz-Profile`, `MainMarkerCode-Profile`, `TileMarkerCode-Profile` and `FragmentList-Profile`, and `Fragment` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `PclrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader needs must be added to that list. |
+| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`), the `ftyp` header, the `dtbl`, `url` and fragment counts, and `Rreq-Std`. Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, the profile types `Siz-Profile`, `MainMarkerCode-Profile`, `TileMarkerCode-Profile` and `FragmentList-Profile`, and `Fragment`, `Brand` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `PclrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
+| `modules` | The four modules, in import order: the one list that `../lib/generate.sh`, `check-model.sh` and `../lib/CMakeLists.txt` read. |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
 | `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs ACN v2 and `-icdPdus` regressions. |
-| `check-model.sh` | Checks `../lib/hv_codes.h` and the harness's box-type mapping against ACN values, repeated ACN encodings, the profile tile-part limit, and `../lib/generated/` against the model; generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
+| `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../lib/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies; the tile-part and dimension limits restated in C. Then, with the Docker image: `../lib/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, and duplicate vector names rejected. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
-| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names. |
+| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` here only. |
 | `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8), and the decode-only box-type mappings `boxtype`, `resboxtype` and `jp2boxtype`. |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 
@@ -253,7 +254,8 @@ code ever computes a length. Second, most placement rules are types: a PLT
 in the main header or an `flst` at the top level cannot even be expressed,
 so the decoder rejects it. The type of a superbox's children admits some
 boxes the standard places elsewhere, and C rules reject those: an `flst`
-in a `jpch` decodes and fails `box.flst-placement`.
+in a `jpch` decodes and fails `box.flst-placement`, a `jpch` in a `jpch`
+`box.nested-superbox`.
 
 ## Quick start (regenerating the corpus)
 
@@ -280,10 +282,11 @@ root.
    ```
 
    `lib/generate.sh` runs the compiler in that Docker image unless
-   `ASN1SCC` names a local copy of the same patched build. `check-model.sh`
-   always builds the corpus with the Docker image but runs
-   `lib/generate.sh --check`, which honors an inherited `ASN1SCC`: leave it
-   unset, or make sure it is the same compiler as the image.
+   `ASN1SCC` names a local copy of the same patched build, as in
+   `ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"`.
+   `check-model.sh` ignores `ASN1SCC`: it runs `lib/generate.sh --check`
+   with the image it builds the corpus with, so that both come from one
+   compiler.
 3. Run the complete generation and harness gate:
 
    ```sh
@@ -291,7 +294,8 @@ root.
    ```
 
    This checks that `lib/generated/` matches the model, so regenerate it
-   before running the gate.
+   before running the gate. `spec/check-model.sh --static` runs the checks
+   that need no compiler; it takes a second.
 
    To retain the generated corpus, pass an empty output directory. The
    script refuses a directory that is not empty, so it cannot regenerate
@@ -302,11 +306,12 @@ root.
    files first so that vectors no longer generated do not remain.
 
    It reports how many vectors were written and how many are valid at both
-   layers. It exits non-zero if any mutant did not produce the label its
-   table entry expects (see "What the harness generates"); each such line names the
-   vector, the expected and actual labels, and the rule that fired. On the
-   first run after an intentional model change, investigate any mismatch
-   before trusting the corpus.
+   layers. It exits non-zero if any vector did not get the label and the
+   reason its mutant expects (see "What the harness generates"); each such
+   line names the vector, the expected label and reason, and the actual
+   labels and the reasons at both layers. On the first run after an
+   intentional model change, investigate any mismatch before trusting the
+   corpus.
 
    The generic compiler `-atc` generator is intentionally not used for this
    model: its large bounded, inline container types make generic exhaustive
@@ -361,22 +366,33 @@ Two conventions worth knowing before you edit:
   box of a .jp2 but `jP`, `ftyp` and `jp2c` opaque). A box payload is a
   `CHOICE` selected by the box type. A marker segment (`MainSegment`,
   `TileSegment`) is a `SEQUENCE` of `OPTIONAL` fields, each present when the
-  sibling `code` has its value (`present-when`), so a code with no field
-  decodes with nothing present and only the constraint check on `code`
-  rejects it. The deliberate type-level exception is the `other` field of
-  `MainSegment-Profile`, for marker codes the profile parser skips as opaque
-  data. The profile also keeps opaque what the server does not interpret
-  (`jp2h`, `jplh`, `rreq` and `asoc` in a .jpx, and the contents of the
-  children of `jpch`), so the header-box rules and the `rreq` contents are
-  checked at layer 1 only, and it omits two standard cross-field rules the
-  server does not enforce: a missing JPX `rreq` and trailing zero-valued PLT
-  entries. Every `standard=invalid, profile=valid` vector in the corpus
-  comes from one of these; `COVERAGE.md` lists them by kind. An unlisted
-  main-header marker would be `standard=invalid, profile=valid` too, but no
-  vector in the corpus is one (see "Gaps"). This records the server's skip
+  sibling `code` has its value (`present-when`); every code of the
+  `MainMarkerCode` or `TileMarkerCode` value set selects exactly one field
+  (`check-model.sh` checks this), and the constraint check on `code`
+  rejects any other code, so a segment always has its field. The deliberate
+  type-level exception is the `other` field of `MainSegment-Profile`, for
+  marker codes the profile parser skips as opaque data. The profile also
+  keeps opaque what the server does not interpret (`jp2h`, `jplh`, `rreq`
+  and `asoc` in a .jpx, and the contents of the children of `jpch`), so
+  the header-box rules, the placement of boxes in those superboxes and the
+  `rreq` contents are checked at layer 1 only, and it omits two standard
+  cross-field rules the server does not enforce: a missing JPX `rreq` and
+  trailing zero-valued PLT entries. An unlisted main-header marker is
+  `standard=invalid, profile=valid` too (`*-main-unknown`). Every
+  `standard=invalid, profile=valid` vector in the corpus comes from one of
+  these; `COVERAGE.md` lists them by kind. This records the server's skip
   policy; it does not establish that the marker is forbidden by every
   edition or extension of JPEG 2000. Unknown box types are valid at both
   layers, as required by T.800 I.8 and T.801 M.12.
+- **The `-Std` suffix** means one thing: `X-Std` is the reader/writer's
+  version of the whole-file model's type `X`, with the same encoding and
+  the standard's bounds where `X` has a corpus bound. It is an instance of
+  `X`'s parameterized body (`Qcd-Std`, `Plt-Std`, `Com-Std`), a copy where
+  `X` is not parameterized (`Rreq-Std`), or, where `X` has no corpus bound,
+  the same definition (`SizSegment-Std`, `CodSegment-Std`);
+  `check-model.sh` checks that the copies agree. A reader/writer type with
+  no whole-file counterpart (`BoxHeader`, `SotSegment`, the counts) has no
+  suffix (`jpeg2000-io.asn1`, "The -Std suffix").
 - **ACN properties are explicit on profile structures.** asn1scc does not
   inherit field encodings through `WITH COMPONENTS` constraints. Profile
   structures that must be encoded independently therefore repeat the base
@@ -430,9 +446,16 @@ rules are implemented: the shared rules in `../lib/hv_rules.c`; the
 structural rules (segment placement and count, the `Zplt` sequence, PLT
 sums, the file's first boxes, some box counts) in
 `harness/crossfield_impl.h` and `harness/crossfield.c` and, under the same
-names, in `../lib/hv_reader.c`. In the manifest, the two cross-file names,
+names, in `../lib/hv_reader.c`; one, `flst.nf-count`, in the harness only
+(the reader reads JPX boxes for the profile, where it is
+`flst.one-fragment`). In the manifest, the two cross-file names,
 `flst.source-extent` and `url.missing-companion`, come from the companion
-oracle in `harness/vectors.c`.
+oracle in `harness/vectors.c`. Some rules of the reader never appear as a
+manifest reason because a type rejects the vector first, with reason
+`decode`: the rule lists say which (`main.marker-code`,
+`codestream.tile-part-limit`, `siz.zero-origin`,
+`siz.component-sampling`, `url.version-flags`, `url.length`,
+`flst.one-fragment`).
 
 ## When a vector fails
 
@@ -440,12 +463,13 @@ oracle in `harness/vectors.c`.
 the server. For the reader, `test_profile` (run by `lib/test/run.sh`)
 prints
 `FAIL profile label: <name>: reader <result>, manifest <label> (<reason>)`
-when its profile mode disagrees with the `profile` column, where
-`<result>` is `valid` or the reader's error and offset; when its
-header-box checks disagree with the `standard` column, it prints
-`FAIL header rule:`, `FAIL header boxes:` or `FAIL header box contents:`
-with the same details. Either way, look the name up in `manifest.tsv`;
-the cases below name the server, and apply to the reader in the same way:
+when its profile checks disagree with the `profile` column, where
+`<result>` is `valid` or the reader's error and offset (and the linked
+file it was reading); when its header-box checks break their contract with
+the `standard` and `reason` columns, it prints `FAIL (a)` to `FAIL (d)`
+lines, which `../lib/test/test_profile.c` explains at its top, with the
+same details. Either way, look the name up in `manifest.tsv`; the cases
+below name the server, and apply to the reader in the same way:
 
 - **`standard=valid profile=valid`, server rejected.** Either the parser is
   too strict, or the model is wrong about the standard. Read the `note`,
@@ -562,8 +586,9 @@ From each base:
    in the main header, 2:1 component sampling, a packet count above 2^31, no
    `jP` box, a wrong or unlisted `ftyp` brand, two `jp2c`, a `jp2c` inside a
    `jpch`, fewer `jp2c` than `jpch`, no `jpch`, `jp2c` and `ftbl` in one
-   JPX, two `dtbl`, `DR = 0`, `NDR` mismatch, two `flst`, an `http` URL, a
-   link to a `.jpx` — plus the valid shapes the rules must *not* reject: two
+   JPX, two `dtbl`, no `dtbl`, `DR = 0`, `NDR` mismatch, two `flst`, `NF` 2
+   with one fragment, an `http` URL, a link to a `.jpx`, a byte after a
+   URL's NUL — plus the valid shapes the rules must *not* reject: two
    tile-parts, TNsot given only in the second, 64 tile-parts, packet lengths
    split over two PLT segments, a COM in the main header, and `jp2c` boxes
    ahead of the `jpch` boxes. The deployed trailing-zero PLT form is generated
@@ -577,10 +602,13 @@ From each base:
    the JP2 header boxes and the JPX codestream headers. Valid shapes (a
    palette, a resolution box, `jp2h` defaults with empty `jpch` boxes, ...)
    and one violation per header rule or field range, plus the `rreq` mask
-   length. Names look like `jp2-header-jp2h.position-9`, numbered like the
-   rule mutants.
-5. **Length mutants**: every `Lxxx`, `Psot` and `LBox` patched to `n − 1`,
-   `n + 1`, and below its minimum. Names: `jp2-len-<offset>-<value>`.
+   length and a `jp2c` or `flst` inside `jp2h`. Names look like
+   `jp2-header-jp2h.position-9`, numbered like the rule mutants.
+5. **Length mutants**: every `Lxxx`, `Psot` and `LBox` the standard layer
+   reads patched to `n − 1`, `n + 1`, and below its minimum. Invalid at
+   both layers, except the children of a box the profile keeps opaque
+   (`jp2h` in a .jpx, every superbox in a .jp2), which are
+   `standard=invalid, profile=valid`. Names: `jp2-len-<offset>-<value>`.
 6. **Code mutants**: each marker segment's code is patched to `FF70`
    (undefined), `FF51` (SIZ out of place) and `FF90` (SOT where a segment
    was). Each replaces a segment the codestream needs or puts SIZ or SOT
@@ -593,8 +621,11 @@ From each base:
 8. **Insertion mutants** (bases with a codestream): bytes the structured
    mutants cannot produce, inserted with every enclosing length grown to
    match. PPT, SOP, `FF30` read with a length, and `FF00` before the first
-   SOT, and an 11-byte `Iplt`; all invalid at both layers. Names:
-   `jp2-main-ppt`, `-main-sop`, `-main-ff30-length`, `-main-ff00`, and
+   SOT, and an 11-byte `Iplt`, all invalid at both layers; and `FF70`, a
+   code T.800 does not define, before the first SOT, beside the segments the
+   codestream needs: `standard=invalid, profile=valid`, the profile's
+   unknown-marker leniency. Names: `jp2-main-ppt`, `-main-sop`,
+   `-main-ff30-length`, `-main-ff00`, `-main-unknown`, and
    `jp2-plt-iplt-eleven-bytes`.
 9. **Reader Requirements mutants** (`jpx-embedded`): NSF and NVF one too
    high, and a byte after the vendor features, which the structured
@@ -609,14 +640,18 @@ Beyond the bases, the harness generates:
   (`jp2-unknown-top-wxyz`, `jp2-unknown-top-binary`), and to `wxyz` at the
   top level and inside a `jpch` in an embedded JPX
   (`jpx-unknown-top-wxyz`, `jpx-unknown-inner-wxyz`), all valid at both
-  layers. Patching that inner box's type to `jpch` gives `jpx-nested-jpch`,
-  which fails to decode at both layers.
+  layers.
+- **Nested superboxes**: an empty `jpch`, an `ftbl` holding one `flst`,
+  and a `dtbl` with NDR 0, each inside the first `jpch` of an embedded JPX
+  (`jpx-nested-jpch`, `jpx-nested-ftbl`, `jpx-nested-dtbl`): each is a
+  valid box in the wrong place, `box.nested-superbox` at both layers.
 - **Association vectors**: an embedded JPX with an `asoc` holding a label
   and an XML box (`jpx-asoc`, valid at both layers); with an inner LBox
   below 8 (`jpx-asoc-child-length`) or only one child
-  (`jpx-asoc-one-child`), standard-invalid and profile-valid; and with an
+  (`jpx-asoc-one-child`), standard-invalid and profile-valid; with an
   outer LBox past the end of the file (`jpx-asoc-outer-length`), invalid
-  at both.
+  at both; and with a label and a nested `asoc` (`jpx-asoc-nested`), valid
+  at both, as T.801 M.11.11 lets associations nest.
 - **JPX graph vectors**: a second companion, `jpx-graph-frame2.jp2`, with
   the `plt.boundaries` codestream, and three linked JPX files whose two
   fragments reference `jpx-linked-frame1.jp2` and `jpx-graph-frame2.jp2`
@@ -631,18 +666,25 @@ manifest's `reason` column. Before each decoder, `box_bounds_ok` checks the
 physical LBox boundaries (see "Mapping functions"); a failure there is
 also reported as `decode`.
 
-Every mutant table entry does carry an *expectation* (`X_VALID`, `X_STD`
-for invalid at both layers, `X_LENIENT` for standard-invalid but
-profile-valid, a documented leniency, `X_PROF` for standard-valid but
-profile-invalid), and
-`emit()` compares it with the label. This is not a second source of truth
-for the corpus — the manifest always holds what the decoders said — it is a
-self-check that the mutant did what its note claims. A setter that writes
-the wrong field, a structural mutant that leaves the file valid, or a model
-rule that quietly stopped firing shows up as a mismatch at generation time
-rather than as an inexplicable server-test result later. Byte-level mutants
-(length, code, signature, insertion, Reader Requirements) always expect
-standard-invalid; bases always expect valid at both layers.
+Every vector the harness emits carries an *expectation*: its label
+(`X_VALID`, `X_STD` for invalid at both layers, `X_LENIENT` for
+standard-invalid but profile-valid, a documented leniency, `X_PROF` for
+standard-valid but profile-invalid) and its reason, what the manifest's
+`reason` column must say: a rule name, `decode` where a type rejects the
+vector before any rule runs, or nothing for a valid vector. Where an entry
+is named after a layer-2 rule that a layer-1 rule preempts in the manifest
+(`plt.padding-position`, whose vector is `plt.zero-length` at layer 1, and
+`url.terminator`, `box.extent` at layer 1), the entry also states the
+layer-2 reason, which `emit()` checks too. So an entry's `field` names the
+rule it breaks, and its reason says whether that rule or a type rejects
+it. This is not a second source of truth for the corpus — the manifest
+always holds what the decoders said — it is a self-check that the mutant
+did what its note claims. A setter that writes the wrong field, a
+structural mutant that leaves the file valid, or a model rule that quietly
+stopped firing, or that another check now preempts, shows up as a mismatch
+at generation time rather than as an inexplicable server-test result
+later. Bases expect valid at both layers; length and code mutants expect
+`decode`.
 
 ### Generated-API adaptation
 
@@ -699,25 +741,35 @@ also count themselves and their neighbours:
 | `psot` | SOT | `n + 12` | `n − 12` |
 | `lbox` | every box | `n + 8` | `n − 8` |
 
-`boxtype` is decode-only. It preserves every box type listed in the ACN
-choices and maps every other 32-bit TBox value to `'abcd'`, which selects the
-opaque `other` alternative. `resboxtype`, inside a Resolution box,
-preserves only `resc` and `resd`. `jp2boxtype`, for a .jp2 at the profile
-layer, preserves only `jP`, `ftyp` and `jp2c`. The model uses the
-normalized type for validity checks; the server retains the original
-bytes. The model encoder writes `'abcd'` for `other`, so the corpus
-generator patches encoded TBox values to exercise other unknown types. `check-model.sh` verifies that the mappings'
-known-type lists together match the ACN choices, and that each marker code
-and box type named in `../lib/hv_codes.h` is the value the model states for
-the field of that name (a `present-when` value, a fixed INTEGER field or a
-termination pattern); the script lists the few it names that the model does
-not state (SOP, EPH, the FF30 to FF3F range, four box types and the brands).
+The box-type mappings are decode-only, and declared, as all mapping
+functions, with `asn1SccUint`, as the generated code calls them. `boxtype`
+preserves every box type listed in `TopPayload`, `InnerPayload` and their
+`-Profile` versions and maps every other 32-bit TBox value to `'abcd'`
+(`MAPPING_OTHER_BOX`), which selects the opaque `other` alternative.
+`resboxtype`, inside a Resolution box, preserves only `resc` and `resd`.
+`jp2boxtype`, for a .jp2 at the profile layer, preserves only `jP`, `ftyp`
+and `jp2c`. The model uses the normalized type for validity checks; the
+server retains the original bytes. The model encoder writes `'abcd'` for
+`other`, so the corpus generator patches encoded TBox values to exercise
+other unknown types. `check-model.sh` verifies each mapping's list against
+the CHOICEs its determinants select, and that every `other` alternative is
+`'abcd'`; and that each marker code and box type named in
+`../lib/hv_codes.h` is the value the model states for the field of that
+name (a `present-when` value, a fixed INTEGER field or a termination
+pattern); the script lists the few it names that the model does not state
+(SOP, EPH, the FF30 to FF3F range, four box types and the brands).
 
 Before decoding, the corpus harness checks physical LBox boundaries. The
 generated `CONTAINING` decoder uses LBox as a temporary stream size, which
 can otherwise read beyond the buffer for malformed lengths. The check
-follows the standard and profile's different superbox interpretations. A
-file that fails it is labeled `decode` at that layer.
+follows the boxes each layer reads as boxes (`children_offset` in
+`vectors.c`, the harness's one list of superboxes: at layer 1 the children
+of the top-level superboxes and of `res` inside them, at layer 2 those of
+the top-level `jpch`, `ftbl` and `dtbl` of a .jpx). A file that fails it is
+labeled `decode` at that layer. The reader's `hv_is_superbox` lists more
+(`res`, `cgrp`, `comp`, `drep` and `j2cx`, at any depth) and leaves `dtbl`
+to its callers, because `hv_walk` and `hv_transcode` check the framing of
+every box that holds boxes.
 
 ## The test loop in `jpeg2000_test.cc`
 
@@ -754,20 +806,18 @@ each until the model does:
 - `LBox = 1` with `XLBox`: two possible determinants for one payload.
 - Main-header marker codes outside the listed set are rejected at layer 1
   only; layer 2 has an `other` field (`MainSegment-Profile`) and skips them
-  exactly as the server does. A vector with e.g. a `CAP` segment would be
-  `standard=invalid, profile=valid` until the layer-1 marker list is
-  extended with the applicable standard citation. The corpus has no such
-  vector: the code mutants replace segments the codestream needs, so they
-  are invalid at both layers.
+  exactly as the server does. Such a segment is `standard=invalid,
+  profile=valid` (`*-main-unknown`, with `FF70`) until the layer-1 marker
+  list is extended with the applicable standard citation.
   Unknown box types are valid at both layers and are decoded as opaque boxes.
 - `Rsiz` is modelled as a 16-bit capability field because the server preserves
   it for the client and validates packet-layout features separately. The
   standard model decodes one level of `asoc` children and requires at least
-  two. The type of those children has no `asoc` alternative, and `boxtype`
-  keeps every listed type, so a nested `asoc` (like any listed box type
-  without an alternative at its level) fails to decode at layer 1, although
-  T.801 allows association trees. The profile treats `asoc` contents as
-  opaque metadata, like the server.
+  two. A nested `asoc` is valid and opaque (`jpx-asoc-nested`): the model
+  does not check what it holds. The profile treats `asoc` contents as
+  opaque metadata, like the server. A box type listed at only one level
+  (a header box, `flst` or `url` at the top level) still fails to decode
+  at the other.
 - Deeper association trees and Multiple Codestream (`j2cx`) storage are
   exercised by explicit server fixtures, not generated-model labels.
 

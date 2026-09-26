@@ -1,27 +1,27 @@
-/* mapping.c — see mapping.h. The length decode mappings are not
- * clamped. mapping.h declares them with asn1SccSint, but the generated code
- * declares and calls every mapping function with asn1SccUint (the same
- * width), so a wire value below the offset (e.g. Lcod = 1) reaches the
- * generated decoder as a huge payload length, which it then rejects. That
- * is the behaviour the corpus wants for invalid-length vectors. */
+/* mapping.c — see mapping.h. The length decode mappings are not clamped:
+ * a wire value below the offset (Lcod = 1, say) wraps to a huge payload
+ * length, which the generated decoder then rejects. That is the behaviour
+ * the corpus wants for invalid-length vectors. */
 #include "mapping.h"
 
-asn1SccSint MAPPING_ENCODE_NAME(lxxx)(asn1SccSint n) { return n + 2; }
-asn1SccSint MAPPING_DECODE_NAME(lxxx)(asn1SccSint n) { return n - 2; }
+asn1SccUint MAPPING_ENCODE_NAME(lxxx)(asn1SccUint n) { return n + 2; }
+asn1SccUint MAPPING_DECODE_NAME(lxxx)(asn1SccUint n) { return n - 2; }
 
-asn1SccSint MAPPING_ENCODE_NAME(psot)(asn1SccSint n) { return n + 12; }
-asn1SccSint MAPPING_DECODE_NAME(psot)(asn1SccSint n) { return n - 12; }
+asn1SccUint MAPPING_ENCODE_NAME(psot)(asn1SccUint n) { return n + 12; }
+asn1SccUint MAPPING_DECODE_NAME(psot)(asn1SccUint n) { return n - 12; }
 
-asn1SccSint MAPPING_ENCODE_NAME(lbox)(asn1SccSint n) { return n + 8; }
-asn1SccSint MAPPING_DECODE_NAME(lbox)(asn1SccSint n) { return n - 8; }
+asn1SccUint MAPPING_ENCODE_NAME(lbox)(asn1SccUint n) { return n + 8; }
+asn1SccUint MAPPING_DECODE_NAME(lbox)(asn1SccUint n) { return n - 8; }
 
-/* Normalize types unknown to both box grammars for the opaque `other` branch.
- * Preserve all recognized types, at both levels: a type the CHOICE at its
- * level has no alternative for (a jpch or an asoc inside a superbox, an
- * ihdr at the top level) then fails to decode, which is how the model
- * rejects its placement: the corpus reason is `decode`, and
- * box.nested-superbox (hv_rule_child) never fires in the harness. The
- * original wire type is irrelevant to this validity-only model. */
+/* Normalize types unknown to both box grammars for the opaque `other`
+ * branch. Keep every type listed in TopPayload, InnerPayload or their
+ * -Profile versions, at both levels: a type the CHOICE at its level has no
+ * alternative for (a header box, flst or url at the top level) then fails
+ * to decode, which is how the model rejects its placement (reason
+ * `decode`). The superboxes that must stay at the top level (jpch, ftbl,
+ * dtbl) have opaque alternatives in InnerPayload, so that hv_rule_child
+ * names their placement. The original wire type is irrelevant to this
+ * validity-only model. */
 asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
     switch (type) {
         case 1634955107u: /* asoc */
@@ -51,7 +51,7 @@ asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
         case 2020437024u: /* xml  */
             return type;
         default:
-            return 1633837924u; /* abcd: `other` choice determinant */
+            return MAPPING_OTHER_BOX;
     }
 }
 
@@ -62,7 +62,7 @@ asn1SccUint MAPPING_DECODE_NAME(resboxtype)(asn1SccUint type) {
         case 1919251300u: /* resd */
             return type;
         default:
-            return 1633837924u; /* abcd: `other` choice determinant */
+            return MAPPING_OTHER_BOX;
     }
 }
 
@@ -75,6 +75,6 @@ asn1SccUint MAPPING_DECODE_NAME(jp2boxtype)(asn1SccUint type) {
         case 1785737827u: /* jp2c */
             return type;
         default:
-            return 1633837924u; /* abcd: `other` choice determinant */
+            return MAPPING_OTHER_BOX;
     }
 }

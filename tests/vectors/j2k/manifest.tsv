@@ -49,12 +49,13 @@ jp2-main-ppt.jp2	jp2	invalid	invalid	decode	main.marker-code	PPT, a tile-part he
 jp2-main-sop.jp2	jp2	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
 jp2-main-ff30-length.jp2	jp2	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
 jp2-main-ff00.jp2	jp2	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jp2-main-unknown.jp2	jp2	invalid	valid	decode	main.marker-code	FF70, a code T.800 does not define, in the main header: the profile skips it	-
 jp2-plt-iplt-eleven-bytes.jp2	jp2	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jp2-siz.rsiz-2.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-
 jp2-siz.rsiz-32768.jp2	jp2	valid	valid	-	siz.rsiz	extension capability flag	-
 jp2-siz.xsiz-0.jp2	jp2	invalid	invalid	decode	siz.xsiz	min-1	-
 jp2-siz.xsiz-2147483648.jp2	jp2	valid	invalid	decode	siz.xsiz	profile max+1	-
-jp2-siz.xsiz-4294967295.jp2	jp2	valid	invalid	decode	siz.xsiz	standard max (tile smaller: single-tile rule)	-
+jp2-siz.xsiz-4294967295.jp2	jp2	valid	invalid	decode	siz.xsiz	standard max; profile: beyond Siz-Profile and the tile	-
 jp2-siz.ysiz-0.jp2	jp2	invalid	invalid	decode	siz.ysiz	min-1	-
 jp2-siz.ysiz-2147483648.jp2	jp2	valid	invalid	decode	siz.ysiz	profile max+1	-
 jp2-siz.xosiz-1.jp2	jp2	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-
@@ -94,7 +95,7 @@ jp2-sot.tpsot-255.jp2	jp2	invalid	invalid	decode	sot.tpsot	reserved	-
 jp2-sot.tnsot-0.jp2	jp2	valid	valid	-	sot.tnsot	unspecified count: valid	-
 jp2-sot.tnsot-2.jp2	jp2	invalid	invalid	sot.tnsot-count	sot.tnsot	count 2 with one tile-part	-
 jp2-plt.zplt-1.jp2	jp2	invalid	invalid	plt.zplt-sequence	plt.zplt	first PLT index is not zero	-
-jp2-plt.iplt.b0.bits-0.jp2	jp2	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0: PLT coverage short	-
+jp2-plt.iplt.b0.bits-0.jp2	jp2	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0 (a packet has at least one byte)	-
 jp2-rule-codestream.one-cod-before-sot-0.jp2	jp2	invalid	invalid	codestream.one-cod-before-sot	codestream.one-cod-before-sot	two COD in main header	-
 jp2-rule-codestream.one-qcd-before-sot-1.jp2	jp2	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	two QCD in main header	-
 jp2-rule-codestream.one-qcd-before-sot-2.jp2	jp2	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	no QCD	-
@@ -117,7 +118,7 @@ jp2-rule-plt.sum-short-24.jp2	jp2	invalid	invalid	plt.coverage	plt.sum-short	til
 jp2-rule-tile.header-coding-default-25.jp2	jp2	valid	invalid	decode	tile.header-coding-default	COD in the first tile-part: profile invalid	-
 jp2-rule-tile.header-coding-default-26.jp2	jp2	valid	invalid	decode	tile.header-coding-default	QCD in the first tile-part: profile invalid	-
 jp2-rule-tile.cod-once-27.jp2	jp2	invalid	invalid	tile.cod-once	tile.cod-once	two COD in the tile-part header	-
-jp2-rule-tile.cod-first-part-28.jp2	jp2	invalid	invalid	tile.cod-once	tile.cod-first-part	COD in the second tile-part	-
+jp2-rule-tile.cod-once-28.jp2	jp2	invalid	invalid	tile.cod-once	tile.cod-once	COD in the second tile-part	-
 jp2-rule-codestream.packet-count-29.jp2	jp2	valid	invalid	codestream.packet-count	codestream.packet-count	2^32 packets: profile invalid	-
 jp2-rule-plt.iplt-six-bytes-30.jp2	jp2	valid	valid	-	plt.iplt-six-bytes	6-byte Iplt encoding value 1: valid	-
 jp2-rule-siz.component-sampling-31.jp2	jp2	valid	invalid	decode	siz.component-sampling	2:1 sampling: profile invalid	-
@@ -149,7 +150,7 @@ jp2-header-res.resc-resd-6.jp2	jp2	valid	valid	-	res.resc-resd	resd and an unkno
 jp2-header-jp2.one-jp2h-7.jp2	jp2	invalid	valid	jp2.one-jp2h	jp2.one-jp2h	no jp2h (T.800 I.5.3)	-
 jp2-header-jp2.one-jp2h-8.jp2	jp2	invalid	valid	jp2.one-jp2h	jp2.one-jp2h	two jp2h boxes	-
 jp2-header-jp2h.position-9.jp2	jp2	invalid	valid	jp2h.position	jp2h.position	jp2h after jp2c (T.800 I.2)	-
-jp2-header-jp2.codestream-10.jp2	jp2	invalid	invalid	jp2.codestream	jp2.codestream	no jp2c (T.800 I.2)	-
+jp2-header-jp2.one-codestream-10.jp2	jp2	invalid	invalid	jp2.one-codestream	jp2.one-codestream	no jp2c (T.800 I.2)	-
 jp2-header-jp2h.ihdr-first-11.jp2	jp2	invalid	valid	jp2h.ihdr-first	jp2h.ihdr-first	colr before ihdr	-
 jp2-header-jp2h.colr-12.jp2	jp2	invalid	valid	jp2h.colr	jp2h.colr	no colr	-
 jp2-header-jp2h.colr-contiguous-13.jp2	jp2	invalid	valid	jp2h.colr-contiguous	jp2h.colr-contiguous	colr, xml, colr	-
@@ -192,6 +193,7 @@ jp2-header-cdef.opacity-49.jp2	jp2	valid	valid	-	cdef.opacity	grey and opacity c
 jp2-header-ihdr.extent-63.jp2	jp2	invalid	valid	ihdr.extent	ihdr.extent	a byte after the ihdr fields: a 23-byte box (I.5.3.1: 22)	-
 jp2-header-cdef.extent-64.jp2	jp2	invalid	valid	cdef.extent	cdef.extent	a byte after the cdef descriptions	-
 jp2-header-res.extent-65.jp2	jp2	invalid	valid	res.extent	res.extent	a byte after the resc fields	-
+jp2-header-box.nested-jp2c-66.jp2	jp2	invalid	valid	box.nested-jp2c	box.nested-jp2c	jp2c inside jp2h (T.800 I.2: at the top level)	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -242,6 +244,7 @@ jp2-precincts-main-ppt.jp2	jp2	invalid	invalid	decode	main.marker-code	PPT, a ti
 jp2-precincts-main-sop.jp2	jp2	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
 jp2-precincts-main-ff30-length.jp2	jp2	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
 jp2-precincts-main-ff00.jp2	jp2	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jp2-precincts-main-unknown.jp2	jp2	invalid	valid	decode	main.marker-code	FF70, a code T.800 does not define, in the main header: the profile skips it	-
 jp2-precincts-plt-iplt-eleven-bytes.jp2	jp2	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jp2-precincts-cod.spcod.precincts.lowest.ppx-0.jp2	jp2	valid	valid	-	cod.spcod.precincts.lowest.ppx	zero at r=0: valid	-
 jp2-precincts-cod.spcod.precincts.higher[0].ppx-0.jp2	jp2	invalid	invalid	cod.precincts-higher-zero	cod.spcod.precincts.higher[0].ppx	zero above r=0 (Table A.21)	-
@@ -344,6 +347,7 @@ jpx-embedded-main-ppt.jpx	jpx	invalid	invalid	decode	main.marker-code	PPT, a til
 jpx-embedded-main-sop.jpx	jpx	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
 jpx-embedded-main-ff30-length.jpx	jpx	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
 jpx-embedded-main-ff00.jpx	jpx	invalid	invalid	decode	main.marker-code	FF00, not a marker, in the main header	-
+jpx-embedded-main-unknown.jpx	jpx	invalid	valid	decode	main.marker-code	FF70, a code T.800 does not define, in the main header: the profile skips it	-
 jpx-embedded-plt-iplt-eleven-bytes.jpx	jpx	invalid	invalid	decode	plt.iplt-length	11-byte Iplt: beyond the model's ten bytes; T.800 sets no bound	-
 jpx-embedded-header-rreq.nsf.jpx	jpx	invalid	valid	decode	rreq.nsf	NSF one more than the standard features	-
 jpx-embedded-header-rreq.nvf.jpx	jpx	invalid	valid	decode	rreq.nvf	NVF 1 with no vendor feature	-
@@ -352,7 +356,7 @@ jpx-embedded-siz.rsiz-2.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 2 (profi
 jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	extension capability flag	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-
 jpx-embedded-siz.xsiz-2147483648.jpx	jpx	valid	invalid	decode	siz.xsiz	profile max+1	-
-jpx-embedded-siz.xsiz-4294967295.jpx	jpx	valid	invalid	decode	siz.xsiz	standard max (tile smaller: single-tile rule)	-
+jpx-embedded-siz.xsiz-4294967295.jpx	jpx	valid	invalid	decode	siz.xsiz	standard max; profile: beyond Siz-Profile and the tile	-
 jpx-embedded-siz.ysiz-0.jpx	jpx	invalid	invalid	decode	siz.ysiz	min-1	-
 jpx-embedded-siz.ysiz-2147483648.jpx	jpx	valid	invalid	decode	siz.ysiz	profile max+1	-
 jpx-embedded-siz.xosiz-1.jpx	jpx	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-
@@ -392,7 +396,7 @@ jpx-embedded-sot.tpsot-255.jpx	jpx	invalid	invalid	decode	sot.tpsot	reserved	-
 jpx-embedded-sot.tnsot-0.jpx	jpx	valid	valid	-	sot.tnsot	unspecified count: valid	-
 jpx-embedded-sot.tnsot-2.jpx	jpx	invalid	invalid	sot.tnsot-count	sot.tnsot	count 2 with one tile-part	-
 jpx-embedded-plt.zplt-1.jpx	jpx	invalid	invalid	plt.zplt-sequence	plt.zplt	first PLT index is not zero	-
-jpx-embedded-plt.iplt.b0.bits-0.jpx	jpx	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0: PLT coverage short	-
+jpx-embedded-plt.iplt.b0.bits-0.jpx	jpx	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0 (a packet has at least one byte)	-
 jpx-embedded-rule-codestream.one-cod-before-sot-0.jpx	jpx	invalid	invalid	codestream.one-cod-before-sot	codestream.one-cod-before-sot	two COD in main header	-
 jpx-embedded-rule-codestream.one-qcd-before-sot-1.jpx	jpx	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	two QCD in main header	-
 jpx-embedded-rule-codestream.one-qcd-before-sot-2.jpx	jpx	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	no QCD	-
@@ -420,7 +424,7 @@ jpx-embedded-rule-plt.sum-short-24.jpx	jpx	invalid	invalid	plt.coverage	plt.sum-
 jpx-embedded-rule-tile.header-coding-default-25.jpx	jpx	valid	invalid	decode	tile.header-coding-default	COD in the first tile-part: profile invalid	-
 jpx-embedded-rule-tile.header-coding-default-26.jpx	jpx	valid	invalid	decode	tile.header-coding-default	QCD in the first tile-part: profile invalid	-
 jpx-embedded-rule-tile.cod-once-27.jpx	jpx	invalid	invalid	tile.cod-once	tile.cod-once	two COD in the tile-part header	-
-jpx-embedded-rule-tile.cod-first-part-28.jpx	jpx	invalid	invalid	tile.cod-once	tile.cod-first-part	COD in the second tile-part	-
+jpx-embedded-rule-tile.cod-once-28.jpx	jpx	invalid	invalid	tile.cod-once	tile.cod-once	COD in the second tile-part	-
 jpx-embedded-rule-codestream.packet-count-29.jpx	jpx	valid	invalid	codestream.packet-count	codestream.packet-count	2^32 packets: profile invalid	-
 jpx-embedded-rule-plt.iplt-six-bytes-30.jpx	jpx	valid	valid	-	plt.iplt-six-bytes	6-byte Iplt encoding value 1: valid	-
 jpx-embedded-rule-siz.component-sampling-31.jpx	jpx	valid	invalid	decode	siz.component-sampling	2:1 sampling: profile invalid	-
@@ -452,15 +456,19 @@ jpx-embedded-header-colr.one-method-59.jpx	jpx	invalid	valid	colr.one-method	col
 jpx-embedded-header-cdef.pairs-60.jpx	jpx	invalid	valid	cdef.pairs	cdef.pairs	jplh cdef with two descriptions Typ 0, Asoc 1	-
 jpx-embedded-header-rreq.mask-length-61.jpx	jpx	valid	valid	-	rreq.mask-length	rreq masks of 2 bytes (ML 2): valid	-
 jpx-embedded-header-rreq.ml-62.jpx	jpx	invalid	valid	decode	rreq.ml	rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)	-
+jpx-embedded-header-box.flst-placement-67.jpx	jpx	invalid	valid	box.flst-placement	box.flst-placement	flst inside jp2h (T.801 M.11.3: in ftbl)	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jpx-unknown-inner-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted box inside jpch: valid and skipped	-
-jpx-nested-jpch.jpx	jpx	invalid	invalid	decode	box.nested-superbox	jpch inside jpch (T.801 M.11.6: top level only)	-
+jpx-nested-jpch.jpx	jpx	invalid	invalid	box.nested-superbox	box.nested-superbox	empty jpch inside jpch (T.801 M.11.6: top level only)	-
+jpx-nested-ftbl.jpx	jpx	invalid	invalid	box.nested-superbox	box.nested-superbox	ftbl holding one flst inside jpch (T.801 M.11.3: top level only)	-
+jpx-nested-dtbl.jpx	jpx	invalid	invalid	box.nested-superbox	box.nested-superbox	dtbl with NDR 0 inside jpch (T.801 M.11.2: top level only)	-
 jpx-asoc.jpx	jpx	valid	valid	-	asoc.opaque	T.801 M.11.11: label associated with XML; profile preserves opaque contents	-
 jpx-asoc-child-length.jpx	jpx	invalid	valid	decode	asoc.opaque	inner LBox below 8: standard invalid, profile preserves opaque contents	-
 jpx-asoc-outer-length.jpx	jpx	invalid	invalid	decode	asoc.outer-length	outer LBox exceeds file: invalid at both layers	-
 jpx-asoc-one-child.jpx	jpx	invalid	valid	decode	asoc.opaque	T.801 M.11.11 requires at least two children; profile preserves opaque contents	-
+jpx-asoc-nested.jpx	jpx	valid	valid	-	asoc.nested	T.801 M.11.11: an association inside an association; valid, contents opaque	-
 jpx-linked.jpx	jpx	valid	valid	-	-	base	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-sig-bad.jpx	jpx	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jpx-linked-len-0-11.jpx	jpx	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -521,10 +529,10 @@ jpx-linked-rule-flst.dr-range-3.jpx	jpx	invalid	invalid	flst.dr-range	flst.dr-ra
 jpx-linked-rule-ftbl.one-flst-4.jpx	jpx	invalid	invalid	ftbl.one-flst	ftbl.one-flst	two flst in one ftbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-dtbl.ndr-count-5.jpx	jpx	invalid	invalid	dtbl.ndr-count	dtbl.ndr-count	NDR = 3 with 2 url boxes	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.file-scheme-6.jpx	jpx	valid	invalid	url.file-scheme	url.file-scheme	http URL: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
-jpx-linked-rule-url.version-7.jpx	jpx	valid	invalid	decode	url.version	VERS = 1: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.version-flags-7.jpx	jpx	valid	invalid	decode	url.version-flags	VERS = 1: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.jp2-target-8.jpx	jpx	valid	invalid	url.jp2-target	url.jp2-target	link to a .jpx: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.mixed-sources-9.jpx	jpx	valid	invalid	jpx.mixed-sources	jpx.mixed-sources	jp2c next to ftbl: profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
-jpx-linked-rule-jpx.linked-shape-10.jpx	jpx	invalid	invalid	flst.dr-range	jpx.linked-shape	no dtbl	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-jpx.linked-shape-10.jpx	jpx	valid	invalid	jpx.linked-shape	jpx.linked-shape	no dtbl, fragments in this file (DR 0): profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-jpx.one-dtbl-11.jpx	jpx	invalid	invalid	jpx.one-dtbl	jpx.one-dtbl	two dtbl boxes (T.801 M.11.2)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.source-extent-12.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment starts one byte before companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.source-extent-13.jpx	jpx	valid	invalid	flst.source-extent	flst.source-extent	fragment starts one byte after companion codestream	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
@@ -533,6 +541,8 @@ jpx-linked-rule-flst.source-extent-15.jpx	jpx	valid	invalid	flst.source-extent	f
 jpx-linked-rule-url.missing-companion-16.jpx	jpx	valid	invalid	url.missing-companion	url.missing-companion	structurally valid JPX with unavailable companion	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-box.flst-placement-17.jpx	jpx	invalid	invalid	box.flst-placement	box.flst-placement	flst inside a jpch (T.801 M.11.3: in ftbl)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-box.url-placement-18.jpx	jpx	invalid	invalid	box.url-placement	box.url-placement	url inside an ftbl (T.801 M.11.2: in dtbl)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-url.terminator-19.jpx	jpx	invalid	invalid	box.extent	url.terminator	a byte after LOC's NUL, inside the url box	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.nf-count-20.jpx	jpx	invalid	invalid	flst.nf-count	flst.nf-count	NF 2 with one fragment (T.801 M.11.3.1)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

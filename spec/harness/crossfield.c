@@ -1,13 +1,14 @@
 /* crossfield.c — instantiates crossfield_impl.h for both struct families,
- * checks the JP2 header boxes at layer 1 (the only layer that types them),
- * and checks a .jp2 at layer 2, whose box types differ (Jp2File_Profile). */
+ * checks the placement of boxes in the metadata superboxes and the JP2
+ * header boxes at layer 1 (the only layer that types them), and checks a
+ * .jp2 at layer 2, whose box types differ (Jp2File_Profile). */
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include "crossfield.h"
 
 /* Tile-part counts per tile, for hv_rule_tile_part: Isot addresses at most
- * 65 535 tiles. */
+ * 65,535 tiles. */
 static uint16_t cf_tile_parts[65535];
 static uint8_t cf_tile_tnsot[65535];
 
@@ -19,11 +20,11 @@ static int cf_signature(const OpaqueBox *box) {
 /* T.800 I.5.2 / T.801 Annex M: the brand for the file's kind, and in the
  * compatibility list. */
 static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
-    const char *expected = kind == CF_JP2 ? "jp2 " : "jpx ";
+    Brand expected = kind == CF_JP2 ? HV_BRAND_JP2 : HV_BRAND_JPX;
     int i, compatible = 0;
-    if (memcmp(ftyp->brand.arr, expected, 4) != 0) return "file.ftyp-brand";
+    if (ftyp->brand != expected) return "file.ftyp-brand";
     for (i = 0; i < ftyp->compat.nCount; ++i)
-        compatible |= memcmp(ftyp->compat.arr[i].arr, expected, 4) == 0;
+        compatible |= ftyp->compat.arr[i] == expected;
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
@@ -52,6 +53,50 @@ static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
 #undef CF_COD
 #undef CF_MAIN_OTHER
 #undef CF_TILE_PLT_ONLY
+
+/* The children of a top-level superbox that the server does not walk
+ * (jp2h, jplh, uinf, asoc; layer 1 only, as layer 2 keeps these boxes
+ * opaque): jp2c, jpch, ftbl and dtbl belong at the top level and flst in
+ * an ftbl (hv_rule_child). A url is not checked here: T.800 I.7.3 puts one
+ * in uinf. */
+static const char *cf_placement_children(uint32_t parent, const InnerBox *children, int n) {
+    int i;
+    const char *r;
+    for (i = 0; i < n; ++i) {
+        uint32_t type = cf_inner_type_(&children[i]);
+        if (type != HV_BOX_URL && (r = hv_rule_child(parent, type)) != NULL) return r;
+    }
+    return NULL;
+}
+
+static const char *cf_placement(const Jp2Family *file) {
+    int i;
+    const char *r = NULL;
+    for (i = 0; i < file->boxes.nCount && r == NULL; ++i) {
+        const TopPayload *p = &file->boxes.arr[i].payload;
+        switch (p->kind) {
+            case TopPayload_jp2h_PRESENT:
+                r = cf_placement_children(HV_BOX_JP2H, p->u.jp2h.children.arr,
+                                          p->u.jp2h.children.nCount);
+                break;
+            case TopPayload_jplh_PRESENT:
+                r = cf_placement_children(HV_BOX_JPLH, p->u.jplh.children.arr,
+                                          p->u.jplh.children.nCount);
+                break;
+            case TopPayload_uinf_PRESENT:
+                r = cf_placement_children(HV_BOX_UINF, p->u.uinf.children.arr,
+                                          p->u.uinf.children.nCount);
+                break;
+            case TopPayload_asoc_PRESENT:
+                r = cf_placement_children(HV_BOX_ASOC, p->u.asoc.children.arr,
+                                          p->u.asoc.children.nCount);
+                break;
+            default:
+                break;
+        }
+    }
+    return r;
+}
 
 /* The header box type of a layer-1 inner box, as far as hv_rule_header_child
  * distinguishes them (1: any other). */
@@ -192,7 +237,8 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
 
 const char *cf_check_family(const Jp2Family *file, cf_layer layer, cf_kind kind) {
     const char *r = cf_check_family_(file, layer, kind);
-    return r != NULL || layer != CF_STANDARD ? r : cf_headers(file, kind);
+    if (r != NULL || layer != CF_STANDARD) return r;
+    return (r = cf_placement(file)) != NULL ? r : cf_headers(file, kind);
 }
 
 const char *cf_check_jpx_profile(const JpxFile_Profile *file) {

@@ -1,15 +1,18 @@
 #!/bin/sh
 # Regenerates generated/ from the model in spec/: only the reader/writer
-# types (asn1scc -icdPdus) and what they depend on.
+# types (asn1scc -icdPdus, the `pdus` list below) and what they depend on.
+# A type the reader or writer needs must be added to `pdus`. The modules
+# are those of spec/modules, in its order.
 #
 # The compiler is the pinned build from spec/build-asn1scc.sh. By default it
-# runs in its Docker image, as spec/check-model.sh does. Set ASN1SCC to run
-# a copy of that build (with spec/asn1scc-patches applied) directly, for
-# example:
+# runs in its Docker image (ASN1SCC_IMAGE, default esajpip-asn1scc). Set
+# ASN1SCC to run a copy of that build (with spec/asn1scc-patches applied)
+# directly, as in
 #   ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"
 #
 # With --check it only compares: it fails if generated/ is not what the
-# compiler makes of the model (spec/check-model.sh runs it so).
+# compiler makes of the model. spec/check-model.sh runs it so, always with
+# the Docker image it builds the corpus with.
 
 set -eu
 
@@ -33,10 +36,11 @@ pdus=$pdus,DataReferenceCount,UrlHeader,FragmentCount,Fragment,FragmentList-Prof
 pdus=$pdus,FtypHeader,Brand
 # JP2 header boxes, one box or entry at a time.
 pdus=$pdus,Ihdr,BitDepth,ColrHeader,PclrHeader,CmapEntry,CdefCount,CdefEntry,Resolution
-models="j2k-headers j2k-codestream jp2-boxes jpeg2000-io"
+models=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$repo/spec/modules")
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/hv-generated.XXXXXX")
-trap 'rm -rf "$temporary"' EXIT HUP INT TERM
+trap 'rm -rf "$temporary"' EXIT
+trap 'exit 1' HUP INT TERM
 
 files=
 for m in $models; do

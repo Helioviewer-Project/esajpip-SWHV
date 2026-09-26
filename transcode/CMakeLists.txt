@@ -10,15 +10,9 @@ if(ESAJPIP_TOOL_TESTS)
     add_subdirectory(test)
 endif()
 
-# fuzz_transcode: a libFuzzer target (Clang only); fuzz_merge is in
-# ../merge/CMakeLists.txt.
-option(ESAJPIP_FUZZ "Build the libFuzzer targets fuzz_transcode and fuzz_merge" OFF)
+# fuzz_transcode: a libFuzzer target (Clang only), with ESAJPIP_FUZZ (set up
+# in the top-level CMakeLists.txt); fuzz_merge is in ../merge/CMakeLists.txt.
 if(ESAJPIP_FUZZ)
-    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "ESAJPIP_FUZZ requires Clang")
-    endif()
-    # Coverage for the library too.
-    target_compile_options(jpeg2000_io PRIVATE -fsanitize=fuzzer-no-link)
     add_executable(fuzz_transcode fuzz_transcode.c transcode.c tier2.c)
     esajpip_configure_target(fuzz_transcode)
     target_compile_options(fuzz_transcode PRIVATE -fsanitize=fuzzer)

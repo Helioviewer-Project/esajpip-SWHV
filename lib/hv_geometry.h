@@ -100,7 +100,7 @@ static inline uint64_t hv_block_number(const hv_band *band, int64_t cx, int64_t 
 }
 
 /* The packets in the progression order of the COD. *packets is malloc'd.
- * Fails when there are more than 2^31 - 1 packets. */
+ * Fails when there are more than 2,147,483,647 (2^31 - 1) packets. */
 int hv_geometry_packets(const hv_geometry *g, hv_packet **packets, size_t *count,
                         char *error, size_t error_size);
 

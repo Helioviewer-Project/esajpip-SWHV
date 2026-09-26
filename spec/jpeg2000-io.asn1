@@ -1,7 +1,7 @@
 -- jpeg2000-io.asn1
 --
--- Header types for the JPEG 2000 reader/writer (lib/, used by hv_transcode
--- and hv_merge).
+-- Header types for the JPEG 2000 reader/writer in ../lib (hv_reader,
+-- hv_writer), which hv_walk, hv_transcode and hv_merge use.
 -- Unlike the whole-file model (j2k-codestream.asn1, jp2-boxes.asn1), these
 -- types are decoded and encoded one at a time by a hand-written walker that
 -- steps from header to header. A payload (box contents, tile-part data) is
@@ -16,6 +16,20 @@
 -- only by `field == value`, so there is no "otherwise" alternative, and
 -- `size deduced` cannot sit inside a CHOICE alternative.) The generated
 -- code checks the values; the walker turns them into extents.
+--
+-- The -Std suffix. A type X-Std is the reader/writer's version of the
+-- whole-file model's type X: the same encoding, with the standard's bounds
+-- wherever X has a corpus bound (j2k-headers.asn1, "CORPUS BOUNDS"). How it
+-- is written depends on X: an instance of X's parameterized body (Qcd-Std,
+-- Plt-Std, Com-Std, in j2k-headers.asn1), a copy where X is not
+-- parameterized (Rreq-Std; spec/check-model.sh checks that the two agree
+-- but for their bounds), or, where X has no corpus bound, the same
+-- definition (SizSegment-Std, CodSegment-Std; checked too): every segment
+-- wrapper the reader decodes is an -Std type of this module. A type with
+-- no counterpart in the whole-file model has no suffix: BoxHeader,
+-- MarkerCode, SegmentLength, FtypHeader, UrlHeader, the counts, and
+-- SotSegment (the whole-file model's SOT is TilePart, which holds the
+-- tile-part too).
 --
 -- Marker segments with a body are decoded whole, Lxxx included, by the
 -- *Segment-Std wrappers below. They carry the bodies of j2k-headers.asn1 at
@@ -32,7 +46,7 @@ EXPORTS ALL;
 IMPORTS
     Siz, Cod, Qcd-Std, Plt-Std, Com-Std
         FROM J2K-Headers
-    RreqMask, StandardFeature, VendorFeature, Extra
+    Brand, RreqMask, StandardFeature, VendorFeature, Extra
         FROM JP2-Boxes;
 
 -- ---------------------------------------------------------------------------
@@ -48,9 +62,8 @@ BoxHeader ::= SEQUENCE {
 }
 
 -- File Type box, T.800 I.5.2 / T.801 Annex M: BR and MinV, then the
--- compatibility list, entries of the same kind as BR, filling the box.
-Brand ::= INTEGER (0..4294967295)                 -- four-character code, big-endian
-
+-- compatibility list, entries of the same kind as BR (Brand, in
+-- jp2-boxes.asn1), filling the box.
 FtypHeader ::= SEQUENCE {
     brand       Brand,
     minor       INTEGER (0..4294967295)
@@ -68,11 +81,11 @@ SegmentLength ::= INTEGER (2..65535)
 
 -- Marker segments after their code: Lxxx (ACN-inserted, counts itself: +2,
 -- mapping function lxxx) and the body it sizes.
-SizSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Siz) }       -- Lsiz 41 to 49 190
+SizSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Siz) }       -- Lsiz 41 to 49,190
 CodSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Cod) }       -- Lcod 12 to 45
 QcdSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Qcd-Std) }   -- Lqcd 4 to 197
-PltSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Std) }   -- Lplt 4 to 65 535
-ComSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Std) }   -- Lcom 5 to 65 535
+PltSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Plt-Std) }   -- Lplt 4 to 65,535
+ComSegment-Std ::= SEQUENCE { body OCTET STRING (CONTAINING Com-Std) }   -- Lcom 5 to 65,535
 
 -- ---------------------------------------------------------------------------
 -- JPX boxes, T.801 Annex M, read one box at a time
@@ -101,11 +114,13 @@ Rreq-Std ::= SEQUENCE {
 }
 
 -- Fragment List box (M.11.3.1): NF, then NF fragments (Fragment in
--- jp2-boxes.asn1), which the walker counts. The served profile's box, one
--- fragment, is FragmentList-Profile in jp2-boxes.asn1.
-FragmentCount ::= INTEGER (0..65535)
+-- jp2-boxes.asn1), which the walker counts. NF is FragmentList's nf, at
+-- least 1. The served profile's box, one fragment, is FragmentList-Profile
+-- in jp2-boxes.asn1.
+FragmentCount ::= INTEGER (1..65535)
 
--- SOT marker segment after the FF90 code, A.4.2 (Table A.5).
+-- SOT marker segment after the FF90 code, A.4.2 (Table A.5). The
+-- whole-file model's TilePart has Psot as a determinant instead.
 SotSegment ::= SEQUENCE {
     lsot        INTEGER (10..10),
     isot        INTEGER (0..65534),               -- tile index

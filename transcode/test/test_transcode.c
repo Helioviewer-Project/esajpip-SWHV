@@ -198,6 +198,14 @@ static void expect_error(const char *name, const bytes *input, const char *messa
     bytes_free(&r.out);
 }
 
+/* Rejected by the reader with this message, at this offset. */
+static void expect_reader_error(const char *name, const bytes *input, const char *message,
+                                size_t at) {
+    char expected[256];
+    snprintf(expected, sizeof expected, "%s at %zu", message, at);
+    expect_error(name, input, expected);
+}
+
 /* Transcoding an output again gives the same output. */
 static void expect_stable(const char *name, const bytes *out) {
     result r = transcode(out->data, out->size, 7, 7);
@@ -248,10 +256,13 @@ static void test_references(void) {
         hv_out_init(&out);
         if (strcmp(e->d_name, ORIGIN_FIXTURE) == 0) {
             bytes in_cs = box_payload(&input, HV_BOX_JP2C);
+            char expected[64];
             result r;
+            snprintf(expected, sizeof expected, "siz.zero-origin at %zu",
+                     (size_t)(in_cs.data - input.data) + 2);         /* SIZ */
             check(hv_transcode_file(input.data, input.size, 7, 7, 1, &out, error,
                                     sizeof error) != 0 &&
-                  strcmp(error, "siz.zero-origin") == 0 && out.size == 0,
+                  strcmp(error, expected) == 0 && out.size == 0,
                   "%s: file accepted or rejected otherwise: %s", e->d_name, error);
             r = transcode(in_cs.data, in_cs.size, 7, 7);
             check(r.status == 0, "%s: codestream rejected: %s", e->d_name, r.error);
@@ -291,7 +302,8 @@ static void test_references(void) {
                 break;
             if (bo.type != HV_BOX_JP2C) {
                 check(bo.end - bo.payload == br.end - br.payload &&
-                      memcmp(out.data + bo.payload, ref.data + br.payload, bo.end - bo.payload) == 0,
+                      memcmp(out.data + bo.payload, ref.data + br.payload,
+                             bo.end - bo.payload) == 0,
                       "%s: a box differs from the reference", e->d_name);
                 continue;
             }
@@ -426,7 +438,9 @@ static void test_tile_parts(void) {
     eoc(&b);
     expect_output("Psot = 0 on the last tile-part", &b, &expected);
     b.size -= 2;
-    expect_error("Psot = 0 without EOC", &b, "Psot = 0 but the codestream does not end with EOC");
+    expect_reader_error("Psot = 0 without EOC", &b,
+                        "Psot = 0 but the codestream does not end with EOC",
+                        s.main.size + 14 + first);
     bytes_free(&b);
 
     b = codestream(&s.main);
@@ -452,40 +466,42 @@ static void test_tile_parts(void) {
 
     b = bytes_copy(s.cs.data, s.cs.size);
     append(&b, "", 1);
-    expect_error("a byte after EOC", &b, "bytes after EOC");
+    expect_reader_error("a byte after EOC", &b, "bytes after EOC", s.cs.size);
     b.size = s.cs.size - 2;
-    expect_error("no EOC", &b, "tile-part overruns the codestream");
+    expect_reader_error("no EOC", &b, "tile-part overruns the codestream", s.main.size);
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 1, 0, 1, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("tile 1 of 1", &b, "sot.isot-range");
+    expect_reader_error("tile 1 of 1", &b, "sot.isot-range", s.main.size);
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 1, 1, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("tile-part 1 first", &b, "sot.tpsot-sequence");
+    expect_reader_error("tile-part 1 first", &b, "sot.tpsot-sequence", s.main.size);
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 0, 2, s.body.data, s.body.size, 0);
     eoc(&b);
-    expect_error("one of two tile-parts", &b, "sot.tnsot-count");
+    expect_reader_error("one of two tile-parts", &b, "sot.tnsot-count", b.size - 2);
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 0, 2, s.body.data, first, 0);
     tile_part(&b, 0, 1, 3, s.body.data + first, s.body.size - first, 0);
     eoc(&b);
-    expect_error("TNsot 2 then 3", &b, "sot.tnsot-inconsistent");
+    expect_reader_error("TNsot 2 then 3", &b, "sot.tnsot-inconsistent",
+                        s.main.size + 14 + first);
     bytes_free(&b);
 
     b = codestream(&s.main);
     tile_part(&b, 0, 0, 1, s.body.data, s.body.size - (size_t)s.lengths[s.nlengths - 1], 0);
     eoc(&b);
-    expect_error("without the last packet", &b, "truncated input is not supported: missing packets");
+    expect_error("without the last packet", &b,
+                 "truncated input is not supported: missing packets");
     bytes_free(&b);
 
     b = codestream(&s.main);
@@ -505,8 +521,8 @@ static void test_tile_parts(void) {
     tile_part(&b, 0, 0, 2, s.body.data, first, 1);
     tile_part(&b, 0, 1, 2, s.body.data + first, s.body.size - first, 0);
     eoc(&b);
-    expect_error("Psot = 0 on the first of two, TNsot = 2", &b,
-                 "sot.tnsot-count");
+    expect_reader_error("Psot = 0 on the first of two, TNsot = 2", &b, "sot.tnsot-count",
+                        b.size - 2);
     bytes_free(&b);
 
     bytes_free(&expected);
@@ -551,11 +567,12 @@ static bytes concat3(const uint8_t *a, size_t na, const uint8_t *b, size_t nb,
     return out;
 }
 
-#define EXPECT_PATCHED(name, offset, value, message)                        \
+/* Patched, rejected by the reader at `at`. */
+#define EXPECT_PATCHED(name, offset, value, message, at)                    \
     do {                                                                     \
         static const uint8_t v_[] = value;                                   \
         bytes b_ = patched(&rgb, (offset), v_, sizeof v_);                    \
-        expect_error((name), &b_, (message));                                \
+        expect_reader_error((name), &b_, (message), (at));                   \
         bytes_free(&b_);                                                     \
     } while (0)
 #define BYTES(...) {__VA_ARGS__}
@@ -564,38 +581,58 @@ static void test_headers(void) {
     bytes file, cs = fixture_codestream("input", "synthetic_rgb_129x129_origin129_CPRL.jp2", &file);
     bytes rgb = bytes_copy(cs.data, cs.size), b;
     size_t siz = 2, cod = siz + 2 + get16(rgb.data + siz + 2), sot = cod, n;
+    static const char *too_many = "code-block count exceeds supported limit (250,000)";
     uint8_t *p;
 
     while (get16(rgb.data + sot) != HV_SOT)
         sot += 2 + get16(rgb.data + sot + 2);
 
+    /* Flags other than 0 and HV_PROFILE_HEADERS. */
+    {
+        static const unsigned flags[] = {HV_ACCEPT_PLT_PADDING, HV_PROFILE};
+        char error[256];
+        hv_out out;
+        size_t i;
+        for (i = 0; i < sizeof flags / sizeof *flags; i++) {
+            char expected[80];
+            snprintf(expected, sizeof expected,
+                     "flags 0x%X: only 0 and HV_PROFILE_HEADERS are supported", flags[i]);
+            hv_out_init(&out);
+            check(hv_transcode_codestream(rgb.data, 0, rgb.size, 7, 7, flags[i], &out, error,
+                                          sizeof error) != 0 &&
+                  strcmp(error, expected) == 0 && out.size == 0,
+                  "flags 0x%X: \"%s\", expected \"%s\"", flags[i], error, expected);
+            hv_out_free(&out);
+        }
+    }
+
     b.data = rgb.data;
     b.size = 0;
-    expect_error("empty", &b, "codestream does not start with SOC");
+    expect_reader_error("empty", &b, "codestream does not start with SOC", 0);
     b.size = 4;
-    expect_error("SOC and SIZ code only", &b, "truncated SIZ");
+    expect_reader_error("SOC and SIZ code only", &b, "truncated SIZ", siz);
     b = concat3(rgb.data, 2, rgb.data + cod, rgb.size - cod, NULL, 0);
-    expect_error("no SIZ", &b, "SOC is not followed by SIZ");
+    expect_reader_error("no SIZ", &b, "SOC is not followed by SIZ", siz);
     bytes_free(&b);
     b = concat3(rgb.data, cod, rgb.data + sot, rgb.size - sot, NULL, 0);
-    expect_error("no COD or QCD", &b, "codestream.one-cod-before-sot");
+    expect_reader_error("no COD or QCD", &b, "codestream.one-cod-before-sot", cod);
     bytes_free(&b);
     b = concat3(rgb.data, cod, rgb.data + siz, cod - siz, rgb.data + cod, rgb.size - cod);
-    expect_error("two SIZ", &b, "main.marker-code");
+    expect_reader_error("two SIZ", &b, "main.marker-code", cod);
     bytes_free(&b);
     b = concat3(rgb.data, sot, rgb.data + cod, sot - cod, rgb.data + sot, rgb.size - sot);
-    expect_error("two COD", &b, "codestream.one-cod-before-sot");
+    expect_reader_error("two COD", &b, "codestream.one-cod-before-sot", sot);
     bytes_free(&b);
 
-    EXPECT_PATCHED("Lsiz 2", siz + 2, BYTES(0x00, 0x02), "invalid SIZ");
-    EXPECT_PATCHED("Lsiz 65535", siz + 2, BYTES(0xFF, 0xFF), "truncated SIZ");
-    EXPECT_PATCHED("Csiz 0", siz + 4 + 34, BYTES(0x00, 0x00), "invalid SIZ");
+    EXPECT_PATCHED("Lsiz 2", siz + 2, BYTES(0x00, 0x02), "invalid SIZ", siz);
+    EXPECT_PATCHED("Lsiz 65,535", siz + 2, BYTES(0xFF, 0xFF), "truncated SIZ", siz);
+    EXPECT_PATCHED("Csiz 0", siz + 4 + 34, BYTES(0x00, 0x00), "invalid SIZ", siz);
     EXPECT_PATCHED("Csiz 4 of 3", siz + 4 + 34, BYTES(0x00, 0x04),
-                   "siz.csiz-count");
+                   "siz.csiz-count", siz);
     EXPECT_PATCHED("XOsiz past Xsiz", siz + 4 + 10, BYTES(0x00, 0x00, 0x01, 0x02),
-                   "siz.origin-inside");
-    EXPECT_PATCHED("XTsiz 0", siz + 4 + 18, BYTES(0x00, 0x00, 0x00, 0x00), "invalid SIZ");
-    EXPECT_PATCHED("XRsiz 0", siz + 4 + 37, BYTES(0x00), "invalid SIZ");
+                   "siz.origin-inside", siz);
+    EXPECT_PATCHED("XTsiz 0", siz + 4 + 18, BYTES(0x00, 0x00, 0x00, 0x00), "invalid SIZ", siz);
+    EXPECT_PATCHED("XRsiz 0", siz + 4 + 37, BYTES(0x00), "invalid SIZ", siz);
 
     /* Components subsampled so much that coarse resolutions are empty. */
     b = bytes_copy(rgb.data, rgb.size);
@@ -604,21 +641,22 @@ static void test_headers(void) {
     expect_error("empty resolutions", &b, "5569 unparsed tile bytes");
     bytes_free(&b);
 
-    EXPECT_PATCHED("Lcod 0", cod + 2, BYTES(0x00, 0x00), "marker segment overruns its header");
+    EXPECT_PATCHED("Lcod 0", cod + 2, BYTES(0x00, 0x00), "marker segment overruns its header",
+                   cod);
     /* One precinct byte short. */
     n = get16(rgb.data + cod + 2);
     b = concat3(rgb.data, cod + n + 1, rgb.data + cod + n + 2, rgb.size - cod - n - 2, NULL, 0);
     put16(b.data + cod + 2, (unsigned)n - 1);
-    expect_error("short COD", &b, "cod.precincts-count");
+    expect_reader_error("short COD", &b, "cod.precincts-count", cod);
     bytes_free(&b);
-    EXPECT_PATCHED("Scod reserved bit", cod + 4, BYTES(0x08), "invalid COD");
-    EXPECT_PATCHED("progression 5", cod + 4 + 1, BYTES(0x05), "invalid COD");
-    EXPECT_PATCHED("0 layers", cod + 4 + 2, BYTES(0x00, 0x00), "invalid COD");
-    EXPECT_PATCHED("66 levels", cod + 4 + 5, BYTES(0x42), "invalid COD");
-    EXPECT_PATCHED("xcb 11", cod + 4 + 6, BYTES(0x09), "invalid COD");
-    EXPECT_PATCHED("xcb + ycb 13", cod + 4 + 7, BYTES(0x05), "cod.codeblock-area");
+    EXPECT_PATCHED("Scod reserved bit", cod + 4, BYTES(0x08), "invalid COD", cod);
+    EXPECT_PATCHED("progression 5", cod + 4 + 1, BYTES(0x05), "invalid COD", cod);
+    EXPECT_PATCHED("0 layers", cod + 4 + 2, BYTES(0x00, 0x00), "invalid COD", cod);
+    EXPECT_PATCHED("66 levels", cod + 4 + 5, BYTES(0x42), "invalid COD", cod);
+    EXPECT_PATCHED("xcb 11", cod + 4 + 6, BYTES(0x09), "invalid COD", cod);
+    EXPECT_PATCHED("xcb + ycb 13", cod + 4 + 7, BYTES(0x05), "cod.codeblock-area", cod);
     EXPECT_PATCHED("PPy 0 at resolution 1", cod + 4 + 11, BYTES(0x08),
-                   "cod.precincts-higher-zero");
+                   "cod.precincts-higher-zero", cod);
 
     /* A huge image and many layers with little data. */
     b = bytes_copy(rgb.data, rgb.size);
@@ -635,9 +673,9 @@ static void test_headers(void) {
     put32(p + 18, 65536);                       /* XTsiz, YTsiz */
     put32(p + 22, 65536);
     memset(b.data + cod + 4 + 10, 0xFF, 3);     /* 2^15 precincts */
-    expect_error("too many code-blocks", &b, "code-block count exceeds supported limit");
+    expect_error("too many code-blocks", &b, too_many);
     put16(b.data + cod + 4 + 2, 200);
-    expect_error("too many code-blocks, 200 layers", &b, "code-block count exceeds supported limit");
+    expect_error("too many code-blocks, 200 layers", &b, too_many);
     bytes_free(&b);
 
     bytes_free(&rgb);
@@ -1077,7 +1115,8 @@ static bytes declared(unsigned ncomps, unsigned levels, unsigned xr, uint32_t x0
 }
 
 static void test_memory_bounds(void) {
-    static const char *too_many = "component and resolution count exceeds supported limit";
+    static const char *too_many =
+        "component and resolution count exceeds supported limit (65,536)";
     bytes b;
     b = declared(16384, 32, 1, 0);
     expect_error("16,384 components, 33 resolutions", &b, too_many);

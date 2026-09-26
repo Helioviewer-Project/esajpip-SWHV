@@ -4,11 +4,10 @@
  * order, then the new ones), and written with hv_writer. */
 #include "transcode.h"
 
-#include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "hv_error.h"
 #include "hv_reader.h"
 #include "tier2.h"
 
@@ -25,20 +24,14 @@
 #define MAX_RESOLUTIONS 65536
 #define MAX_CODE_BLOCKS 250000
 #define MAX_OUTPUT_PACKETS 2000000
+/* The same, as the messages state them. */
+#define MAX_RESOLUTIONS_TEXT "65,536"
+#define MAX_CODE_BLOCKS_TEXT "250,000"
+#define MAX_OUTPUT_PACKETS_TEXT "2,000,000"
 
-
-typedef struct {
-    char *error;
-    size_t error_size;
-} errors;
-
-static int fail(errors *e, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    vsnprintf(e->error, e->error_size, format, args);
-    va_end(args);
-    return -1;
-}
+/* Code-block styles (T.800 Table A.19) whose coding passes end where the
+ * packet headers do not say: not supported. */
+enum { CB_BYPASS = 0x01, CB_TERMALL = 0x04 };
 
 /* Grows *p (elements of `size` bytes), which holds *cap, to hold `need`. */
 static int grow(void *p, size_t *cap, size_t need, size_t size) {
@@ -59,10 +52,10 @@ static int grow(void *p, size_t *cap, size_t need, size_t size) {
  * Limits and the code-block partition
  * ------------------------------------------------------------------------ */
 
-/* The tile's packet count, saturating. */
-static uint64_t packet_count(const hv_geometry *g) {
-    return g->nprecincts > UINT64_MAX / (uint64_t)g->layers
-           ? UINT64_MAX : g->nprecincts * (uint64_t)g->layers;
+/* Nonzero if the tile has more than `limit` packets, nprecincts * layers:
+ * compared by division, which cannot overflow (nprecincts saturates). */
+static int more_packets(const hv_geometry *g, uint64_t limit) {
+    return g->layers > 0 && g->nprecincts > limit / (uint64_t)g->layers;
 }
 
 /* Nonzero if every non-empty band has the same code-blocks in both. */
@@ -102,7 +95,8 @@ static CodSegment_Std new_cod(const CodSegment_Std *in, int ppx, int ppy) {
 /* One transcode: the input as read, both layouts of its tile, and the
  * code-blocks' contributions. */
 typedef struct {
-    errors e;
+    char *error;
+    size_t error_size;
     const uint8_t *buf;
     hv_codestream cs;
     hv_span *parts;             /* the tile-parts' data */
@@ -140,32 +134,34 @@ static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int 
     int status = hv_codestream_open(&t->cs, t->buf, start, end, HV_ACCEPT_PLT_PADDING | flags);
 
     if (status == 0 && hv_write_marker(out, HV_SOC) != 0)
-        return fail(&t->e, "%s", out->error);
+        return hv_fail(t->error, t->error_size, "%s", out->error);
     while (status == 0 && (status = hv_codestream_next(&t->cs, &item)) == 1) {
         status = 0;
         switch (item.kind) {
         case HV_SEGMENT:
             if (item.code == HV_COC || item.code == HV_POC || item.code == HV_PPM)
-                return fail(&t->e, "unsupported main header marker 0x%04X", item.code);
+                return hv_fail(t->error, t->error_size, "unsupported main header marker 0x%04X",
+                               item.code);
             if (item.code == HV_COD) {
                 t->cod = new_cod(item.cod, ppx, ppy);
                 if (hv_write_cod(out, &t->cod) != 0)
-                    return fail(&t->e, "%s", out->error);
+                    return hv_fail(t->error, t->error_size, "%s", out->error);
             } else if (item.code != HV_TLM && item.code != HV_PLM &&
                        hv_write_bytes(out, t->buf + item.start, item.end - item.start) != 0) {
-                return fail(&t->e, "%s", out->error);
+                return hv_fail(t->error, t->error_size, "%s", out->error);
             }
             break;
         case HV_TILE_SEGMENT:
             if (item.code != HV_PLT && item.code != HV_COM)
-                return fail(&t->e, "unsupported tile-part marker 0x%04X", item.code);
+                return hv_fail(t->error, t->error_size, "unsupported tile-part marker 0x%04X",
+                               item.code);
             break;
         case HV_TILE_PART:
             t->zero_psot |= item.sot.psot == 0;
             break;
         case HV_TILE_DATA:
             if (grow(&t->parts, &t->parts_cap, t->nparts + 1, sizeof *t->parts) != 0)
-                return fail(&t->e, "out of memory");
+                return hv_fail(t->error, t->error_size, "out of memory");
             t->parts[t->nparts].start = item.start;
             t->parts[t->nparts++].end = item.end;
             break;
@@ -173,7 +169,8 @@ static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int 
             return 0;
         }
     }
-    return status < 0 ? fail(&t->e, "%s", t->cs.error) : 0;
+    return status < 0 ? hv_fail(t->error, t->error_size, "%s at %zu", t->cs.error, t->cs.error_at)
+                      : 0;
 }
 
 /* Lays out the tile with the input's precincts and order and decodes its
@@ -184,29 +181,33 @@ static int read_packets(transcode *t) {
     size_t data = 0, i;
 
     if (t->cs.tiles != 1)
-        return fail(&t->e, "only single-tile codestreams are supported");
-    if (cod->spcod.cbStyle & 0x05)
-        return fail(&t->e, "code-block styles with bypass or termall are not supported");
+        return hv_fail(t->error, t->error_size, "only single-tile codestreams are supported");
+    if (cod->spcod.cbStyle & (CB_BYPASS | CB_TERMALL))
+        return hv_fail(t->error, t->error_size,
+                       "code-block styles with bypass or termall are not supported");
     for (i = 0; i < t->nparts; i++)
         data += t->parts[i].end - t->parts[i].start;
     /* Empty components and resolutions have no packets, so the data does
      * not bound them. */
     if ((uint64_t)hv_codestream_siz(&t->cs)->csiz * (cod->spcod.levels + 1) > MAX_RESOLUTIONS)
-        return fail(&t->e, "component and resolution count exceeds supported limit");
-    if (hv_geometry_init(&t->in, hv_codestream_siz(&t->cs), cod, 0, t->e.error,
-                         t->e.error_size) != 0)
+        return hv_fail(t->error, t->error_size,
+                       "component and resolution count exceeds supported limit ("
+                       MAX_RESOLUTIONS_TEXT ")");
+    if (hv_geometry_init(&t->in, hv_codestream_siz(&t->cs), cod, 0, t->error,
+                         t->error_size) != 0)
         return -1;
-    if (packet_count(&t->in) > data)
-        return fail(&t->e, "packet count exceeds tile data");
+    if (more_packets(&t->in, data))
+        return hv_fail(t->error, t->error_size, "packet count exceeds tile data");
     if (t->in.nblocks > MAX_CODE_BLOCKS)
-        return fail(&t->e, "code-block count exceeds supported limit");
-    if (hv_geometry_packets(&t->in, &t->in_packets, &t->in_count, t->e.error,
-                            t->e.error_size) != 0)
+        return hv_fail(t->error, t->error_size,
+                       "code-block count exceeds supported limit (" MAX_CODE_BLOCKS_TEXT ")");
+    if (hv_geometry_packets(&t->in, &t->in_packets, &t->in_count, t->error,
+                            t->error_size) != 0)
         return -1;
     if (hv_codeblocks_init(&t->cb, (size_t)t->in.nblocks) != 0)
-        return fail(&t->e, "out of memory");
+        return hv_fail(t->error, t->error_size, "out of memory");
     return hv_read_packets(&t->in, t->in_packets, t->in_count, &tile, cod->scod.sopMarkers,
-                           cod->scod.ephMarkers, &t->cb, t->e.error, t->e.error_size);
+                           cod->scod.ephMarkers, &t->cb, t->error, t->error_size);
 }
 
 /* Lays out the tile with the new COD and writes it as one tile-part. Code-
@@ -218,31 +219,32 @@ static int write_tile(transcode *t, int ppx, int ppy, hv_out *out) {
 
     /* The same code-block partition means the same code-blocks, so their
      * count is already bounded. */
-    if (hv_geometry_init(&t->out, hv_codestream_siz(&t->cs), &t->cod.body, 0, t->e.error,
-                         t->e.error_size) != 0)
+    if (hv_geometry_init(&t->out, hv_codestream_siz(&t->cs), &t->cod.body, 0, t->error,
+                         t->error_size) != 0)
         return -1;
     if (!same_partition(&t->in, &t->out))
-        return fail(&t->e, "%dx%d precincts change the code-block partition", 1 << ppx,
-                    1 << ppy);
-    if (packet_count(&t->out) > MAX_OUTPUT_PACKETS)
-        return fail(&t->e, "output packet count exceeds supported limit");
-    if (hv_geometry_packets(&t->out, &t->out_packets, &t->out_count, t->e.error,
-                            t->e.error_size) != 0)
+        return hv_fail(t->error, t->error_size, "%dx%d precincts change the code-block partition",
+                       1 << ppx, 1 << ppy);
+    if (more_packets(&t->out, MAX_OUTPUT_PACKETS))
+        return hv_fail(t->error, t->error_size,
+                       "output packet count exceeds supported limit (" MAX_OUTPUT_PACKETS_TEXT ")");
+    if (hv_geometry_packets(&t->out, &t->out_packets, &t->out_count, t->error,
+                            t->error_size) != 0)
         return -1;
     if ((t->lengths = malloc((t->out_count + 1) * sizeof *t->lengths)) == NULL)
-        return fail(&t->e, "out of memory");
+        return hv_fail(t->error, t->error_size, "out of memory");
     if (hv_write_packets(&t->out, t->out_packets, t->out_count, t->buf, &t->cb, NULL,
-                         t->lengths, t->e.error, t->e.error_size) != 0)
+                         t->lengths, t->error, t->error_size) != 0)
         return -1;
     if (hv_begin_tile_part(out, 0, 0, 1, &tp_start) != 0 ||
         hv_write_plt(out, t->lengths, t->out_count) != 0 ||
         hv_write_marker(out, HV_SOD) != 0)
-        return fail(&t->e, "%s", out->error);
+        return hv_fail(t->error, t->error_size, "%s", out->error);
     if (hv_write_packets(&t->out, t->out_packets, t->out_count, t->buf, &t->cb, out,
-                         t->lengths, t->e.error, t->e.error_size) != 0)
+                         t->lengths, t->error, t->error_size) != 0)
         return -1;
     if (hv_end_tile_part(out, tp_start) != 0 || hv_write_marker(out, HV_EOC) != 0)
-        return fail(&t->e, "%s", out->error);
+        return hv_fail(t->error, t->error_size, "%s", out->error);
     return 0;
 }
 
@@ -253,14 +255,18 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
     int status;
 
     memset(&t, 0, sizeof t);
-    t.e.error = error;
-    t.e.error_size = error_size;
+    t.error = error;
+    t.error_size = error_size;
     t.buf = buf;
     error[0] = 0;
     if (out->error != NULL)                     /* an earlier write failed */
-        return fail(&t.e, "%s", out->error);
-    if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15)
-        status = fail(&t.e, "precinct dimensions must be powers of 2 from 2 to 32768");
+        return hv_fail(t.error, t.error_size, "%s", out->error);
+    if (flags != 0 && flags != HV_PROFILE_HEADERS)
+        status = hv_fail(t.error, t.error_size,
+                         "flags 0x%X: only 0 and HV_PROFILE_HEADERS are supported", flags);
+    else if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15)
+        status = hv_fail(t.error, t.error_size,
+                         "precinct dimensions must be powers of 2 from 2 to 32,768");
     else if ((status = read_codestream(&t, start, end, ppx, ppy, flags, out)) == 0 &&
              (status = read_packets(&t)) == 0)
         status = write_tile(&t, ppx, ppy, out);

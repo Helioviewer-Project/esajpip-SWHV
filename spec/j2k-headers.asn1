@@ -41,7 +41,9 @@
 -- time. QCD is small enough for the standard's bound in both (Qcd and
 -- Qcd-Std are two instances with the same arguments). A WITH COMPONENTS
 -- subtype would not do: asn1scc keeps the base type's allocation, while
--- each instance of a parameterized type gets its own.
+-- each instance of a parameterized type gets its own. The -Std suffix means
+-- the same in every module: the reader/writer's version of a type, at the
+-- standard's bounds (jpeg2000-io.asn1, "The -Std suffix").
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -144,7 +146,7 @@ PltBody {INTEGER:maxEntries} ::= SEQUENCE {
 }
 
 Plt ::= PltBody {128}                         -- corpus bound
-Plt-Std ::= PltBody {65532}                   -- Table A.37: Lplt 4 to 65 535, entries >= 1 byte
+Plt-Std ::= PltBody {65532}                   -- Table A.37: Lplt 4 to 65,535, entries >= 1 byte
 
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
 -- byte follows. T.800 does not bound the byte count; the model stops at ten
@@ -183,7 +185,7 @@ ComBody {INTEGER:minCcom, INTEGER:maxCcom} ::= SEQUENCE {
 }
 
 Com ::= ComBody {1, 4096}                     -- corpus bound; Lcom >= 5 (Table A.43)
-Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65 535
+Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65,535
 
 -- ===========================================================================
 -- Layer 2: esajpip served profile (JPIP_PROFILE.md)
@@ -246,15 +248,24 @@ END
 --         where a tile-part has PLT segments, the sum of their Iplt values
 --         equals that tile-part's data length (A.7.3: every packet is listed;
 --         ImageIndex::GetOffsetPacket rejects both excess and shortfall).
---         Layer 1 rejects a zero-valued Iplt entry. Layer 2 tolerates trailing
---         zero-valued entries found in deployed files (JPIP_PROFILE.md). The
---         sum rule still rejects any non-zero excess entry at both layers.
+--         Layer 1 rejects a zero-valued Iplt entry (plt.zero-length).
+--         Layer 2 tolerates trailing zero-valued entries found in deployed
+--         files (JPIP_PROFILE.md): a nonzero entry after a zero one in the
+--         codestream is plt.padding-position, and zero entries where the
+--         nonzero ones do not list every packet plt.zero-length. The reader
+--         has the same rule for one tile-part at a time
+--         (HV_ACCEPT_PLT_PADDING, for hv_transcode's input), under the same
+--         name. The sum rule (plt.coverage) still rejects any non-zero excess
+--         entry at both layers.
 --
 -- Profile only:
 --   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)
 --         the packet count, sum over resolutions of the precinct count
 --         (B.6) times csiz times sgcod.layers, is <= 2^31 - 1
---                                                     (CodingParameters::FillPrecinctCounts)
+--         (codestream.packet-count; CodingParameters::FillPrecinctCounts:
+--         the server's signed JPIP state). Siz-Profile's bound on xsiz and
+--         ysiz has the same value but is another quantity, a coordinate;
+--         spec/check-model.sh checks the harness's copy of it.
 --         zero origins and component sampling xrsiz == yrsiz == 1 are
 --         Siz-Profile constraints, which the corpus decoder applies (reason
 --         `decode`); the reader names them siz.zero-origin and

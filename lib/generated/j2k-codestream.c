@@ -81,7 +81,7 @@ flag MainMarkerCode_Profile_ACN_Encode(const MainMarkerCode_Profile* pVal, BitSt
     *pErrCode = 0;
 	ret = bCheckConstraints ? MainMarkerCode_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
 	if (ret && *pErrCode == 0) {
-	    BitStream_EncodeConstraintPosWholeNumber(pBitStrm, (*(pVal)), 65281, 65534);
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (*(pVal)));
     } /*COVERAGE_IGNORE*/
 
 
@@ -94,7 +94,7 @@ flag MainMarkerCode_Profile_ACN_Decode(MainMarkerCode_Profile* pVal, BitStream* 
 	*pErrCode = 0;
 
 
-	ret = BitStream_DecodeConstraintPosWholeNumber(pBitStrm, pVal, 65281, 65534);
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal);
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_MAINMARKERCODE_PROFILE;
 
     return ret && MainMarkerCode_Profile_IsConstraintValid(pVal, pErrCode);
@@ -121,13 +121,11 @@ void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal)
 flag TileMarkerCode_Profile_ACN_Encode(const TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
 {
     flag ret = TRUE;
-	(void)pBitStrm;
 
     *pErrCode = 0;
 	ret = bCheckConstraints ? TileMarkerCode_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
 	if (ret && *pErrCode == 0) {
-	    /* No need to encode value since it will always be 65368UL */
-	    (void)pBitStrm;
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (*(pVal)));
     } /*COVERAGE_IGNORE*/
 
 
@@ -137,15 +135,11 @@ flag TileMarkerCode_Profile_ACN_Encode(const TileMarkerCode_Profile* pVal, BitSt
 flag TileMarkerCode_Profile_ACN_Decode(TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode)
 {
     flag ret = TRUE;
-	(void)pVal;
-	(void)pBitStrm;
 	*pErrCode = 0;
 
 
-	(*(pVal))=65368UL;
-	(void)pBitStrm;
-	ret = TRUE;
-	*pErrCode = 0;
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_TILEMARKERCODE_PROFILE;
 
     return ret && TileMarkerCode_Profile_IsConstraintValid(pVal, pErrCode);
 }

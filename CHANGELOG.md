@@ -14,7 +14,10 @@ while letting HTTP connections be pooled or replaced independently of channels.
 ### Added
 
 - A formal description of the accepted files in ASN.1/ACN (`spec/`), with a
-  generated, labeled test corpus that the server tests check against.
+  generated, labeled test corpus that the server tests check against. The
+  generator checks every vector's label and the rule that rejects it, and
+  `spec/check-model.sh --static` checks, without a compiler, that the code
+  restating the model agrees with it.
 - A JPEG 2000 reader/writer library (`lib/`), built on code generated from
   that description and sharing its rules, and the `hv_walk` tool.
 - `hv_transcode` (`transcode/`), a C port of hvJP2K's transcoder that
@@ -22,8 +25,11 @@ while letting HTTP connections be pooled or replaced independently of channels.
 - `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`),
   writing the same bytes, from inputs within the served profile only. It
   also rejects a later input that lacks a `cdef` or `res` box the first
-  input has, which hvJP2K accepts: that input would inherit the first
-  input's box.
+  input has, and a first input with two `colr` boxes of the same method
+  (`colr.one-method` in the JPX file), both of which hvJP2K accepts. Its
+  command line is parsed as hvJP2K's argparse does (`-s -` reads standard
+  input). Both tools write their output through a temporary file, keeping
+  a symbolic link and, for `hv_merge`, an existing output's permissions.
 - The JP2 header boxes (T.800 I.5.3, T.801 M.11.5 to M.11.7) in the model,
   with their rules shared by the corpus and the reader (`hv_check_jp2h`,
   `hv_check_jpx_headers`, `hv_walk -H`). `hv_transcode` and `hv_merge` reject

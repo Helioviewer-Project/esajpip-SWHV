@@ -1,10 +1,11 @@
 /* tier2.c: see tier2.h. Clause numbers are T.800's. */
 #include "tier2.h"
 
-#include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "hv_codes.h"
+#include "hv_error.h"
 
 /* Tag-tree value of a node not yet known: above any layer or bit-plane. */
 #define INF ((int32_t)1 << 30)
@@ -12,13 +13,15 @@
  * and the caller then reports the overrun. */
 #define HUGE_LENGTH ((uint64_t)1 << 62)
 
-static int fail(char *error, size_t size, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    vsnprintf(error, size, format, args);
-    va_end(args);
-    return -1;
-}
+/* An SOP marker segment (A.8.1): the marker, then Lsop = 4 and Nsop. */
+enum { LSOP = 4, SOP_SIZE = 2 + LSOP };
+/* A marker without a segment: EPH. */
+enum { MARKER_SIZE = 2 };
+
+/* hvJP2K's messages for a packet header and a packet that run past the
+ * tile's data. */
+#define INCOMPLETE_HEADER "truncated input is not supported: incomplete packet header"
+#define OVERRUNS_THE_TILE "truncated input is not supported: packet data overruns the tile"
 
 int hv_codeblocks_init(hv_codeblocks *cb, size_t nblocks) {
     size_t i;
@@ -460,9 +463,10 @@ static int state_init(pass_state *s, const hv_geometry *g, const hv_codeblocks *
  * Decoding (B.10)
  * ------------------------------------------------------------------------ */
 
-/* Two marker bytes at buf[pos] inside the tile-part. */
-static int marker_at(const uint8_t *buf, size_t pos, size_t end, uint8_t code) {
-    return pos + 1 < end && buf[pos] == 0xFF && buf[pos + 1] == code;
+/* The marker `code` (HV_SOT, HV_SOP, HV_EPH) at buf[pos] inside the
+ * tile-part. */
+static int marker_at(const uint8_t *buf, size_t pos, size_t end, uint16_t code) {
+    return pos + 1 < end && buf[pos] == code >> 8 && buf[pos + 1] == (code & 0xFF);
 }
 
 /* Decodes one packet header at buf[*pos, end), records its contributions
@@ -527,7 +531,7 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
 
     if (state_init(&s, g, NULL, cb->nblocks, g->layers) != 0) {
         state_free(&s);
-        return fail(error, error_size, "out of memory");
+        return hv_fail(error, error_size, "out of memory");
     }
     for (pkt = 0; pkt < npackets && status == 0; pkt++) {
         precinct_ref p = precinct_of(g, &packets[pkt]);
@@ -538,66 +542,65 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
             if (++part < nparts)
                 pos = parts[part].start;
         if (part == nparts) {
-            status = fail(error, error_size, "truncated input is not supported: missing packets");
+            status = hv_fail(error, error_size,
+                             "truncated input is not supported: missing packets");
             break;
         }
         end = parts[part].end;
         last_part = part + 1 == nparts;
         /* With Psot = 0 a following SOT is only found at a packet boundary. */
-        if (zero_psot && marker_at(buf, pos, end, 0x90)) {
-            status = fail(error, error_size, "Psot=0 is only valid for the last tile-part");
+        if (zero_psot && marker_at(buf, pos, end, HV_SOT)) {
+            status = hv_fail(error, error_size, "Psot=0 is only valid for the last tile-part");
             break;
         }
         /* SOP marker segment (A.8.1), allowed by Scod bit 1: Lsop = 4, and
-         * Nsop numbers the tile's packets from 0, rolling over after 65535. */
-        if (sop && marker_at(buf, pos, end, 0x91)) {
-            if (end - pos < 6 || buf[pos + 2] != 0 || buf[pos + 3] != 4 ||
+         * Nsop numbers the tile's packets from 0, rolling over after 65,535. */
+        if (sop && marker_at(buf, pos, end, HV_SOP)) {
+            if (end - pos < SOP_SIZE || buf[pos + 2] != 0 || buf[pos + 3] != LSOP ||
                 ((size_t)buf[pos + 4] << 8 | buf[pos + 5]) != (pkt & 0xFFFF)) {
-                status = fail(error, error_size, "invalid SOP marker segment before packet %zu",
-                              pkt);
+                status = hv_fail(error, error_size, "invalid SOP marker segment before packet %zu",
+                                 pkt);
                 break;
             }
-            pos += 6;
+            pos += SOP_SIZE;
         }
         switch (decode_header(&p, packets[pkt].layer, buf, &pos, end, &s, cb)) {
         case HEADER_OK:
             break;
         case HEADER_OVERRUN:
-            status = fail(error, error_size,
-                          last_part ? "truncated input is not supported: incomplete packet header"
-                                    : "packet crosses a tile-part boundary");
+            status = hv_fail(error, error_size, "%s",
+                             last_part ? INCOMPLETE_HEADER : "packet crosses a tile-part boundary");
             break;
         case HEADER_STUFFING:
-            status = fail(error, error_size, "invalid bit stuffing in packet header %zu", pkt);
+            status = hv_fail(error, error_size, "invalid bit stuffing in packet header %zu", pkt);
             break;
         case HEADER_NOMEM:
-            status = fail(error, error_size, "out of memory");
+            status = hv_fail(error, error_size, "out of memory");
             break;
         }
         if (status != 0)
             break;
         if (pos > end) {        /* the stuffed byte after a final 0xFF */
-            status = fail(error, error_size,
-                          last_part ? "truncated input is not supported: packet data overruns the tile"
-                                    : "packet crosses a tile-part boundary");
+            status = hv_fail(error, error_size, "%s",
+                             last_part ? OVERRUNS_THE_TILE : "packet crosses a tile-part boundary");
             break;
         }
         /* EPH marker (A.8.2): required after every header by Scod bit 2. */
         if (eph) {
-            if (!marker_at(buf, pos, end, 0x92)) {
-                status = fail(error, error_size, "missing EPH marker after packet header %zu",
-                              pkt);
+            if (!marker_at(buf, pos, end, HV_EPH)) {
+                status = hv_fail(error, error_size, "missing EPH marker after packet header %zu",
+                                 pkt);
                 break;
             }
-            pos += 2;
+            pos += MARKER_SIZE;
         }
         /* The packet body: the contributions' bytes in header order. */
         for (i = first; i < cb->ncontrib; i++) {
             hv_contribution *c = &cb->contrib[i];
             if (c->length > end - pos) {
-                status = fail(error, error_size,
-                              last_part ? "truncated input is not supported: packet data overruns the tile"
-                                        : "packet crosses a tile-part boundary");
+                status = hv_fail(error, error_size, "%s",
+                                 last_part ? OVERRUNS_THE_TILE
+                                           : "packet crosses a tile-part boundary");
                 break;
             }
             c->offset = pos;
@@ -609,13 +612,13 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
             if (++part < nparts)
                 pos = parts[part].start;
         if (part < nparts) {
-            if (zero_psot && marker_at(buf, pos, parts[part].end, 0x90)) {
-                status = fail(error, error_size, "Psot=0 is only valid for the last tile-part");
+            if (zero_psot && marker_at(buf, pos, parts[part].end, HV_SOT)) {
+                status = hv_fail(error, error_size, "Psot=0 is only valid for the last tile-part");
             } else {
                 rest = parts[part].end - pos;
                 for (i = part + 1; i < nparts; i++)
                     rest += parts[i].end - parts[i].start;
-                status = fail(error, error_size, "%zu unparsed tile bytes", rest);
+                status = hv_fail(error, error_size, "%zu unparsed tile bytes", rest);
             }
         }
     }
@@ -640,7 +643,7 @@ int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npac
         (cursor = malloc((cb->nblocks ? cb->nblocks : 1) * sizeof *cursor)) == NULL) {
         state_free(&s);
         free(cursor);
-        return fail(error, error_size, "out of memory");
+        return hv_fail(error, error_size, "out of memory");
     }
     /* Each code-block's next contribution; layers only increase per precinct. */
     for (k = 0; k < cb->nblocks; k++)
@@ -708,7 +711,7 @@ int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npac
         }
         header_end(&wr);
         if (wr.failed) {
-            status = fail(error, error_size, "out of memory");
+            status = hv_fail(error, error_size, "out of memory");
             break;
         }
         length = wr.size;
@@ -720,16 +723,16 @@ int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npac
         }
         /* The PLT was written from the first pass: the packets must match. */
         if (lengths[pkt] != length) {
-            status = fail(error, error_size, "packet %zu: %llu bytes, the PLT says %llu", pkt,
-                          (unsigned long long)length, (unsigned long long)lengths[pkt]);
+            status = hv_fail(error, error_size, "packet %zu: %llu bytes, the PLT says %llu", pkt,
+                             (unsigned long long)length, (unsigned long long)lengths[pkt]);
             break;
         }
         if (hv_write_bytes(out, wr.out, wr.size) != 0)
-            status = fail(error, error_size, "%s", out->error);
+            status = hv_fail(error, error_size, "%s", out->error);
         for (k = 0; k < nbody && status == 0; k++) {
             const hv_contribution *c = &cb->contrib[body[k]];
             if (hv_write_bytes(out, buf + c->offset, (size_t)c->length) != 0)
-                status = fail(error, error_size, "%s", out->error);
+                status = hv_fail(error, error_size, "%s", out->error);
         }
     }
     state_free(&s);
