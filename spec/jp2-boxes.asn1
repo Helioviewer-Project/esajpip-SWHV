@@ -38,8 +38,12 @@
 --   * The Reader Requirements box is modelled at layer 1 only; the server
 --     ignores it, so layer 2 keeps it opaque.
 --
--- Cross-field rules are at the end (harness/crossfield_impl.h and
--- harness/crossfield.c).
+-- Cross-field rules are at the end. The JPX box rules (hv_rule_child,
+-- hv_rule_url, hv_rule_flst, hv_rule_fragment_dr, hv_rule_jpx) and the
+-- header box rules are ../lib/hv_rules.c, shared by the harness
+-- (harness/crossfield_impl.h, harness/crossfield.c) and the reader; the
+-- file rules (signature, ftyp, one flst per ftbl, the NDR count) are
+-- implemented in both, the harness's and ../lib/hv_reader.c.
 
 JP2-Boxes DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -426,8 +430,9 @@ DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the box layer (harness/crossfield_impl.h and
--- harness/crossfield.c)
+-- Cross-field constraints for the box layer (../lib/hv_rules.c and, for
+-- the file rules, harness/crossfield_impl.h, harness/crossfield.c and
+-- ../lib/hv_reader.c; see the top)
 -- ===========================================================================
 --
 -- Standard (both layers of a .jpx; for a .jp2, layer 1 and, at layer 2,

@@ -7,8 +7,18 @@
 # a copy of that build (with spec/asn1scc-patches applied) directly, for
 # example:
 #   ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"
+#
+# With --check it only compares: it fails if generated/ is not what the
+# compiler makes of the model (spec/check-model.sh runs it so).
 
 set -eu
+
+check=0
+case "${1:-}" in
+    --check) check=1 ;;
+    "") ;;
+    *) echo "usage: $0 [--check]" >&2; exit 2 ;;
+esac
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 image=${ASN1SCC_IMAGE:-esajpip-asn1scc}
@@ -42,6 +52,18 @@ else
         "$image" -c -ACN --acn-v2 --field-prefix AUTO -icdPdus "$pdus" \
         -o /output $files > "$temporary/asn1scc.log" 2>&1 ||
         { cat "$temporary/asn1scc.log" >&2; exit 1; }
+fi
+
+if [ "$check" = 1 ]; then
+    mkdir "$temporary/generated"
+    cp "$temporary"/*.[ch] "$temporary/generated"/
+    if ! diff -r "$out" "$temporary/generated" > "$temporary/diff"; then
+        echo "lib/generated differs from the model; run lib/generate.sh:" >&2
+        head -40 "$temporary/diff" >&2
+        exit 1
+    fi
+    echo "generated: lib/generated is up to date"
+    exit 0
 fi
 
 mkdir -p "$out"

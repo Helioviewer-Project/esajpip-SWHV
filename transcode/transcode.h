@@ -27,7 +27,7 @@
  * out. Precinct width and height exponents: 1 to 15 (2 to 32 768 samples).
  * flags: hv_codestream_open flags the input must also pass, 0 or
  * HV_PROFILE_HEADERS. 0, or -1 with a message in error; on failure out
- * keeps its size (a write failure also leaves out->error set). */
+ * is as it was (hv_out_rewind), and fails at once if out->error is set. */
 int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
                             unsigned flags, hv_out *out, char *error, size_t error_size);
 
@@ -41,7 +41,8 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
  * kept in order: the codestream box is transcoded, every other box is
  * copied as read and superboxes are checked.
  * xml_rewrite: the first top-level XML box keeps only its root element.
- * 0, or -1 with a message in error; on failure out keeps its size. */
+ * 0, or -1 with a message in error; on failure out is as it was
+ * (hv_out_rewind), and fails at once if out->error is set. */
 int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml_rewrite,
                       hv_out *out, char *error, size_t error_size);
 

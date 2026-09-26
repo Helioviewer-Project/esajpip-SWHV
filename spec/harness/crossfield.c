@@ -156,7 +156,8 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
     if (kind == CF_JP2) {
         for (i = 0; i < file->boxes.nCount; ++i)
             if (file->boxes.arr[i].payload.kind == TopPayload_jp2c_PRESENT) break;
-        return hv_rule_codestream_header(&jp2h, NULL, &file->boxes.arr[i].payload.u.jp2c.siz.body);
+        return hv_rule_codestream_header(&jp2h, NULL, &file->boxes.arr[i].payload.u.jp2c.siz.body,
+                                         0);
     }
 
     /* JPX: codestream k has jpch k (M.11.6; the counts agree, hv_rule_jpx),
@@ -174,14 +175,14 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
         if (p->kind != TopPayload_jp2c_PRESENT && p->kind != TopPayload_ftbl_PRESENT) continue;
         siz = p->kind == TopPayload_jp2c_PRESENT ? &p->u.jp2c.siz.body : NULL;
         if (jpchs == 0) {
-            r = hv_rule_codestream_header(NULL, jp2h_box ? &jp2h : NULL, siz);
+            r = hv_rule_codestream_header(NULL, jp2h_box ? &jp2h : NULL, siz, 1);
         } else {
             for (k = 0; k < file->boxes.nCount; ++k)
                 if (file->boxes.arr[k].payload.kind == TopPayload_jpch_PRESENT && seen++ == stream)
                     break;
             if ((r = cf_header(&file->boxes.arr[k].payload.u.jpch, HV_BOX_JPCH, kind, &jpch)) != NULL)
                 return r;
-            r = hv_rule_codestream_header(&jpch, jp2h_box ? &jp2h : NULL, siz);
+            r = hv_rule_codestream_header(&jpch, jp2h_box ? &jp2h : NULL, siz, 1);
         }
         if (r != NULL) return r;
         stream++;

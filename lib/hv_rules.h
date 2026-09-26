@@ -1,10 +1,13 @@
-/* hv_rules.h: the cross-field rules of the model on marker segment bodies
- * and tile-parts, JPX boxes and JP2 header boxes (listed at the end of
- * ../spec/j2k-headers.asn1, ../spec/j2k-codestream.asn1 and
- * ../spec/jp2-boxes.asn1). They are written once, here, and used both by
- * the reader (hv_reader.c) and by the model's harness
- * (../spec/harness/crossfield_impl.h, crossfield.c), which labels the corpus in
- * ../tests/vectors/j2k. With HV_PROFILE the reader applies every JP2 rule
+/* hv_rules.h: the cross-field rules of the model on values (listed at the
+ * end of ../spec/j2k-headers.asn1, ../spec/j2k-codestream.asn1 and
+ * ../spec/jp2-boxes.asn1): marker segment bodies, tile-part indices, PLT
+ * entries and packet counts, JPX boxes and JP2 header boxes. They are
+ * written once, here, and used both by the reader (hv_reader.c) and by the
+ * model's harness (../spec/harness/crossfield_impl.h, crossfield.c), which
+ * labels the corpus in ../tests/vectors/j2k. The rules on structure (the
+ * placement and count of segments and boxes, the PLT Zplt sequence and
+ * sums, the file's first boxes) each checks in its own code, the reader on
+ * the bytes and the harness on the decoded model, under the same names. With HV_PROFILE the reader applies every JP2 rule
  * the profile labels come from; its T.800 mode leaves some out (see
  * README.md, "What the reader checks").
  *
@@ -198,9 +201,10 @@ const char *hv_rule_cdef(hv_header *h, const CdefEntry *entries, size_t n);
 const char *hv_rule_res_child(hv_header *h, uint32_t type);
 const char *hv_rule_res_end(hv_header *h);
 
-/* The header of one codestream: its own header box h (NULL for none) over
- * the JP2 Header box's defaults (NULL for none), and SIZ, the codestream's
- * (NULL when the codestream is not at hand: its checks are skipped).
+/* The header of one codestream of a JP2 or (jpx) JPX file: its own header
+ * box h (NULL for none) over the JP2 Header box's defaults (NULL for none),
+ * and SIZ, the codestream's (NULL when the codestream is not at hand: its
+ * checks are skipped).
  *   JP2 (T.800 I.5.3), h the jp2h and no defaults: at least one colr; bpcc
  *     exactly when BPC is 255; pclr exactly with cmap.
  *   JPX (T.801 M.11.6), h the jpch and defaults the jp2h: an ihdr in
@@ -212,7 +216,7 @@ const char *hv_rule_res_end(hv_header *h);
  *     BPC the components' common Ssiz or 255 when they differ, and each
  *     bpcc entry the component's Ssiz. */
 const char *hv_rule_codestream_header(const hv_header *h, const hv_header *defaults,
-                                      const Siz *siz);
+                                      const Siz *siz, int jpx);
 
 #ifdef __cplusplus
 }

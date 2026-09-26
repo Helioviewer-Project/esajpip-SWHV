@@ -20,10 +20,13 @@
 -- (see the .acn), so a body that does not exactly fill its segment is a
 -- decode error rather than a hand-written rule.
 --
--- Cross-field rules that ASN.1 cannot state are listed at the end and are
--- implemented once, in ../lib/hv_rules.c, which the harness
--- (harness/crossfield_impl.h) and the reader in ../lib share; the server
--- implements them in C++ (FileManager).
+-- Cross-field rules that ASN.1 cannot state are listed at the end. Those on
+-- one segment body (SIZ, COD) and on single PLT entries are implemented
+-- once, in ../lib/hv_rules.c, which the harness (harness/crossfield_impl.h)
+-- and the reader in ../lib share; those across PLT segments (the Zplt
+-- sequence, plt.zplt-sequence, and the Iplt sum, plt.coverage) twice, in
+-- the harness from the decoded model and in the reader (../lib/hv_reader.c)
+-- from the bytes. The server implements them in C++ (FileManager).
 --
 -- CORPUS BOUNDS: some SIZE upper bounds are smaller than the standard's
 -- (marked "corpus bound"). asn1scc allocates every SEQUENCE OF / OCTET
@@ -220,9 +223,11 @@ Plt-Profile ::= Plt
 END
 
 -- ===========================================================================
--- Cross-field constraints for the bodies (../lib/hv_rules.c, shared by the
--- harness and the reader; C++ in FileManager). Segment-length consistency is NOT listed: it is enforced by
--- the CONTAINING framing plus `size deduced` in the .acn.
+-- Cross-field constraints for the bodies (SIZ, COD and PLT entries:
+-- ../lib/hv_rules.c, shared by the harness and the reader; across PLT
+-- segments: in both, see the top; C++ in FileManager). Segment-length
+-- consistency is NOT listed: it is enforced by the CONTAINING framing plus
+-- `size deduced` in the .acn.
 -- ===========================================================================
 --
 -- Standard (both layers):

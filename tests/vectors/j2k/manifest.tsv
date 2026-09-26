@@ -454,6 +454,7 @@ jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level b
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jpx-unknown-inner-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted box inside jpch: valid and skipped	-
+jpx-nested-jpch.jpx	jpx	invalid	invalid	decode	box.nested-superbox	jpch inside jpch (T.801 M.11.6: top level only)	-
 jpx-asoc.jpx	jpx	valid	valid	-	asoc.opaque	T.801 M.11.11: label associated with XML; profile preserves opaque contents	-
 jpx-asoc-child-length.jpx	jpx	invalid	valid	decode	asoc.opaque	inner LBox below 8: standard invalid, profile preserves opaque contents	-
 jpx-asoc-outer-length.jpx	jpx	invalid	invalid	decode	asoc.outer-length	outer LBox exceeds file: invalid at both layers	-

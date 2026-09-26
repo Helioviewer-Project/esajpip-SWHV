@@ -4,7 +4,8 @@
  *
  *   -v  print every box and codestream item
  *   -p  accept trailing zero PLT entries of each tile-part
- *       (HV_ACCEPT_PLT_PADDING), as deployed files carry them
+ *       (HV_ACCEPT_PLT_PADDING), as deployed files carry them; not with -P,
+ *       whose profile accepts them after the last packet only
  *   -P  check the served profile: the file rules (hv_check_jp2, or
  *       hv_check_jpx for a .jpx, with every linked file), and HV_PROFILE for
  *       the codestreams
@@ -319,7 +320,7 @@ int main(int argc, char **argv) {
         else
             break;
     }
-    if (i == argc || argv[i][0] == '-') {
+    if (i == argc || argv[i][0] == '-' || ((flags & HV_ACCEPT_PLT_PADDING) && profile)) {
         fprintf(stderr, "usage: hv_walk [-v] [-p] [-P] [-H] [-w] file...\n");
         return 2;
     }

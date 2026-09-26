@@ -320,7 +320,8 @@ Two conventions worth knowing before you edit:
 - **Corpus bounds.** Some `SIZE` upper bounds are far smaller than the
   standard's and are marked "corpus bound" (e.g. 32 top-level boxes, 128 PLT
   entries). asn1scc allocates every list at its maximum inside the struct,
-  so standard-sized bounds would make a `Jp2Family` gigabytes large. A file
+  so standard-sized bounds would make a `Jp2Family` far larger than its
+  877 MB with the corpus bounds. A file
   that exceeds a corpus bound is not standard-invalid; the harness never
   generates one. The bodies with a corpus bound (`Plt`, `Com`) are
   instances of parameterized types (`PltBody`, `ComBody`); the `-Std`
@@ -367,11 +368,12 @@ over-long packet length is only detected when a packet is indexed.
 | invalid | (invalid) | reject |
 | invalid | valid | accept only for an explicit documented profile leniency; otherwise investigate the model |
 
-A vector is *valid at a layer* when all three hold: the generated ACN decoder
+A vector is *valid at a layer* when both hold: the generated ACN decoder
 accepts it (this is what catches region overruns, leftover bytes, wrong
-`CHOICE` selection, and unknown codes), the generated constraint checker for
-that layer accepts the decoded value (`<Type>_IsConstraintValid`), and the
-cross-field rules for that layer hold (`crossfield.c`, with the body
+`CHOICE` selection, and unknown codes; the decoder ends with the layer's
+generated constraint check, `<Type>_IsConstraintValid`, so a value out of
+range is a decode failure too), and the cross-field rules for that layer
+hold (`crossfield.c`, with the body
 rules of `../lib/hv_rules.c`). The compiler performs
 the evaluation, but the ASN.1/ACN model and the imperative cross-field rules
 are human-maintained sources that cite the corresponding standard clauses.
@@ -382,8 +384,8 @@ claims a file decodes to an image.
 
 Manifest columns: `file kind standard profile reason field note
 companions`. `reason` is the first check that failed at the stricter
-failing layer — `decode`, `constraint`, or a cross-field rule name such as
-`plt.coverage` — or `-` for a valid vector; `field` names the mutated field
+failing layer — `decode` (which includes the constraints) or a cross-field
+rule name such as `plt.coverage` — or `-` for a valid vector; `field` names the mutated field
 or rule (or `-` for a base); `note` is the mutant's intent in words;
 `companions` lists files that must sit next to the vector (the `.jp2`
 frames a linked JPX points at).
@@ -522,12 +524,14 @@ From each base:
    the lengths stay consistent and only the innermost body comes up short.
 
 Labels are never written by hand: `label()` decodes each vector with the
-layer-1 decoder and the layer-2 decoder for its kind, runs the constraint
-checkers and `crossfield.c`, and records the first failing reason in the
+layer-1 decoder and the layer-2 decoder for its kind (constraints
+included), runs `crossfield.c`, and records the first failing reason in the
 manifest's `reason` column.
 
 Every mutant table entry does carry an *expectation* (`X_VALID`, `X_STD`
-for standard-invalid, `X_PROF` for standard-valid but profile-invalid), and
+for invalid at both layers, `X_LENIENT` for standard-invalid but
+profile-valid, a documented leniency, `X_PROF` for standard-valid but
+profile-invalid), and
 `emit()` compares it with the label. This is not a second source of truth
 for the corpus — the manifest always holds what the decoders said — it is a
 self-check that the mutant did what its note claims. A setter that writes
@@ -539,8 +543,8 @@ always expect valid at both layers.
 
 ### Generated-API adaptation
 
-`vectors.c` names generated symbols only through four macros at the top
-(`ENC`, `DEC`, `VALID`, `INIT` → `<Type>_ACN_Encode` etc.) and one size
+`vectors.c` names generated symbols only through three macros at the top
+(`ENC`, `DEC`, `INIT` → `<Type>_ACN_Encode` etc.) and one size
 macro (`Jp2Family_REQUIRED_BYTES_FOR_ACN_ENCODING`); `mapping.h` names the
 mapping-function prototypes through `MAPPING_ENCODE_NAME`/`_DECODE_NAME`;
 `crossfield.h` includes the three generated headers it needs by module name. Field
@@ -551,9 +555,10 @@ access assumes asn1scc's C conventions: `nCount`/`arr` for `SEQUENCE OF` and
 `IA5String`. If your release differs on any of these, the compiler will tell
 you at exactly the access sites; nothing is hidden behind reflection.
 
-Struct sizes: the generated `Jp2Family` is tens of MB (asn1scc allocates
-every corpus bound inline); the harness allocates its few instances on the
-heap. If your compiler reports larger sizes, lower the corpus bounds in the
+Struct sizes: the generated `Jp2Family` is 876,572,424 bytes, and
+`Jp2File-Profile` and `JpxFile-Profile` 334,405,384 each (asn1scc
+allocates every corpus bound inline); the harness allocates its few
+instances on the heap. If your compiler reports larger sizes, lower the corpus bounds in the
 `.asn1` files (they are marked) rather than the harness.
 
 The reader/writer types in `jpeg2000-io.asn1` use the standard's bounds and
@@ -567,6 +572,7 @@ target:
 | `ComSegment-Std` (65,531 bytes) | 65,544 |
 | `CodSegment-Std` | 616 |
 | `QcdSegment-Std` (194 bytes) | 208 |
+| `Rreq-Std` (65,535 standard and vendor features) | 3,407,928 |
 | `SotSegment` | 40 |
 | `BoxHeader` | 32 |
 
@@ -725,8 +731,9 @@ other source. Keeping the compiler offline keeps asn1scc and .NET out of the
 build.
 
 **Why does the model have "corpus bounds"?** asn1scc's C structs embed
-every list at its maximum size. Bounds like "65,535 boxes" would make a
-single struct gigabytes large. The bounds only limit what the harness
+every list at its maximum size. Even with the corpus bounds a
+`Jp2Family` is 877 MB; bounds like "65,535 boxes" would make it far
+larger. The bounds only limit what the harness
 generates; they are not claims about the standard.
 
 **Can the generated decoder replace `file_manager.cc`?** Not the whole-file

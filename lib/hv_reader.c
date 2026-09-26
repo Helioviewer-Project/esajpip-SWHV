@@ -185,9 +185,9 @@ static const char *check_ftyp(const uint8_t *buf, const hv_box *box, uint32_t br
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
-/* The rule names are those of the file rules in
- * ../spec/harness/crossfield.c and lib/hv_rules.c, except file.size-limit,
- * which the corpus cannot exercise. */
+/* The file rules, as ../spec/harness/crossfield.c names them (the harness
+ * implements them on the decoded model), except file.size-limit, which the
+ * corpus cannot exercise. */
 const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
     hv_boxes it;
     hv_box box;
@@ -277,8 +277,8 @@ static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *li
     return NULL;
 }
 
-/* The rule names are those of lib/hv_rules.c and
- * ../spec/harness/crossfield_impl.h. */
+/* The rules of hv_rules.c, and the file rules as
+ * ../spec/harness/crossfield_impl.h names them. */
 const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *at) {
     hv_boxes it, children;
     hv_box box, child;
@@ -351,6 +351,7 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
                 goto fail;
             }
             ndr = c;
+            nurls = 0;          /* a second dtbl is jpx.one-dtbl, below */
             refs.payload += used;
             hv_boxes_children(&children, buf, &refs);
             while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
@@ -612,7 +613,7 @@ static const char *read_header(const uint8_t *buf, const hv_box *box, uint32_t p
 /* The codestream in buf[start, end): its SIZ against the header. */
 static const char *check_codestream_header(const uint8_t *buf, size_t start, size_t end,
                                            const hv_header *h, const hv_header *defaults,
-                                           size_t *at) {
+                                           int jpx, size_t *at) {
     hv_codestream cs;
     const char *error;
     *at = start;
@@ -620,7 +621,7 @@ static const char *check_codestream_header(const uint8_t *buf, size_t start, siz
         error = cs.error;
         *at = cs.error_at;
     } else {
-        error = hv_rule_codestream_header(h, defaults, hv_codestream_siz(&cs));
+        error = hv_rule_codestream_header(h, defaults, hv_codestream_siz(&cs), jpx);
     }
     hv_codestream_close(&cs);
     return error;
@@ -653,7 +654,7 @@ const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
         return "out of memory";
     *at = jp2h.start;
     if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, h, at)) == NULL)
-        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, at);
+        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, 0, at);
     free(h);
     return error;
 }
@@ -750,9 +751,9 @@ const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
         *at = box.start;
         if (box.type == HV_BOX_JP2C)
             error = check_codestream_header(buf, box.payload, box.end, jpchs ? &h[1] : NULL,
-                                            n ? &h[0] : NULL, at);
+                                            n ? &h[0] : NULL, 1, at);
         else
-            error = hv_rule_codestream_header(jpchs ? &h[1] : NULL, n ? &h[0] : NULL, NULL);
+            error = hv_rule_codestream_header(jpchs ? &h[1] : NULL, n ? &h[0] : NULL, NULL, 1);
         stream++;
     }
     free(h);
@@ -815,6 +816,8 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
     cs->start = start;
     cs->end = end;
     cs->flags = flags;
+    if ((flags & HV_ACCEPT_PLT_PADDING) && profile_full(cs))
+        return fail(cs, "HV_ACCEPT_PLT_PADDING with HV_PROFILE", start);
     if (DECODE(MarkerCode, &m, buf, start, min_size(end - start, MARKER)) != 0 || m != HV_SOC)
         return fail(cs, "codestream does not start with SOC", start);
     cs->pos = start + MARKER;
@@ -853,7 +856,8 @@ void hv_codestream_close(hv_codestream *cs) {
     cs->tnsot = NULL;
 }
 
-const Siz *hv_codestream_siz(const hv_codestream *cs) { return cs->siz ? &cs->siz->body : NULL; }
+/* siz_end is set once SIZ passed its checks. */
+const Siz *hv_codestream_siz(const hv_codestream *cs) { return cs->siz_end ? &cs->siz->body : NULL; }
 const Cod *hv_codestream_cod(const hv_codestream *cs) { return cs->cods ? &cs->cod.body : NULL; }
 
 /* Reads the marker segment at cs->pos: *code, and *end just past it. */
@@ -939,12 +943,13 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         return fail(cs, "main header: marker outside MainMarkerCode-Profile", pos);
     switch (code) {
     case HV_COD:
-        if (++cs->cods > 1)
+        if (cs->cods > 0)
             return fail(cs, "second COD in the main header", pos);
         if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->cod.body)) != NULL)
             return fail(cs, error, pos);
+        cs->cods++;
         item->cod = &cs->cod;
         break;
     case HV_QCD:
@@ -997,15 +1002,15 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_QCD:
         if (cs->sot.tpsot != 0 || cs->tp_qcd++)
             return fail(cs, "QCD only once, in the first tile-part of a tile", pos);
-        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
+        if (DECODE(QcdSegment_Std, &cs->tile_qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
-        item->qcd = &cs->qcd;
+        item->qcd = &cs->tile_qcd;
         break;
     case HV_PLT: {
-        /* HV_ACCEPT_PLT_PADDING alone takes zero entries after the last
-         * packet of each tile-part; the profile, after the last packet of
-         * the codestream (hv_rule_plt_entry). */
-        int i, per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) && !profile_full(cs);
+        /* HV_ACCEPT_PLT_PADDING takes zero entries after the last packet
+         * of each tile-part; the profile, after the last packet of the
+         * codestream (hv_rule_plt_entry). */
+        int i, per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) != 0;
         if (cs->plt == NULL && (cs->plt = malloc(sizeof *cs->plt)) == NULL)
             return fail(cs, "out of memory", pos);
         if (DECODE(PltSegment_Std, cs->plt, cs->buf, pos + MARKER, len) != 0)

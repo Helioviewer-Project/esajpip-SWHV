@@ -54,9 +54,11 @@ codestream with `HV_PROFILE`), so the JPX file is one it serves too
 (`hv_check_jpx`), and must have valid header boxes (`hv_check_jp2h`: T.800
 I.5.3, with `ihdr` and `bpcc` agreeing with SIZ), which the JPX headers are
 made of, so theirs are valid too (`hv_check_jpx_headers`). The tests check
-both of every JPX file they write. hvJP2K checks neither the profile, nor
-the header boxes, nor the link targets: it merges files without PLT, which the server then
-rejects. Errors name the file and the rule, as in `siz.zero-origin`. The
+both of every JPX file they write. An input without a `cdef` or `res` box
+cannot follow a first input with one: its `jplh` would inherit the first
+input's from `jp2h` (T.801 M.11.7). hvJP2K checks neither the profile, nor
+the header boxes, nor the link targets, nor the inheritance: it merges files
+without PLT, which the server then rejects. Errors name the file and the rule, as in `siz.zero-origin`. The
 output must be at most `INT_MAX` bytes (`file.size-limit`), a link must
 name a `.jp2` file (`url.jp2-target`), and a linked JPX file holds at most
 65,535 links.

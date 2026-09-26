@@ -238,12 +238,15 @@ int main(int argc, char **argv) {
         /* argparse's reparse: the command line, then the file's words. */
         if ((text = read_text(a.argfile)) == NULL || split_words(text, &extra) != 0) {
             fprintf(stderr, "hv_merge: cannot read the arguments in %s\n", a.argfile);
+            status = 1;
             goto done;
         }
         for (i = 1; i < (size_t)argc; i++)
-            push(&all, argv[i]);
+            if (push(&all, argv[i]) != 0)
+                goto oom;
         for (i = 0; i < extra.n; i++)
-            push(&all, extra.v[i]);
+            if (push(&all, extra.v[i]) != 0)
+                goto oom;
         free(a.inputs.v);
         memset(&a, 0, sizeof a);
         if (parse(all.v, all.n, &a) != 0)
@@ -256,8 +259,8 @@ int main(int argc, char **argv) {
         for (;;) {
             if ((comma = strchr(p, ',')) != NULL)
                 *comma = 0;
-            if (*p)
-                push(&names, p);
+            if (*p && push(&names, p) != 0)
+                goto oom;
             if (comma == NULL)
                 break;
             p = comma + 1;
@@ -270,6 +273,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "hv_merge: %s\n", error);
     goto done;
 
+oom:
+    fprintf(stderr, "hv_merge: out of memory\n");
+    status = 1;
+    goto done;
 usage:
     usage();
 done:

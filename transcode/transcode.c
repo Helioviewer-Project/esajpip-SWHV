@@ -254,13 +254,15 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
     t.e.error_size = error_size;
     t.buf = buf;
     error[0] = 0;
+    if (out->error != NULL)                     /* an earlier write failed */
+        return fail(&t.e, "%s", out->error);
     if (ppx < 1 || ppx > 15 || ppy < 1 || ppy > 15)
         status = fail(&t.e, "precinct dimensions must be powers of 2 from 2 to 32768");
     else if ((status = read_codestream(&t, start, end, ppx, ppy, flags, out)) == 0 &&
              (status = read_packets(&t)) == 0)
         status = write_tile(&t, ppx, ppy, out);
     if (status != 0)
-        out->size = out_start;  /* nothing of a failed transcode */
+        hv_out_rewind(out, out_start);  /* nothing of a failed transcode */
     transcode_free(&t);
     return status;
 }

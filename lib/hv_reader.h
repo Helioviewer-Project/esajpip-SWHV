@@ -157,7 +157,8 @@ typedef struct {
 enum {
     /* Accept zero-valued PLT entries after the last packet of a tile-part.
      * T.800 forbids them (a packet has at least one byte); deployed files
-     * carry them as padding (JPIP_PROFILE.md). */
+     * carry them as padding (JPIP_PROFILE.md). Not with HV_PROFILE, which
+     * has its own rule (below): hv_codestream_open refuses the pair. */
     HV_ACCEPT_PLT_PADDING = 1,
     /* The served profile's rules on the main header (JPIP_PROFILE.md; the
      * model's layer 2): SIZ as Siz-Profile, with zero origins, unit
@@ -182,7 +183,8 @@ typedef struct {
     SizSegment_Std *siz;    /* decoded SIZ (large, allocated) */
     CodSegment_Std cod;     /* decoded main-header COD */
     CodSegment_Std tile_cod;/* decoded tile-part COD */
-    QcdSegment_Std qcd;     /* last decoded QCD */
+    QcdSegment_Std qcd;     /* decoded main-header QCD */
+    QcdSegment_Std tile_qcd;/* decoded tile-part QCD */
     ComSegment_Std *com;    /* last decoded COM (64 KiB, allocated) */
     PltSegment_Std *plt;    /* last decoded PLT (large, allocated) */
     uint32_t tiles;         /* tiles Isot can address: min(grid, 65 535) */
@@ -220,8 +222,8 @@ const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, un
  * saturates at UINT64_MAX. */
 uint64_t hv_iplt_value(const Iplt *entry);
 
-/* Decoded main-header SIZ, and COD once the reader has reported it (NULL
- * before). */
+/* Decoded main-header SIZ once hv_codestream_open has accepted it, and COD
+ * once the reader has reported it (NULL before, and for one it rejected). */
 const Siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
 

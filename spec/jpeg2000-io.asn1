@@ -89,7 +89,7 @@ UrlHeader ::= SEQUENCE {
 }
 
 -- Reader Requirements box (M.11.1): Rreq of jp2-boxes.asn1 at the
--- standard's bounds, for the reader and for writing it. About 3.7 MB as a
+-- standard's bounds, for the reader and for writing it. About 3.4 MB as a
 -- C struct.
 Rreq-Std ::= SEQUENCE {
     fuam        RreqMask,

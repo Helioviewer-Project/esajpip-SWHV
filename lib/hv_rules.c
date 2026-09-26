@@ -320,15 +320,15 @@ static const hv_header *pick(const hv_header *h, const hv_header *d, int present
     return present_h ? h : present_d ? d : NULL;
 }
 
-const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, const Siz *siz) {
+const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, const Siz *siz,
+                                      int jpx) {
     static const hv_header none;
     const hv_header *ihdr, *bpcc, *pclr, *cmap;
-    int jpx, i, same = 1;
+    int i, same = 1;
     uint64_t nc, ssiz0 = 0;
 
     if (h == NULL) h = &none;
     if (d == NULL) d = &none;
-    jpx = h->jpx || d->jpx;
     ihdr = pick(h, d, h->ihdr, d->ihdr);
     bpcc = pick(h, d, h->bpcc, d->bpcc);
     pclr = pick(h, d, h->pclr, d->pclr);

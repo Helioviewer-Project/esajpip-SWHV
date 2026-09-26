@@ -270,6 +270,9 @@ static bytes add_to_jp2h(const bytes *jp2, const uint8_t *boxes, size_t n) {
     return out;
 }
 
+static void expect_error(const char *name, const hv_merge_input *in, size_t n, int links,
+                         const char *message);
+
 static void test_rreq(void) {
     static const int only[] = {1}, rsiz2[] = {1, 4}, rsiz0[] = {1, 5}, all[] = {1, 2, 5, 9, 10, 15};
     /* Channel 0 described as opacity and as premultiplied opacity. */
@@ -317,18 +320,22 @@ static void test_rreq(void) {
         expect_features("opacity, linked", &out, all, 6);
         bytes_free(&out);
     }
+    /* A later input without the cdef of the first would inherit it. */
+    in[1].buf = jp2.data;
+    in[1].size = jp2.size;
+    expect_error("no cdef after one", in, 2, 0, "no cdef box, but the first input has one");
     bytes_free(&opacity);
     bytes_free(&jp2);
 }
-
-static void expect_error(const char *name, const hv_merge_input *in, size_t n, int links,
-                         const char *message);
 
 /* An input whose JP2 Header box its codestream contradicts: NC in the
  * ihdr of a one-component input after one with a palette. hv_merge once
  * sized that input's generated cmap by an NC of up to 65 535 and wrote
  * past the buffer; the reference merge covers the generated cmap itself. */
 static void test_headers(void) {
+    /* A Resolution box holding a Capture Resolution box of 1/1 per metre. */
+    static const uint8_t res[26] = {0, 0, 0, 26, 'r', 'e', 's', ' ', 0, 0, 0, 18, 'r', 'e', 's', 'c',
+                                    0, 1, 0, 1, 0, 1, 0, 1, 0, 0};
     bytes bad = {NULL, 0};
     hv_merge_input in[2];
     hv_boxes it;
@@ -353,6 +360,14 @@ static void test_headers(void) {
     expect_error("NC 65 535", in, 2, 0, "ihdr: not 14 bytes of valid fields");
     put16(bad.data + box.payload + 16, 16384);          /* for Csiz 1 */
     expect_error("NC 16 384", in, 2, 0, "ihdr.nc");
+    bytes_free(&bad);
+
+    /* A later input without the res of the first would inherit it. */
+    bad = add_to_jp2h(&files[0], res, sizeof res);
+    in[0].buf = bad.data;
+    in[0].size = bad.size;
+    in[1] = inputs[0];
+    expect_error("no res after one", in, 2, 0, "no res box, but the first input has one");
     bytes_free(&bad);
 }
 

@@ -17,7 +17,7 @@ payload starts and ends.
 | `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC. |
 | `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box (`Rreq-Std`), with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65 535). |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
-| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries, `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
+| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (not with `-P`), `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
 | `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's profile mode (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid; the header box checks must accept every standard-valid vector and reject, by name, each one a header rule makes standard-invalid. `run.sh` builds and runs it with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types in `../spec/jpeg2000-io.asn1`, the profile types the reader checks against, and what they use. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`). |
@@ -50,7 +50,9 @@ a PLT decoder that reads an uninitialized flag on truncated input.
   SIZ, COD, zero packet lengths, and PLT sums against the tile-part data.
 - `HV_ACCEPT_PLT_PADDING` (`hv_walk -p`) accepts zero PLT entries after the
   last packet of each tile-part. T.800 does not allow them, but deployed
-  files carry them: every one of 4,014 EUI files checked has them.
+  files carry them: every one of 4,014 EUI files checked has them. Not
+  with `HV_PROFILE`, which accepts them after the codestream's last packet
+  only: `hv_codestream_open` refuses the pair.
 - The served profile (`JPIP_PROFILE.md`, the model's layer 2), in two
   scopes. `HV_PROFILE_HEADERS`, the main header: SIZ as `Siz-Profile`
   (zero origins, unit sampling, dimensions up to `INT32_MAX`) and one tile;
@@ -87,7 +89,7 @@ a PLT decoder that reads an uninitialized flag on truncated input.
   file its `jpch` over the `jp2h` defaults) against its SIZ, where the
   codestream is embedded. For a JPX file also the Reader Requirements box:
   one, the third box, its contents decoded with `Rreq-Std` (the model's
-  `Rreq` at the standard's bounds, about 3.7 MB, allocated per check). `hv_transcode` and `hv_merge` require
+  `Rreq` at the standard's bounds, about 3.4 MB, allocated per check). `hv_transcode` and `hv_merge` require
   `hv_check_jp2h` of their inputs.
 
 Not yet: box bodies other than the box header, `ftyp`, `flst`, `url` and

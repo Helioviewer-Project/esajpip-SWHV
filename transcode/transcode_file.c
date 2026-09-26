@@ -211,6 +211,10 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml
     int status;
 
     error[0] = 0;
+    if (out->error != NULL) {                   /* an earlier write failed */
+        snprintf(error, error_size, "%s", out->error);
+        return -1;
+    }
     if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL ||
         (rule = hv_check_jp2h(buf, size, &at)) != NULL) {
         snprintf(error, error_size, "%s at %zu", rule, at);
@@ -224,7 +228,7 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml
     if (status != 0) {
         if (error[0] == 0)
             snprintf(error, error_size, "%s", out->error ? out->error : "out of memory");
-        out->size = out_start;
+        hv_out_rewind(out, out_start);
     }
     return status;
 }

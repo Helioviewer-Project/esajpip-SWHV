@@ -40,7 +40,6 @@
 /* asn1scc 4.x C conventions. If a generated name differs, change it here. */
 #define ENC(T)   T##_ACN_Encode
 #define DEC(T)   T##_ACN_Decode
-#define VALID(T) T##_IsConstraintValid
 #define INIT(T)  T##_Initialize
 
 /* Encoded size upper bound for the top-level file types. asn1scc emits
@@ -533,7 +532,8 @@ typedef struct {
  * generation time instead of surfacing as a puzzling server-test result. */
 typedef enum {
     X_VALID,   /* valid at both layers */
-    X_STD,     /* invalid at layer 1; layer 2 may accept an intentional leniency */
+    X_STD,     /* invalid at both layers */
+    X_LENIENT, /* invalid at layer 1, valid at layer 2: a documented leniency */
     X_PROF     /* valid at layer 1, invalid at layer 2 */
 } Expect;
 
@@ -618,7 +618,6 @@ static Label label(Bytes b, cf_kind kind) {
     INIT(Jp2Family)(dec_family);
     if (!box_bounds_ok(&b, 0, b.len, 0, 1) ||
         !DEC(Jp2Family)(dec_family, &bs, &err)) l.std_reason = "decode";
-    else if (!VALID(Jp2Family)(dec_family, &err)) l.std_reason = "constraint";
     else if ((r = cf_check_family(dec_family, CF_STANDARD, kind)) != NULL) l.std_reason = r;
     else l.std_ok = 1;
 
@@ -627,14 +626,12 @@ static Label label(Bytes b, cf_kind kind) {
         INIT(Jp2File_Profile)(dec_jp2);
         if (!box_bounds_ok(&b, 0, b.len, 2, 1) ||
             !DEC(Jp2File_Profile)(dec_jp2, &bs, &err)) l.prof_reason = "decode";
-        else if (!VALID(Jp2File_Profile)(dec_jp2, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jp2_profile(dec_jp2)) != NULL) l.prof_reason = r;
         else l.prof_ok = 1;
     } else {
         INIT(JpxFile_Profile)(dec_jpx);
         if (!box_bounds_ok(&b, 0, b.len, 1, 1) ||
             !DEC(JpxFile_Profile)(dec_jpx, &bs, &err)) l.prof_reason = "decode";
-        else if (!VALID(JpxFile_Profile)(dec_jpx, &err)) l.prof_reason = "constraint";
         else if ((r = cf_check_jpx_profile(dec_jpx)) != NULL) l.prof_reason = r;
         else if ((r = check_linked_extents(dec_jpx)) != NULL) l.prof_reason = r;
         else l.prof_ok = 1;
@@ -647,7 +644,8 @@ static const char *out_dir;
 static int emitted, emitted_valid, mismatches;
 
 static const char *expect_name(Expect x) {
-    return x == X_VALID ? "valid/valid" : x == X_STD ? "invalid/-" : "valid/invalid";
+    return x == X_VALID ? "valid/valid" : x == X_STD ? "invalid/invalid"
+         : x == X_LENIENT ? "invalid/valid" : "valid/invalid";
 }
 
 /* Emit one vector: write the file, label it, append a manifest row, and
@@ -657,9 +655,10 @@ static void emit(Bytes b, cf_kind kind, const char *name, const char *field,
     char file[256];
     Label l = label(b, kind);
     const char *reason = !l.std_ok ? l.std_reason : !l.prof_ok ? l.prof_reason : "-";
-    int as_expected = expect == X_VALID ? (l.std_ok && l.prof_ok)
-                    : expect == X_STD   ? !l.std_ok
-                    :                     (l.std_ok && !l.prof_ok);
+    int as_expected = expect == X_VALID   ? (l.std_ok && l.prof_ok)
+                    : expect == X_STD     ? (!l.std_ok && !l.prof_ok)
+                    : expect == X_LENIENT ? (!l.std_ok && l.prof_ok)
+                    :                       (l.std_ok && !l.prof_ok);
     snprintf(file, sizeof file, "%s.%s", name, kind == CF_JP2 ? "jp2" : "jpx");
     write_file(out_dir, file, b);
     fprintf(manifest, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", file,
@@ -1204,10 +1203,10 @@ static const RuleMutant rule_mutants[] = {
     { "plt.two-markers", rule_two_plt_markers, "packet lengths split over two PLT: valid", 0, 1, X_VALID },
     { "tile.header-marker", rule_com_in_tile_header, "COM in the tile-part header: profile invalid", 0, 0, X_PROF },
     { "jpx.box-order", rule_jpx_jp2c_before_jpch, "jp2c before the jpch boxes: valid (counts match)", CF_JPX, 0, X_VALID },
-    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
+    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_LENIENT },
     { "file.unknown-box", rule_unknown_box, "unknown top-level box: valid and skipped", 0, 0, X_VALID },
     { "jpx.codestream-count", rule_jpx_missing_jp2c, "two jpch, one jp2c (T.801 M.11.6)", CF_JPX, 0, X_STD },
-    { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: standard invalid, profile accepted for deployed files", 0, 0, X_STD },
+    { "plt.trailing-zero", rule_trailing_zero_iplt, "extra zero Iplt after the last packet: standard invalid, profile accepted for deployed files", 0, 0, X_LENIENT },
     { "jpx.no-jpch", rule_jpx_no_jpch, "jp2c boxes without jpch: profile invalid", CF_JPX, 0, X_PROF },
     { "jpch.nested-jp2c", rule_jp2c_in_jpch, "jp2c inside a jpch superbox", CF_JPX, 0, X_STD },
     { "sot.tnsot-inconsistent", rule_tnsot_inconsistent, "second SOT declares 3 tile-parts, first 2", 0, 0, X_STD },
@@ -1242,7 +1241,7 @@ static const RuleMutant rule_mutants[] = {
     { "main.packet-headers-moved", rule_main_ppm, "PPM in the main header: profile invalid", 0, 0, X_PROF },
     { "sot.two-tiles", rule_two_tiles, "two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid", 0, 0, X_PROF },
     { "siz.mct-components", rule_tile_cod_mct, "MCT in a tile-part COD with one component", 0, 0, X_STD },
-    { "ftbl.one-flst", rule_jp2_empty_ftbl, "empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)", CF_JP2, 0, X_STD },
+    { "ftbl.one-flst", rule_jp2_empty_ftbl, "empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)", CF_JP2, 0, X_LENIENT },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -1313,7 +1312,7 @@ static void rule_url_in_ftbl(Jp2Family *f, int box) {
 
 /* Appended entries only: array positions are in fixture names. */
 static const RuleMutant linked_rule_mutants[] = {
-    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_STD },
+    { "jpx.reader-requirements", rule_missing_rreq, "no rreq box: standard invalid, profile accepted", CF_JPX, 0, X_LENIENT },
     { "file.unknown-box", rule_unknown_box, "unknown top-level box: valid and skipped", CF_JPX, 0, X_VALID },
     { "flst.dr-external", rule_dr_zero, "DR = 0 (this file): profile invalid", CF_JPX, 0, X_PROF },
     { "flst.dr-range", rule_dr_out_of_range, "DR = ndr+1", CF_JPX, 0, X_STD },
@@ -1726,65 +1725,65 @@ static const RuleMutant header_mutants[] = {
     { "colr.prec-approx", hdr_colr_prec_approx, "PREC -1 and APPROX 1: writer fields readers ignore, valid", CF_JP2, 0, X_VALID },
     { "cdef.pairs", hdr_cdef_unspecified, "grey and two unspecified channels from a palette: the pair (65535, 65535) may repeat, valid", CF_JP2, 0, X_VALID },
     { "res.resc-resd", hdr_res_other, "resd and an unknown box in res: valid", CF_JP2, 0, X_VALID },
-    { "jp2.one-jp2h", hdr_no_jp2h, "no jp2h (T.800 I.5.3)", CF_JP2, 0, X_STD },
-    { "jp2.one-jp2h", hdr_two_jp2h, "two jp2h boxes", CF_JP2, 0, X_STD },
-    { "jp2h.position", hdr_jp2h_after_jp2c, "jp2h after jp2c (T.800 I.2)", CF_JP2, 0, X_STD },
+    { "jp2.one-jp2h", hdr_no_jp2h, "no jp2h (T.800 I.5.3)", CF_JP2, 0, X_LENIENT },
+    { "jp2.one-jp2h", hdr_two_jp2h, "two jp2h boxes", CF_JP2, 0, X_LENIENT },
+    { "jp2h.position", hdr_jp2h_after_jp2c, "jp2h after jp2c (T.800 I.2)", CF_JP2, 0, X_LENIENT },
     { "jp2.codestream", hdr_no_jp2c, "no jp2c (T.800 I.2)", CF_JP2, 0, X_STD },
-    { "jp2h.ihdr-first", hdr_colr_first, "colr before ihdr", CF_JP2, 0, X_STD },
-    { "jp2h.colr", hdr_no_colr, "no colr", CF_JP2, 0, X_STD },
-    { "jp2h.colr-contiguous", hdr_colr_split, "colr, xml, colr", CF_JP2, 0, X_STD },
-    { "ihdr.bpcc", hdr_bpcc_not_varying, "bpcc with BPC 7 (I.5.3.2: only when BPC is 255)", CF_JP2, 0, X_STD },
-    { "ihdr.bpcc", hdr_bpc_255_no_bpcc, "BPC 255 without bpcc", CF_JP2, 0, X_STD },
-    { "header.one-bpcc", hdr_two_bpcc, "two bpcc", CF_JP2, 0, X_STD },
-    { "bpcc.count", hdr_bpcc_count, "BPC 255, bpcc of 2 entries for NC 1 (and BPC 255 for equal depths)", CF_JP2, 0, X_STD },
-    { "bpcc.depth", hdr_bpcc_depth, "BPC 255, bpcc entry 8 for Ssiz 7 (and BPC 255 for equal depths)", CF_JP2, 0, X_STD },
-    { "ihdr.height", hdr_ihdr_height, "HEIGHT = Ysiz - YOsiz + 1", CF_JP2, 0, X_STD },
-    { "ihdr.width", hdr_ihdr_width, "WIDTH = Xsiz - XOsiz + 1", CF_JP2, 0, X_STD },
-    { "ihdr.nc", hdr_ihdr_nc, "NC 2 for Csiz 1", CF_JP2, 0, X_STD },
-    { "ihdr.bpc", hdr_ihdr_bpc, "BPC 8 for Ssiz 7", CF_JP2, 0, X_STD },
-    { "ihdr.bpc", hdr_ihdr_signed, "BPC signed for unsigned Ssiz", CF_JP2, 0, X_STD },
-    { "ihdr.c", hdr_ihdr_c, "C 0 (uncompressed, T.801 only)", CF_JP2, 0, X_STD },
-    { "ihdr.unkc", hdr_ihdr_unkc, "UnkC 2 (reserved)", CF_JP2, 0, X_STD },
-    { "ihdr.nc", hdr_ihdr_nc_zero, "NC 0", CF_JP2, 0, X_STD },
-    { "ihdr.bpc", hdr_ihdr_bpc_38, "BPC 38 (reserved)", CF_JP2, 0, X_STD },
-    { "colr.method", hdr_colr_method, "METH 3 (JP2: 1 or 2)", CF_JP2, 0, X_STD },
-    { "colr.enumcs", hdr_colr_enumcs, "first colr EnumCS 12 (CMYK; JP2: 16, 17 or 18)", CF_JP2, 0, X_STD },
-    { "colr.enumcs-length", hdr_colr_enumcs_length, "METH 1 with a byte after EnumCS", CF_JP2, 0, X_STD },
-    { "header.pclr-cmap", hdr_pclr_no_cmap, "pclr without cmap", CF_JP2, 0, X_STD },
-    { "header.pclr-cmap", hdr_cmap_no_pclr, "cmap without pclr", CF_JP2, 0, X_STD },
-    { "header.one-pclr", hdr_two_pclr, "two pclr", CF_JP2, 0, X_STD },
-    { "header.one-cmap", hdr_two_cmap, "two cmap", CF_JP2, 0, X_STD },
-    { "pclr.entries-length", hdr_pclr_entries, "NE 2 x 1 byte, 1 byte of entries", CF_JP2, 0, X_STD },
-    { "pclr.ne", hdr_pclr_ne_zero, "NE 0", CF_JP2, 0, X_STD },
-    { "cmap.pcol-zero", hdr_cmap_pcol_zero, "MTYP 0 with PCOL 1", CF_JP2, 0, X_STD },
-    { "cmap.component", hdr_cmap_component, "CMP 1 for NC 1", CF_JP2, 0, X_STD },
-    { "cmap.palette-column", hdr_cmap_palette_column, "PCOL 1 for NPC 1", CF_JP2, 0, X_STD },
-    { "cmap.mtyp", hdr_cmap_mtyp, "MTYP 2 (reserved)", CF_JP2, 0, X_STD },
-    { "cdef.pairs", hdr_cdef_pairs, "two descriptions Typ 0, Asoc 1", CF_JP2, 0, X_STD },
-    { "cdef.channel", hdr_cdef_channel, "Cn 1 for one channel", CF_JP2, 0, X_STD },
-    { "cdef.typ", hdr_cdef_typ, "Typ 3 (reserved)", CF_JP2, 0, X_STD },
-    { "header.one-cdef", hdr_two_cdef, "two cdef", CF_JP2, 0, X_STD },
-    { "header.one-res", hdr_two_res, "two res", CF_JP2, 0, X_STD },
-    { "res.resc-resd", hdr_res_two_resc, "two resc in res", CF_JP2, 0, X_STD },
-    { "res.resc-resd", hdr_res_empty, "res with neither resc nor resd", CF_JP2, 0, X_STD },
-    { "res.vd", hdr_res_zero, "resc VRcD 0", CF_JP2, 0, X_STD },
+    { "jp2h.ihdr-first", hdr_colr_first, "colr before ihdr", CF_JP2, 0, X_LENIENT },
+    { "jp2h.colr", hdr_no_colr, "no colr", CF_JP2, 0, X_LENIENT },
+    { "jp2h.colr-contiguous", hdr_colr_split, "colr, xml, colr", CF_JP2, 0, X_LENIENT },
+    { "ihdr.bpcc", hdr_bpcc_not_varying, "bpcc with BPC 7 (I.5.3.2: only when BPC is 255)", CF_JP2, 0, X_LENIENT },
+    { "ihdr.bpcc", hdr_bpc_255_no_bpcc, "BPC 255 without bpcc", CF_JP2, 0, X_LENIENT },
+    { "header.one-bpcc", hdr_two_bpcc, "two bpcc", CF_JP2, 0, X_LENIENT },
+    { "bpcc.count", hdr_bpcc_count, "BPC 255, bpcc of 2 entries for NC 1 (and BPC 255 for equal depths)", CF_JP2, 0, X_LENIENT },
+    { "bpcc.depth", hdr_bpcc_depth, "BPC 255, bpcc entry 8 for Ssiz 7 (and BPC 255 for equal depths)", CF_JP2, 0, X_LENIENT },
+    { "ihdr.height", hdr_ihdr_height, "HEIGHT = Ysiz - YOsiz + 1", CF_JP2, 0, X_LENIENT },
+    { "ihdr.width", hdr_ihdr_width, "WIDTH = Xsiz - XOsiz + 1", CF_JP2, 0, X_LENIENT },
+    { "ihdr.nc", hdr_ihdr_nc, "NC 2 for Csiz 1", CF_JP2, 0, X_LENIENT },
+    { "ihdr.bpc", hdr_ihdr_bpc, "BPC 8 for Ssiz 7", CF_JP2, 0, X_LENIENT },
+    { "ihdr.bpc", hdr_ihdr_signed, "BPC signed for unsigned Ssiz", CF_JP2, 0, X_LENIENT },
+    { "ihdr.c", hdr_ihdr_c, "C 0 (uncompressed, T.801 only)", CF_JP2, 0, X_LENIENT },
+    { "ihdr.unkc", hdr_ihdr_unkc, "UnkC 2 (reserved)", CF_JP2, 0, X_LENIENT },
+    { "ihdr.nc", hdr_ihdr_nc_zero, "NC 0", CF_JP2, 0, X_LENIENT },
+    { "ihdr.bpc", hdr_ihdr_bpc_38, "BPC 38 (reserved)", CF_JP2, 0, X_LENIENT },
+    { "colr.method", hdr_colr_method, "METH 3 (JP2: 1 or 2)", CF_JP2, 0, X_LENIENT },
+    { "colr.enumcs", hdr_colr_enumcs, "first colr EnumCS 12 (CMYK; JP2: 16, 17 or 18)", CF_JP2, 0, X_LENIENT },
+    { "colr.enumcs-length", hdr_colr_enumcs_length, "METH 1 with a byte after EnumCS", CF_JP2, 0, X_LENIENT },
+    { "header.pclr-cmap", hdr_pclr_no_cmap, "pclr without cmap", CF_JP2, 0, X_LENIENT },
+    { "header.pclr-cmap", hdr_cmap_no_pclr, "cmap without pclr", CF_JP2, 0, X_LENIENT },
+    { "header.one-pclr", hdr_two_pclr, "two pclr", CF_JP2, 0, X_LENIENT },
+    { "header.one-cmap", hdr_two_cmap, "two cmap", CF_JP2, 0, X_LENIENT },
+    { "pclr.entries-length", hdr_pclr_entries, "NE 2 x 1 byte, 1 byte of entries", CF_JP2, 0, X_LENIENT },
+    { "pclr.ne", hdr_pclr_ne_zero, "NE 0", CF_JP2, 0, X_LENIENT },
+    { "cmap.pcol-zero", hdr_cmap_pcol_zero, "MTYP 0 with PCOL 1", CF_JP2, 0, X_LENIENT },
+    { "cmap.component", hdr_cmap_component, "CMP 1 for NC 1", CF_JP2, 0, X_LENIENT },
+    { "cmap.palette-column", hdr_cmap_palette_column, "PCOL 1 for NPC 1", CF_JP2, 0, X_LENIENT },
+    { "cmap.mtyp", hdr_cmap_mtyp, "MTYP 2 (reserved)", CF_JP2, 0, X_LENIENT },
+    { "cdef.pairs", hdr_cdef_pairs, "two descriptions Typ 0, Asoc 1", CF_JP2, 0, X_LENIENT },
+    { "cdef.channel", hdr_cdef_channel, "Cn 1 for one channel", CF_JP2, 0, X_LENIENT },
+    { "cdef.typ", hdr_cdef_typ, "Typ 3 (reserved)", CF_JP2, 0, X_LENIENT },
+    { "header.one-cdef", hdr_two_cdef, "two cdef", CF_JP2, 0, X_LENIENT },
+    { "header.one-res", hdr_two_res, "two res", CF_JP2, 0, X_LENIENT },
+    { "res.resc-resd", hdr_res_two_resc, "two resc in res", CF_JP2, 0, X_LENIENT },
+    { "res.resc-resd", hdr_res_empty, "res with neither resc nor resd", CF_JP2, 0, X_LENIENT },
+    { "res.vd", hdr_res_zero, "resc VRcD 0", CF_JP2, 0, X_LENIENT },
     { "cdef.opacity", hdr_cdef_opacity, "grey and opacity channels from a palette: valid", CF_JP2, 0, X_VALID },
     { "jpx.header-defaults", hdr_jpx_defaults, "jp2h ihdr and colr as the default for both codestreams, empty jpch: valid", CF_JPX, 0, X_VALID },
     { "jpch.palette", hdr_jpx_palette, "pclr and cmap in a jpch: valid", CF_JPX, 0, X_VALID },
     { "jpx.no-jp2h", hdr_jpx_no_jp2h, "no jp2h, an ihdr in each jpch (T.801: jp2h optional)", CF_JPX, 0, X_VALID },
     { "jplh.res", hdr_jpx_jplh, "jplh with res: valid", CF_JPX, 0, X_VALID },
-    { "jpch.ihdr", hdr_jpx_no_ihdr, "no jp2h, first jpch empty (T.801 M.11.6)", CF_JPX, 0, X_STD },
-    { "jp2h.position", hdr_jpx_late_jp2h, "jp2h after the codestreams (T.801 M.11.5)", CF_JPX, 0, X_STD },
-    { "header.one-ihdr", hdr_jpx_two_ihdr, "two ihdr in a jpch", CF_JPX, 0, X_STD },
-    { "ihdr.width", hdr_jpx_ihdr_width, "jpch ihdr WIDTH = Xsiz - XOsiz + 1", CF_JPX, 0, X_STD },
-    { "header.pclr-cmap", hdr_jpx_pclr_no_cmap, "pclr in a jpch without cmap", CF_JPX, 0, X_STD },
-    { "colr.one-method", hdr_jpx_two_enumerated, "two enumerated colr in jp2h (T.801 M.11.7.1)", CF_JPX, 0, X_STD },
-    { "cdef.pairs", hdr_jpx_jplh_cdef_pairs, "jplh cdef with two descriptions Typ 0, Asoc 1", CF_JPX, 0, X_STD },
+    { "jpch.ihdr", hdr_jpx_no_ihdr, "no jp2h, first jpch empty (T.801 M.11.6)", CF_JPX, 0, X_LENIENT },
+    { "jp2h.position", hdr_jpx_late_jp2h, "jp2h after the codestreams (T.801 M.11.5)", CF_JPX, 0, X_LENIENT },
+    { "header.one-ihdr", hdr_jpx_two_ihdr, "two ihdr in a jpch", CF_JPX, 0, X_LENIENT },
+    { "ihdr.width", hdr_jpx_ihdr_width, "jpch ihdr WIDTH = Xsiz - XOsiz + 1", CF_JPX, 0, X_LENIENT },
+    { "header.pclr-cmap", hdr_jpx_pclr_no_cmap, "pclr in a jpch without cmap", CF_JPX, 0, X_LENIENT },
+    { "colr.one-method", hdr_jpx_two_enumerated, "two enumerated colr in jp2h (T.801 M.11.7.1)", CF_JPX, 0, X_LENIENT },
+    { "cdef.pairs", hdr_jpx_jplh_cdef_pairs, "jplh cdef with two descriptions Typ 0, Asoc 1", CF_JPX, 0, X_LENIENT },
     { "rreq.mask-length", hdr_rreq_ml2, "rreq masks of 2 bytes (ML 2): valid", CF_JPX, 0, X_VALID },
-    { "rreq.ml", hdr_rreq_ml3, "rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)", CF_JPX, 0, X_STD },
-    { "ihdr.extent", hdr_ihdr_extent, "a byte after the ihdr fields: a 23-byte box (I.5.3.1: 22)", CF_JP2, 0, X_STD },
-    { "cdef.extent", hdr_cdef_extent, "a byte after the cdef descriptions", CF_JP2, 0, X_STD },
-    { "res.extent", hdr_res_extent, "a byte after the resc fields", CF_JP2, 0, X_STD },
+    { "rreq.ml", hdr_rreq_ml3, "rreq masks of 3 bytes (ML 3; T.801 Table M.15: 1, 2, 4 or 8)", CF_JPX, 0, X_LENIENT },
+    { "ihdr.extent", hdr_ihdr_extent, "a byte after the ihdr fields: a 23-byte box (I.5.3.1: 22)", CF_JP2, 0, X_LENIENT },
+    { "cdef.extent", hdr_cdef_extent, "a byte after the cdef descriptions", CF_JP2, 0, X_LENIENT },
+    { "res.extent", hdr_res_extent, "a byte after the resc fields", CF_JP2, 0, X_LENIENT },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1803,11 +1802,16 @@ static void emit_signature_mutant(Bytes valid, cf_kind kind, const char *base_na
     free(m.data);
 }
 
+/* A wrong length is invalid at both layers, except inside jp2h, whose
+ * children the profile keeps opaque. */
 static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name) {
     Regions rs = walk(&valid);
     int i;
     for (i = 0; i < rs.n; ++i) {
         const Region *r = &rs.r[i];
+        Expect expect = r->parent >= 0 && strcmp(rs.r[r->parent].kind, "LBox") == 0 &&
+                        be32(valid.data + rs.r[r->parent].start + 4) == HV_BOX_JP2H
+                      ? X_LENIENT : X_STD;
         uint32_t v = r->len_width == 2 ? be16(valid.data + r->len_off) : be32(valid.data + r->len_off);
         uint32_t cand[4];
         int n = 0, k;
@@ -1828,7 +1832,7 @@ static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name
             else put32(m.data + r->len_off, cand[k]);
             snprintf(field, sizeof field, "%s@0x%zx", r->kind, r->len_off);
             snprintf(name, sizeof name, "%s-len-%zx-%u", base_name, r->len_off, cand[k]);
-            emit(m, kind, name, field, "length patched", NULL, X_STD);
+            emit(m, kind, name, field, "length patched", NULL, expect);
             free(m.data);
         }
     }
@@ -1836,9 +1840,9 @@ static void emit_length_mutants(Bytes valid, cf_kind kind, const char *base_name
 }
 
 /* Patch marker codes in place: the body stays well-formed and only its
- * selector changes. Unknown marker codes are standard-invalid and
- * profile-valid (the server skips them); SIZ/SOT in the wrong place are
- * invalid at both layers. Box-type rules use structured mutants so changing
+ * selector changes. Each patch is invalid at both layers: an unknown code
+ * (which the profile would skip) replaces a segment the codestream needs,
+ * and SIZ or SOT is out of place. Box-type rules use structured mutants so changing
  * the type does not accidentally remove a different mandatory box. */
 static void emit_code_mutants(Bytes valid, cf_kind kind, const char *base_name) {
     Regions rs = walk(&valid);
@@ -1944,17 +1948,17 @@ static void emit_rreq_mutants(Bytes valid, const char *base_name) {
     m = bytes_dup(valid);
     put16(m.data + nsf, (uint16_t) (be16(m.data + nsf) + 1));
     snprintf(name, sizeof name, "%s-header-rreq.nsf", base_name);
-    emit(m, CF_JPX, name, "rreq.nsf", "NSF one more than the standard features", NULL, X_STD);
+    emit(m, CF_JPX, name, "rreq.nsf", "NSF one more than the standard features", NULL, X_LENIENT);
     free(m.data);
     m = bytes_dup(valid);
     put16(m.data + nvf, (uint16_t) (be16(m.data + nvf) + 1));
     snprintf(name, sizeof name, "%s-header-rreq.nvf", base_name);
-    emit(m, CF_JPX, name, "rreq.nvf", "NVF 1 with no vendor feature", NULL, X_STD);
+    emit(m, CF_JPX, name, "rreq.nvf", "NVF 1 with no vendor feature", NULL, X_LENIENT);
     free(m.data);
     m = insert_bytes(valid, nvf + 2, "\x00", 1);                 /* at the end of the box */
     put32(m.data + rreq, be32(m.data + rreq) + 1);
     snprintf(name, sizeof name, "%s-header-rreq.extent", base_name);
-    emit(m, CF_JPX, name, "rreq.extent", "a byte after the vendor features, inside the box", NULL, X_STD);
+    emit(m, CF_JPX, name, "rreq.extent", "a byte after the vendor features, inside the box", NULL, X_LENIENT);
     free(m.data);
 }
 
@@ -2084,6 +2088,11 @@ static void emit_unknown_box_types(void) {
     patch_other_type(&b, 1, 1633837924u, be32((const unsigned char *) "wxyz"));
     emit(b, CF_JPX, "jpx-unknown-inner-wxyz", "file.unknown-box",
          "unlisted box inside jpch: valid and skipped", NULL, X_VALID);
+    /* A listed type with no alternative inside a superbox fails to decode:
+     * the model's form of box.nested-superbox. */
+    patch_other_type(&b, 1, be32((const unsigned char *) "wxyz"), HV_BOX_JPCH);
+    emit(b, CF_JPX, "jpx-nested-jpch", "box.nested-superbox",
+         "jpch inside jpch (T.801 M.11.6: top level only)", NULL, X_STD);
     free(b.data);
     free(base.file);
 }
@@ -2110,7 +2119,7 @@ static void emit_associations(void) {
     mutant = bytes_dup(b);
     put32(mutant.data + offset + 8, 7);
     emit(mutant, CF_JPX, "jpx-asoc-child-length", "asoc.opaque",
-         "inner LBox below 8: standard invalid, profile preserves opaque contents", NULL, X_STD);
+         "inner LBox below 8: standard invalid, profile preserves opaque contents", NULL, X_LENIENT);
     free(mutant.data);
     mutant = bytes_dup(b);
     put32(mutant.data + offset, (uint32_t) (b.len - offset + 1));
@@ -2122,7 +2131,7 @@ static void emit_associations(void) {
     box->payload.u.asoc.children.nCount = 1;
     b = encode_family(base.file, 0);
     emit(b, CF_JPX, "jpx-asoc-one-child", "asoc.opaque",
-         "T.801 M.11.11 requires at least two children; profile preserves opaque contents", NULL, X_STD);
+         "T.801 M.11.11 requires at least two children; profile preserves opaque contents", NULL, X_LENIENT);
     free(b.data);
     free(base.file);
 }

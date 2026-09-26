@@ -198,8 +198,10 @@ TileSegment-Profile ::= SEQUENCE {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the framing (harness/crossfield_impl.h; the
--- tile-part and PLT rules are ../lib/hv_rules.c, shared with the reader)
+-- Cross-field constraints for the framing (the tile-part rules sot.*, the
+-- tile-part limit and the packet count are ../lib/hv_rules.c, shared by
+-- the harness and the reader; the placement and count of segments are
+-- implemented in both, harness/crossfield_impl.h and ../lib/hv_reader.c)
 -- ===========================================================================
 --
 -- Standard (both layers), T.800 A.3 and Table A.1:

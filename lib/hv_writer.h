@@ -25,6 +25,11 @@ typedef struct {
 void hv_out_init(hv_out *out);
 void hv_out_free(hv_out *out);
 
+/* Back to out->size `size`, taken while out->error was NULL: drops what was
+ * written since and the error of those writes. The only way to shorten
+ * out; callers do not set out->size. */
+void hv_out_rewind(hv_out *out, size_t size);
+
 /* Every write returns 0, or -1 with out->error set. */
 
 /* Bytes the writer does not interpret: packet data, box payloads. */
@@ -55,7 +60,8 @@ int hv_end_tile_part(hv_out *out, size_t start);
 
 /* A box header whose length hv_end_box fills in. Begun `extended`, the
  * box has LBox = 1 and XLBox; otherwise LBox, which hv_end_box switches to
- * XLBox, moving the payload, if the box outgrew it (above 4 GiB - 1). */
+ * XLBox if the box outgrew it (above 4 GiB - 1), moving the payload up 8
+ * bytes: an offset taken inside the box is then 8 short. */
 int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start);
 int hv_end_box(hv_out *out, size_t start);
 

@@ -104,7 +104,8 @@ static uint8_t *vector(const char *dir, const char *name, size_t *size) {
 static int header_rule(const char *name) {
     static const char *const prefixes[] = {
         "jp2.one-jp2h", "jp2.codestream", "jp2h.", "jpch.ihdr", "header.", "ihdr.", "bpcc.",
-        "colr.", "pclr.", "cmap.", "cdef.", "res.", "jpx.reader-requirements", "rreq."};
+        "colr.", "pclr.", "cmap.", "cdef.", "res.", "jpx.reader-requirements",
+        "jpx.codestream-count", "rreq."};
     size_t i;
     for (i = 0; i < sizeof prefixes / sizeof *prefixes; i++)
         if (strncmp(name, prefixes[i], strlen(prefixes[i])) == 0)
@@ -243,6 +244,30 @@ static void check_file_rules(const char *dir) {
     free(buf);
 }
 
+/* hv_check_jpx's rule names where a later check could claim the file. */
+static void check_jpx_rules(const char *dir) {
+    static const struct {
+        const char *name, *error;
+    } cases[] = {
+        {"jpx-linked-rule-jpx.one-dtbl-11.jpx", "jpx.one-dtbl"},
+        {"jpx-nested-jpch.jpx", "box.nested-superbox"},
+    };
+    size_t i, size, at;
+    for (i = 0; i < sizeof cases / sizeof *cases; i++) {
+        uint8_t *buf = vector(dir, cases[i].name, &size);
+        const char *error;
+        hv_jpx jpx;
+        if (buf == NULL)
+            continue;
+        error = hv_check_jpx(buf, size, &jpx, &at);
+        check(error != NULL && strcmp(error, cases[i].error) == 0, cases[i].name,
+              error ? error : "accepted");
+        if (error == NULL)
+            hv_jpx_free(&jpx);
+        free(buf);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: test_profile <vector directory>\n");
@@ -251,6 +276,7 @@ int main(int argc, char **argv) {
     check_corpus(argv[1]);
     check_headers_scope(argv[1]);
     check_file_rules(argv[1]);
+    check_jpx_rules(argv[1]);
     printf(failures ? "%d failures\n" : "all checks passed\n", failures);
     return failures != 0;
 }

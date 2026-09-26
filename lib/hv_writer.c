@@ -28,6 +28,12 @@ void hv_out_free(hv_out *out) {
     memset(out, 0, sizeof *out);
 }
 
+void hv_out_rewind(hv_out *out, size_t size) {
+    if (size < out->size)
+        out->size = size;
+    out->error = NULL;
+}
+
 static int reserve(hv_out *out, size_t more) {
     size_t need, capacity;
     uint8_t *data;

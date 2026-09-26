@@ -104,6 +104,66 @@ fi
     }
 ' || { echo "lib/hv_codes.h differs from the model" >&2; exit 1; }
 
+# ACN is not inherited through WITH COMPONENTS or parameterization, so each
+# instance restates its template's encoding; each group must agree.
+acn_body() {
+    awk -v name="$1" '
+        !on && ($1 == name || index($1, name "<") == 1) && $0 ~ /[[{<]/ { on = 1 }
+        on {
+            line = $0; sub(/--.*/, "", line)
+            if (!first) { sub("^[[:space:]]*" name, "", line); first = 1 }
+            text = text " " line
+            n = gsub(/{/, "{", line); m = gsub(/}/, "}", line)
+            depth += n - m
+            if (n > 0) opened = 1
+            if (opened && depth == 0) { on = 0; exit }
+        }
+        END { gsub(/[[:space:]]+/, " ", text); print text }
+    ' "$repo"/spec/*.acn
+}
+for group in \
+    "Siz Siz-Profile" \
+    "Cod Cod-Profile" \
+    "QcdBody Qcd Qcd-Profile Qcd-Std" \
+    "PltBody Plt Plt-Profile Plt-Std" \
+    "ComBody Com Com-Profile Com-Std" \
+    "SizSegment SizSegment-Profile SizSegment-Std CodSegment CodSegment-Profile CodSegment-Std QcdSegment QcdSegment-Profile QcdSegment-Std PltSegment PltSegment-Profile PltSegment-Std ComSegment ComSegment-Profile ComSegment-Std" \
+    "TilePart TilePart-Profile" \
+    "Superbox Superbox-Profile" \
+    "DataEntryUrl DataEntryUrl-Profile" \
+    "Rreq Rreq-Std"; do
+    first=
+    for type in $group; do
+        body=$(acn_body "$type")
+        if [ -z "$body" ]; then
+            echo "check-model.sh: no ACN encoding for $type" >&2
+            exit 1
+        fi
+        if [ -z "$first" ]; then
+            first=$body
+            first_type=$type
+        elif [ "$body" != "$first" ]; then
+            echo "ACN encoding of $type differs from that of $first_type" >&2
+            exit 1
+        fi
+    done
+done
+
+# The profile's tile-part limit: TilePart-Profile and HV_PROFILE_TILE_PARTS.
+tnsot=$(sed -n '/^TilePart-Profile ::=/,/^}/s/^[[:space:]]*tnsot[[:space:]]*INTEGER (0\.\.\([0-9]*\)).*/\1/p' \
+    "$repo/spec/j2k-codestream.asn1")
+tpsot=$(sed -n '/^TilePart-Profile ::=/,/^}/s/^[[:space:]]*tpsot[[:space:]]*INTEGER (0\.\.\([0-9]*\)).*/\1/p' \
+    "$repo/spec/j2k-codestream.asn1")
+limit=$(sed -n 's/.*HV_PROFILE_TILE_PARTS = \([0-9]*\).*/\1/p' "$repo/lib/hv_rules.h")
+if [ -z "$tnsot" ] || [ "$tnsot" != "$limit" ] || [ "$((tpsot + 1))" != "$limit" ]; then
+    echo "tile-part limit: TilePart-Profile tpsot 0..$tpsot, tnsot 0..$tnsot;" \
+        "HV_PROFILE_TILE_PARTS $limit" >&2
+    exit 1
+fi
+
+# lib/generated must be what this compiler makes of the model.
+ASN1SCC_IMAGE=$image sh "$repo/lib/generate.sh" --check
+
 if [ "$#" -eq 1 ]; then
     corpus=$1
     mkdir -p "$corpus"

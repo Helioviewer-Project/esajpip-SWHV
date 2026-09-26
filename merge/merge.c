@@ -140,7 +140,7 @@ static int flush(writer *w) {
     if (w->out.size != 0 && fwrite(w->out.data, 1, w->out.size, w->file) != w->out.size)
         return fail(w->error, w->error_size, "cannot write the JPX file");
     w->written += w->out.size;
-    w->out.size = 0;
+    hv_out_rewind(&w->out, 0);
     if (w->written > INT_MAX)
         return fail(w->error, w->error_size, "file.size-limit: output larger than INT_MAX bytes");
     return 0;
@@ -374,6 +374,19 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
     for (i = 0; i < n; i++)
         if (read_source(&inputs[i], &s[i], error, error_size) != 0)
             goto done;
+    /* A jplh without a cdef or res box takes the one of jp2h, the first
+     * input's (T.801 M.11.7): an input without one cannot follow a first
+     * input with one. hvJP2K writes such a file. */
+    for (i = 1; i < n; i++) {
+        const char *missing = s[0].cdef.type != 0 && s[i].cdef.type == 0 ? "cdef"
+                            : s[0].res.type != 0 && s[i].res.type == 0   ? "res"
+                                                                         : NULL;
+        if (missing != NULL) {
+            fail(error, error_size, "%s: no %s box, but the first input has one, which it would "
+                 "inherit", inputs[i].path, missing);
+            goto done;
+        }
+    }
     for (i = 0; links && i < n; i++) {
         const char *rule;
         if ((urls[i] = link_url(inputs[i].path, error, error_size)) == NULL)
