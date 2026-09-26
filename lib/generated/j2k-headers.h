@@ -190,7 +190,65 @@ flag Siz_ACN_Decode(Siz* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef Siz Siz_Profile;
 
 
+#define ERR_SIZ_PROFILE_2		179  /*(WITH COMPONENTS {
+    ...,
+    xsiz    (1..2147483647),
+    ysiz    (1..2147483647),
+    xosiz   (0..0),
+    yosiz   (0..0),
+    xtosiz  (0..0),
+    ytosiz  (0..0),
+    components (WITH COMPONENT (WITH COMPONENTS {
+        ...,
+        xrsiz (1..1),                         -- one shared precinct geometry
+        yrsiz (1..1)                          -- (ReadSIZMarker)
+    }))
+})*/
+flag Siz_Profile_IsConstraintValid(const Siz_Profile* pVal, int* pErrCode);
 
+void Siz_Profile_Initialize(Siz_Profile* pVal);
+
+#define Siz_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       49188
+#define Siz_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        393504
+
+#define ERR_ACN_ENCODE_SIZ_PROFILE		177  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_RSIZ		94  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_XSIZ		99  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_YSIZ		104  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_XOSIZ		109  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_YOSIZ		114  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_XTSIZ		119  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_YTSIZ		124  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_XTOSIZ		129  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_YTOSIZ		134  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_CSIZ		139  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS		172  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS_ELM		164  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS_ELM_ISSIGNED		144  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS_ELM_DEPTHMINUS1		149  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS_ELM_XRSIZ		154  /**/
+#define ERR_ACN_ENCODE_SIZ_PROFILE_COMPONENTS_ELM_YRSIZ		159  /**/
+
+flag Siz_Profile_ACN_Encode(const Siz_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
+
+#define ERR_ACN_DECODE_SIZ_PROFILE		178  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_RSIZ		95  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_XSIZ		100  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_YSIZ		105  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_XOSIZ		110  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_YOSIZ		115  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_XTSIZ		120  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_YTSIZ		125  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_XTOSIZ		130  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_YTOSIZ		135  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_CSIZ		140  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS		173  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM		165  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_ISSIGNED		145  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_DEPTHMINUS1		150  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_XRSIZ		155  /**/
+#define ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_YRSIZ		160  /**/
+flag Siz_Profile_ACN_Decode(Siz_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Scod --------------------------------------------*/
 typedef asn1SccUint Scod_reserved;
 

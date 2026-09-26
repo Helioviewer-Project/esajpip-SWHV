@@ -59,10 +59,11 @@ docker run --rm --entrypoint sh \
     "$image" -c '
         set -eu
         cc -std=c11 -pedantic-errors -Wall -Wextra -Werror \
-            -O1 -g -fsanitize=address,undefined -I/generated \
+            -O1 -g -fsanitize=address,undefined -I/generated -I/project/lib \
             /project/spec/harness/vectors.c \
             /project/spec/harness/crossfield.c \
             /project/spec/harness/mapping.c \
+            /project/lib/hv_rules.c \
             /generated/asn1crt.c \
             /generated/asn1crt_encoding.c \
             /generated/asn1crt_encoding_acn.c \

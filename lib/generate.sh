@@ -15,6 +15,8 @@ image=${ASN1SCC_IMAGE:-esajpip-asn1scc}
 out=$repo/lib/generated
 pdus=BoxHeader,MarkerCode,SegmentLength,SotSegment
 pdus=$pdus,SizSegment-Std,CodSegment-Std,QcdSegment-Std,PltSegment-Std,ComSegment-Std
+# The served profile (layer 2) types the reader checks decoded values against.
+pdus=$pdus,Siz-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
 models="j2k-headers j2k-codestream jp2-boxes jpeg2000-io"
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/hv-generated.XXXXXX")

@@ -6,7 +6,6 @@ esajpip_configure_target(hv_transcode)
 target_link_libraries(hv_transcode PRIVATE jpeg2000_io)
 
 # Tests (test/), separate from the server's.
-option(ESAJPIP_TRANSCODE_TESTS "Build and register the hv_transcode tests" OFF)
 if(ESAJPIP_TRANSCODE_TESTS)
     add_subdirectory(test)
 endif()

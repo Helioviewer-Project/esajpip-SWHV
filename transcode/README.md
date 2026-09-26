@@ -117,4 +117,5 @@ checks the command: options, exit status, in-place replacement keeping the
 mode, and nothing written or left behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
-in `test/fixtures/FIXTURES.md`.
+in `test/fixtures/FIXTURES.md`. The same run includes the reader's tests
+(`../lib/test/`).

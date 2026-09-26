@@ -5,6 +5,7 @@
 
 add_library(jpeg2000_io STATIC
     hv_reader.c
+    hv_rules.c
     hv_writer.c
     hv_geometry.c
     hv_mapping.c
@@ -26,3 +27,8 @@ target_include_directories(jpeg2000_io PUBLIC
 add_executable(hv_walk hv_walk.c)
 esajpip_configure_target(hv_walk)
 target_link_libraries(hv_walk PRIVATE jpeg2000_io)
+
+# Tests (test/), with hv_transcode's.
+if(ESAJPIP_TRANSCODE_TESTS)
+    add_subdirectory(test)
+endif()

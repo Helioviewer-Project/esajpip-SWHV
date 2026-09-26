@@ -3,8 +3,10 @@
  * identically), 1 otherwise, 2 on usage errors.
  *
  *   -v  print every box and codestream item
- *   -p  accept trailing zero PLT entries (HV_ACCEPT_PLT_PADDING), as the
- *       server does for deployed files
+ *   -p  accept trailing zero PLT entries of each tile-part
+ *       (HV_ACCEPT_PLT_PADDING), as deployed files carry them
+ *   -P  check the served profile: the JP2 file rules (hv_check_jp2) and
+ *       HV_PROFILE for the codestream
  *   -w  rewrite the whole file with hv_writer from what the reader decoded,
  *       and compare it with the input */
 #include <stdio.h>
@@ -14,7 +16,7 @@
 #include "hv_reader.h"
 #include "hv_writer.h"
 
-static int verbose, rewrite;
+static int verbose, rewrite, profile;
 static unsigned flags;
 
 enum { JP2C = 0x6A703263, SOC = 0xFF4F, SOD = 0xFF93, EOC = 0xFFD9 };
@@ -206,7 +208,13 @@ static int walk_file(const char *path) {
         return -1;
     }
     fclose(f);
-    if (size >= 2 && buf[0] == 0xFF && buf[1] == 0x4F) {
+    if (profile) {
+        hv_box jp2c;
+        r.error = hv_check_jp2(buf, (size_t)size, &jp2c, &r.at);
+    }
+    if (r.error != NULL) {
+        status = -1;
+    } else if (size >= 2 && buf[0] == 0xFF && buf[1] == 0x4F) {
         status = walk_codestream(buf, 0, (size_t)size, &r);
     } else {
         hv_boxes it;
@@ -248,13 +256,17 @@ int main(int argc, char **argv) {
             verbose = 1;
         else if (argv[i][1] == 'p')
             flags |= HV_ACCEPT_PLT_PADDING;
+        else if (argv[i][1] == 'P') {
+            flags |= HV_PROFILE;
+            profile = 1;
+        }
         else if (argv[i][1] == 'w')
             rewrite = 1;
         else
             break;
     }
     if (i == argc || argv[i][0] == '-') {
-        fprintf(stderr, "usage: hv_walk [-v] [-p] [-w] file...\n");
+        fprintf(stderr, "usage: hv_walk [-v] [-p] [-P] [-w] file...\n");
         return 2;
     }
     for (; i < argc; i++)

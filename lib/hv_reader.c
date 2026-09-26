@@ -1,6 +1,8 @@
 /* hv_reader.c: see hv_reader.h. */
 #include "hv_reader.h"
 
+#include "j2k-codestream.h"   /* MainMarkerCode-Profile, TileMarkerCode-Profile */
+
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,6 +123,66 @@ int hv_is_superbox(uint32_t type) {
 }
 
 /* ------------------------------------------------------------------------
+ * JP2 file rules of the served profile
+ * ------------------------------------------------------------------------ */
+
+enum { BOX_FTYP = 0x66747970, BOX_JP2C = 0x6A703263, BRAND_JP2 = 0x6A703220 };
+
+static uint32_t get32(const uint8_t *p) {
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+
+/* The rule names are those of the file rules in
+ * ../spec/harness/crossfield_impl.h. */
+const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at) {
+    static const uint8_t signature[12] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
+                                          0x0D, 0x0A, 0x87, 0x0A};
+    hv_boxes it;
+    hv_box box;
+    const char *error = NULL;
+    size_t i, n = 0;
+    int status, codestreams = 0, compatible = 0;
+
+    *at = 0;
+    if (size > INT_MAX)
+        return "file.size-limit";
+    if (size < 12 || memcmp(buf, signature, 12) != 0)
+        return "file.signature";
+    hv_boxes_file(&it, buf, size);
+    while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
+        *at = box.start;
+        if (n == 1) {
+            /* Brand, MinV, then the compatibility list (I.5.2). */
+            size_t length = box.end - box.payload;
+            if (box.type != BOX_FTYP)
+                return "file.ftyp-second";
+            if (length < 12 || length % 4 != 0)
+                return "ftyp: contents shorter than 12 bytes or not a multiple of 4";
+            if (get32(buf + box.payload) != BRAND_JP2)
+                return "file.ftyp-brand";
+            for (i = box.payload + 8; i < box.end; i += 4)
+                compatible |= get32(buf + i) == BRAND_JP2;
+            if (!compatible)
+                return "file.ftyp-compatibility";
+        }
+        if (box.type == BOX_JP2C && codestreams++ == 0)
+            *jp2c = box;
+        n++;
+    }
+    if (status < 0)
+        return error;
+    if (n < 2) {
+        *at = size;
+        return "file.two-boxes";
+    }
+    if (codestreams != 1) {
+        *at = size;
+        return "jp2.one-codestream";
+    }
+    return NULL;
+}
+
+/* ------------------------------------------------------------------------
  * Codestream
  * ------------------------------------------------------------------------ */
 
@@ -142,18 +204,20 @@ static int fail(hv_codestream *cs, const char *error, size_t at) {
 
 static uint64_t ceil_div(uint64_t a, uint64_t b) { return (a + b - 1) / b; }
 
-/* Cross-field rules for SIZ (T.800 A.5.1, B.3), as listed at the end of
- * spec/j2k-headers.asn1. */
-static const char *check_siz(const Siz *s, uint32_t *tiles) {
+/* The served profile, in the scope the flags ask for. */
+static int profile_headers(const hv_codestream *cs) { return (cs->flags & HV_PROFILE_HEADERS) != 0; }
+static int profile_full(const hv_codestream *cs) { return (cs->flags & HV_PROFILE) == HV_PROFILE; }
+
+/* SIZ: the shared cross-field rules (hv_rules.c), and in the profile the
+ * model's Siz-Profile type; then the tiles Isot can address. */
+static const char *check_siz(const hv_codestream *cs, const Siz *s, uint32_t *tiles) {
+    const char *error;
     uint64_t nx, ny;
-    if (s->csiz != (asn1SccUint)s->components.nCount)
-        return "SIZ: Csiz differs from the number of components";
-    if (s->xosiz >= s->xsiz || s->yosiz >= s->ysiz)
-        return "SIZ: empty image area";
-    if (s->xtosiz > s->xosiz || s->ytosiz > s->yosiz)
-        return "SIZ: tile grid starts after the image";
-    if (s->xtosiz + s->xtsiz <= s->xosiz || s->ytosiz + s->ytsiz <= s->yosiz)
-        return "SIZ: first tile does not reach the image";
+    int err;
+    if ((error = hv_rule_siz(s, NULL, profile_headers(cs))) != NULL)
+        return error;
+    if (profile_headers(cs) && !Siz_Profile_IsConstraintValid(s, &err))
+        return "SIZ: outside Siz-Profile";
     nx = ceil_div(s->xsiz - s->xtosiz, s->xtsiz);
     ny = ceil_div(s->ysiz - s->ytosiz, s->ytsiz);
     /* Isot (0 to 65 534) can address at most 65 535 tiles; a larger grid
@@ -162,45 +226,17 @@ static const char *check_siz(const Siz *s, uint32_t *tiles) {
     return NULL;
 }
 
-/* Cross-field rules for COD (A.6.1), as listed at the end of
- * spec/j2k-headers.asn1. */
-static const char *check_cod(const Cod *c, const Siz *s) {
-    int i;
-    if (c->scod.customPrecincts) {
-        if ((asn1SccUint)c->spcod.precincts.nCount != c->spcod.levels + 1)
-            return "COD: precinct list does not have one entry per resolution";
-        for (i = 1; i < c->spcod.precincts.nCount; i++)
-            if (c->spcod.precincts.arr[i].ppx == 0 || c->spcod.precincts.arr[i].ppy == 0)
-                return "COD: zero precinct exponent above resolution 0";
-    } else if (c->spcod.precincts.nCount != 0) {
-        return "COD: precinct sizes without Scod bit 0";
-    }
-    if (c->spcod.cbWidthExp + c->spcod.cbHeightExp > 8)
-        return "COD: code-block larger than 4096 samples";
-    if (c->sgcod.mct != 0) {
-        const Component *k = s->components.arr;
-        if (s->csiz < 3)
-            return "COD: multiple component transform with fewer than 3 components";
-        for (i = 1; i < 3; i++)
-            if (k[i].depthMinus1 != k[0].depthMinus1 || k[i].isSigned != k[0].isSigned ||
-                k[i].xrsiz != k[0].xrsiz || k[i].yrsiz != k[0].yrsiz)
-                return "COD: multiple component transform over unlike components";
-    }
-    return NULL;
+/* COD: the shared cross-field rules, with the SIZ they depend on. SOP is
+ * outside the profile, but only the full scope checks it: a transcoder's
+ * input may carry SOP, its output may not. */
+static const char *check_cod(const hv_codestream *cs, const Cod *c) {
+    const char *error = hv_rule_cod(&c->scod, &c->spcod, profile_full(cs));
+    return error ? error : hv_rule_siz(&cs->siz->body, &c->sgcod, profile_headers(cs));
 }
 
 uint64_t hv_iplt_value(const Iplt *p) {
-    const IpltByte *more[8] = {&p->b1, &p->b2, &p->b3, &p->b4, &p->b5, &p->b6, &p->b7, &p->b8};
-    const int present[9] = {p->exist.b1, p->exist.b2, p->exist.b3, p->exist.b4,
-                            p->exist.b5, p->exist.b6, p->exist.b7, p->exist.b8, p->exist.b9};
-    uint64_t v = p->b0.bits;
-    int i;
-    for (i = 0; i < 9 && present[i]; i++) {
-        uint64_t bits = i < 8 ? more[i]->bits : p->b9.bits;
-        if (v > (UINT64_MAX >> 7)) return UINT64_MAX;
-        v = (v << 7) | bits;
-    }
-    return v;
+    uint64_t v;
+    return hv_rule_iplt(p, &v) == NULL ? v : UINT64_MAX;
 }
 
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,
@@ -227,7 +263,7 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
         return fail(cs, "out of memory", cs->pos);
     if (DECODE(SizSegment_Std, cs->siz, buf, cs->pos + 2, l) != 0)
         return fail(cs, "invalid SIZ", cs->pos);
-    if ((error = check_siz(&cs->siz->body, &cs->tiles)) != NULL)
+    if ((error = check_siz(cs, &cs->siz->body, &cs->tiles)) != NULL)
         return fail(cs, error, cs->pos);
     cs->siz_end = cs->pos + 2 + (size_t)l;
     cs->parts = calloc(cs->tiles, sizeof *cs->parts);
@@ -283,6 +319,8 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
         return fail(cs, "main header needs exactly one COD and one QCD", pos);
     if (DECODE(SotSegment, sot, cs->buf, pos + 2, min_size(cs->end - pos - 2, 10)) != 0)
         return fail(cs, "invalid SOT", pos);
+    if (profile_full(cs) && cs->tile_parts == 64)
+        return fail(cs, "codestream.tile-part-limit", pos);
     if (sot->isot >= cs->tiles)
         return fail(cs, "SOT: tile index outside the tile grid", pos);
     if (sot->tpsot != cs->parts[sot->isot])
@@ -332,14 +370,18 @@ static int decode_com(hv_codestream *cs, size_t pos, size_t len) {
 static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *item) {
     size_t pos = cs->pos, len = end - pos - 2;
     const char *error;
+    MainMarkerCode_Profile profile_code = code;
+    int err;
 
+    if (profile_headers(cs) && !MainMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
+        return fail(cs, "main header: marker outside MainMarkerCode-Profile", pos);
     switch (code) {
     case COD:
         if (++cs->cods > 1)
             return fail(cs, "second COD in the main header", pos);
         if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid COD", pos);
-        if ((error = check_cod(&cs->cod.body, &cs->siz->body)) != NULL)
+        if ((error = check_cod(cs, &cs->cod.body)) != NULL)
             return fail(cs, error, pos);
         item->cod = &cs->cod;
         break;
@@ -375,14 +417,18 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
 static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *item) {
     size_t pos = cs->pos, len = end - pos - 2;
     const char *error;
+    TileMarkerCode_Profile profile_code = code;
+    int err;
 
+    if (profile_full(cs) && !TileMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
+        return fail(cs, "tile-part header: marker outside TileMarkerCode-Profile", pos);
     switch (code) {
     case COD:
         if (cs->sot.tpsot != 0 || cs->tp_cod++)
             return fail(cs, "COD only once, in the first tile-part of a tile", pos);
         if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid COD", pos);
-        if ((error = check_cod(&cs->tile_cod.body, &cs->siz->body)) != NULL)
+        if ((error = check_cod(cs, &cs->tile_cod.body)) != NULL)
             return fail(cs, error, pos);
         item->cod = &cs->tile_cod;
         break;
@@ -394,24 +440,30 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->qcd = &cs->qcd;
         break;
     case PLT: {
-        int i;
+        /* HV_ACCEPT_PLT_PADDING alone takes zero entries after the last
+         * packet of each tile-part; the profile, after the last packet of
+         * the codestream (hv_rule_plt_entry). */
+        int i, per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) && !profile_full(cs);
         if (cs->plt == NULL && (cs->plt = malloc(sizeof *cs->plt)) == NULL)
             return fail(cs, "out of memory", pos);
         if (DECODE(PltSegment_Std, cs->plt, cs->buf, pos + 2, len) != 0)
             return fail(cs, "invalid PLT", pos);
         if (cs->plt->body.zplt != (asn1SccUint)cs->plts++)
-            return fail(cs, "PLT: Zplt out of order", pos);
+            return fail(cs, "plt.zplt-sequence", pos);
         for (i = 0; i < cs->plt->body.entries.nCount; i++) {
-            uint64_t v = hv_iplt_value(&cs->plt->body.entries.arr[i]);
-            if (v == 0) {           /* a packet has at least one byte */
-                if (!(cs->flags & HV_ACCEPT_PLT_PADDING))
-                    return fail(cs, "PLT: zero packet length", pos);
-                cs->plt_zeros++;
-                continue;
+            uint64_t v;
+            if ((error = hv_rule_iplt(&cs->plt->body.entries.arr[i], &v)) != NULL)
+                return fail(cs, error, pos);
+            if (per_tile_part) {
+                if (v != 0 && cs->plt_zeros != 0)
+                    return fail(cs, "plt.padding-position", pos);
+            } else if ((error = hv_rule_plt_entry(&cs->plt_count, v, profile_full(cs))) != NULL) {
+                return fail(cs, error, pos);
             }
-            if (cs->plt_zeros != 0)
-                return fail(cs, "PLT: zero packet length before a nonzero one", pos);
-            cs->plt_sum = v > UINT64_MAX - cs->plt_sum ? UINT64_MAX : cs->plt_sum + v;
+            if (v == 0)
+                cs->plt_zeros++;
+            else
+                cs->plt_sum = v > UINT64_MAX - cs->plt_sum ? UINT64_MAX : cs->plt_sum + v;
         }
         item->plt = cs->plt;
         break;
@@ -443,6 +495,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     uint16_t code;
     size_t end;
     uint32_t t;
+    const char *error;
 
     item->siz = NULL;
     item->cod = NULL;
@@ -478,6 +531,10 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             for (t = 0; t < cs->tiles; t++)
                 if (cs->tnsot[t] != 0 && cs->parts[t] != cs->tnsot[t])
                     return fail(cs, "number of tile-parts differs from TNsot", cs->pos);
+            if (profile_full(cs) &&
+                (error = hv_rule_plt_packets(&cs->plt_count, &cs->siz->body, &cs->cod.body.sgcod,
+                                             &cs->cod.body.spcod, 1)) != NULL)
+                return fail(cs, error, cs->pos);
             item->kind = HV_END;
             item->code = EOC;
             item->start = cs->pos;
@@ -494,8 +551,10 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
         if (read_segment(cs, cs->tp_end, &code, &end) != 0)
             return -1;
         if (code == SOD) {
+            if (profile_full(cs) && cs->plts == 0)
+                return fail(cs, "codestream.no-plt", cs->tp_start);
             if (cs->plts != 0 && cs->plt_sum != cs->tp_end - end)
-                return fail(cs, "PLT lengths do not add up to the tile-part data", cs->tp_start);
+                return fail(cs, "plt.coverage", cs->tp_start);
             item->kind = HV_TILE_DATA;
             item->code = 0;
             item->plt_padding = cs->plt_zeros;

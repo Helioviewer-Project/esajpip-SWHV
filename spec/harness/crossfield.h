@@ -16,6 +16,7 @@
 #include "jp2-boxes.h"       /* generated: adjust to the emitted header names */
 #include "j2k-codestream.h"
 #include "j2k-headers.h"
+#include "hv_rules.h"         /* ../../lib: the body rules, shared with the reader */
 
 typedef enum { CF_STANDARD = 1, CF_PROFILE = 2 } cf_layer;
 typedef enum { CF_JP2 = 1, CF_JPX = 2 } cf_kind;

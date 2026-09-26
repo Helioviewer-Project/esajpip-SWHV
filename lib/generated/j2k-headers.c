@@ -544,6 +544,222 @@ flag Siz_ACN_Decode(Siz* pVal, BitStream* pBitStrm, int* pErrCode)
 }
 
 
+flag Siz_Profile_IsConstraintValid(const Siz_Profile* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    int i1;
+    ret = Siz_IsConstraintValid(pVal, pErrCode);
+    if (ret) {
+        ret = ((1UL <= pVal->xsiz) && (pVal->xsiz <= 2147483647UL));
+        if (ret) {
+            ret = ((1UL <= pVal->ysiz) && (pVal->ysiz <= 2147483647UL));
+            if (ret) {
+                ret = (pVal->xosiz <= 0UL);
+                if (ret) {
+                    ret = (pVal->yosiz <= 0UL);
+                    if (ret) {
+                        ret = (pVal->xtosiz <= 0UL);
+                        if (ret) {
+                            ret = (pVal->ytosiz <= 0UL);
+                            if (ret) {
+                                for(i1 = 0; ret && i1 < pVal->components.nCount; i1++)
+                                {
+                                	ret = ((1UL <= pVal->components.arr[i1].xrsiz) && (pVal->components.arr[i1].xrsiz <= 1UL));
+                                	if (ret) {
+                                	    ret = ((1UL <= pVal->components.arr[i1].yrsiz) && (pVal->components.arr[i1].yrsiz <= 1UL));
+                                	}   /*COVERAGE_IGNORE*/
+                                }
+                            }   /*COVERAGE_IGNORE*/
+                        }   /*COVERAGE_IGNORE*/
+                    }   /*COVERAGE_IGNORE*/
+                }   /*COVERAGE_IGNORE*/
+            }   /*COVERAGE_IGNORE*/
+        }   /*COVERAGE_IGNORE*/
+        *pErrCode = ret ? 0 :  ERR_SIZ_PROFILE_2;
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void Siz_Profile_Initialize(Siz_Profile* pVal)
+{
+	(void)pVal;
+
+
+	Siz_Initialize(pVal);
+}
+
+flag Siz_Profile_ACN_Encode(const Siz_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+	int i1;
+    *pErrCode = 0;
+	ret = bCheckConstraints ? Siz_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode rsiz */
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->rsiz);
+	    if (ret) {
+	        /*Encode xsiz */
+	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->xsiz);
+	        if (ret) {
+	            /*Encode ysiz */
+	            Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->ysiz);
+	            if (ret) {
+	                /*Encode xosiz */
+	                Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->xosiz);
+	                if (ret) {
+	                    /*Encode yosiz */
+	                    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->yosiz);
+	                    if (ret) {
+	                        /*Encode xtsiz */
+	                        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->xtsiz);
+	                        if (ret) {
+	                            /*Encode ytsiz */
+	                            Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->ytsiz);
+	                            if (ret) {
+	                                /*Encode xtosiz */
+	                                Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->xtosiz);
+	                                if (ret) {
+	                                    /*Encode ytosiz */
+	                                    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->ytosiz);
+	                                    if (ret) {
+	                                        /*Encode csiz */
+	                                        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal->csiz);
+	                                        if (ret) {
+	                                            /*Encode components */
+	                                            for(i1=0; (i1 < (int)pVal->components.nCount) && ret; i1++)
+	                                            {
+	                                            	/*Encode isSigned */
+	                                            	{
+	                                            		static byte true_data[] = {0x80};
+	                                            		static byte false_data[] = {0x7F};
+	                                            	    byte* tmp = pVal->components.arr[i1].isSigned ? true_data : false_data;
+	                                            	    BitStream_AppendBits(pBitStrm, tmp, 1);
+	                                            	}
+	                                            	if (ret) {
+	                                            	    /*Encode depthMinus1 */
+	                                            	    Acn_Enc_Int_PositiveInteger_ConstSize(pBitStrm, pVal->components.arr[i1].depthMinus1, 7);
+	                                            	    if (ret) {
+	                                            	        /*Encode xrsiz */
+	                                            	        Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->components.arr[i1].xrsiz);
+	                                            	        if (ret) {
+	                                            	            /*Encode yrsiz */
+	                                            	            Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, pVal->components.arr[i1].yrsiz);
+	                                            	        }   /*COVERAGE_IGNORE*/
+	                                            	    }   /*COVERAGE_IGNORE*/
+	                                            	}   /*COVERAGE_IGNORE*/
+	                                            }
+	                                        }   /*COVERAGE_IGNORE*/
+	                                    }   /*COVERAGE_IGNORE*/
+	                                }   /*COVERAGE_IGNORE*/
+	                            }   /*COVERAGE_IGNORE*/
+	                        }   /*COVERAGE_IGNORE*/
+	                    }   /*COVERAGE_IGNORE*/
+	                }   /*COVERAGE_IGNORE*/
+	            }   /*COVERAGE_IGNORE*/
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag Siz_Profile_ACN_Decode(Siz_Profile* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+	int i1;
+
+	/*Decode rsiz */
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->rsiz)));
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_RSIZ;
+	if (ret) {
+	    /*Decode xsiz */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->xsiz)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_XSIZ;
+	    if (ret) {
+	        /*Decode ysiz */
+	        ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->ysiz)));
+	        *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_YSIZ;
+	        if (ret) {
+	            /*Decode xosiz */
+	            ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->xosiz)));
+	            *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_XOSIZ;
+	            if (ret) {
+	                /*Decode yosiz */
+	                ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->yosiz)));
+	                *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_YOSIZ;
+	                if (ret) {
+	                    /*Decode xtsiz */
+	                    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->xtsiz)));
+	                    *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_XTSIZ;
+	                    if (ret) {
+	                        /*Decode ytsiz */
+	                        ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->ytsiz)));
+	                        *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_YTSIZ;
+	                        if (ret) {
+	                            /*Decode xtosiz */
+	                            ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->xtosiz)));
+	                            *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_XTOSIZ;
+	                            if (ret) {
+	                                /*Decode ytosiz */
+	                                ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->ytosiz)));
+	                                *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_YTOSIZ;
+	                                if (ret) {
+	                                    /*Decode csiz */
+	                                    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (&(pVal->csiz)));
+	                                    *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_CSIZ;
+	                                    if (ret) {
+	                                        /*Decode components */
+	                                        {
+	                                        	long ded_avail_bits = (pBitStrm->count * 8L - 0) - (pBitStrm->currentByte * 8L + pBitStrm->currentBit);
+	                                        	asn1SccSint ded_count = ded_avail_bits / 24;
+	                                        	ret = (ded_avail_bits >= 0) && (ded_avail_bits - ded_count * 24 < 8) && (1 <= ded_count) && (ded_count <= 16384);
+	                                        	*pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS;
+	                                        	if (ret) {
+	                                        		pVal->components.nCount = (int)ded_count;
+	                                        		for(i1=0; (i1 < (int)pVal->components.nCount) && ret; i1++)
+	                                        		{
+	                                        			/*Decode isSigned */
+	                                        			{
+	                                        				static byte tmp[] = {0x80};
+	                                        				ret = BitStream_ReadBitPattern(pBitStrm, tmp, 1, (&(pVal->components.arr[i1].isSigned)));
+	                                        			    *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_ISSIGNED;
+	                                        			}
+	                                        			if (ret) {
+	                                        			    /*Decode depthMinus1 */
+	                                        			    ret = Acn_Dec_Int_PositiveInteger_ConstSize(pBitStrm, (&(pVal->components.arr[i1].depthMinus1)), 7);
+	                                        			    *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_DEPTHMINUS1;
+	                                        			    if (ret) {
+	                                        			        /*Decode xrsiz */
+	                                        			        ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->components.arr[i1].xrsiz)));
+	                                        			        *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_XRSIZ;
+	                                        			        if (ret) {
+	                                        			            /*Decode yrsiz */
+	                                        			            ret = Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, (&(pVal->components.arr[i1].yrsiz)));
+	                                        			            *pErrCode = ret ? 0 : ERR_ACN_DECODE_SIZ_PROFILE_COMPONENTS_ELM_YRSIZ;
+	                                        			        }   /*COVERAGE_IGNORE*/
+	                                        			    }   /*COVERAGE_IGNORE*/
+	                                        			}   /*COVERAGE_IGNORE*/
+	                                        		}
+	                                        	}
+	                                        }
+	                                    }   /*COVERAGE_IGNORE*/
+	                                }   /*COVERAGE_IGNORE*/
+	                            }   /*COVERAGE_IGNORE*/
+	                        }   /*COVERAGE_IGNORE*/
+	                    }   /*COVERAGE_IGNORE*/
+	                }   /*COVERAGE_IGNORE*/
+	            }   /*COVERAGE_IGNORE*/
+	        }   /*COVERAGE_IGNORE*/
+	    }   /*COVERAGE_IGNORE*/
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && Siz_Profile_IsConstraintValid(pVal, pErrCode);
+}
 
 
 flag Scod_reserved_IsConstraintValid(const Scod_reserved* pVal, int* pErrCode)

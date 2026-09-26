@@ -197,7 +197,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | **label** | The vector's verdict at each layer: `valid` or `invalid`. |
 | **base** | One of four canonical, valid files everything else is derived from. |
 | **mutant** | A base with one deliberate change (a field out of range, a rule broken, a length off by one). |
-| **cross-field rule** | A validity rule ASN.1 cannot state (e.g. "csiz equals the number of components"); listed at the end of each `.asn1`, implemented in `harness/crossfield.c`. |
+| **cross-field rule** | A validity rule ASN.1 cannot state (e.g. "csiz equals the number of components"); listed at the end of each `.asn1`, implemented in `harness/crossfield.c` and, for marker segment bodies, in `../lib/hv_rules.c`, which the reader shares. |
 | **determinant** | An ACN field whose value controls the size or presence of another (e.g. `Lxxx` sizes the segment body). |
 | **harness** | `spec/harness/`: the offline C program that builds and labels the corpus. |
 | **manifest** | `tests/vectors/j2k/manifest.tsv`: one row per vector with its labels. |
@@ -209,7 +209,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. |
+| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. The reader also checks values against the profile types `Siz-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile` (`../lib/generate.sh`). |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus. |
 | `asn1scc-patches/` | Local compiler fixes that upstream does not have yet, applied to `VERSION` in `series` order, and a reference archive of the former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
@@ -217,7 +217,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `check-model.sh` | Generates the complete model, builds it as strict C11 with ASan/UBSan, runs the corpus harness, and rejects duplicate vector names. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
-| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. |
+| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. The rules on marker segment bodies (SIZ, COD, PLT entries, packet count) are `../lib/hv_rules.c`, shared with the reader. |
 | `harness/mapping.{h,c}` | Three tiny functions ACN needs because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8). |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 

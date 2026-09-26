@@ -57,8 +57,98 @@ extern asn1SccUint psot_decode(asn1SccUint);
 
 
 
+flag MainMarkerCode_Profile_IsConstraintValid(const MainMarkerCode_Profile* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((((((65281UL <= (*(pVal))) && ((*(pVal)) <= 65362UL))) || (((65364UL <= (*(pVal))) && ((*(pVal)) <= 65374UL))))) || (((65377UL <= (*(pVal))) && ((*(pVal)) <= 65534UL))));
+    *pErrCode = ret ? 0 :  ERR_MAINMARKERCODE_PROFILE;
+
+	return ret;
+}
+
+void MainMarkerCode_Profile_Initialize(MainMarkerCode_Profile* pVal)
+{
+	(void)pVal;
 
 
+	(*(pVal)) = 65281UL;
+}
+
+flag MainMarkerCode_Profile_ACN_Encode(const MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? MainMarkerCode_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    BitStream_EncodeConstraintPosWholeNumber(pBitStrm, (*(pVal)), 65281, 65534);
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag MainMarkerCode_Profile_ACN_Decode(MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	ret = BitStream_DecodeConstraintPosWholeNumber(pBitStrm, pVal, 65281, 65534);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_MAINMARKERCODE_PROFILE;
+
+    return ret && MainMarkerCode_Profile_IsConstraintValid(pVal, pErrCode);
+}
+
+
+flag TileMarkerCode_Profile_IsConstraintValid(const TileMarkerCode_Profile* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((65368UL <= (*(pVal))) && ((*(pVal)) <= 65368UL));
+    *pErrCode = ret ? 0 :  ERR_TILEMARKERCODE_PROFILE;
+
+	return ret;
+}
+
+void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 65368UL;
+}
+
+flag TileMarkerCode_Profile_ACN_Encode(const TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+	(void)pBitStrm;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? TileMarkerCode_Profile_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /* No need to encode value since it will always be 65368UL */
+	    (void)pBitStrm;
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag TileMarkerCode_Profile_ACN_Decode(TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	(void)pVal;
+	(void)pBitStrm;
+	*pErrCode = 0;
+
+
+	(*(pVal))=65368UL;
+	(void)pBitStrm;
+	ret = TRUE;
+	*pErrCode = 0;
+
+    return ret && TileMarkerCode_Profile_IsConstraintValid(pVal, pErrCode);
+}
 
 
 

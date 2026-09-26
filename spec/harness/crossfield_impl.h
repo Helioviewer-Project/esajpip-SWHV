@@ -45,96 +45,22 @@
 #define BT_FLST 1718383476UL
 #define BT_URL  1970433056UL
 
+/* The body rules are shared with the reader: ../../lib/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
                                           const CF_COD *cod) {
-    if ((int) s->csiz != s->components.nCount) return "siz.csiz-count";
-    if (!(s->xosiz < s->xsiz && s->yosiz < s->ysiz)) return "siz.origin-inside";
-    if (!(s->xtosiz <= s->xosiz && s->ytosiz <= s->yosiz)) return "siz.tile-origin";
-    if (!(s->xtosiz + s->xtsiz > s->xosiz && s->ytosiz + s->ytsiz > s->yosiz))
-        return "siz.tile-covers-origin";
-    if (cod != NULL && cod->sgcod.mct != 0) {
-        int i;
-        if (s->components.nCount < 3) return "siz.mct-components";
-        for (i = 1; i < 3; ++i)
-            if (s->components.arr[i].depthMinus1 !=
-                        s->components.arr[0].depthMinus1 ||
-                s->components.arr[i].xrsiz != s->components.arr[0].xrsiz ||
-                s->components.arr[i].yrsiz != s->components.arr[0].yrsiz)
-                return "siz.mct-geometry";
-    }
-    if (layer >= CF_PROFILE) {
-        if (s->xosiz != 0 || s->yosiz != 0 ||
-            s->xtosiz != 0 || s->ytosiz != 0)
-            return "siz.zero-origin";
-        for (int i = 0; i < s->components.nCount; ++i)
-            if (s->components.arr[i].xrsiz != 1 ||
-                s->components.arr[i].yrsiz != 1)
-                return "siz.component-sampling";
-        if (!(s->xtsiz >= s->xsiz && s->ytsiz >= s->ysiz)) return "siz.single-tile";
-    }
-    return NULL;
+    return hv_rule_siz(s, cod != NULL ? &cod->sgcod : NULL, layer >= CF_PROFILE);
 }
 
 static const char *CF_CAT3(cf_cod, CF_S, )(const CF_COD *c, cf_layer layer) {
-    int i;
-    int expected = c->scod.customPrecincts ? (int) c->spcod.levels + 1 : 0;
-    if (c->spcod.precincts.nCount != expected)
-        return "cod.precincts-count";
-    for (i = 1; i < c->spcod.precincts.nCount; ++i)
-        if (c->spcod.precincts.arr[i].ppx == 0 ||
-            c->spcod.precincts.arr[i].ppy == 0)
-            return "cod.precincts-higher-zero";
-    if (c->spcod.cbWidthExp + c->spcod.cbHeightExp > 8) return "cod.codeblock-area";
-    if (layer >= CF_PROFILE && c->scod.sopMarkers) return "cod.sop-markers";
-    return NULL;
-}
-
-/* Decode one Iplt entry (7-bit groups, MSB first). */
-static int CF_CAT3(cf_iplt_value, CF_S, )(const Iplt *e, uint64_t *value) {
-    uint64_t v = e->b0.bits;
-#define CF_IPLT_STEP(n) if (e->exist.b##n) { \
-        if (v > (UINT64_MAX >> 7)) return 0; \
-        v = (v << 7) | (uint64_t) e->b##n.bits; \
-    }
-    CF_IPLT_STEP(1); CF_IPLT_STEP(2); CF_IPLT_STEP(3); CF_IPLT_STEP(4);
-    CF_IPLT_STEP(5); CF_IPLT_STEP(6); CF_IPLT_STEP(7); CF_IPLT_STEP(8); CF_IPLT_STEP(9);
-#undef CF_IPLT_STEP
-    *value = v;
-    return 1;
-}
-
-/* Total packets = sum over resolutions of precinct counts, times csiz and
- * layers (T.800 B.6, B.7). Returns 0 when the total exceeds INT32_MAX
- * (CodingParameters::FillPrecinctCounts rejects such a codestream). */
-static uint64_t CF_CAT3(cf_packet_count, CF_S, )(const CF_T(Siz) *s, const CF_COD *c) {
-    uint64_t total = 0;
-    int levels = (int) c->spcod.levels, r;
-    for (r = 0; r <= levels; ++r) {
-        uint64_t scale = (uint64_t) 1 << (levels - r);
-        uint64_t w = ((uint64_t) s->xsiz + scale - 1) / scale;       /* size at r */
-        uint64_t h = ((uint64_t) s->ysiz + scale - 1) / scale;
-        int ppx = 15, ppy = 15;
-        if (c->spcod.precincts.nCount != 0) {
-            const PrecinctSize *ps = &c->spcod.precincts.arr[r];
-            ppx = (int) ps->ppx; ppy = (int) ps->ppy;
-        }
-        w = (w + ((uint64_t) 1 << ppx) - 1) >> ppx;
-        h = (h + ((uint64_t) 1 << ppy) - 1) >> ppy;
-        total += w * h;
-        if (total > 2147483647u) return 0;
-    }
-    total *= (uint64_t) s->csiz;
-    if (total > 2147483647u) return 0;
-    total *= (uint64_t) c->sgcod.layers;
-    return total > 2147483647u ? 0 : total;
+    return hv_rule_cod(&c->scod, &c->spcod, layer >= CF_PROFILE);
 }
 
 static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf_layer layer) {
     int i, j;
     int cod_before = 0, qcd_before = 0, tile_parts = 0, plts = 0;
     int seen_tile = 0, expect_tpsot = 0, tnsot = 0;
-    int all_parts_have_plt = 1, packet_layout_override = 0, plt_padding = 0;
-    uint64_t plt_packets = 0;
+    int all_parts_have_plt = 1, packet_layout_override = 0;
+    hv_plt_count count = { 0, 0 };
     const CF_COD *main_cod = NULL;
     const char *r;
 
@@ -179,18 +105,13 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                         tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e) {
                             uint64_t length;
-                            if (!CF_CAT3(cf_iplt_value, CF_S, )(
-                                    &plt->entries.arr[e], &length))
-                                return "plt.value-overflow";
+                            if ((r = hv_rule_iplt(&plt->entries.arr[e], &length)) != NULL)
+                                return r;
                             if (length > (uint64_t) tp->rest.data.nCount - plt_sum)
                                 return "plt.coverage";
-                            if (length == 0) {
-                                if (layer == CF_STANDARD) return "plt.zero-length";
-                                plt_padding = 1;
-                            } else {
-                                if (plt_padding) return "plt.padding-position";
-                                plt_packets++;
-                            }
+                            if ((r = hv_rule_plt_entry(&count, length,
+                                                       layer >= CF_PROFILE)) != NULL)
+                                return r;
                             plt_sum += length;
                         }
                     }
@@ -271,17 +192,9 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 s->components.arr[i].yrsiz != 1)
                 return NULL;
     }
-    if (main_cod != NULL && plts > 0) {
-        uint64_t packets = CF_CAT3(cf_packet_count, CF_S, )(&cs->siz.body, main_cod);
-        /* A zero result is the profile's signed JPIP packet-count overflow. */
-        if (packets == 0 && layer >= CF_PROFILE)
-            return "codestream.packet-count";
-        if (packets != 0) {
-            if (layer >= CF_PROFILE && plt_padding && plt_packets < packets)
-                return "plt.zero-length";
-            if (plt_packets != packets) return "plt.packet-count";
-        }
-    }
+    if (main_cod != NULL && plts > 0)
+        return hv_rule_plt_packets(&count, &cs->siz.body, &main_cod->sgcod,
+                                   &main_cod->spcod, layer >= CF_PROFILE);
     return NULL;
 }
 

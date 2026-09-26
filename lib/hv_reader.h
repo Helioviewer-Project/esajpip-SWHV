@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hv_rules.h"
 #include "jpeg2000-io.h"
 
 #ifdef __cplusplus
@@ -50,6 +51,17 @@ int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at);
 /* Nonzero for the box types T.800 and T.801 define as superboxes. */
 int hv_is_superbox(uint32_t type);
 
+/* The file rules of the served profile (JPIP_PROFILE.md; the profile layer
+ * of ../spec/jp2-boxes.asn1) for a JP2 file: at most INT_MAX bytes; the
+ * signature box, then a file type box with the jp2 brand and a jp2
+ * compatibility entry; top-level boxes framed as hv_boxes_next requires;
+ * exactly one codestream box. Other boxes' contents are not checked, and a
+ * raw codestream fails. NULL on success, with *jp2c the codestream box;
+ * otherwise the rule that fails (the manifest's name where it has one) and
+ * *at its offset. Check the codestream with hv_codestream_open and
+ * HV_PROFILE. */
+const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *at);
+
 /* ------------------------------------------------------------------------
  * Codestream, T.800 Annex A
  * ------------------------------------------------------------------------ */
@@ -77,12 +89,25 @@ typedef struct {
     const ComSegment_Std *com;
 } hv_item;
 
-/* hv_codestream_open flags. */
+/* hv_codestream_open flags. Without HV_PROFILE_HEADERS or HV_PROFILE, the
+ * reader checks T.800. Error messages that name a rule (siz.single-tile)
+ * come from the shared rules in hv_rules.c. */
 enum {
     /* Accept zero-valued PLT entries after the last packet of a tile-part.
      * T.800 forbids them (a packet has at least one byte); deployed files
-     * carry them as padding, and the server accepts them (JPIP_PROFILE.md). */
-    HV_ACCEPT_PLT_PADDING = 1
+     * carry them as padding (JPIP_PROFILE.md). */
+    HV_ACCEPT_PLT_PADDING = 1,
+    /* The served profile's rules on the main header (JPIP_PROFILE.md; the
+     * model's layer 2): SIZ as Siz-Profile, with zero origins, unit
+     * sampling and one tile; no COC, POC or PPM (MainMarkerCode-Profile).
+     * What a transcoder needs of its input: it rewrites the tile-parts. */
+    HV_PROFILE_HEADERS = 2,
+    /* The whole served profile, main header included: no SOP; tile-part
+     * headers with PLT only (TileMarkerCode-Profile); PLT in every
+     * tile-part; at most 64 tile-parts; one nonzero PLT entry per packet,
+     * with zero entries only after the last packet of the codestream; a
+     * packet count that fits INT32_MAX. */
+    HV_PROFILE = 6
 };
 
 typedef struct {
@@ -104,14 +129,15 @@ typedef struct {
     SotSegment sot;         /* current tile-part */
     size_t tp_start, tp_end;
     int tp_cod, tp_qcd, plts;
-    uint32_t plt_zeros;     /* zero entries since the last nonzero one */
+    uint32_t plt_zeros;     /* zero entries in the current tile-part */
     uint64_t plt_sum;
+    hv_plt_count plt_count; /* PLT entries of the codestream, for the profile */
     const char *error;
     size_t error_at;
 } hv_codestream;
 
 /* Opens the codestream in buf[start, end): checks SOC and decodes SIZ.
- * flags: 0 for T.800 as written, or HV_ACCEPT_PLT_PADDING.
+ * flags: 0 for T.800 as written, or any of the flags above.
  * 0 on success, -1 on error (cs->error, cs->error_at). Call
  * hv_codestream_close in both cases. */
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,

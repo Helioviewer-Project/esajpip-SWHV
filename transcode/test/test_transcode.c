@@ -540,9 +540,9 @@ static void test_headers(void) {
     EXPECT_PATCHED("Lsiz 65535", siz + 2, BYTES(0xFF, 0xFF), "truncated SIZ");
     EXPECT_PATCHED("Csiz 0", siz + 4 + 34, BYTES(0x00, 0x00), "invalid SIZ");
     EXPECT_PATCHED("Csiz 4 of 3", siz + 4 + 34, BYTES(0x00, 0x04),
-                   "SIZ: Csiz differs from the number of components");
+                   "siz.csiz-count");
     EXPECT_PATCHED("XOsiz past Xsiz", siz + 4 + 10, BYTES(0x00, 0x00, 0x01, 0x02),
-                   "SIZ: empty image area");
+                   "siz.origin-inside");
     EXPECT_PATCHED("XTsiz 0", siz + 4 + 18, BYTES(0x00, 0x00, 0x00, 0x00), "invalid SIZ");
     EXPECT_PATCHED("XRsiz 0", siz + 4 + 37, BYTES(0x00), "invalid SIZ");
 
@@ -558,16 +558,16 @@ static void test_headers(void) {
     n = get16(rgb.data + cod + 2);
     b = concat3(rgb.data, cod + n + 1, rgb.data + cod + n + 2, rgb.size - cod - n - 2, NULL, 0);
     put16(b.data + cod + 2, (unsigned)n - 1);
-    expect_error("short COD", &b, "COD: precinct list does not have one entry per resolution");
+    expect_error("short COD", &b, "cod.precincts-count");
     bytes_free(&b);
     EXPECT_PATCHED("Scod reserved bit", cod + 4, BYTES(0x08), "invalid COD");
     EXPECT_PATCHED("progression 5", cod + 4 + 1, BYTES(0x05), "invalid COD");
     EXPECT_PATCHED("0 layers", cod + 4 + 2, BYTES(0x00, 0x00), "invalid COD");
     EXPECT_PATCHED("66 levels", cod + 4 + 5, BYTES(0x42), "invalid COD");
     EXPECT_PATCHED("xcb 11", cod + 4 + 6, BYTES(0x09), "invalid COD");
-    EXPECT_PATCHED("xcb + ycb 13", cod + 4 + 7, BYTES(0x05), "COD: code-block larger than 4096 samples");
+    EXPECT_PATCHED("xcb + ycb 13", cod + 4 + 7, BYTES(0x05), "cod.codeblock-area");
     EXPECT_PATCHED("PPy 0 at resolution 1", cod + 4 + 11, BYTES(0x08),
-                   "COD: zero precinct exponent above resolution 0");
+                   "cod.precincts-higher-zero");
 
     /* A huge image and many layers with little data. */
     b = bytes_copy(rgb.data, rgb.size);
