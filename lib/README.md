@@ -63,8 +63,12 @@ a PLT decoder that reads an uninitialized flag on truncated input.
   (`TileMarkerCode-Profile`) and at least one; at most 64 tile-parts; one
   nonzero PLT entry per packet of the main COD, with zero entries only after
   the last packet of the codestream; a packet count up to `INT32_MAX`.
-  Errors from shared rules are the rule names of the corpus manifest
-  (`siz.single-tile`).
+  Errors name the rule that fails (`siz.single-tile`,
+  `codestream.one-cod-before-sot`), with the names of the corpus manifest;
+  a main-header or tile-part-header marker out of place is
+  `main.marker-code` or `tile.marker-code`. Failures of the decoders
+  themselves (`invalid SIZ`, `truncated SIZ`) and against a profile type
+  (`SIZ: outside Siz-Profile`) are described in words.
 - `hv_check_jp2` (`hv_walk -P`), the profile's file rules for a JP2 file:
   at most `INT_MAX` bytes, the signature box, then the file type box with
   the `jp2 ` brand and compatibility entry, top-level boxes framed as above,

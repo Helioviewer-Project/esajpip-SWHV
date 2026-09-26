@@ -202,9 +202,9 @@ static void check_headers_scope(const char *dir) {
         {"jp2-siz.xtsiz-3.jp2", "siz.single-tile"},
         {"jp2-siz.xosiz-1.jp2", "siz.zero-origin"},
         {"jp2-rule-main.packet-headers-moved-48.jp2",
-         "main header: marker outside MainMarkerCode-Profile"},
-        {"jp2-main-ff30-length.jp2", "main header: marker outside MainMarkerCode-Profile"},
-        {"jp2-main-ppt.jp2", "main header: marker outside MainMarkerCode-Profile"},
+         "main.marker-code"},
+        {"jp2-main-ff30-length.jp2", "main.marker-code"},
+        {"jp2-main-ppt.jp2", "main.marker-code"},
     };
     size_t i, size;
     for (i = 0; i < sizeof cases / sizeof *cases; i++) {

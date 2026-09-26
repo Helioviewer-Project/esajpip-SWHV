@@ -578,13 +578,13 @@ static void test_headers(void) {
     expect_error("no SIZ", &b, "SOC is not followed by SIZ");
     bytes_free(&b);
     b = concat3(rgb.data, cod, rgb.data + sot, rgb.size - sot, NULL, 0);
-    expect_error("no COD or QCD", &b, "main header needs exactly one COD and one QCD");
+    expect_error("no COD or QCD", &b, "codestream.one-cod-before-sot");
     bytes_free(&b);
     b = concat3(rgb.data, cod, rgb.data + siz, cod - siz, rgb.data + cod, rgb.size - cod);
-    expect_error("two SIZ", &b, "marker not allowed in the main header");
+    expect_error("two SIZ", &b, "main.marker-code");
     bytes_free(&b);
     b = concat3(rgb.data, sot, rgb.data + cod, sot - cod, rgb.data + sot, rgb.size - sot);
-    expect_error("two COD", &b, "second COD in the main header");
+    expect_error("two COD", &b, "codestream.one-cod-before-sot");
     bytes_free(&b);
 
     EXPECT_PATCHED("Lsiz 2", siz + 2, BYTES(0x00, 0x02), "invalid SIZ");
@@ -755,7 +755,7 @@ static void test_served_profile(void) {
         b = concat3(cs.data, sot, segment, sizeof segment, cs.data + sot, cs.size - sot);
         expect_error(layout[i].name, &b, layout[i].codestream_error);
         f = jp2_file(&b, "jp2 ");
-        expect_file_error(layout[i].name, &f, "main header: marker outside MainMarkerCode-Profile");
+        expect_file_error(layout[i].name, &f, "main.marker-code");
         bytes_free(&f);
         bytes_free(&b);
     }

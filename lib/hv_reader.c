@@ -897,8 +897,10 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     hv_tile_parts seen = {cs->tiles, cs->parts, cs->tnsot};
     const char *error;
 
-    if (cs->state == ST_MAIN && (cs->cods != 1 || cs->qcds != 1))
-        return fail(cs, "main header needs exactly one COD and one QCD", pos);
+    if (cs->state == ST_MAIN && cs->cods != 1)
+        return fail(cs, "codestream.one-cod-before-sot", pos);
+    if (cs->state == ST_MAIN && cs->qcds != 1)
+        return fail(cs, "codestream.one-qcd-before-sot", pos);
     if (DECODE(SotSegment, sot, cs->buf, pos + MARKER,
                min_size(cs->end - pos - MARKER, HV_FIXED(SotSegment))) != 0)
         return fail(cs, "invalid SOT", pos);
@@ -949,11 +951,11 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     int err;
 
     if (profile_headers(cs) && !MainMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
-        return fail(cs, "main header: marker outside MainMarkerCode-Profile", pos);
+        return fail(cs, "main.marker-code", pos);   /* MainMarkerCode-Profile */
     switch (code) {
     case HV_COD:
         if (cs->cods > 0)
-            return fail(cs, "second COD in the main header", pos);
+            return fail(cs, "codestream.one-cod-before-sot", pos);
         if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->cod.body)) != NULL)
@@ -962,10 +964,11 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->cod = &cs->cod;
         break;
     case HV_QCD:
-        if (++cs->qcds > 1)
-            return fail(cs, "second QCD in the main header", pos);
+        if (cs->qcds > 0)
+            return fail(cs, "codestream.one-qcd-before-sot", pos);
         if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
+        cs->qcds++;
         item->qcd = &cs->qcd;
         break;
     case HV_COM:
@@ -976,9 +979,8 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG:
         break;                        /* bodies not modelled: skipped by length */
     case HV_SOC: case HV_SIZ: case HV_SOD: case HV_SOP: case HV_EPH:
-        return fail(cs, "marker not allowed in the main header", pos);
-    case HV_PLT: case HV_PPT:
-        return fail(cs, "tile-part header marker in the main header", pos);
+    case HV_PLT: case HV_PPT:           /* T.800 places them elsewhere (Table A.1) */
+        return fail(cs, "main.marker-code", pos);
     default:
         break;                        /* unknown: reported, skipped by length */
     }
@@ -997,11 +999,11 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     int err;
 
     if (profile_full(cs) && !TileMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
-        return fail(cs, "tile-part header: marker outside TileMarkerCode-Profile", pos);
+        return fail(cs, "tile.marker-code", pos);   /* TileMarkerCode-Profile */
     switch (code) {
     case HV_COD:
         if (cs->sot.tpsot != 0 || cs->tp_cod++)
-            return fail(cs, "COD only once, in the first tile-part of a tile", pos);
+            return fail(cs, "tile.cod-once", pos);
         if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->tile_cod.body)) != NULL)
@@ -1010,7 +1012,7 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         break;
     case HV_QCD:
         if (cs->sot.tpsot != 0 || cs->tp_qcd++)
-            return fail(cs, "QCD only once, in the first tile-part of a tile", pos);
+            return fail(cs, "tile.qcd-once", pos);
         if (DECODE(QcdSegment_Std, &cs->tile_qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
         item->qcd = &cs->tile_qcd;
@@ -1054,7 +1056,7 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_SOT: case HV_EOC:
         return fail(cs, "tile-part header without SOD", pos);
     case HV_SOC: case HV_SIZ: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG: case HV_SOP: case HV_EPH:
-        return fail(cs, "marker not allowed in a tile-part header", pos);
+        return fail(cs, "tile.marker-code", pos);
     default:
         break;
     }
@@ -1100,7 +1102,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             return start_tile_part(cs, item);
         if (code == HV_EOC) {
             if (cs->tile_parts == 0)
-                return fail(cs, "codestream without a tile-part", cs->pos);
+                return fail(cs, "codestream.no-tile-part", cs->pos);
             if (end != cs->end)
                 return fail(cs, "bytes after EOC", end);
             {
@@ -1121,7 +1123,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             return 1;
         }
         if (cs->state == ST_AFTER_DATA)
-            return fail(cs, "only SOT or EOC may follow tile-part data", cs->pos);
+            return fail(cs, "codestream.segment-after-sot", cs->pos);
         return main_segment(cs, code, end, item);
 
     case ST_TILE_HEADER:

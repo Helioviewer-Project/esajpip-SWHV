@@ -5,16 +5,19 @@
  * written once, here, and used both by the reader (hv_reader.c) and by the
  * model's harness (../spec/harness/crossfield_impl.h, crossfield.c), which
  * labels the corpus in ../tests/vectors/j2k. The rules on structure (the
- * placement and count of segments and boxes, the PLT Zplt sequence and
- * sums, the file's first boxes) each checks in its own code, the reader on
- * the bytes and the harness on the decoded model, under the same names. With HV_PROFILE the reader applies every JP2 rule
- * the profile labels come from; its T.800 mode leaves some out (see
- * README.md, "What the reader checks").
+ * placement and count of segments, the PLT Zplt sequence and sums, the
+ * file's first boxes) each checks in its own code, the reader on the bytes
+ * and the harness on the decoded model, under the same names. With
+ * HV_PROFILE the reader applies every JP2 rule the profile labels come
+ * from; its T.800 mode leaves some out (see README.md, "What the reader
+ * checks").
  *
  * `profile` selects the layer: 0 for the standard (T.800), nonzero for the
  * served profile (JPIP_PROFILE.md), which adds the server's restrictions.
  * Each check returns NULL when the rules hold, otherwise the name of the
- * rule that fails, as the corpus manifest spells it. */
+ * rule that fails. The corpus manifest uses the same names, for the rules
+ * a vector exercises; some (file.size-limit, box.extent, ...) no vector
+ * does. */
 #ifndef HV_RULES_H
 #define HV_RULES_H
 
