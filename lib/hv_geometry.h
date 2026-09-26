@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hv_rules.h"
 #include "jpeg2000-io.h"
 
 #ifdef __cplusplus
@@ -71,11 +72,12 @@ typedef struct {
 } hv_block_rect;
 
 /* Lays out tile `tile` of `siz` with the coding style `cod`. 0, or -1 with
- * a message in error. Call hv_geometry_free in both cases. Allocates one
+ * a message in error (siz.csiz-count when siz holds other than Csiz
+ * components). Call hv_geometry_free in both cases. Allocates one
  * hv_resolution per component and resolution, csiz * (levels + 1) of them
  * (up to 540,672), whether or not they hold data: callers that read
  * untrusted headers bound that product first. */
-int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t tile,
+int hv_geometry_init(hv_geometry *g, const hv_siz *siz, const Cod *cod, uint32_t tile,
                      char *error, size_t error_size);
 void hv_geometry_free(hv_geometry *g);
 

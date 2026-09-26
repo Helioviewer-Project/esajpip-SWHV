@@ -38,9 +38,9 @@ description changes; it is never part of the build. The server tests consume
 only the committed corpus through plain CMake/CTest, and the `esajpip`
 binary links no generated code. The reader/writer library in `../lib/`
 does: `lib/generate.sh` generates the header types of `jpeg2000-io.asn1`,
-the profile types the reader checks against and the box types it decodes
-one at a time (the script's `pdus` list) into `lib/generated/`, which is
-committed and built by the normal CMake build.
+the profile types the reader checks against, and the box types and list
+elements it decodes one at a time (the script's `pdus` list) into
+`lib/generated/`, which is committed and built by the normal CMake build.
 
 **Status.** With the upstream compiler revision pinned here, the complete model
 generates C, that C builds as strict C11, and the sanitized harness writes the
@@ -216,13 +216,13 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`) in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`), the `ftyp` header, the `dtbl`, `url` and fragment counts, and `Rreq-Std`. Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, the profile types `Siz-Profile`, `MainMarkerCode-Profile`, `TileMarkerCode-Profile` and `FragmentList-Profile`, and `Fragment`, `Brand` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `PclrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
+| `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`, each a fixed part or one element of a list: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, the COD and QCD segments at the standard's bounds (`CodSegment-Std`, `QcdSegment-Std`), the `ftyp` header, the `dtbl`, `url` and fragment counts, the Reader Requirements box in parts (`RreqHeader`, `RreqStandardFeature`, `RreqVendorFeature`, `FeatureCount`), and the palette's NE and NPC (`PclrCounts`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, the elements of SIZ, PLT and COM in `j2k-headers.asn1` (`SizFixed`, `Component`, `Zplt`, `Iplt`, `Rcom`), the profile types `SizFixed-Profile`, `Component-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile`, and `Fragment`, `Brand` and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
 | `modules` | The four modules, in import order: the one list that `../lib/generate.sh`, `check-model.sh` and `../lib/CMakeLists.txt` read. |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
 | `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs ACN v2 and `-icdPdus` regressions. |
-| `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../lib/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies; the tile-part and dimension limits restated in C. Then, with the Docker image: `../lib/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, and duplicate vector names rejected. |
+| `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../lib/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies, the parts of `Rreq` in `jpeg2000-io.asn1` among them; the tile-part and dimension limits restated in C. Then, with the Docker image: `../lib/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, and duplicate vector names rejected. |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` here only. |
@@ -341,7 +341,7 @@ every field, **Layer 2** `*-Profile` types, and at the end the cross-field
 rules for each layer. The `.acn` mirrors the type names and gives each
 field its width and encoding, plus the determinants.
 
-Two conventions worth knowing before you edit:
+Conventions worth knowing before you edit:
 
 - **Corpus bounds.** Some `SIZE` upper bounds are far smaller than the
   standard's and are marked "corpus bound" (e.g. 32 top-level boxes, 128 PLT
@@ -350,10 +350,10 @@ Two conventions worth knowing before you edit:
   877 MB with the corpus bounds. A file
   that exceeds a corpus bound is not standard-invalid; the harness never
   generates one. The bodies with a corpus bound (`Plt`, `Com`) are
-  instances of parameterized types (`PltBody`, `ComBody`); the `-Std`
-  instances (`Plt-Std`, `Com-Std`) carry the standard's bounds for the
-  reader/writer, which decodes one segment at a time. `Qcd` and `Qcd-Std`
-  both use the standard's bound (Lqcd 4 to 197). A
+  instances of parameterized types (`PltBody`, `ComBody`); the
+  reader/writer reads those segments one element at a time (below), so
+  they need no instance at the standard's bounds.
+  `Qcd` and `Qcd-Std` both use the standard's bound (Lqcd 4 to 197). A
   `WITH COMPONENTS` subtype cannot do this: asn1scc keeps the base type's
   allocation for it.
 - **Layer 2 normally narrows layer 1.** A `*-Profile` type is either a `WITH
@@ -384,14 +384,30 @@ Two conventions worth knowing before you edit:
   policy; it does not establish that the marker is forbidden by every
   edition or extension of JPEG 2000. Unknown box types are valid at both
   layers, as required by T.800 I.8 and T.801 M.12.
+- **The reader/writer handles one element at a time.** No type of
+  `jpeg2000-io.asn1` holds a list: asn1scc would allocate it at the
+  standard's bound (16,384 components, 65,532 packet lengths, 65,535
+  features), up to megabytes per struct. The reader decodes the fixed part of a
+  segment or box, then its elements one at a time up to the end the
+  segment or box length gives: SIZ as `SizFixed` and `Csiz` `Component`s,
+  PLT as `Zplt` and `Iplt`s, COM as `Rcom` and text left in place, a
+  Fragment List box as `FragmentCount` and a `Fragment`, and a Reader
+  Requirements box as `RreqHeader`, the features and `FeatureCount`. The
+  writer encodes the same parts one at a time and measures the length it
+  wrote; no box or segment length comes from a type's size. The elements are the
+  whole-file model's own types, so the two share one encoding. Where an
+  element takes an ACN parameter from its list (a Reader Requirements mask
+  is ML bytes), `jpeg2000-io.asn1` has a copy whose mask is `size deduced`
+  instead (`RreqStandardFeature`, `RreqVendorFeature`), and `RreqHeader`
+  restates Rreq's head; `check-model.sh` checks both against `Rreq`.
+  Only COD and QCD, at most 45 and 197 bytes, are decoded whole.
 - **The `-Std` suffix** means one thing: `X-Std` is the reader/writer's
   version of the whole-file model's type `X`, with the same encoding and
   the standard's bounds where `X` has a corpus bound. It is an instance of
-  `X`'s parameterized body (`Qcd-Std`, `Plt-Std`, `Com-Std`), a copy where
-  `X` is not parameterized (`Rreq-Std`), or, where `X` has no corpus bound,
-  the same definition (`SizSegment-Std`, `CodSegment-Std`);
-  `check-model.sh` checks that the copies agree. A reader/writer type with
-  no whole-file counterpart (`BoxHeader`, `SotSegment`, the counts) has no
+  `X`'s parameterized body (`Qcd-Std`) or, where `X` has no corpus bound, the
+  same definition (`CodSegment-Std`); `check-model.sh` checks that the
+  copies agree. A reader/writer type with no whole-file counterpart
+  (`BoxHeader`, `SotSegment`, the counts, the parts of `Rreq`) has no
   suffix (`jpeg2000-io.asn1`, "The -Std suffix").
 - **ACN properties are explicit on profile structures.** asn1scc does not
   inherit field encodings through `WITH COMPONENTS` constraints. Profile
@@ -706,20 +722,31 @@ allocates every corpus bound inline); the harness allocates its few
 instances on the heap. If your compiler reports larger sizes, lower the corpus bounds in the
 `.asn1` files (they are marked) rather than the harness.
 
-The reader/writer types in `jpeg2000-io.asn1` use the standard's bounds and
-are decoded one at a time. Their sizes with asn1scc 4.9.3.0 on a 64-bit
-target:
+The reader/writer decodes one header or one list element at a time (see
+"Reading a model file"), so its types are small. Their sizes with asn1scc
+4.9.3.0 on a 64-bit target:
 
 | Type | Bytes |
 | --- | ---: |
-| `PltSegment-Std` (65,532 `Iplt` entries) | 5,766,832 |
-| `SizSegment-Std` (16,384 components) | 524,376 |
-| `ComSegment-Std` (65,531 bytes) | 65,544 |
 | `CodSegment-Std` | 616 |
 | `QcdSegment-Std` (194 bytes) | 208 |
-| `Rreq-Std` (65,535 standard and vendor features) | 3,407,928 |
+| `SizFixed` | 80 |
+| `Component` | 32 |
+| `Zplt`, `Rcom` | 8 |
+| `Iplt` | 88 |
+| `RreqHeader` | 32 |
+| `RreqStandardFeature` | 24 |
+| `RreqVendorFeature` | 28 |
+| `Fragment` | 24 |
 | `SotSegment` | 40 |
 | `BoxHeader` | 32 |
+| `Ihdr` | 128 |
+| `Resolution` | 120 |
+| `PclrCounts` | 16 |
+
+The largest type in `../lib/generate.sh`'s `pdus` list is `CodSegment-Std`.
+None is sized by a list's bound: the palette's column depths, like SIZ's
+components, are decoded one at a time.
 
 The harness, the library in `../lib/` (`hv_reader.c`, `hv_writer.c`,
 `hv_rules.c`, `hv_geometry.c`, `hv_walk.c`, and `hv_mapping.c`, which
@@ -906,7 +933,7 @@ generates; they are not claims about the standard.
 **Can the generated decoder replace `file_manager.cc`?** Not the whole-file
 decoder: the server indexes multi-megabyte files by offset without copying,
 and ACN models fully decoded, bounded records. The reader in `../lib/` is
-meant to: it steps from header to header, decodes one marker segment or box
-header at a time with the generated code of `jpeg2000-io.asn1`, and applies
+meant to: it steps from header to header, decodes one header or one list
+element at a time with the generated code of `jpeg2000-io.asn1`, and applies
 the shared rules, so the server can use it for JP2 files once it covers
 JPX. The whole-file model stays the specification and the test oracle.

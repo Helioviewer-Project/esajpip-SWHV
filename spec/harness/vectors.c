@@ -316,12 +316,12 @@ static void copy_box(Jp2Family *f, int from, int at) {
 }
 
 static void build_siz(Siz *s, int width, int height) {
-    s->rsiz = 0;
-    s->xsiz = width;  s->ysiz = height;
-    s->xosiz = 0;     s->yosiz = 0;
-    s->xtsiz = width; s->ytsiz = height;
-    s->xtosiz = 0;    s->ytosiz = 0;
-    s->csiz = 1;
+    s->fixed.rsiz = 0;
+    s->fixed.xsiz = width;  s->fixed.ysiz = height;
+    s->fixed.xosiz = 0;     s->fixed.yosiz = 0;
+    s->fixed.xtsiz = width; s->fixed.ytsiz = height;
+    s->fixed.xtosiz = 0;    s->fixed.ytosiz = 0;
+    s->fixed.csiz = 1;
     s->components.nCount = 1;
     s->components.arr[0].isSigned = 0;
     s->components.arr[0].depthMinus1 = 7;
@@ -814,16 +814,16 @@ static TilePart *tp_of(Jp2Family *f, int box) { return &cs_of(f, box)->segments.
 #define SETTER(id, lvalue) \
     static void set_##id(Jp2Family *f, int box, asn1SccSint v) { (void) f; (void) box; lvalue = v; }
 
-SETTER(siz_rsiz,   cs_of(f, box)->siz.body.rsiz)
-SETTER(siz_xsiz,   cs_of(f, box)->siz.body.xsiz)
-SETTER(siz_ysiz,   cs_of(f, box)->siz.body.ysiz)
-SETTER(siz_xosiz,  cs_of(f, box)->siz.body.xosiz)
-SETTER(siz_yosiz,  cs_of(f, box)->siz.body.yosiz)
-SETTER(siz_xtsiz,  cs_of(f, box)->siz.body.xtsiz)
-SETTER(siz_ytsiz,  cs_of(f, box)->siz.body.ytsiz)
-SETTER(siz_xtosiz, cs_of(f, box)->siz.body.xtosiz)
-SETTER(siz_ytosiz, cs_of(f, box)->siz.body.ytosiz)
-SETTER(siz_csiz,   cs_of(f, box)->siz.body.csiz)
+SETTER(siz_rsiz,   cs_of(f, box)->siz.body.fixed.rsiz)
+SETTER(siz_xsiz,   cs_of(f, box)->siz.body.fixed.xsiz)
+SETTER(siz_ysiz,   cs_of(f, box)->siz.body.fixed.ysiz)
+SETTER(siz_xosiz,  cs_of(f, box)->siz.body.fixed.xosiz)
+SETTER(siz_yosiz,  cs_of(f, box)->siz.body.fixed.yosiz)
+SETTER(siz_xtsiz,  cs_of(f, box)->siz.body.fixed.xtsiz)
+SETTER(siz_ytsiz,  cs_of(f, box)->siz.body.fixed.ytsiz)
+SETTER(siz_xtosiz, cs_of(f, box)->siz.body.fixed.xtosiz)
+SETTER(siz_ytosiz, cs_of(f, box)->siz.body.fixed.ytosiz)
+SETTER(siz_csiz,   cs_of(f, box)->siz.body.fixed.csiz)
 SETTER(siz_depth,  cs_of(f, box)->siz.body.components.arr[0].depthMinus1)
 SETTER(siz_xrsiz,  cs_of(f, box)->siz.body.components.arr[0].xrsiz)
 SETTER(siz_yrsiz,  cs_of(f, box)->siz.body.components.arr[0].yrsiz)
@@ -1216,8 +1216,8 @@ static void rule_tile_cod_second_part(Jp2Family *f, int box) {
 }
 static void rule_packet_count_overflow(Jp2Family *f, int box) {
     Siz *s = &cs_of(f, box)->siz.body;                     /* 2^16 x 2^16 default precincts */
-    s->xsiz = s->xtsiz = PROFILE_MAX_DIMENSION;
-    s->ysiz = s->ytsiz = PROFILE_MAX_DIMENSION;
+    s->fixed.xsiz = s->fixed.xtsiz = PROFILE_MAX_DIMENSION;
+    s->fixed.ysiz = s->fixed.ytsiz = PROFILE_MAX_DIMENSION;
 }
 static void rule_xsiz_profile_limit(Jp2Family *f, int box) {
     /* At level 0 the default 2^15-wide precincts of a 2^31-wide image are
@@ -1237,7 +1237,7 @@ static void rule_xsiz_profile_limit(Jp2Family *f, int box) {
         PLTS * ENTRIES > CAPACITY(rest->data.arr))
         die("rule_xsiz_profile_limit: tile-parts beyond the corpus bounds");
     check_tile_part_room(cs, PARTS);
-    s->xsiz = s->xtsiz = PROFILE_MAX_DIMENSION + 1u;
+    s->fixed.xsiz = s->fixed.xtsiz = PROFILE_MAX_DIMENSION + 1u;
     cs->segments.nCount = 2 + PARTS;
     for (part = 0; part < PARTS; part++) {
         MainSegment *segment = &cs->segments.arr[2 + part];
@@ -1336,7 +1336,7 @@ static void rule_missing_signature(Jp2Family *f, int box) {
 }
 static void rule_two_tiles(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
-    cs->siz.body.xtsiz = BASE_W / 2;                       /* two tiles, one tile-part each */
+    cs->siz.body.fixed.xtsiz = BASE_W / 2;                 /* two tiles, one tile-part each */
     cs->segments.arr[3] = cs->segments.arr[2];
     cs->segments.arr[3].tilePart.isot = 1;
     cs->segments.nCount = 4;
@@ -1581,6 +1581,17 @@ static void rule_url_terminator(Jp2Family *f, int box) {
 }
 /* NF 2 in the first flst, which holds one fragment. */
 static void rule_flst_nf(Jp2Family *f, int box) { (void) box; flst_of(f, 0)->nf = 2; }
+/* A mutant whose violation no field of the structs can hold sets this; the
+ * driver applies it to the encoded file. */
+static Bytes (*wire_patch)(Bytes valid);
+static Bytes flst_trailing_byte(Bytes valid);
+/* A byte after the only fragment of the first flst, inside the box: at
+ * both layers the list, `size deduced`, fails on a partial fragment. */
+static void rule_flst_trailing_byte(Jp2Family *f, int box) {
+    (void) f;
+    (void) box;
+    wire_patch = flst_trailing_byte;
+}
 
 /* Appended entries only: array positions are in fixture names. */
 static const RuleMutant linked_rule_mutants[] = {
@@ -1630,6 +1641,9 @@ static const RuleMutant linked_rule_mutants[] = {
       0, X_STD, "box.extent", "url.terminator" },
     { "flst.nf-count", rule_flst_nf, "NF 2 with one fragment (T.801 M.11.3.1)", CF_JPX, 0, X_STD,
       "flst.nf-count", "decode" },
+    { "flst.one-fragment", rule_flst_trailing_byte,
+      "a byte after the only fragment, inside the flst box (T.801 M.11.3.1)", CF_JPX, 0, X_STD,
+      "decode", "decode" },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1643,10 +1657,11 @@ static const RuleMutant linked_rule_mutants[] = {
  * codestream rules reject it first. */
 static void sync_ihdr(InnerBox *c, const Siz *s) {
     Ihdr *ihdr = &c->payload.u.ihdr;
+    const SizFixed *z = &s->fixed;
     int i;
     if (c->payload.kind != InnerPayload_ihdr_PRESENT ||
-        s->ysiz <= s->yosiz || s->xsiz <= s->xosiz || s->ysiz - s->yosiz > 4294967295u ||
-        s->xsiz - s->xosiz > 4294967295u || s->csiz < 1 || s->csiz > 16384 ||
+        z->ysiz <= z->yosiz || z->xsiz <= z->xosiz || z->ysiz - z->yosiz > 4294967295u ||
+        z->xsiz - z->xosiz > 4294967295u || z->csiz < 1 || z->csiz > 16384 ||
         s->components.nCount < 1)
         return;
     for (i = 0; i < s->components.nCount; ++i)
@@ -1654,9 +1669,9 @@ static void sync_ihdr(InnerBox *c, const Siz *s) {
             s->components.arr[i].depthMinus1 != s->components.arr[0].depthMinus1 ||
             s->components.arr[i].isSigned != s->components.arr[0].isSigned)
             return;
-    ihdr->height = s->ysiz - s->yosiz;
-    ihdr->width = s->xsiz - s->xosiz;
-    ihdr->nc = s->csiz;
+    ihdr->height = z->ysiz - z->yosiz;
+    ihdr->width = z->xsiz - z->xosiz;
+    ihdr->nc = z->csiz;
     ihdr->bpc = s->components.arr[0].depthMinus1 | (s->components.arr[0].isSigned ? 128 : 0);
 }
 
@@ -2281,6 +2296,27 @@ static Bytes insert_bytes(Bytes valid, size_t at, const void *bytes, size_t n) {
     return m;
 }
 
+/* The patch of rule_flst_trailing_byte: a byte after the first flst of
+ * the first ftbl. insert_bytes grows the boxes that go on past it; this
+ * grows the flst and the boxes that end with it. */
+static Bytes flst_trailing_byte(Bytes valid) {
+    Regions rs = walk(&valid);
+    int ftbl = (int) (find_top_box(&rs, &valid, HV_BOX_FTBL) - rs.r), flst = -1, i;
+    size_t at;
+    Bytes m;
+    for (i = ftbl + 1; i < rs.n && flst < 0; ++i)
+        if (rs.r[i].parent == ftbl && be32(valid.data + rs.r[i].start + 4) == HV_BOX_FLST)
+            flst = i;
+    if (flst < 0) die("flst_trailing_byte: no flst in the first ftbl");
+    at = rs.r[flst].end;
+    m = insert_bytes(valid, at, "\x00", 1);
+    for (i = flst; i >= 0; i = rs.r[i].parent)
+        if (rs.r[i].end == at)
+            put32(m.data + rs.r[i].len_off, be32(m.data + rs.r[i].len_off) + 1);
+    free(rs.r);
+    return m;
+}
+
 /* Insertions the structured mutants cannot make: codes the model has no
  * alternative for, placed before the first SOT, and an Iplt longer than
  * the model's ten bytes. Invalid at layer 1; the server skipped the first
@@ -2435,8 +2471,14 @@ static void run_base(Base base, const char *companions) {
             const RuleMutant *rm = &linked_rule_mutants[i];
             Bytes m;
             *work = *base.file;
+            wire_patch = NULL;
             rm->apply(work, -1);
             m = encode_family(work, 0);
+            if (wire_patch != NULL) {
+                Bytes patched = wire_patch(m);
+                free(m.data);
+                m = patched;
+            }
             snprintf(name, sizeof name, "%s-rule-%s-%zu", base.name, rm->name, i);
             emit(m, base.kind, name, rm->name, rm->note, companions, rm->expect, rm->reason,
                  rm->profile_reason);
@@ -2613,7 +2655,8 @@ static void emit_associations(void) {
 static void check_profile_rule_parity(void) {
     Base base = base_jp2(0, 0);
     Siz *siz = &base.file->boxes.arr[base.jp2c_box].payload.u.jp2c.siz.body;
-    asn1SccUint *origins[] = {&siz->xosiz, &siz->yosiz};
+    const hv_siz view = cf_siz_view(siz);
+    asn1SccUint *origins[] = {&siz->fixed.xosiz, &siz->fixed.yosiz};
     asn1SccUint *sampling[] = {&siz->components.arr[0].xrsiz,
                             &siz->components.arr[0].yrsiz};
     DataEntryUrl url;
@@ -2621,19 +2664,19 @@ static void check_profile_rule_parity(void) {
     size_t i;
     int err = 0;
 
-    if (!Siz_Profile_IsConstraintValid(siz, &err) || hv_rule_siz(siz, NULL, 1) != NULL)
+    if (!Siz_Profile_IsConstraintValid(siz, &err) || hv_rule_siz(&view, NULL, 1) != NULL)
         die("SIZ profile rules disagree on the base");
     for (i = 0; i < sizeof origins / sizeof *origins; i++) {
         *origins[i] = 1;
         if (Siz_Profile_IsConstraintValid(siz, &err) ||
-            hv_rule_siz(siz, NULL, 1) == NULL)
+            hv_rule_siz(&view, NULL, 1) == NULL)
             die("SIZ origin rules disagree");
         *origins[i] = 0;
     }
     for (i = 0; i < sizeof sampling / sizeof *sampling; i++) {
         *sampling[i] = 2;
         if (Siz_Profile_IsConstraintValid(siz, &err) ||
-            strcmp(hv_rule_siz(siz, NULL, 1), "siz.component-sampling") != 0)
+            strcmp(hv_rule_siz(&view, NULL, 1), "siz.component-sampling") != 0)
             die("SIZ sampling rules disagree");
         *sampling[i] = 1;
     }

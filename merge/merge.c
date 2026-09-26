@@ -48,8 +48,8 @@ typedef struct {
 } writer;
 
 /* The generated decoders and encoders on a byte array: size bytes to
- * decode, of which *used (unless NULL) were read, and a fixed-size type's
- * HV_FIXED(T) bytes to encode into. 0, or -1. */
+ * decode, of which *used (unless NULL) were read, and HV_LARGEST(T) bytes
+ * to encode into, of which *used were written. 0, or -1. */
 #define DEFINE_DECODE(T)                                                     \
     static int decode_##T(T *value, const uint8_t *bytes, size_t size,      \
                           size_t *used) {                                    \
@@ -63,12 +63,16 @@ typedef struct {
         return 0;                                                            \
     }
 #define DEFINE_ENCODE(T)                                                     \
-    static int encode_##T(const T *value, uint8_t bytes[HV_FIXED(T)]) {     \
+    static int encode_##T(const T *value, uint8_t bytes[HV_LARGEST(T)],     \
+                          size_t *used) {                                    \
         BitStream s;                                                         \
         int err = 0;                                                         \
-        memset(bytes, 0, HV_FIXED(T));      /* the encoders skip 0 bits */   \
-        BitStream_AttachBuffer(&s, bytes, (long)HV_FIXED(T));               \
-        return T##_ACN_Encode(value, &s, &err, TRUE) ? 0 : -1;              \
+        memset(bytes, 0, HV_LARGEST(T));    /* the encoders skip 0 bits */   \
+        BitStream_AttachBuffer(&s, bytes, (long)HV_LARGEST(T));             \
+        if (!T##_ACN_Encode(value, &s, &err, TRUE))                         \
+            return -1;                                                       \
+        *used = (size_t)BitStream_GetLength(&s);                             \
+        return 0;                                                            \
     }
 
 DEFINE_DECODE(Ihdr)
@@ -95,7 +99,7 @@ static unsigned codestream_rsiz(const uint8_t *buf, const hv_box *jp2c) {
     hv_codestream cs;
     unsigned rsiz = 0;
     if (hv_codestream_open(&cs, buf, jp2c->payload, jp2c->end, HV_PROFILE) == 0)
-        rsiz = (unsigned)hv_codestream_siz(&cs)->rsiz;
+        rsiz = (unsigned)hv_codestream_siz(&cs)->fixed->rsiz;
     hv_codestream_close(&cs);
     return rsiz;
 }
@@ -157,17 +161,17 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
         return hv_fail(error, size, "%s: ihdr at %zu cannot be decoded", in->path, s->ihdr.start);
     s->nc = (unsigned)ihdr.nc;
     if (s->cdef.type != 0) {
-        /* N, then N (Cn, Typ, Asoc), as hv_check_jp2h decoded them. */
+        /* N, then N (Cn, Typ, Asoc), as hv_check_jp2h decoded them, each
+         * where the one before ended. */
         const uint8_t *p = in->buf + s->cdef.payload;
-        size_t n = s->cdef.end - s->cdef.payload, used = HV_FIXED(CdefCount), c;
+        size_t n = s->cdef.end - s->cdef.payload, used, one, c;
         CdefCount count;
         CdefEntry entry;
-        if (decode_CdefCount(&count, p, n, NULL) != 0)
+        if (decode_CdefCount(&count, p, n, &used) != 0)
             return hv_fail(error, size, "%s: cdef at %zu cannot be decoded", in->path,
                            s->cdef.start);
-        for (c = 0; c < count; c++, used += HV_FIXED(CdefEntry)) {
-            if (n - used < HV_FIXED(CdefEntry) ||
-                decode_CdefEntry(&entry, p + used, HV_FIXED(CdefEntry), NULL) != 0)
+        for (c = 0; c < count; c++, used += one) {
+            if (decode_CdefEntry(&entry, p + used, n - used, &one) != 0)
                 return hv_fail(error, size, "%s: cdef at %zu cannot be decoded", in->path,
                                s->cdef.start);
             s->opacity |= entry.typ == 1;
@@ -181,25 +185,20 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
  * holds them (hv_rule_colr for a JPX jp2h: at most one with METH 1 and one
  * with METH 2, T.801 M.11.7.1), which a JP2 file's jp2h need not keep. */
 static int check_jpx_colrs(const source *s, char *error, size_t size) {
-    hv_header *h = malloc(sizeof *h);
+    hv_header h;
     const char *rule = NULL;
     size_t used = 0;
     int k;
-    if (h == NULL)
-        return hv_fail(error, size, "out of memory");
-    hv_header_init(h, HV_BOX_JP2H, 1);
+    hv_header_init(&h, HV_BOX_JP2H, 1);
     for (k = 0; k < s->ncolr && rule == NULL; k++) {
         const hv_box *colr = &s->colr[k];
         ColrHeader header;
         if (decode_ColrHeader(&header, s->in.buf + colr->payload, colr->end - colr->payload,
-                              &used) != 0) {
-            free(h);
+                              &used) != 0)
             return hv_fail(error, size, "%s: colr at %zu cannot be decoded", s->in.path,
                            colr->start);
-        }
-        rule = hv_rule_colr(h, &header, colr->end - colr->payload - used);
+        rule = hv_rule_colr(&h, &header, colr->end - colr->payload - used);
     }
-    free(h);
     return rule == NULL ? 0
                         : hv_fail(error, size, "%s: %s at %zu, in the JPX file's jp2h",
                                   s->in.path, rule, s->colr[k - 1].start);
@@ -305,19 +304,19 @@ static int write_start(hv_out *out, int links) {
     static const Brand linked[] = {HV_BRAND_JPX};
     const Brand *compatible = links ? linked : embedded;
     size_t ncompatible = links ? sizeof linked / sizeof *linked
-                               : sizeof embedded / sizeof *embedded, i, start;
+                               : sizeof embedded / sizeof *embedded, i, start, used;
     FtypHeader header = {HV_BRAND_JPX, 1};
-    uint8_t bytes[HV_FIXED(FtypHeader)];
+    uint8_t bytes[HV_LARGEST(FtypHeader)], brand[HV_LARGEST(Brand)];
 
     if (hv_write_box_header(out, HV_BOX_JP, sizeof jp_signature) != 0 ||
         hv_write_bytes(out, jp_signature, sizeof jp_signature) != 0 ||
         hv_begin_box(out, HV_BOX_FTYP, 0, &start) != 0)
         return -1;
-    if (encode_FtypHeader(&header, bytes) != 0 || hv_write_bytes(out, bytes, sizeof bytes) != 0)
+    if (encode_FtypHeader(&header, bytes, &used) != 0 || hv_write_bytes(out, bytes, used) != 0)
         return -1;
     for (i = 0; i < ncompatible; i++)
-        if (encode_Brand(&compatible[i], bytes) != 0 ||
-            hv_write_bytes(out, bytes, HV_FIXED(Brand)) != 0)
+        if (encode_Brand(&compatible[i], brand, &used) != 0 ||
+            hv_write_bytes(out, brand, used) != 0)
             return -1;
     return hv_end_box(out, start);
 }
@@ -358,33 +357,37 @@ static int write_jp2h(hv_out *out, const source *s) {
 }
 
 /* Entry i of the Component Mapping for an input without the palette of
- * the first: component i used directly (CMP = i, MTYP = 0, PCOL = 0). */
-static int cmap_entry(unsigned i, uint8_t bytes[HV_FIXED(CmapEntry)]) {
+ * the first, appended to out: component i used directly (CMP = i,
+ * MTYP = 0, PCOL = 0). */
+static int cmap_entry(hv_out *out, unsigned i) {
     CmapEntry entry = {i, 0, 0};
-    return encode_CmapEntry(&entry, bytes);
+    uint8_t bytes[HV_LARGEST(CmapEntry)];
+    size_t used;
+    return encode_CmapEntry(&entry, bytes, &used) != 0 ? -1 : hv_write_bytes(out, bytes, used);
 }
 
 /* That Component Mapping box, unless the first input's cmap is the same:
- * one entry per component, NC of them (the checked Csiz, at most 16,384). */
+ * one entry per component, NC of them (the checked Csiz, at most 16,384).
+ * The box is written, then dropped again (hv_out_rewind) if its entries
+ * are that cmap's. */
 static int write_generated_cmap(hv_out *out, const source *s, const source *first) {
     const hv_box *c0 = &first->cmap;
-    const uint8_t *p0 = first->in.buf + c0->payload;
-    size_t n = HV_FIXED(CmapEntry) * (size_t)s->nc;
-    uint8_t bytes[HV_FIXED(CmapEntry)];
+    size_t start, payload, n;
     unsigned i;
-    int same = c0->type != 0 && c0->end - c0->payload == n;
 
-    for (i = 0; same && i < s->nc; i++)
-        same = cmap_entry(i, bytes) == 0 &&
-               memcmp(bytes, p0 + HV_FIXED(CmapEntry) * i, sizeof bytes) == 0;
-    if (same)
-        return 0;
-    if (hv_write_box_header(out, HV_BOX_CMAP, n) != 0)
+    if (hv_begin_box(out, HV_BOX_CMAP, 0, &start) != 0)
         return -1;
+    payload = out->size;
     for (i = 0; i < s->nc; i++)
-        if (cmap_entry(i, bytes) != 0 || hv_write_bytes(out, bytes, sizeof bytes) != 0)
+        if (cmap_entry(out, i) != 0)
             return -1;
-    return 0;
+    n = out->size - payload;
+    if (c0->type != 0 && c0->end - c0->payload == n &&
+        memcmp(first->in.buf + c0->payload, out->data + payload, n) == 0) {
+        hv_out_rewind(out, start);
+        return 0;
+    }
+    return hv_end_box(out, start);
 }
 
 /* Codestream and Compositing Layer Header boxes: empty where the input's
@@ -440,15 +443,16 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
  * than one codestream), 4 and 5 (the codestreams' Rsiz), 9 and 10 (opacity
  * channels in cdef), 15 (linked codestreams), each needed for both the
  * Fully Understand and the Display expressions: feature i sets mask bit i,
- * FUAM and DCM all of them. At most 7 features, so ML is 1. 0, or -1 with
- * a message in w->error, or with w->out.error set. */
+ * FUAM and DCM all of them. At most 7 features, so every mask is one byte
+ * (ML 1), and no vendor features. 0, or -1 with w->out.error set. */
 static int write_rreq(writer *w, const source *s, size_t n, int links) {
-    int has[16] = {0}, k = 0, i, status;
-    Rreq_Std *rreq = calloc(1, sizeof *rreq);
-    size_t j;
+    RreqStandardFeature standard[7];      /* 1, 2, 4, 5, 9, 10 and 15 at most */
+    RreqHeader header;
+    int has[16] = {0}, i;
+    size_t j, k = 0;
 
-    if (rreq == NULL)
-        return hv_fail(w->error, w->error_size, "out of memory");
+    memset(standard, 0, sizeof standard);
+    memset(&header, 0, sizeof header);
     has[1] = 1;
     for (j = 0; j < n; j++) {
         has[9] |= s[j].opacity;
@@ -458,22 +462,19 @@ static int write_rreq(writer *w, const source *s, size_t n, int links) {
     }
     has[2] = n > 1;
     has[15] = links != 0;
-    rreq->fuam.nCount = rreq->dcm.nCount = 1;
+    header.fuam.nCount = header.dcm.nCount = 1;
     for (i = 0; i < 16; i++) {
         if (!has[i])
             continue;
-        rreq->standard.arr[k].sf = (asn1SccUint)i;
-        rreq->standard.arr[k].sm.nCount = 1;
-        rreq->standard.arr[k].sm.arr[0] = (byte)(0x80 >> k);
-        rreq->fuam.arr[0] |= (byte)(0x80 >> k);
+        standard[k].sf = (FeatureCode)i;
+        standard[k].sm.nCount = 1;
+        standard[k].sm.arr[0] = (byte)(0x80 >> k);
+        header.fuam.arr[0] |= (byte)(0x80 >> k);
         k++;
     }
-    rreq->dcm.arr[0] = rreq->fuam.arr[0];
-    rreq->standard.nCount = k;
-    rreq->vendor.nCount = 0;
-    status = hv_write_rreq(&w->out, rreq);
-    free(rreq);
-    return status;
+    header.dcm.arr[0] = header.fuam.arr[0];
+    header.nsf = (FeatureCount)k;
+    return hv_write_rreq(&w->out, &header, standard, k, NULL, 0);
 }
 
 /* The XML box of input i as read, associated with codestream i and

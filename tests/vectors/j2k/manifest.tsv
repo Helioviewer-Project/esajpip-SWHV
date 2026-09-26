@@ -543,6 +543,7 @@ jpx-linked-rule-box.flst-placement-17.jpx	jpx	invalid	invalid	box.flst-placement
 jpx-linked-rule-box.url-placement-18.jpx	jpx	invalid	invalid	box.url-placement	box.url-placement	url inside an ftbl (T.801 M.11.2: in dtbl)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-url.terminator-19.jpx	jpx	invalid	invalid	box.extent	url.terminator	a byte after LOC's NUL, inside the url box	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.nf-count-20.jpx	jpx	invalid	invalid	flst.nf-count	flst.nf-count	NF 2 with one fragment (T.801 M.11.3.1)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
+jpx-linked-rule-flst.one-fragment-21.jpx	jpx	invalid	invalid	decode	flst.one-fragment	a byte after the only fragment, inside the flst box (T.801 M.11.3.1)	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-graph-sequential.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-reversed.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2
 jpx-graph-repeated.jpx	jpx	valid	valid	-	jpx.reference-order	T.801 M.11.2/M.11.3.1: distinct companions, DR mapping independent of codestream order	jpx-linked-frame1.jp2,jpx-graph-frame2.jp2

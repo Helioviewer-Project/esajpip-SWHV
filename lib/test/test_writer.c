@@ -32,10 +32,11 @@ static int spare_zero(const hv_out *out) {
 /* A codestream with one 8 x 8 component, no decomposition and one
  * tile-part whose PLT lists `count` packets of one byte each. */
 static int write_codestream(hv_out *out, size_t count) {
-    static SizSegment_Std siz;
+    static SizFixed fixed;
+    static Component component;
     static CodSegment_Std cod;
     static QcdSegment_Std qcd;
-    static ComSegment_Std com;
+    hv_siz siz = {&fixed, &component, 1};
     uint64_t *lengths = malloc(count * sizeof *lengths);
     size_t i, start;
     int status;
@@ -44,12 +45,12 @@ static int write_codestream(hv_out *out, size_t count) {
         return -1;
     for (i = 0; i < count; i++)
         lengths[i] = 1;
-    memset(&siz, 0, sizeof siz);
-    siz.body.xsiz = siz.body.ysiz = siz.body.xtsiz = siz.body.ytsiz = 8;
-    siz.body.csiz = 1;
-    siz.body.components.nCount = 1;
-    siz.body.components.arr[0].depthMinus1 = 7;
-    siz.body.components.arr[0].xrsiz = siz.body.components.arr[0].yrsiz = 1;
+    memset(&fixed, 0, sizeof fixed);
+    fixed.xsiz = fixed.ysiz = fixed.xtsiz = fixed.ytsiz = 8;
+    fixed.csiz = 1;
+    memset(&component, 0, sizeof component);
+    component.depthMinus1 = 7;
+    component.xrsiz = component.yrsiz = 1;
     memset(&cod, 0, sizeof cod);
     cod.body.sgcod.layers = 1;
     cod.body.spcod.cbWidthExp = cod.body.spcod.cbHeightExp = 4;
@@ -58,12 +59,8 @@ static int write_codestream(hv_out *out, size_t count) {
     qcd.body.sqcd = 0x40;
     qcd.body.spqcd.nCount = 1;
     qcd.body.spqcd.arr[0] = 0x48;
-    memset(&com, 0, sizeof com);
-    com.body.rcom = 1;
-    com.body.ccom.nCount = 4;
-    memcpy(com.body.ccom.arr, "test", 4);
     status = hv_write_marker(out, HV_SOC) || hv_write_siz(out, &siz) || hv_write_cod(out, &cod) ||
-             hv_write_qcd(out, &qcd) || hv_write_com(out, &com) ||
+             hv_write_qcd(out, &qcd) || hv_write_com(out, 1, (const uint8_t *)"test", 4) ||
              hv_begin_tile_part(out, 0, 0, 1, &start) || hv_write_plt(out, lengths, count) ||
              hv_write_marker(out, HV_SOD);
     for (i = 0; i < count && status == 0; i++)
@@ -72,6 +69,52 @@ static int write_codestream(hv_out *out, size_t count) {
         status = hv_end_tile_part(out, start) || hv_write_marker(out, HV_EOC);
     free(lengths);
     return status ? -1 : 0;
+}
+
+/* What write_codestream wrote element by element, read back item by item:
+ * SIZ and its one component, COM and its text, and the PLT split the way
+ * Kakadu splits it, each Lxxx measured. */
+static void check_elements(const hv_out *out, size_t count) {
+    hv_codestream cs;
+    hv_item item;
+    size_t entries = 0, segments = 0, first = 0;
+    int status, siz = 0, com = 0;
+
+    if (hv_codestream_open(&cs, out->data, 0, out->size, 0) != 0) {
+        check(0, "the codestream opens", cs.error);
+        hv_codestream_close(&cs);
+        return;
+    }
+    while ((status = hv_codestream_next(&cs, &item)) == 1) {
+        if (item.siz != NULL)
+            siz = item.siz == hv_codestream_siz(&cs) && item.siz->ncomponents == 1 &&
+                  item.siz->fixed->csiz == 1 && item.siz->components[0].depthMinus1 == 7 &&
+                  item.end - item.start == 2 + 41;      /* the code, Lsiz 38 + 3 */
+        if (item.com != NULL)
+            com = item.com->rcom == 1 && item.com->size == 4 &&
+                  memcmp(item.com->text, "test", 4) == 0 &&
+                  item.com->text == out->data + item.end - 4;
+        if (item.plt != NULL) {
+            size_t pos = item.plt->start, n = 0;
+            uint64_t v;
+            int more;
+            while ((more = hv_plt_next(out->data, &pos, item.plt->end, &v)) == 1 && v == 1)
+                n++;
+            check(more == 0 && pos == item.end && item.plt->end == item.end &&
+                  item.plt->start == item.start + 5 && item.plt->zplt == segments,
+                  "PLT entries read back", NULL);
+            if (segments++ == 0)
+                first = n;
+            entries += n;
+        }
+    }
+    check(status == 0, "the codestream reads back item by item", cs.error);
+    check(siz, "SIZ read back", NULL);
+    check(com, "COM read back, its text in place", NULL);
+    /* Lplt 65,535: its own 2 bytes, Zplt, and 65,532 one-byte entries. */
+    check(segments == 2 && first == 65532 && entries == count, "PLT split at Lplt 65,535",
+          NULL);
+    hv_codestream_close(&cs);
 }
 
 /* Every write leaves the spare capacity zero, and appending after
@@ -99,6 +142,7 @@ static void check_spare_capacity(void) {
     /* Two PLT segments (Zplt 0 and 1), Psot, and the PLT sums. */
     error = hv_codestream_check(fresh.data, 0, fresh.size, 0, &(size_t){0});
     check(error == NULL, "the codestream reads back", error);
+    check_elements(&fresh, 70000);
     hv_out_free(&fresh);
     hv_out_free(&reused);
 }
@@ -193,6 +237,85 @@ static void check_xlbox(void) {
     hv_out_free(&out);
 }
 
+/* PLT entries of every size, 1 to 10 bytes, each encoded on its own, read
+ * back with hv_plt_next. */
+static void check_plt_entries(void) {
+    uint64_t lengths[11], v;
+    hv_out out;
+    size_t i, pos = 5;          /* after the code, Lplt and Zplt */
+    int ok = 1;
+
+    for (i = 0; i < 10; i++)
+        lengths[i] = (uint64_t)1 << (7 * i);         /* i + 1 bytes */
+    lengths[10] = UINT64_MAX;                        /* 10 bytes */
+    hv_out_init(&out);
+    check(hv_write_plt(&out, lengths, 11) == 0 && out.size == 5 + 55 + 10 &&
+          out.data[2] == 0 && out.data[3] == 68 && out.data[4] == 0, "PLT of 11 entries",
+          out.error);
+    for (i = 0; i < 11 && ok; i++)
+        ok = hv_plt_next(out.data, &pos, out.size, &v) == 1 && v == lengths[i];
+    check(ok && hv_plt_next(out.data, &pos, out.size, &v) == 0,
+          "PLT entries of 1 to 10 bytes read back", NULL);
+    hv_out_free(&out);
+}
+
+/* The JPX boxes, element by element with LBox measured, byte for byte:
+ * flst (NF 1 and a Fragment), url (VERS, FLAG, LOC and its NUL) and rreq
+ * (RreqHeader with ML inserted, the standard features, NVF, the vendor
+ * features). */
+static void check_jpx_boxes(void) {
+    static const uint8_t flst[] = {
+        0, 0, 0, 24, 'f', 'l', 's', 't', 0, 1,
+        0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 3, 4, 0, 5};
+    static const uint8_t url[] = {
+        0, 0, 0, 15, 'u', 'r', 'l', ' ', 0, 0, 0, 0, 'a', 'b', 0};
+    static const uint8_t rreq[] = {
+        0, 0, 0, 39, 'r', 'r', 'e', 'q', 2, 0x80, 0x00, 0x40, 0x00, 0, 1,
+        0, 5, 0x80, 0x00, 0, 1,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 0x40, 0x00};
+    RreqHeader header;
+    RreqStandardFeature standard;
+    RreqVendorFeature vendor;
+    hv_out out;
+    size_t i;
+
+    hv_out_init(&out);
+    check(hv_write_flst(&out, 0x102, 0x304, 5) == 0 && out.size == sizeof flst &&
+          memcmp(out.data, flst, sizeof flst) == 0, "flst box", out.error);
+    hv_out_rewind(&out, 0);
+    check(hv_write_url(&out, "ab") == 0 && out.size == sizeof url &&
+          memcmp(out.data, url, sizeof url) == 0, "url box", out.error);
+    hv_out_rewind(&out, 0);
+
+    memset(&header, 0, sizeof header);
+    memset(&standard, 0, sizeof standard);
+    memset(&vendor, 0, sizeof vendor);
+    header.fuam.nCount = header.dcm.nCount = 2;
+    header.fuam.arr[0] = 0x80;
+    header.dcm.arr[0] = 0x40;
+    header.nsf = 1;
+    standard.sf = 5;
+    standard.sm.nCount = 2;
+    standard.sm.arr[0] = 0x80;
+    for (i = 0; i < 16; i++)
+        vendor.vf.arr[i] = (byte)(i + 1);
+    vendor.vm.nCount = 2;
+    vendor.vm.arr[0] = 0x40;
+    check(hv_write_rreq(&out, &header, &standard, 1, &vendor, 1) == 0 &&
+          out.size == sizeof rreq && memcmp(out.data, rreq, sizeof rreq) == 0, "rreq box",
+          out.error);
+    hv_out_rewind(&out, 0);
+    check(hv_write_rreq(&out, &header, &standard, 0, NULL, 0) != 0 && out.error != NULL &&
+          strcmp(out.error, "Reader Requirements NSF other than the standard features given")
+          == 0 && out.size == 0, "rreq NSF against the features", out.error);
+    hv_out_rewind(&out, 0);
+    vendor.vm.nCount = 1;
+    check(hv_write_rreq(&out, &header, &standard, 1, &vendor, 1) != 0 && out.error != NULL &&
+          strcmp(out.error, "Reader Requirements masks of different lengths (ML)") == 0 &&
+          out.size == 0, "rreq masks of different lengths", out.error);
+    hv_out_free(&out);
+}
+
 /* Errors: the message, sticky until hv_out_rewind. */
 static void check_errors(void) {
     static uint8_t body[65534];
@@ -212,6 +335,15 @@ static void check_errors(void) {
     check(hv_write_plt(&out, lengths, 2) != 0 && out.error != NULL &&
           strcmp(out.error, "zero packet length") == 0, "zero packet length", out.error);
     hv_out_rewind(&out, 0);
+    check(hv_write_com(&out, 1, body, 0) != 0 && out.error != NULL &&
+          strcmp(out.error, "COM segment without text") == 0, "COM without text", out.error);
+    hv_out_rewind(&out, 0);
+    /* Lcom 65,535: its own 2 bytes, Rcom and 65,531 bytes of text. */
+    check(hv_write_com(&out, 0, body, sizeof body - 3) == 0 && out.size == 2 + 65535 &&
+          hv_write_com(&out, 0, body, sizeof body - 2) != 0 && out.error != NULL &&
+          strcmp(out.error, "marker segment longer than 65,535 bytes (Lxxx)") == 0,
+          "longest COM text, and one byte more", out.error);
+    hv_out_rewind(&out, 0);
     check(hv_end_tile_part(&out, 1) != 0 && out.error != NULL &&
           strcmp(out.error, "tile-part shorter than SOT and SOD") == 0,
           "tile-part end without a tile-part", out.error);
@@ -225,6 +357,8 @@ static void check_errors(void) {
 int main(void) {
     check_spare_capacity();
     check_xlbox();
+    check_plt_entries();
+    check_jpx_boxes();
     check_errors();
     printf(failures ? "%d failures\n" : "all checks passed\n", failures);
     return failures != 0;

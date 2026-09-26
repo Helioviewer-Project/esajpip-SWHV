@@ -27,15 +27,16 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 image=${ASN1SCC_IMAGE:-esajpip-asn1scc}
 out=$repo/lib/generated
 pdus=BoxHeader,MarkerCode,SegmentLength,SotSegment
-pdus=$pdus,SizSegment-Std,CodSegment-Std,QcdSegment-Std,PltSegment-Std,ComSegment-Std
+pdus=$pdus,CodSegment-Std,QcdSegment-Std,SizFixed,Component,Zplt,Iplt,Rcom
 # The served profile (layer 2) types the reader checks decoded values against.
-pdus=$pdus,Siz-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
+pdus=$pdus,SizFixed-Profile,Component-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
 # JPX boxes.
-pdus=$pdus,DataReferenceCount,UrlHeader,FragmentCount,Fragment,FragmentList-Profile,Rreq-Std
+pdus=$pdus,DataReferenceCount,UrlHeader,FragmentCount,Fragment
+pdus=$pdus,RreqHeader,RreqStandardFeature,RreqVendorFeature,FeatureCount
 # File Type box.
 pdus=$pdus,FtypHeader,Brand
 # JP2 header boxes, one box or entry at a time.
-pdus=$pdus,Ihdr,BitDepth,ColrHeader,PclrHeader,CmapEntry,CdefCount,CdefEntry,Resolution
+pdus=$pdus,Ihdr,BitDepth,ColrHeader,PclrCounts,CmapEntry,CdefCount,CdefEntry,Resolution
 models=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$repo/spec/modules")
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/hv-generated.XXXXXX")

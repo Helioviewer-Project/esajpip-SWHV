@@ -188,7 +188,7 @@ InnerPayload ::= CHOICE {
 -- contents left unread, so a type whose layout does not end in a deduced
 -- size ends in `extra`, the bytes after its fields, which a rule requires
 -- to be empty (<box>.extent). The bound is a corpus bound that the reader
--- inherits: it decodes Ihdr, Resolution and Rreq-Std with it, so 1 to 64
+-- inherits: it decodes Ihdr and Resolution with it, so 1 to 64
 -- bytes after the fields give <box>.extent there and more fail to decode.
 Extra ::= OCTET STRING (SIZE (0..64))                     -- corpus bound
 
@@ -234,7 +234,9 @@ Colr ::= SEQUENCE {
 }
 
 -- Palette box, I.5.3.4: NE, NPC (the count of depths), a BitDepth per
--- column, then NE x NPC entries, each padded to whole bytes (a rule).
+-- column, then NE x NPC entries, each padded to whole bytes (a rule). The
+-- reader decodes NE and NPC as jpeg2000-io.asn1's PclrCounts, then the
+-- depths one at a time.
 PclrHeader ::= SEQUENCE {
     ne          INTEGER (1..1024),
     depths      SEQUENCE (SIZE (1..255)) OF BitDepth
@@ -307,14 +309,17 @@ Resolution ::= SEQUENCE {
 RreqMask ::= OCTET STRING (SIZE (1 | 2 | 4 | 8))
 
 StandardFeature ::= SEQUENCE {
-    sf          INTEGER (0..65535),
+    sf          FeatureCode,
     sm          RreqMask
 }
 
 VendorFeature ::= SEQUENCE {
-    vf          OCTET STRING (SIZE (16)),                -- a UUID
+    vf          VendorId,
     vm          RreqMask
 }
+
+FeatureCode ::= INTEGER (0..65535)                       -- SF (Table M.14)
+VendorId ::= OCTET STRING (SIZE (16))                    -- VF, a UUID
 
 Rreq ::= SEQUENCE {
     fuam        RreqMask,
@@ -442,13 +447,14 @@ InnerPayload-Profile ::= CHOICE {
 }
 
 -- One fragment describing the complete codestream in the referenced file
--- (ReadFlstBox: box length 16, NF == 1). asn1scc refuses `size deduced`
--- on this fixed-size list, so a byte after the fragment is skipped by the
--- CONTAINING decoder at layer 2 (layer 1's FragmentList rejects it); the
--- reader rejects it too, counting whole fragments (flst.one-fragment).
+-- (ReadFlstBox: box length 16, NF == 1). NF is 1 here, and the list,
+-- `size deduced` as FragmentList's, must hold NF fragments (flst.nf-count),
+-- so the box holds exactly one fragment; a byte after it fails to decode.
+-- (A SIZE (1..1) list would be fixed-size, and asn1scc refuses `size
+-- deduced` on a fixed-size list.)
 FragmentList-Profile ::= FragmentList (WITH COMPONENTS {
-    nf (1..1),
-    fragments (SIZE (1..1))
+    ...,
+    nf (1..1)
 })
 
 -- Version-zero file:// URLs (ReadUrlBox). The 1,024-character bound on LOC

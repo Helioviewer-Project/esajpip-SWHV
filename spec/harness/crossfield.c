@@ -113,8 +113,17 @@ static uint32_t cf_header_type(const InnerBox *b) {
     }
 }
 
+/* A header box's state for hv_rules.c: hv_header, and its first bpcc's
+ * entries as bytes, where hv_rule_bpcc leaves them. */
+typedef struct {
+    hv_header h;
+    uint8_t bpcc[sizeof ((Bpcc *) 0)->depths.arr / sizeof ((Bpcc *) 0)->depths.arr[0]];
+} cf_header_state;
+
 /* One header box (jp2h, jpch or jplh), child by child (hv_rules.c). */
-static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind, hv_header *h) {
+static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind,
+                             cf_header_state *state) {
+    hv_header *h = &state->h;
     int i, j;
     const char *r;
     hv_header_init(h, parent, kind == CF_JPX);
@@ -125,16 +134,25 @@ static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind, 
             case InnerPayload_ihdr_PRESENT:
                 r = hv_rule_ihdr(h, &p->u.ihdr);
                 break;
-            case InnerPayload_bpcc_PRESENT:
-                for (j = 0; j < p->u.bpcc.depths.nCount && r == NULL; ++j)
-                    r = hv_rule_bpcc_entry(h, p->u.bpcc.depths.arr[j]);
+            case InnerPayload_bpcc_PRESENT: {
+                /* The first bpcc's entries stay in state; a later one's
+                 * (header.one-bpcc) never reach here. */
+                for (j = 0; j < p->u.bpcc.depths.nCount; ++j)
+                    state->bpcc[j] = (uint8_t) p->u.bpcc.depths.arr[j];
+                r = hv_rule_bpcc(h, state->bpcc, (size_t) p->u.bpcc.depths.nCount);
                 break;
+            }
             case InnerPayload_colr_PRESENT:
                 r = hv_rule_colr(h, &p->u.colr.header, (size_t) p->u.colr.rest.nCount);
                 break;
-            case InnerPayload_pclr_PRESENT:
-                r = hv_rule_pclr(h, &p->u.pclr.header, (uint64_t) p->u.pclr.entries.nCount);
+            case InnerPayload_pclr_PRESENT: {
+                const PclrHeader *ph = &p->u.pclr.header;
+                r = hv_rule_pclr(h, ph->ne, (uint64_t) ph->depths.nCount);
+                for (j = 0; j < ph->depths.nCount && r == NULL; ++j)
+                    r = hv_rule_pclr_column(h, ph->depths.arr[j]);
+                if (r == NULL) r = hv_rule_pclr_end(h, (uint64_t) p->u.pclr.entries.nCount);
                 break;
+            }
             case InnerPayload_cmap_PRESENT:
                 for (j = 0; j < p->u.cmap.entries.nCount && r == NULL; ++j)
                     r = hv_rule_cmap_entry(h, &p->u.cmap.entries.arr[j]);
@@ -167,7 +185,7 @@ static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind, 
  * where jp2h is, what each header box holds, and each codestream's header
  * against its SIZ (a linked codestream's SIZ is in another file). */
 static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
-    static hv_header jp2h, jpch, jplh;
+    static cf_header_state jp2h, jpch, jplh;
     const Superbox *jp2h_box = NULL;
     int i, n = 0, jp2c = 0, late = 0, codestreams = 0, headers = 0, stream = 0, jpchs = 0;
     const char *r;
@@ -201,8 +219,8 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
     if (kind == CF_JP2) {
         for (i = 0; i < file->boxes.nCount; ++i)
             if (file->boxes.arr[i].payload.kind == TopPayload_jp2c_PRESENT) break;
-        return hv_rule_codestream_header(&jp2h, NULL, &file->boxes.arr[i].payload.u.jp2c.siz.body,
-                                         0);
+        hv_siz siz = cf_siz_view(&file->boxes.arr[i].payload.u.jp2c.siz.body);
+        return hv_rule_codestream_header(&jp2h.h, NULL, &siz, 0);
     }
 
     /* JPX: codestream k has jpch k (M.11.6; the counts agree, hv_rule_jpx),
@@ -215,19 +233,23 @@ static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
     }
     for (i = 0; i < file->boxes.nCount; ++i) {
         const TopPayload *p = &file->boxes.arr[i].payload;
-        const Siz *siz;
+        hv_siz view;
+        const hv_siz *siz = NULL;
         int k, seen = 0;
         if (p->kind != TopPayload_jp2c_PRESENT && p->kind != TopPayload_ftbl_PRESENT) continue;
-        siz = p->kind == TopPayload_jp2c_PRESENT ? &p->u.jp2c.siz.body : NULL;
+        if (p->kind == TopPayload_jp2c_PRESENT) {
+            view = cf_siz_view(&p->u.jp2c.siz.body);
+            siz = &view;
+        }
         if (jpchs == 0) {
-            r = hv_rule_codestream_header(NULL, jp2h_box ? &jp2h : NULL, siz, 1);
+            r = hv_rule_codestream_header(NULL, jp2h_box ? &jp2h.h : NULL, siz, 1);
         } else {
             for (k = 0; k < file->boxes.nCount; ++k)
                 if (file->boxes.arr[k].payload.kind == TopPayload_jpch_PRESENT && seen++ == stream)
                     break;
             if ((r = cf_header(&file->boxes.arr[k].payload.u.jpch, HV_BOX_JPCH, kind, &jpch)) != NULL)
                 return r;
-            r = hv_rule_codestream_header(&jpch, jp2h_box ? &jp2h : NULL, siz, 1);
+            r = hv_rule_codestream_header(&jpch.h, jp2h_box ? &jp2h.h : NULL, siz, 1);
         }
         if (r != NULL) return r;
         stream++;

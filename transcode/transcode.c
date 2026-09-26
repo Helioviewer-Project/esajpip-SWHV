@@ -177,6 +177,7 @@ static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int 
  * packet headers. */
 static int read_packets(transcode *t) {
     const Cod *cod = hv_codestream_cod(&t->cs);
+    const hv_siz *siz = hv_codestream_siz(&t->cs);
     hv_tile_data tile = {t->buf, t->parts, t->nparts, t->zero_psot};
     size_t data = 0, i;
 
@@ -189,12 +190,11 @@ static int read_packets(transcode *t) {
         data += t->parts[i].end - t->parts[i].start;
     /* Empty components and resolutions have no packets, so the data does
      * not bound them. */
-    if ((uint64_t)hv_codestream_siz(&t->cs)->csiz * (cod->spcod.levels + 1) > MAX_RESOLUTIONS)
+    if ((uint64_t)siz->fixed->csiz * (cod->spcod.levels + 1) > MAX_RESOLUTIONS)
         return hv_fail(t->error, t->error_size,
                        "component and resolution count exceeds supported limit ("
                        MAX_RESOLUTIONS_TEXT ")");
-    if (hv_geometry_init(&t->in, hv_codestream_siz(&t->cs), cod, 0, t->error,
-                         t->error_size) != 0)
+    if (hv_geometry_init(&t->in, siz, cod, 0, t->error, t->error_size) != 0)
         return -1;
     if (more_packets(&t->in, data))
         return hv_fail(t->error, t->error_size, "packet count exceeds tile data");

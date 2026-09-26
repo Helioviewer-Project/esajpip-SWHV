@@ -235,7 +235,7 @@ typedef struct {
 typedef asn1SccUint MainMarkerCode_Profile;
 
 
-#define ERR_MAINMARKERCODE_PROFILE		2229  /*(65281..65327 | 65344..65358 | 65360 | 65362 |
+#define ERR_MAINMARKERCODE_PROFILE		2184  /*(65281..65327 | 65344..65358 | 65360 | 65362 |
                                     65364..65367 | 65369..65374 | 65378..65424 |
                                     65428..65496 | 65498..65534)*/
 flag MainMarkerCode_Profile_IsConstraintValid(const MainMarkerCode_Profile* pVal, int* pErrCode);
@@ -245,16 +245,16 @@ void MainMarkerCode_Profile_Initialize(MainMarkerCode_Profile* pVal);
 #define MainMarkerCode_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define MainMarkerCode_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_MAINMARKERCODE_PROFILE		2232  /**/
+#define ERR_ACN_ENCODE_MAINMARKERCODE_PROFILE		2187  /**/
 
 flag MainMarkerCode_Profile_ACN_Encode(const MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_MAINMARKERCODE_PROFILE		2233  /**/
+#define ERR_ACN_DECODE_MAINMARKERCODE_PROFILE		2188  /**/
 flag MainMarkerCode_Profile_ACN_Decode(MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef asn1SccUint TileMarkerCode_Profile;
 
 
-#define ERR_TILEMARKERCODE_PROFILE		2234  /*(65368..65368)*/
+#define ERR_TILEMARKERCODE_PROFILE		2189  /*(65368..65368)*/
 flag TileMarkerCode_Profile_IsConstraintValid(const TileMarkerCode_Profile* pVal, int* pErrCode);
 
 void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal);
@@ -262,11 +262,11 @@ void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal);
 #define TileMarkerCode_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define TileMarkerCode_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_TILEMARKERCODE_PROFILE		2237  /**/
+#define ERR_ACN_ENCODE_TILEMARKERCODE_PROFILE		2192  /**/
 
 flag TileMarkerCode_Profile_ACN_Encode(const TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_TILEMARKERCODE_PROFILE		2238  /**/
+#define ERR_ACN_DECODE_TILEMARKERCODE_PROFILE		2193  /**/
 flag TileMarkerCode_Profile_ACN_Decode(TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- TileSegment_Profile --------------------------------------------*/
 typedef struct {

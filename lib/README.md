@@ -10,16 +10,16 @@ header and records where each payload starts and ends.
 
 | File | Role |
 | --- | --- |
-| `hv_reader.h` / `.c` | Steps through a file in memory: boxes (T.800 I.4) and codestream items (Annex A). Checks framing and decodes marker segments with the generated code, which also gives the bytes a variable-size field takes (`DECODE_USED`). Never copies a payload. |
+| `hv_reader.h` / `.c` | Steps through a file in memory: boxes (T.800 I.4) and codestream items (Annex A). Checks framing and decodes marker segments with the generated code, which also gives the bytes a variable-size field takes (`DECODE_USED`), one element at a time (see below). Never copies a payload. A codestream item carries the decoded segment: SIZ as `hv_siz` (`SizFixed` and its `Component`s), COD and QCD as `CodSegment_Std` and `QcdSegment_Std`, PLT as `hv_plt` (Zplt and where its entries are, read with `hv_plt_next`), COM as `hv_com` (Rcom and its text, in place). |
 | `hv_codes.h` | The marker codes, box types and brands the code refers to, the box header sizes, `HV_LARGEST(T)`, the size of a generated type's largest encoding (its `_REQUIRED_BYTES_FOR_ACN_ENCODING`), and `HV_FIXED(T)`, the same for a fixed-size type: used instead of hand-counted layout sizes. |
 | `hv_rules.h` / `.c` | The model's cross-field rules, for both layers: on marker segment bodies (SIZ, COD, the tile-parts, the PLT entries and the packet count), the JPX boxes, and the JP2 header boxes (standard layer), and the profile's limit of 64 tile-parts. The corpus harness (`../spec/harness/crossfield_impl.h`, `crossfield.c`) uses the same code, so the reader applies the rules the corpus labels come from. A check returns a rule name or NULL, nothing else, and does not allocate; `hv_rule_tiles` and `hv_rule_packets` are the two counts, not checks. |
 | `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC; at most 2,147,483,647 packets. |
-| `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box (`Rreq-Std`), with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65,535), once per tile-part. The buffer's spare capacity is kept zero, because the generated encoders skip zero bits: an append clears nothing, and `hv_out_rewind` zeroes what it drops. |
+| `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box, with the generated encoders into a growing buffer, one element at a time. Measures every length it fills in: Lxxx when a SIZ, PLT, COM or opaque segment ends, Psot when a tile-part ends, LBox/XLBox when a box ends (switching a box to XLBox if it outgrows LBox). Splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65,535), once per tile-part. Each encoder runs with room for its type's largest encoding, at most 197 bytes (`QcdSegment_Std`), because the generated encoders do not check the room. The buffer's spare capacity is kept zero, because the generated encoders skip zero bits (`BitStream_AppendNBitZero` only moves on): an append clears nothing, and `hv_out_rewind` zeroes what it drops. An `Iplt` is encoded after a guard byte: the generated `Iplt_ACN_Encode` writes a 0 bit at the start of its stream for each absent byte's `more` determinant, which would clear the `more` bit of an entry of 2 to 8 bytes. |
 | `hv_error.h` / `.c` | `hv_fail`: formats an error message into the caller's buffer and returns -1, for `hv_geometry` and the tools. |
 | `hv_served.h` / `.c` | The served profile's checks of a whole file on disk (`hv_check_served`), the files a JPX file links to included, and the file reader they use: shared by `hv_walk -P` and `test_profile`. |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
 | `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file: `valid`, `invalid` with the error and its offset, `differs` when `-w` rewrote a valid file differently, `ERROR` when it cannot be read. `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (`-p` with `-P` is a usage error), `-P` checks the served profile (`hv_check_served`: a `.jpx` with its linked files, whose codestreams it counts as linked), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. A file is JPX when its name ends in `.jpx` in any case (the server picks the format by the extension), and JP2 otherwise; without `-P` and `-H` a file that starts with SOC is read as a raw codestream, while `-P` and `-H` fail it with `file.signature`. |
-| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's checks of the served profile (`hv_check_served`) exactly when the manifest labels it profile-valid. The header box checks (`hv_check_jp2h`, `hv_check_jpx_headers`) are held to a contract taken from the manifest's labels and their own answers, not from vector names: they accept every standard-valid vector; a vector they reject is standard-invalid by the rule they name (any error for reason `decode`); a rule they name for one vector they name for every vector with that reason; and they reject every standard-invalid, profile-valid vector except the two profile leniencies they do not read, which the test lists (PLT padding, `asoc` contents). Also unit checks the corpus cannot reach (URL decoding, `cdef` pairs, accessors, error offsets). `test_writer`: `hv_writer.c` compiled with `HV_LBOX_MAX` 100, for the XLBox switch, the zeroed spare capacity and the error messages, read back with the reader. `run.sh` builds and runs them with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
+| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's checks of the served profile (`hv_check_served`) exactly when the manifest labels it profile-valid. The header box checks (`hv_check_jp2h`, `hv_check_jpx_headers`) are held to a contract taken from the manifest's labels and their own answers, not from vector names: they accept every standard-valid vector; a vector they reject is standard-invalid by the rule they name (any error for reason `decode`); a rule they name for one vector they name for every vector with that reason; and they reject every standard-invalid, profile-valid vector except the two profile leniencies they do not read, which the test lists (PLT padding, `asoc` contents). Also unit checks the corpus cannot reach (URL decoding, `cdef` pairs, accessors and items, `hv_plt_next` on entries of ten bytes, truncated, of eleven bytes or above 64 bits, error offsets). `test_writer`: `hv_writer.c` compiled with `HV_LBOX_MAX` 100, for the XLBox switch, the zeroed spare capacity, the measured Lxxx (SIZ, COM, the PLT split at Lplt 65,535), PLT entries of 1 to 10 bytes, the `flst`, `url` and `rreq` boxes byte for byte, and the error messages, read back with the reader. `run.sh` builds and runs them with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types its `pdus` list names (those of `../spec/jpeg2000-io.asn1`, the served-profile types the reader checks against, `Fragment`, and the JP2 header box types) and what they use. A type the code here needs that none of them uses must be added to `pdus`. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it (`../spec/check-model.sh` runs it so). |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TOOL_TESTS`. |
@@ -50,6 +50,78 @@ every local patch that `../spec/asn1scc-patches/series` lists, in order
 `-icdPdus` does not link, and without `0001-deferred-determinant-uninit`
 the PLT decoder reads an uninitialized flag on truncated input.
 
+## One element at a time
+
+No code here holds a list as a generated struct at the standard's bound.
+The types of `../spec/jpeg2000-io.asn1` are small: a fixed part or one
+element of a list, or a whole COD or QCD segment, which are small enough
+(at most 45 and 197 bytes) to decode in one piece. The reader decodes a
+list element by element up to the end its segment or box length gives:
+
+- SIZ: `SizFixed`, then `Component`s to the end of the segment, as many as
+  a Csiz can count (else `invalid SIZ`), into an array allocated for them;
+  `siz.csiz-count` compares Csiz with the number decoded. In the profile,
+  after the named rules, `SizFixed-Profile` and `Component-Profile`, the
+  two parts of `Siz-Profile`.
+- PLT: `Zplt`, then `Iplt` entries to the end of the segment, all decoded
+  (`invalid PLT`) before the rules: `plt.zplt-sequence`, then each entry
+  (`plt.value-overflow`, the padding rules), then `plt.coverage` at SOD.
+  The entries stay in the caller's buffer; `hv_plt_next` reads them.
+- COM: `Rcom`, then at least one byte of text, which stays in place.
+- `rreq`: `RreqHeader` (ML, FUAM, DCM, NSF), NSF `RreqStandardFeature`s,
+  NVF (`FeatureCount`), NVF `RreqVendorFeature`s, each feature handed
+  exactly its code and ML bytes, and `rreq.extent` for bytes after them.
+- `flst`: NF (`FragmentCount`), then the `Fragment`s, one at a time.
+
+The writer encodes the same elements one at a time and never takes a
+length from a type's size: it measures what it wrote (a segment's Lxxx,
+Psot, LBox). `HV_FIXED(T)` appears only for fixed-size types (a marker
+code, Lxxx, SOT, `Component`, `Fragment`, a feature's code); wherever a
+measured length works, the reader uses `DECODE_USED` instead.
+
+`hv_siz` is SIZ as the rules and the geometry take it, however it was
+decoded: the reader points it at its `SizFixed` and component array, the
+corpus harness at the whole-file model's `Siz`
+(`{&siz.fixed, siz.components.arr, nCount}`).
+
+## Struct sizes
+
+asn1scc 4.9.3.0, C, 64-bit: the C struct and the largest encoding of each
+type the reader and writer decode or encode.
+
+| Type | struct (bytes) | largest encoding (bytes) |
+| --- | ---: | ---: |
+| `BoxHeader` | 32 | 16 |
+| `FtypHeader` | 16 | 8 |
+| `SotSegment` | 40 | 10 |
+| `SizFixed` | 80 | 36 |
+| `Component` | 32 | 3 |
+| `CodSegment_Std` | 616 | 45 |
+| `QcdSegment_Std` | 208 | 197 |
+| `Zplt` | 8 | 1 |
+| `Iplt` | 88 | 10 |
+| `Rcom` | 8 | 2 |
+| `UrlHeader` | 16 | 4 |
+| `RreqHeader` | 32 | 19 |
+| `RreqStandardFeature` | 24 | 10 |
+| `RreqVendorFeature` | 28 | 24 |
+| `Fragment` | 24 | 14 |
+| `Ihdr` | 128 | 78 |
+| `ColrHeader` | 40 | 7 |
+| `PclrCounts` | 16 | 3 |
+| `CmapEntry` | 24 | 4 |
+| `CdefEntry` | 24 | 6 |
+| `Resolution` | 120 | 74 |
+
+`MarkerCode`, `SegmentLength`, `DataReferenceCount`, `FeatureCount`,
+`FragmentCount`, `BitDepth` and `CdefCount` are 8-byte integers.
+`hv_codestream` is 2,000 bytes; it allocates only SIZ's components (32 bytes
+each, at most 16,384: more is `invalid SIZ`) and the per-tile tile-part
+counts. `hv_header`, for the header
+box checks, is 256 bytes: of a `bpcc` box it keeps where the entries are
+(`hv_rule_bpcc`), which the file's buffer holds until the codestream's
+header is checked.
+
 ## What the reader checks
 
 - Boxes: LBox, and XLBox when LBox = 1, within the container; LBox = 0 only
@@ -62,9 +134,10 @@ the PLT decoder reads an uninitialized flag on truncated input.
   The accessors give the main header's SIZ, COD and QCD bodies once read,
   and NULL before, for a segment the reader rejected, and after
   `hv_codestream_close`.
-- Bodies, by the generated decoders: SIZ, COD, QCD, PLT and COM at the
-  standard's bounds, plus the model's cross-field rules (`hv_rules.c`):
-  SIZ, COD, zero packet lengths, and PLT sums against the tile-part data.
+- Bodies, by the generated decoders: COD and QCD whole, SIZ, PLT and COM
+  one element at a time (above), plus the model's cross-field rules
+  (`hv_rules.c`): SIZ, COD, zero packet lengths, and PLT sums against the
+  tile-part data.
 - `HV_ACCEPT_PLT_PADDING` (`hv_walk -p`) accepts zero PLT entries after the
   last packet of each tile-part. T.800 does not allow them, but deployed
   files carry them: every one of 4,014 EUI files checked has them. A
@@ -121,7 +194,7 @@ the PLT decoder reads an uninitialized flag on truncated input.
   `flst` per `ftbl`, in a JP2 file too;
   the children of `jp2h`, `jpch` and `jplh`, decoded one box or entry at a
   time with the model's types (`Ihdr`, `BitDepth`, `ColrHeader`,
-  `PclrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) and
+  `PclrCounts`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) and
   checked by the header rules of `hv_rules.c`; and each codestream's
   header (for a JPX file its `jpch` over the `jp2h` defaults) against its
   SIZ, where the codestream is embedded. A rule comparing boxes points at the
@@ -130,14 +203,14 @@ the PLT decoder reads an uninitialized flag on truncated input.
   file also the count rules of `hv_rule_jpx` at the standard layer (the
   Reader Requirements box, one and the third; at most one `dtbl`; a
   codestream per `jpch`), at most one `jp2h` (`jpx.one-jp2h`, T.801
-  M.11.5), and the Reader Requirements box's contents, decoded with
-  `Rreq-Std` (the model's `Rreq` at the standard's bounds, about 3.4 MB,
-  allocated per check). The top-level boxes are read a fixed number of
+  M.11.5), and the Reader Requirements box's contents, decoded one part
+  at a time (above). The top-level boxes are read a fixed number of
   times, whatever the number of codestreams. `hv_transcode` and
   `hv_merge` require `hv_check_jp2h` of their inputs.
 - Bytes after the fields of `ihdr`, `resc`, `resd`, `cdef` and `rreq` are
   `<box>.extent` however many there are: the reader counts those of
-  `cdef`, and decodes the other types from at most their largest encoding.
+  `cdef` and `rreq`, and decodes the other types from at most their
+  largest encoding.
   The model's `Extra` holds 64 bytes (a corpus bound), so the harness
   labels a box with more `decode`.
 

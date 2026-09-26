@@ -4,16 +4,17 @@
 #include <stddef.h>
 #include <string.h>
 
-const char *hv_rule_siz(const Siz *s, const Sgcod *sgcod, int profile) {
-    int i;
-    if ((int)s->csiz != s->components.nCount) return "siz.csiz-count";
+const char *hv_rule_siz(const hv_siz *siz, const Sgcod *sgcod, int profile) {
+    const SizFixed *s = siz->fixed;
+    const Component *k = siz->components;
+    size_t i;
+    if (s->csiz != siz->ncomponents) return "siz.csiz-count";
     if (!(s->xosiz < s->xsiz && s->yosiz < s->ysiz)) return "siz.origin-inside";
     if (!(s->xtosiz <= s->xosiz && s->ytosiz <= s->yosiz)) return "siz.tile-origin";
     if (!(s->xtosiz + s->xtsiz > s->xosiz && s->ytosiz + s->ytsiz > s->yosiz))
         return "siz.tile-covers-origin";
     if (sgcod != NULL && sgcod->mct != 0) {
-        const Component *k = s->components.arr;
-        if (s->components.nCount < 3) return "siz.mct-components";
+        if (siz->ncomponents < 3) return "siz.mct-components";
         for (i = 1; i < 3; i++)
             if (k[i].depthMinus1 != k[0].depthMinus1 || k[i].xrsiz != k[0].xrsiz ||
                 k[i].yrsiz != k[0].yrsiz)
@@ -22,8 +23,8 @@ const char *hv_rule_siz(const Siz *s, const Sgcod *sgcod, int profile) {
     if (profile) {
         if (s->xosiz != 0 || s->yosiz != 0 || s->xtosiz != 0 || s->ytosiz != 0)
             return "siz.zero-origin";
-        for (i = 0; i < s->components.nCount; i++)
-            if (s->components.arr[i].xrsiz != 1 || s->components.arr[i].yrsiz != 1)
+        for (i = 0; i < siz->ncomponents; i++)
+            if (k[i].xrsiz != 1 || k[i].yrsiz != 1)
                 return "siz.component-sampling";
         if (!(s->xtsiz >= s->xsiz && s->ytsiz >= s->ysiz)) return "siz.single-tile";
     }
@@ -42,7 +43,8 @@ const char *hv_rule_cod(const Scod *scod, const Spcod *spcod, int profile) {
     return NULL;
 }
 
-uint32_t hv_rule_tiles(const Siz *s) {
+uint32_t hv_rule_tiles(const hv_siz *siz) {
+    const SizFixed *s = siz->fixed;
     uint64_t nx, ny;
     if (s->xsiz <= s->xtosiz || s->ysiz <= s->ytosiz || s->xtsiz == 0 || s->ytsiz == 0)
         return 0;
@@ -99,7 +101,8 @@ const char *hv_rule_plt_entry(hv_plt_count *count, uint64_t value, int profile) 
     return NULL;
 }
 
-uint64_t hv_rule_packets(const Siz *s, const Sgcod *sgcod, const Spcod *spcod) {
+uint64_t hv_rule_packets(const hv_siz *siz, const Sgcod *sgcod, const Spcod *spcod) {
+    const SizFixed *s = siz->fixed;
     uint64_t total = 0;
     int levels = (int)spcod->levels, r;
     for (r = 0; r <= levels; r++) {
@@ -122,7 +125,7 @@ uint64_t hv_rule_packets(const Siz *s, const Sgcod *sgcod, const Spcod *spcod) {
     return total > 2147483647u ? 0 : total;
 }
 
-const char *hv_rule_plt_packets(const hv_plt_count *count, const Siz *siz,
+const char *hv_rule_plt_packets(const hv_plt_count *count, const hv_siz *siz,
                                 const Sgcod *sgcod, const Spcod *spcod, int profile) {
     uint64_t packets = hv_rule_packets(siz, sgcod, spcod);
     if (packets == 0)
@@ -223,9 +226,8 @@ const char *hv_rule_jp2h_place(int jp2h, int late, int jp2c, int jpx) {
     return NULL;
 }
 
-/* bpcc_depth is left as it is: only its first bpcc_count entries are read. */
 void hv_header_init(hv_header *h, uint32_t parent, int jpx) {
-    memset(h, 0, offsetof(hv_header, bpcc_depth));
+    memset(h, 0, sizeof *h);
     h->parent = parent;
     h->jpx = jpx;
 }
@@ -269,10 +271,10 @@ const char *hv_rule_ihdr(hv_header *h, const Ihdr *ihdr) {
     return hv_rule_extent(HV_BOX_IHDR, (uint64_t)ihdr->extra.nCount);
 }
 
-const char *hv_rule_bpcc_entry(hv_header *h, uint64_t depth) {
+const char *hv_rule_bpcc(hv_header *h, const uint8_t *depths, size_t n) {
     if (h->bpcc != 1) return NULL;
-    if (h->bpcc_count < sizeof h->bpcc_depth) h->bpcc_depth[h->bpcc_count] = (uint8_t)depth;
-    if (h->bpcc_count < UINT32_MAX) h->bpcc_count++;
+    h->bpcc_depths = depths;
+    h->bpcc_count = n;
     return NULL;
 }
 
@@ -292,14 +294,20 @@ const char *hv_rule_colr(hv_header *h, const ColrHeader *colr, size_t rest) {
     return NULL;
 }
 
-const char *hv_rule_pclr(hv_header *h, const PclrHeader *pclr, uint64_t entries) {
-    uint64_t bytes = 0;
-    int i;
-    for (i = 0; i < pclr->depths.nCount; i++)
-        bytes += ((pclr->depths.arr[i] & 0x7F) + 1 + 7) / 8;
-    if (entries != bytes * pclr->ne) return "pclr.entries-length";
-    if (h->pclr == 1) h->npc = (uint32_t)pclr->depths.nCount;
+const char *hv_rule_pclr(hv_header *h, uint64_t ne, uint64_t npc) {
+    h->pclr_ne = ne;
+    h->pclr_bytes = 0;
+    if (h->pclr == 1) h->npc = (uint32_t)npc;
     return NULL;
+}
+
+const char *hv_rule_pclr_column(hv_header *h, uint64_t depth) {
+    h->pclr_bytes += ((depth & 0x7F) + 1 + 7) / 8;
+    return NULL;
+}
+
+const char *hv_rule_pclr_end(hv_header *h, uint64_t entries) {
+    return entries != h->pclr_bytes * h->pclr_ne ? "pclr.entries-length" : NULL;
 }
 
 const char *hv_rule_cmap_entry(hv_header *h, const CmapEntry *entry) {
@@ -349,11 +357,13 @@ static const hv_header *pick(const hv_header *h, const hv_header *d, int present
     return present_h ? h : present_d ? d : NULL;
 }
 
-const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, const Siz *siz,
+const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, const hv_siz *siz,
                                       int jpx) {
     static const hv_header none;
     const hv_header *ihdr, *bpcc, *pclr, *cmap;
-    int i, same = 1;
+    const SizFixed *s;
+    size_t i;
+    int same = 1;
     uint64_t nc, ssiz0 = 0;
 
     if (h == NULL) h = &none;
@@ -384,16 +394,17 @@ const char *hv_rule_codestream_header(const hv_header *h, const hv_header *d, co
         return "cdef.channel";
 
     if (siz == NULL) return NULL;
-    if (ihdr->image.height != siz->ysiz - siz->yosiz) return "ihdr.height";
-    if (ihdr->image.width != siz->xsiz - siz->xosiz) return "ihdr.width";
-    if (nc != siz->csiz) return "ihdr.nc";
-    for (i = 0; i < siz->components.nCount; i++) {
-        const Component *k = &siz->components.arr[i];
+    s = siz->fixed;
+    if (ihdr->image.height != s->ysiz - s->yosiz) return "ihdr.height";
+    if (ihdr->image.width != s->xsiz - s->xosiz) return "ihdr.width";
+    if (nc != s->csiz) return "ihdr.nc";
+    for (i = 0; i < siz->ncomponents; i++) {
+        const Component *k = &siz->components[i];
         uint64_t ssiz = k->depthMinus1 | (uint64_t)k->isSigned << 7;
         if (i == 0) ssiz0 = ssiz;
         same &= ssiz == ssiz0;
-        if (bpcc != NULL && ihdr->image.bpc == 255 && (size_t)i < sizeof bpcc->bpcc_depth &&
-            bpcc->bpcc_depth[i] != ssiz)
+        if (bpcc != NULL && ihdr->image.bpc == 255 && i < bpcc->bpcc_count &&
+            bpcc->bpcc_depths[i] != ssiz)
             return "bpcc.depth";
     }
     if (ihdr->image.bpc != (same ? ssiz0 : 255)) return "ihdr.bpc";

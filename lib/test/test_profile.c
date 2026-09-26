@@ -387,8 +387,9 @@ static void check_codestream_lifetime(const char *dir) {
     hv_codestream cs;
     hv_item item;
     hv_box jp2c;
-    size_t at;
-    int status, sot_ok = 1;
+    size_t at, data = 0, plts = 0;
+    uint64_t plt_sum = 0;
+    int status, sot_ok = 1, siz_ok = 0, plt_ok = 1;
 
     /* start after end: refused, and nothing to read. */
     check(hv_codestream_open(&cs, (const uint8_t *)"", 1, 0, 0) != 0 && cs.error != NULL &&
@@ -409,15 +410,61 @@ static void check_codestream_lifetime(const char *dir) {
         int tile = item.kind == HV_TILE_PART || item.kind == HV_TILE_SEGMENT ||
                    item.kind == HV_TILE_DATA;
         sot_ok &= tile ? item.sot.lsot != 0 : item.sot.lsot == 0 && item.sot.psot == 0;
+        if (item.siz != NULL)
+            siz_ok = item.siz == hv_codestream_siz(&cs) &&
+                     item.siz->ncomponents == item.siz->fixed->csiz;
+        if (item.plt != NULL) {
+            /* The entries, in place after Zplt, to the end of the segment. */
+            size_t pos = item.plt->start;
+            uint64_t v;
+            while (hv_plt_next(buf, &pos, item.plt->end, &v) == 1)
+                plt_sum += v;
+            plts++;
+            plt_ok &= pos == item.end && item.plt->end == item.end &&
+                      item.plt->start == item.start + 5;
+        }
+        if (item.kind == HV_TILE_DATA)
+            data += item.end - item.start;
     }
     check(status == 0, "jp2.jp2 reads through", cs.error);
     check(sot_ok, "hv_item.sot only on tile-part items", NULL);
+    check(siz_ok, "hv_item.siz: the accessor's, with Csiz components", NULL);
+    check(plts > 0 && plt_ok && plt_sum == data, "hv_item.plt: the entries cover the data",
+          NULL);
     check(hv_codestream_cod(&cs) != NULL && hv_codestream_qcd(&cs) != NULL,
           "COD and QCD accessors after the main header", NULL);
     hv_codestream_close(&cs);
     check(hv_codestream_siz(&cs) == NULL && hv_codestream_cod(&cs) == NULL &&
           hv_codestream_qcd(&cs) == NULL, "accessors after close", NULL);
     free(buf);
+}
+
+/* hv_plt_next on entries the corpus does not hold: the end, a value in
+ * ten bytes, and the entries it refuses (truncated, eleven bytes, above
+ * 64 bits), which leave *pos where it was. */
+static void check_plt_next(void) {
+    static const uint8_t two[] = {0x81, 0x00};
+    static const uint8_t truncated[] = {0x81};
+    static const uint8_t top[] = {0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00};
+    static const uint8_t over[] = {0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00};
+    static const uint8_t eleven[] = {0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+                                     0x81, 0x00};
+    size_t pos = 0;
+    uint64_t v = 0;
+
+    check(hv_plt_next(two, &pos, sizeof two, &v) == 1 && v == 128 && pos == 2 &&
+          hv_plt_next(two, &pos, sizeof two, &v) == 0 && pos == 2, "PLT entry of two bytes",
+          NULL);
+    pos = 0;
+    check(hv_plt_next(top, &pos, sizeof top, &v) == 1 && v == (uint64_t)1 << 63 &&
+          pos == sizeof top, "PLT entry of 2^63 in ten bytes", NULL);
+    pos = 0;
+    check(hv_plt_next(truncated, &pos, sizeof truncated, &v) == -1 && pos == 0,
+          "truncated PLT entry", NULL);
+    check(hv_plt_next(over, &pos, sizeof over, &v) == -1 && pos == 0,
+          "PLT entry above 64 bits", NULL);
+    check(hv_plt_next(eleven, &pos, sizeof eleven, &v) == -1 && pos == 0,
+          "PLT entry of eleven bytes", NULL);
 }
 
 static void check_link_paths(void) {
@@ -572,6 +619,7 @@ int main(int argc, char **argv) {
     check_offsets(argv[1]);
     check_second_jp2h(argv[1]);
     check_codestream_lifetime(argv[1]);
+    check_plt_next();
     check_link_paths();
     check_url_rule();
     check_long_url();

@@ -79,7 +79,6 @@ static int flush_plt(walk_result *r) {
 static int rewrite_item(const uint8_t *buf, const hv_item *item, walk_result *r,
                         size_t *tp_start) {
     hv_out *out = &r->out;
-    int i;
 
     if (item->kind != HV_TILE_SEGMENT || item->plt == NULL)
         if (flush_plt(r) != 0)
@@ -106,16 +105,19 @@ static int rewrite_item(const uint8_t *buf, const hv_item *item, walk_result *r,
         if (item->qcd)
             return hv_write_qcd(out, item->qcd);
         if (item->com)
-            return hv_write_com(out, item->com);
+            return hv_write_com(out, item->com->rcom, item->com->text, item->com->size);
         if (item->plt) {
-            for (i = 0; i < item->plt->body.entries.nCount; i++) {
-                uint64_t v = hv_iplt_value(&item->plt->body.entries.arr[i]);
+            /* The reader has checked every entry: hv_plt_next ends with 0. */
+            size_t pos = item->plt->start;
+            uint64_t v;
+            int more;
+            while ((more = hv_plt_next(buf, &pos, item->plt->end, &v)) == 1) {
                 if (v == 0)
                     r->uncomparable = "zero PLT entries are dropped";
                 else if (add_length(r, v) != 0)
                     return -1;
             }
-            return 0;
+            return more;
         }
         if (item->end - item->start == MARKER)
             return hv_write_marker(out, item->code);

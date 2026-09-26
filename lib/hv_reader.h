@@ -5,7 +5,11 @@
  * segment, tile-part and block of tile-part data starts and ends, and it
  * checks the framing rules of T.800 Annex A and I.4 on the way. Marker
  * segment bodies (SIZ, COD, QCD, PLT, COM) are decoded and checked by the
- * generated code; the decoded SIZ, COD and QCD stay available.
+ * generated code, COD and QCD whole, SIZ, PLT and COM one element at a
+ * time up to the end Lxxx gives; the decoded SIZ, COD and QCD stay
+ * available. A list is never held in a struct at the standard's bound:
+ * SIZ's components are allocated as many as the segment holds, and PLT
+ * entries and COM text stay in the caller's buffer.
  *
  * Offsets are byte offsets into the caller's buffer.
  *
@@ -137,7 +141,8 @@ const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, 
  * hv_check_jpx_headers, for a JPX file: the count rules of hv_rule_jpx at
  * the standard layer (one Reader Requirements box, the third box; at most
  * one dtbl; a codestream per jpch), the Reader Requirements box's contents
- * decoded with Rreq-Std; at most one jp2h, before the first codestream or
+ * decoded one part at a time (RreqHeader, the features, NVF) and nothing
+ * after them (rreq.extent); at most one jp2h, before the first codestream or
  * header box; the children of jp2h, jplh and jpch; and each codestream's
  * header (its jpch over jp2h's defaults, T.801 M.11.6) against its SIZ
  * where the codestream is embedded.
@@ -163,6 +168,27 @@ typedef enum {
     HV_END                  /* EOC: start = its code, end = end of the codestream */
 } hv_item_kind;
 
+/* A PLT segment: Zplt, and its Iplt entries, which stay in the caller's
+ * buffer at [start, end) and are read with hv_plt_next. The reader has
+ * checked them all by the time it reports the segment. */
+typedef struct {
+    Zplt zplt;
+    size_t start, end;      /* Iplt entries in buf[start, end) */
+} hv_plt;
+
+/* The next Iplt entry of buf[*pos, end): 1 with its value in *value and
+ * *pos past it; 0 at end (*pos == end); -1 for an entry that does not
+ * decode as Iplt within end or whose value does not fit 64 bits
+ * (plt.value-overflow), *pos unchanged. */
+int hv_plt_next(const uint8_t *buf, size_t *pos, size_t end, uint64_t *value);
+
+/* A COM segment: Rcom, and its text, in place in the caller's buffer. */
+typedef struct {
+    Rcom rcom;
+    const uint8_t *text;
+    size_t size;
+} hv_com;
+
 /* hv_codestream_next clears every field it does not set. */
 typedef struct {
     hv_item_kind kind;
@@ -172,14 +198,15 @@ typedef struct {
                              * current tile-part's SOT; zero otherwise */
     uint32_t plt_padding;   /* HV_TILE_DATA: trailing zero PLT entries accepted */
     /* A decoded SIZ, COD, QCD, PLT or COM segment, NULL otherwise, in the
-     * form hv_writer's hv_write_* take (the accessors below give the
-     * bodies, the form hv_rules and hv_geometry take). Valid until the next
-     * hv_codestream_next call. */
-    const SizSegment_Std *siz;
+     * form hv_writer's hv_write_* take (for PLT, the entries through
+     * hv_plt_next; the accessors below give the COD and QCD bodies, the
+     * form hv_rules and hv_geometry take). Valid until the next
+     * hv_codestream_next call; siz as long as hv_codestream_siz. */
+    const hv_siz *siz;
     const CodSegment_Std *cod;
     const QcdSegment_Std *qcd;
-    const PltSegment_Std *plt;
-    const ComSegment_Std *com;
+    const hv_plt *plt;
+    const hv_com *com;
 } hv_item;
 
 /* hv_codestream_open flags. Without HV_PROFILE_HEADERS or HV_PROFILE, the
@@ -226,13 +253,15 @@ typedef struct {
     unsigned flags;
     int state;
     size_t siz_end;         /* just past the SIZ segment */
-    SizSegment_Std *siz;    /* decoded SIZ (large, allocated) */
+    SizFixed siz_fixed;     /* decoded SIZ: its fixed part, */
+    Component *components;  /* its components (allocated), */
+    hv_siz siz;             /* and the two as hv_rules takes them */
     CodSegment_Std cod;     /* decoded main-header COD */
     CodSegment_Std tile_cod;/* decoded tile-part COD */
     QcdSegment_Std qcd;     /* decoded main-header QCD */
     QcdSegment_Std tile_qcd;/* decoded tile-part QCD */
-    ComSegment_Std *com;    /* last decoded COM (64 KiB, allocated) */
-    PltSegment_Std *plt;    /* last decoded PLT (large, allocated) */
+    hv_com com;             /* last decoded COM */
+    hv_plt plt;             /* last decoded PLT */
     uint32_t tiles;         /* tiles Isot can address: min(grid, 65,535) */
     int cods, qcds, tile_parts;
     uint16_t *parts;        /* tile-parts seen, per tile */
@@ -267,16 +296,12 @@ void hv_codestream_close(hv_codestream *cs);
 const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,
                                 size_t *at);
 
-/* The value of one PLT entry (7-bit groups, most significant first);
- * saturates at UINT64_MAX. */
-uint64_t hv_iplt_value(const Iplt *entry);
-
-/* The bodies of the main header's SIZ once hv_codestream_open has
- * succeeded, and of its COD and QCD once the reader has reported them:
- * NULL before, for a segment the reader rejected, and after
+/* The main header's SIZ once hv_codestream_open has succeeded (NULL until
+ * SIZ is accepted), and the bodies of its COD and QCD once the reader has
+ * reported them: NULL before, for a segment the reader rejected, and after
  * hv_codestream_close. hv_rules and hv_geometry take these; the items
- * give the whole segments, for hv_writer. */
-const Siz *hv_codestream_siz(const hv_codestream *cs);
+ * give the whole COD and QCD segments, for hv_writer. */
+const hv_siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
 const Qcd_Std *hv_codestream_qcd(const hv_codestream *cs);
 

@@ -2,7 +2,7 @@
 #include "hv_reader.h"
 
 #include "j2k-codestream.h"   /* MainMarkerCode-Profile, TileMarkerCode-Profile */
-#include "jp2-boxes.h"        /* FragmentList-Profile, the JP2 header boxes */
+#include "jp2-boxes.h"        /* Fragment, the JP2 header boxes */
 
 #include <limits.h>
 #include <stdlib.h>
@@ -41,26 +41,31 @@ DEFINE_DECODE(BoxHeader)
 DEFINE_DECODE(MarkerCode)
 DEFINE_DECODE(SegmentLength)
 DEFINE_DECODE(SotSegment)
-DEFINE_DECODE(SizSegment_Std)
+DEFINE_DECODE(SizFixed)
+DEFINE_DECODE(Component)
 DEFINE_DECODE(CodSegment_Std)
 DEFINE_DECODE(QcdSegment_Std)
-DEFINE_DECODE(PltSegment_Std)
-DEFINE_DECODE(ComSegment_Std)
+DEFINE_DECODE(Zplt)
+DEFINE_DECODE(Iplt)
+DEFINE_DECODE(Rcom)
 DEFINE_DECODE(DataReferenceCount)
 DEFINE_DECODE(UrlHeader)
 DEFINE_DECODE(FragmentCount)
-DEFINE_DECODE(FragmentList_Profile)
+DEFINE_DECODE(Fragment)
 DEFINE_DECODE(FtypHeader)
 DEFINE_DECODE(Brand)
 DEFINE_DECODE(Ihdr)
 DEFINE_DECODE(BitDepth)
 DEFINE_DECODE(ColrHeader)
-DEFINE_DECODE(PclrHeader)
+DEFINE_DECODE(PclrCounts)
 DEFINE_DECODE(CmapEntry)
 DEFINE_DECODE(CdefCount)
 DEFINE_DECODE(CdefEntry)
 DEFINE_DECODE(Resolution)
-DEFINE_DECODE(Rreq_Std)
+DEFINE_DECODE(RreqHeader)
+DEFINE_DECODE(RreqStandardFeature)
+DEFINE_DECODE(FeatureCount)
+DEFINE_DECODE(RreqVendorFeature)
 
 /* hv_codes.h's box header sizes are the model's. */
 _Static_assert(HV_LARGEST(BoxHeader) == HV_BOX_HEADER_XL, "BoxHeader is LBox, TBox, XLBox");
@@ -267,26 +272,32 @@ static const char *check_url(const uint8_t *buf, const hv_box *box, hv_link *url
 
 /* One flst box of an ftbl: its fragment recorded in link. */
 static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *link) {
-    FragmentList_Profile f;
+    Fragment f;
     FragmentCount nf = 0;
     const char *error;
-    size_t n = box->end - box->payload, used = n;
+    size_t n = box->end - box->payload, used = n, p;
     int fragments = 0;
     /* NF, then as many whole fragments as the box holds (0 if it holds a
-     * part of one), for hv_rule_flst. */
-    if (DECODE_USED(FragmentCount, &nf, buf, box->payload, n, &used) == 0 &&
-        (n - used) % HV_FIXED(Fragment) == 0)
-        fragments = (int)((n - used) / HV_FIXED(Fragment));
+     * part of one), for hv_rule_flst. Fragment is a fixed-size type. */
+    if (DECODE_USED(FragmentCount, &nf, buf, box->payload, n, &used) == 0) {
+        for (p = box->payload + used; p < box->end; p += HV_FIXED(Fragment)) {
+            if (box->end - p < HV_FIXED(Fragment)) {
+                fragments = 0;
+                break;
+            }
+            fragments++;
+        }
+    }
     if ((error = hv_rule_flst(nf, fragments)) != NULL)
         return error;
     /* NF is 1 and the box holds one whole fragment. Of its fields, OFF and
      * DR take every value their bytes can hold (Fragment), so the decoder
      * can only fail on LEN 0. */
-    if (DECODE(FragmentList_Profile, &f, buf, box->payload, n) != 0)
+    if (DECODE(Fragment, &f, buf, box->payload + used, HV_FIXED(Fragment)) != 0)
         return "flst: fragment length (LEN) 0";
-    link->offset = f.fragments.arr[0].off;
-    link->length = f.fragments.arr[0].len;
-    link->dr = f.fragments.arr[0].dr;
+    link->offset = f.off;
+    link->length = f.len;
+    link->dr = f.dr;
     return NULL;
 }
 
@@ -541,14 +552,15 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     case HV_BOX_BPCC:
         if (n == 0)
             return "bpcc: empty";
-        for (i = 0; i < n && error == NULL; i += HV_FIXED(BitDepth)) {
+        /* Each entry a BitDepth of one byte, which hv_rule_bpcc reads in
+         * place. */
+        for (i = 0; i < n; i += HV_FIXED(BitDepth)) {
             BitDepth depth;
             *at = p + i;
             if (DECODE(BitDepth, &depth, buf, p + i, HV_FIXED(BitDepth)) != 0)
                 return "bpcc: reserved bit depth";
-            error = hv_rule_bpcc_entry(h, depth);
         }
-        return error;
+        return hv_rule_bpcc(h, buf + p, n);
     case HV_BOX_COLR: {
         ColrHeader colr;
         size_t used;
@@ -557,16 +569,22 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
         return hv_rule_colr(h, &colr, n - used);
     }
     case HV_BOX_PCLR: {
-        PclrHeader *pclr = malloc(sizeof *pclr);
-        size_t used;
-        if (pclr == NULL)
-            return "out of memory";
-        if (DECODE_USED(PclrHeader, pclr, buf, p, n, &used) != 0)
-            error = "pclr: invalid NE, NPC or bit depths";
-        else
-            error = hv_rule_pclr(h, pclr, n - used);
-        free(pclr);
-        return error;
+        /* The rules point at the box: *at is left as it is. */
+        PclrCounts counts;
+        size_t used = HV_FIXED(PclrCounts);
+        if (n < used || DECODE(PclrCounts, &counts, buf, p, used) != 0)
+            return "pclr: no NE and NPC, or one out of range";
+        error = hv_rule_pclr(h, counts.ne, counts.npc);
+        for (i = 0; i < counts.npc && error == NULL; i++) {
+            BitDepth depth;
+            if (n - used < HV_FIXED(BitDepth))
+                return "pclr: shorter than its NPC bit depths";
+            if (DECODE(BitDepth, &depth, buf, p + used, HV_FIXED(BitDepth)) != 0)
+                return "pclr: reserved bit depth";
+            used += HV_FIXED(BitDepth);
+            error = hv_rule_pclr_column(h, depth);
+        }
+        return error != NULL ? error : hv_rule_pclr_end(h, n - used);
     }
     case HV_BOX_CMAP:
         if (n == 0 || n % HV_FIXED(CmapEntry) != 0)
@@ -723,7 +741,7 @@ static const char *check_codestream_header(const uint8_t *buf, size_t start, siz
 static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     hv_boxes it;
     hv_box box, jp2h = {0}, jp2c = {0};
-    hv_header *h;
+    hv_header h;
     const char *error;
     int status, n = 0, late = 0, codestreams = 0;
 
@@ -745,12 +763,9 @@ static const char *check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     *at = size;
     if ((error = hv_rule_jp2h_place(n, late, codestreams, 0)) != NULL)
         return error;
-    if ((h = malloc(sizeof *h)) == NULL)
-        return "out of memory";
     *at = jp2h.start;
-    if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, h, at)) == NULL)
-        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, 0, jp2h.start, at);
-    free(h);
+    if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, &h, at)) == NULL)
+        error = check_codestream_header(buf, jp2c.payload, jp2c.end, &h, NULL, 0, jp2h.start, at);
     return error;
 }
 
@@ -762,21 +777,36 @@ const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
     return error;
 }
 
-/* The contents of a Reader Requirements box, decoded with Rreq-Std (from at
- * most its largest encoding, as Ihdr), and nothing after them
- * (rreq.extent). */
+/* The contents of a Reader Requirements box, one part at a time:
+ * RreqHeader (ML, FUAM, DCM, NSF), NSF standard features, NVF
+ * (FeatureCount) and NVF vendor features, each feature handed exactly its
+ * code and ML bytes, the mask's size (RreqMask, size deduced); and nothing
+ * after them (rreq.extent). */
 static const char *check_rreq(const uint8_t *buf, const hv_box *box) {
-    Rreq_Std *rreq = malloc(sizeof *rreq);
-    const char *error;
-    if (rreq == NULL)
-        return "out of memory";
-    if (DECODE(Rreq_Std, rreq, buf, box->payload,
-               min_size(box->end - box->payload, HV_LARGEST(Rreq_Std))) != 0)
-        error = "rreq: contents are not ML, FUAM, DCM, NSF standard and NVF vendor features";
-    else
-        error = hv_rule_extent(HV_BOX_RREQ, (uint64_t)rreq->extra.nCount);
-    free(rreq);
-    return error;
+    static const char invalid[] =
+        "rreq: contents are not ML, FUAM, DCM, NSF standard and NVF vendor features";
+    RreqHeader h;
+    RreqStandardFeature sf;
+    FeatureCount nvf;
+    RreqVendorFeature vf;
+    size_t p = box->payload, used, ml, i;
+
+    if (DECODE_USED(RreqHeader, &h, buf, p, box->end - p, &used) != 0)
+        return invalid;
+    p += used;
+    ml = (size_t)h.fuam.nCount;
+    for (i = 0; i < h.nsf; i++, p += HV_FIXED(FeatureCode) + ml)
+        if (box->end - p < HV_FIXED(FeatureCode) + ml ||
+            DECODE(RreqStandardFeature, &sf, buf, p, HV_FIXED(FeatureCode) + ml) != 0)
+            return invalid;
+    if (DECODE_USED(FeatureCount, &nvf, buf, p, box->end - p, &used) != 0)
+        return invalid;
+    p += used;
+    for (i = 0; i < nvf; i++, p += HV_FIXED(VendorId) + ml)
+        if (box->end - p < HV_FIXED(VendorId) + ml ||
+            DECODE(RreqVendorFeature, &vf, buf, p, HV_FIXED(VendorId) + ml) != 0)
+            return invalid;
+    return hv_rule_extent(HV_BOX_RREQ, (uint64_t)(box->end - p));
 }
 
 /* Linear passes over the top-level boxes. The first counts them for the
@@ -791,7 +821,7 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
     hv_boxes it, next_jpch;
     hv_box box, jpch, jp2h = {0}, rreq = {0};
     hv_jpx_boxes count = {0, 0, 0, 0, 0, 0};
-    hv_header *h, *defaults;    /* h: the jpch or jplh being read */
+    hv_header h[2], *defaults;  /* h[0]: the jpch or jplh being read */
     const char *error = NULL;
     int status, boxes = 0, jp2hs = 0, late = 0, later = 0;
 
@@ -830,8 +860,6 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
     *at = size;
     if ((error = hv_rule_jp2h_place(jp2hs, late, 0, 1)) != NULL)
         return error;
-    if ((h = malloc(2 * sizeof *h)) == NULL)
-        return "out of memory";
     defaults = jp2hs ? &h[1] : NULL;
     if (defaults != NULL) {
         *at = jp2h.start;
@@ -868,7 +896,6 @@ static const char *check_jpx_headers(const uint8_t *buf, size_t size, size_t *at
             error = hv_rule_codestream_header(own, defaults, NULL, 1);
         }
     }
-    free(h);
     return error;
 }
 
@@ -902,19 +929,54 @@ static int profile_full(const hv_codestream *cs) {
 }
 
 /* SIZ: the shared cross-field rules (hv_rules.c), and in the profile the
- * model's Siz-Profile type; then the tiles Isot can address. */
-static const char *check_siz(const hv_codestream *cs, const Siz *s, uint32_t *tiles) {
+ * model's Siz-Profile type, in its two parts, SizFixed-Profile and
+ * Component-Profile; then the tiles Isot can address. */
+static const char *check_siz(const hv_codestream *cs, const hv_siz *s, uint32_t *tiles) {
     const char *error;
+    size_t i;
     int err;
     if ((error = hv_rule_siz(s, NULL, profile_headers(cs))) != NULL)
         return error;
-    /* What Siz-Profile adds to the rules: the image extent. */
-    if (profile_headers(cs) && !Siz_Profile_IsConstraintValid(s, &err))
-        return "SIZ: Xsiz or Ysiz above 2,147,483,647 (Siz-Profile)";
+    if (profile_headers(cs)) {
+        /* What Siz-Profile adds to the rules: the image extent. The
+         * components' unit sampling is siz.component-sampling, above. */
+        if (!SizFixed_Profile_IsConstraintValid(s->fixed, &err))
+            return "SIZ: Xsiz or Ysiz above 2,147,483,647 (Siz-Profile)";
+        for (i = 0; i < s->ncomponents; i++)
+            if (!Component_Profile_IsConstraintValid(&s->components[i], &err))
+                return "SIZ: XRsiz or YRsiz other than 1 (Siz-Profile)";
+    }
     /* Isot (0 to 65,534) can address at most 65,535 tiles; a larger grid
      * is not an error by itself, its other tiles just cannot appear. */
     *tiles = hv_rule_tiles(s);
     return NULL;
+}
+
+/* The SIZ segment in buf[start, end) after its code and Lsiz: SizFixed,
+ * then components one at a time up to the end of the segment, as many as
+ * a Csiz can count (the model's `count == csiz` is siz.csiz-count, in
+ * hv_rule_siz). -1 when they do not decode ("invalid SIZ"). */
+static int decode_siz(hv_codestream *cs, size_t start, size_t end) {
+    SizFixed_csiz count;
+    size_t used, n, i;
+    int err;
+    if (DECODE_USED(SizFixed, &cs->siz_fixed, cs->buf, start, end - start, &used) != 0)
+        return -1;
+    start += used;
+    /* Component is a fixed-size type: the segment holds n whole ones. */
+    n = (end - start) / HV_FIXED(Component);
+    count = n;
+    if ((end - start) % HV_FIXED(Component) != 0 || !SizFixed_csiz_IsConstraintValid(&count, &err))
+        return -1;
+    if ((cs->components = malloc(n * sizeof *cs->components)) == NULL)
+        return -2;
+    for (i = 0; i < n; i++, start += HV_FIXED(Component))
+        if (DECODE(Component, &cs->components[i], cs->buf, start, HV_FIXED(Component)) != 0)
+            return -1;
+    cs->siz.fixed = &cs->siz_fixed;
+    cs->siz.components = cs->components;
+    cs->siz.ncomponents = n;
+    return 0;
 }
 
 /* COD: the shared cross-field rules, with the SIZ they depend on. SOP is
@@ -922,12 +984,28 @@ static const char *check_siz(const hv_codestream *cs, const Siz *s, uint32_t *ti
  * input may carry SOP, its output may not. */
 static const char *check_cod(const hv_codestream *cs, const Cod *c) {
     const char *error = hv_rule_cod(&c->scod, &c->spcod, profile_full(cs));
-    return error ? error : hv_rule_siz(&cs->siz->body, &c->sgcod, profile_headers(cs));
+    return error ? error : hv_rule_siz(&cs->siz, &c->sgcod, profile_headers(cs));
 }
 
-uint64_t hv_iplt_value(const Iplt *p) {
-    uint64_t v;
-    return hv_rule_iplt(p, &v) == NULL ? v : UINT64_MAX;
+/* The Iplt entry at *pos, within end: its value, and *pos past it. NULL;
+ * "invalid PLT" when it does not decode, or plt.value-overflow
+ * (hv_rule_iplt), with *pos unchanged. */
+static const char *plt_entry(const uint8_t *buf, size_t *pos, size_t end, uint64_t *value) {
+    Iplt entry;
+    size_t used;
+    const char *error;
+    if (DECODE_USED(Iplt, &entry, buf, *pos, end - *pos, &used) != 0)
+        return "invalid PLT";
+    if ((error = hv_rule_iplt(&entry, value)) != NULL)
+        return error;
+    *pos += used;
+    return NULL;
+}
+
+int hv_plt_next(const uint8_t *buf, size_t *pos, size_t end, uint64_t *value) {
+    if (*pos >= end)
+        return 0;
+    return plt_entry(buf, pos, end, value) == NULL ? 1 : -1;
 }
 
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,
@@ -954,12 +1032,15 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
                min_size(end - cs->pos - MARKER, HV_FIXED(SegmentLength))) != 0 ||
         l > end - cs->pos - MARKER)
         return fail(cs, "truncated SIZ", cs->pos);
-    cs->siz = calloc(1, sizeof *cs->siz);
-    if (cs->siz == NULL)
+    switch (decode_siz(cs, cs->pos + MARKER + HV_FIXED(SegmentLength), cs->pos + MARKER + l)) {
+    case 0:
+        break;
+    case -2:
         return fail(cs, "out of memory", cs->pos);
-    if (DECODE(SizSegment_Std, cs->siz, buf, cs->pos + MARKER, l) != 0)
+    default:
         return fail(cs, "invalid SIZ", cs->pos);
-    if ((error = check_siz(cs, &cs->siz->body, &cs->tiles)) != NULL)
+    }
+    if ((error = check_siz(cs, &cs->siz, &cs->tiles)) != NULL)
         return fail(cs, error, cs->pos);
     cs->parts = calloc(cs->tiles, sizeof *cs->parts);
     cs->tnsot = calloc(cs->tiles, sizeof *cs->tnsot);
@@ -974,9 +1055,7 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
 void hv_codestream_close(hv_codestream *cs) {
     const char *error = cs->error;
     size_t error_at = cs->error_at;
-    free(cs->siz);
-    free(cs->com);
-    free(cs->plt);
+    free(cs->components);
     free(cs->parts);
     free(cs->tnsot);
     memset(cs, 0, sizeof *cs);
@@ -988,8 +1067,8 @@ void hv_codestream_close(hv_codestream *cs) {
 /* siz_end is set once hv_codestream_open succeeded, cods and qcds once the
  * main-header COD or QCD passed its checks; hv_codestream_close clears all
  * three. */
-const Siz *hv_codestream_siz(const hv_codestream *cs) {
-    return cs->siz_end ? &cs->siz->body : NULL;
+const hv_siz *hv_codestream_siz(const hv_codestream *cs) {
+    return cs->siz_end ? &cs->siz : NULL;
 }
 const Cod *hv_codestream_cod(const hv_codestream *cs) {
     return cs->cods ? &cs->cod.body : NULL;
@@ -1069,11 +1148,15 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     return 1;
 }
 
-static int decode_com(hv_codestream *cs, size_t pos, size_t len) {
-    if (cs->com == NULL && (cs->com = malloc(sizeof *cs->com)) == NULL)
-        return fail(cs, "out of memory", pos);
-    if (DECODE(ComSegment_Std, cs->com, cs->buf, pos + MARKER, len) != 0)
+/* COM at pos, ending at end: Rcom, then at least one byte of text, which
+ * stays in place. */
+static int decode_com(hv_codestream *cs, size_t pos, size_t end) {
+    size_t body = pos + MARKER + HV_FIXED(SegmentLength), used;
+    if (DECODE_USED(Rcom, &cs->com.rcom, cs->buf, body, end - body, &used) != 0 ||
+        end - body - used == 0)
         return fail(cs, "invalid COM", pos);
+    cs->com.text = cs->buf + body + used;
+    cs->com.size = end - body - used;
     return 0;
 }
 
@@ -1105,9 +1188,9 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->qcd = &cs->qcd;
         break;
     case HV_COM:
-        if (decode_com(cs, pos, len) != 0)
+        if (decode_com(cs, pos, end) != 0)
             return -1;
-        item->com = cs->com;
+        item->com = &cs->com;
         break;
     case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_TLM: case HV_PLM: case HV_PPM:
     case HV_CRG:
@@ -1156,19 +1239,30 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->qcd = &cs->tile_qcd;
         break;
     case HV_PLT: {
-        /* HV_ACCEPT_PLT_PADDING takes zero entries after the last packet
-         * of each tile-part; the profile, after the last packet of the
-         * codestream (hv_rule_plt_entry). */
-        int i, per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) != 0;
-        if (cs->plt == NULL && (cs->plt = malloc(sizeof *cs->plt)) == NULL)
-            return fail(cs, "out of memory", pos);
-        if (DECODE(PltSegment_Std, cs->plt, cs->buf, pos + MARKER, len) != 0)
+        /* Zplt, then Iplt entries, at least one, to the end of the
+         * segment: all of them decode before the rules apply, in the order
+         * of the whole-file model's decoder (the Zplt sequence, then each
+         * entry). HV_ACCEPT_PLT_PADDING takes zero entries after the last
+         * packet of each tile-part; the profile, after the last packet of
+         * the codestream (hv_rule_plt_entry). */
+        int per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) != 0;
+        size_t body = pos + MARKER + HV_FIXED(SegmentLength), used, p;
+        uint64_t v;
+        if (DECODE_USED(Zplt, &cs->plt.zplt, cs->buf, body, end - body, &used) != 0 ||
+            body + used == end)
             return fail(cs, "invalid PLT", pos);
-        if (cs->plt->body.zplt != (asn1SccUint)cs->plts++)
+        cs->plt.start = body + used;
+        cs->plt.end = end;
+        for (p = cs->plt.start; p < end; ) {
+            Iplt entry;
+            if (DECODE_USED(Iplt, &entry, cs->buf, p, end - p, &used) != 0)
+                return fail(cs, "invalid PLT", pos);
+            p += used;
+        }
+        if (cs->plt.zplt != (asn1SccUint)cs->plts++)
             return fail(cs, "plt.zplt-sequence", pos);
-        for (i = 0; i < cs->plt->body.entries.nCount; i++) {
-            uint64_t v;
-            if ((error = hv_rule_iplt(&cs->plt->body.entries.arr[i], &v)) != NULL)
+        for (p = cs->plt.start; p < end; ) {
+            if ((error = plt_entry(cs->buf, &p, end, &v)) != NULL)
                 return fail(cs, error, pos);
             if (per_tile_part) {
                 if (v != 0 && cs->plt_zeros != 0)
@@ -1181,13 +1275,13 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
             else
                 cs->plt_sum = v > UINT64_MAX - cs->plt_sum ? UINT64_MAX : cs->plt_sum + v;
         }
-        item->plt = cs->plt;
+        item->plt = &cs->plt;
         break;
     }
     case HV_COM:
-        if (decode_com(cs, pos, len) != 0)
+        if (decode_com(cs, pos, end) != 0)
             return -1;
-        item->com = cs->com;
+        item->com = &cs->com;
         break;
     case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_PPT:
         break;
@@ -1221,7 +1315,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
         item->code = HV_SIZ;
         item->start = cs->pos;
         item->end = cs->siz_end;
-        item->siz = cs->siz;
+        item->siz = &cs->siz;
         cs->pos = item->end;
         cs->state = ST_MAIN;
         return 1;
@@ -1243,7 +1337,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
                     return fail(cs, error, cs->pos);
             }
             if (profile_full(cs) &&
-                (error = hv_rule_plt_packets(&cs->plt_count, &cs->siz->body, &cs->cod.body.sgcod,
+                (error = hv_rule_plt_packets(&cs->plt_count, &cs->siz, &cs->cod.body.sgcod,
                                              &cs->cod.body.spcod, 1)) != NULL)
                 return fail(cs, error, cs->pos);
             item->kind = HV_END;

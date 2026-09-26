@@ -25,6 +25,13 @@
 typedef enum { CF_STANDARD = 1, CF_PROFILE = 2 } cf_layer;
 typedef enum { CF_JP2 = 1, CF_JPX = 2 } cf_kind;
 
+/* SIZ as the rules see it (hv_rules.h), pointing into a decoded Siz (both
+ * families: Siz_Profile is Siz). */
+static inline hv_siz cf_siz_view(const Siz *s) {
+    hv_siz v = { &s->fixed, s->components.arr, (size_t) s->components.nCount };
+    return v;
+}
+
 /* Layer-1 struct family (file decoded as Jp2Family). */
 const char *cf_check_family(const Jp2Family *file, cf_layer layer, cf_kind kind);
 

@@ -1,15 +1,20 @@
 /* hv_writer.h: writes JPEG 2000 headers with the encoders generated from
  * spec/jpeg2000-io.asn1, into a buffer that grows as needed.
  *
- * Marker segment lengths (Lxxx) come from the generated encoders. The
- * lengths that cover data the generated code never sees, Psot and LBox or
- * XLBox, are filled in when the tile-part or box ends. */
+ * Each generated encoder writes one small value: a fixed part or one
+ * element of a list (SizFixed, Component, Zplt, Iplt, Rcom, NF, Fragment, the
+ * Reader Requirements parts), or a whole COD or QCD segment, whose Lxxx
+ * the encoder inserts. Every other length is measured, never taken from a
+ * type's size: the writer fills in Lxxx when a SIZ, PLT or COM segment
+ * ends, Psot when the tile-part ends, and LBox or XLBox when the box
+ * ends. */
 #ifndef HV_WRITER_H
 #define HV_WRITER_H
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hv_rules.h"
 #include "jpeg2000-io.h"
 
 #ifdef __cplusplus
@@ -45,11 +50,13 @@ int hv_write_marker(hv_out *out, uint16_t code);
 /* Any marker segment from its code and body; Lxxx is added. */
 int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size);
 
-/* SIZ, COD, QCD and COM from their decoded form, code included. */
-int hv_write_siz(hv_out *out, const SizSegment_Std *siz);
+/* SIZ, COD, QCD and COM from their decoded form, code included. SIZ is
+ * written as SizFixed and then its components, one at a time; COM as Rcom
+ * and `size` bytes of text. Lxxx is measured. */
+int hv_write_siz(hv_out *out, const hv_siz *siz);
 int hv_write_cod(hv_out *out, const CodSegment_Std *cod);
 int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd);
-int hv_write_com(hv_out *out, const ComSegment_Std *com);
+int hv_write_com(hv_out *out, Rcom rcom, const uint8_t *text, size_t size);
 
 /* The PLT segments of one tile-part, listing all `count` packet lengths of
  * it, Zplt from 0. Each segment holds as many whole entries as fit in Lplt
@@ -83,7 +90,8 @@ int hv_write_box_header(hv_out *out, uint32_t type, uint64_t size);
 
 /* JPX boxes (T.801 Annex M), with the served profile's types. */
 
-/* A Fragment List box with one fragment (FragmentList-Profile). */
+/* A Fragment List box with one fragment: FragmentCount (NF) 1, then the
+ * Fragment, as the served profile's box (FragmentList-Profile). */
 int hv_write_flst(hv_out *out, uint64_t offset, uint32_t length, uint16_t dr);
 
 /* NDR, the start of a Data Reference box's contents. */
@@ -92,9 +100,12 @@ int hv_write_ndr(hv_out *out, uint16_t ndr);
 /* A Data Entry URL box, version 0 and flags 0, with LOC and its NUL. */
 int hv_write_url(hv_out *out, const char *loc);
 
-/* A Reader Requirements box (T.801 M.11.1, Rreq-Std): ML from the masks,
- * which must all have its length (1, 2, 4 or 8 bytes). */
-int hv_write_rreq(hv_out *out, const Rreq_Std *rreq);
+/* A Reader Requirements box (T.801 M.11.1): RreqHeader, whose NSF must be
+ * nstandard, the standard features, NVF (nvendor) and the vendor features,
+ * one at a time; LBox is measured. ML is the length of FUAM,
+ * which DCM and every feature's mask must have (1, 2, 4 or 8 bytes). */
+int hv_write_rreq(hv_out *out, const RreqHeader *header, const RreqStandardFeature *standard,
+                  size_t nstandard, const RreqVendorFeature *vendor, size_t nvendor);
 
 #ifdef __cplusplus
 }

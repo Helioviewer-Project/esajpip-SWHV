@@ -20,7 +20,7 @@ typedef asn1SccUint BoxType;
 typedef asn1SccUint Brand;
 
 
-#define ERR_BRAND		2778  /*(0..4294967295)*/
+#define ERR_BRAND		2743  /*(0..4294967295)*/
 flag Brand_IsConstraintValid(const Brand* pVal, int* pErrCode);
 
 void Brand_Initialize(Brand* pVal);
@@ -28,11 +28,11 @@ void Brand_Initialize(Brand* pVal);
 #define Brand_REQUIRED_BYTES_FOR_ACN_ENCODING       4
 #define Brand_REQUIRED_BITS_FOR_ACN_ENCODING        32
 
-#define ERR_ACN_ENCODE_BRAND		2781  /**/
+#define ERR_ACN_ENCODE_BRAND		2746  /**/
 
 flag Brand_ACN_Encode(const Brand* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_BRAND		2782  /**/
+#define ERR_ACN_DECODE_BRAND		2747  /**/
 flag Brand_ACN_Decode(Brand* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Ftyp --------------------------------------------*/
 typedef asn1SccUint Ftyp_minor;
@@ -113,7 +113,7 @@ typedef struct {
 } Extra;
 
 
-#define ERR_EXTRA		3115  /*(SIZE (0..64))*/
+#define ERR_EXTRA		3080  /*(SIZE (0..64))*/
 flag Extra_IsConstraintValid(const Extra* pVal, int* pErrCode);
 
 void Extra_Initialize(Extra* pVal);
@@ -144,29 +144,29 @@ typedef struct {
 
 } Ihdr;
 
-#define ERR_IHDR_HEIGHT		3120  /*(1..4294967295)*/
+#define ERR_IHDR_HEIGHT		3085  /*(1..4294967295)*/
 flag Ihdr_height_IsConstraintValid(const Ihdr_height* pVal, int* pErrCode);
 
-#define ERR_IHDR_WIDTH		3125  /*(1..4294967295)*/
+#define ERR_IHDR_WIDTH		3090  /*(1..4294967295)*/
 flag Ihdr_width_IsConstraintValid(const Ihdr_width* pVal, int* pErrCode);
 
-#define ERR_IHDR_NC		3130  /*(1..16384)*/
+#define ERR_IHDR_NC		3095  /*(1..16384)*/
 flag Ihdr_nc_IsConstraintValid(const Ihdr_nc* pVal, int* pErrCode);
 
-#define ERR_IHDR_BPC		3135  /*(0..37 | 128..165 | 255)*/
+#define ERR_IHDR_BPC		3100  /*(0..37 | 128..165 | 255)*/
 flag Ihdr_bpc_IsConstraintValid(const Ihdr_bpc* pVal, int* pErrCode);
 
-#define ERR_IHDR_C		3140  /*(7)*/
+#define ERR_IHDR_C		3105  /*(7)*/
 flag Ihdr_c_IsConstraintValid(const Ihdr_c* pVal, int* pErrCode);
 
-#define ERR_IHDR_UNKC		3145  /*(0..1)*/
+#define ERR_IHDR_UNKC		3110  /*(0..1)*/
 flag Ihdr_unkc_IsConstraintValid(const Ihdr_unkc* pVal, int* pErrCode);
 
-#define ERR_IHDR_IPR		3150  /*(0..1)*/
+#define ERR_IHDR_IPR		3115  /*(0..1)*/
 flag Ihdr_ipr_IsConstraintValid(const Ihdr_ipr* pVal, int* pErrCode);
 
-#define ERR_IHDR		3163  /**/
-#define ERR_IHDR_EXTRA_2		3160  /**/
+#define ERR_IHDR		3128  /**/
+#define ERR_IHDR_EXTRA_2		3125  /**/
 flag Ihdr_IsConstraintValid(const Ihdr* pVal, int* pErrCode);
 
 void Ihdr_height_Initialize(Ihdr_height* pVal);
@@ -181,27 +181,27 @@ void Ihdr_Initialize(Ihdr* pVal);
 #define Ihdr_REQUIRED_BYTES_FOR_ACN_ENCODING       78
 #define Ihdr_REQUIRED_BITS_FOR_ACN_ENCODING        624
 
-#define ERR_ACN_ENCODE_IHDR		3166  /**/
-#define ERR_ACN_ENCODE_IHDR_HEIGHT		3123  /**/
-#define ERR_ACN_ENCODE_IHDR_WIDTH		3128  /**/
-#define ERR_ACN_ENCODE_IHDR_NC		3133  /**/
-#define ERR_ACN_ENCODE_IHDR_BPC		3138  /**/
-#define ERR_ACN_ENCODE_IHDR_C		3143  /**/
-#define ERR_ACN_ENCODE_IHDR_UNKC		3148  /**/
-#define ERR_ACN_ENCODE_IHDR_IPR		3153  /**/
-#define ERR_ACN_ENCODE_IHDR_EXTRA		3158  /**/
+#define ERR_ACN_ENCODE_IHDR		3131  /**/
+#define ERR_ACN_ENCODE_IHDR_HEIGHT		3088  /**/
+#define ERR_ACN_ENCODE_IHDR_WIDTH		3093  /**/
+#define ERR_ACN_ENCODE_IHDR_NC		3098  /**/
+#define ERR_ACN_ENCODE_IHDR_BPC		3103  /**/
+#define ERR_ACN_ENCODE_IHDR_C		3108  /**/
+#define ERR_ACN_ENCODE_IHDR_UNKC		3113  /**/
+#define ERR_ACN_ENCODE_IHDR_IPR		3118  /**/
+#define ERR_ACN_ENCODE_IHDR_EXTRA		3123  /**/
 
 flag Ihdr_ACN_Encode(const Ihdr* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_IHDR		3167  /**/
-#define ERR_ACN_DECODE_IHDR_HEIGHT		3124  /**/
-#define ERR_ACN_DECODE_IHDR_WIDTH		3129  /**/
-#define ERR_ACN_DECODE_IHDR_NC		3134  /**/
-#define ERR_ACN_DECODE_IHDR_BPC		3139  /**/
-#define ERR_ACN_DECODE_IHDR_C		3144  /**/
-#define ERR_ACN_DECODE_IHDR_UNKC		3149  /**/
-#define ERR_ACN_DECODE_IHDR_IPR		3154  /**/
-#define ERR_ACN_DECODE_IHDR_EXTRA		3159  /**/
+#define ERR_ACN_DECODE_IHDR		3132  /**/
+#define ERR_ACN_DECODE_IHDR_HEIGHT		3089  /**/
+#define ERR_ACN_DECODE_IHDR_WIDTH		3094  /**/
+#define ERR_ACN_DECODE_IHDR_NC		3099  /**/
+#define ERR_ACN_DECODE_IHDR_BPC		3104  /**/
+#define ERR_ACN_DECODE_IHDR_C		3109  /**/
+#define ERR_ACN_DECODE_IHDR_UNKC		3114  /**/
+#define ERR_ACN_DECODE_IHDR_IPR		3119  /**/
+#define ERR_ACN_DECODE_IHDR_EXTRA		3124  /**/
 flag Ihdr_ACN_Decode(Ihdr* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Resolution --------------------------------------------*/
 typedef asn1SccUint Resolution_vn;
@@ -227,26 +227,26 @@ typedef struct {
 
 } Resolution;
 
-#define ERR_RESOLUTION_VN		3168  /*(1..65535)*/
+#define ERR_RESOLUTION_VN		3133  /*(1..65535)*/
 flag Resolution_vn_IsConstraintValid(const Resolution_vn* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION_VD		3173  /*(1..65535)*/
+#define ERR_RESOLUTION_VD		3138  /*(1..65535)*/
 flag Resolution_vd_IsConstraintValid(const Resolution_vd* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION_HN		3178  /*(1..65535)*/
+#define ERR_RESOLUTION_HN		3143  /*(1..65535)*/
 flag Resolution_hn_IsConstraintValid(const Resolution_hn* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION_HD		3183  /*(1..65535)*/
+#define ERR_RESOLUTION_HD		3148  /*(1..65535)*/
 flag Resolution_hd_IsConstraintValid(const Resolution_hd* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION_VE		3188  /*(-128..127)*/
+#define ERR_RESOLUTION_VE		3153  /*(-128..127)*/
 flag Resolution_ve_IsConstraintValid(const Resolution_ve* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION_HE		3193  /*(-128..127)*/
+#define ERR_RESOLUTION_HE		3158  /*(-128..127)*/
 flag Resolution_he_IsConstraintValid(const Resolution_he* pVal, int* pErrCode);
 
-#define ERR_RESOLUTION		3206  /**/
-#define ERR_RESOLUTION_EXTRA_2		3203  /**/
+#define ERR_RESOLUTION		3171  /**/
+#define ERR_RESOLUTION_EXTRA_2		3168  /**/
 flag Resolution_IsConstraintValid(const Resolution* pVal, int* pErrCode);
 
 void Resolution_vn_Initialize(Resolution_vn* pVal);
@@ -260,25 +260,25 @@ void Resolution_Initialize(Resolution* pVal);
 #define Resolution_REQUIRED_BYTES_FOR_ACN_ENCODING       74
 #define Resolution_REQUIRED_BITS_FOR_ACN_ENCODING        592
 
-#define ERR_ACN_ENCODE_RESOLUTION		3209  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_VN		3171  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_VD		3176  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_HN		3181  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_HD		3186  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_VE		3191  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_HE		3196  /**/
-#define ERR_ACN_ENCODE_RESOLUTION_EXTRA		3201  /**/
+#define ERR_ACN_ENCODE_RESOLUTION		3174  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_VN		3136  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_VD		3141  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_HN		3146  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_HD		3151  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_VE		3156  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_HE		3161  /**/
+#define ERR_ACN_ENCODE_RESOLUTION_EXTRA		3166  /**/
 
 flag Resolution_ACN_Encode(const Resolution* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_RESOLUTION		3210  /**/
-#define ERR_ACN_DECODE_RESOLUTION_VN		3172  /**/
-#define ERR_ACN_DECODE_RESOLUTION_VD		3177  /**/
-#define ERR_ACN_DECODE_RESOLUTION_HN		3182  /**/
-#define ERR_ACN_DECODE_RESOLUTION_HD		3187  /**/
-#define ERR_ACN_DECODE_RESOLUTION_VE		3192  /**/
-#define ERR_ACN_DECODE_RESOLUTION_HE		3197  /**/
-#define ERR_ACN_DECODE_RESOLUTION_EXTRA		3202  /**/
+#define ERR_ACN_DECODE_RESOLUTION		3175  /**/
+#define ERR_ACN_DECODE_RESOLUTION_VN		3137  /**/
+#define ERR_ACN_DECODE_RESOLUTION_VD		3142  /**/
+#define ERR_ACN_DECODE_RESOLUTION_HN		3147  /**/
+#define ERR_ACN_DECODE_RESOLUTION_HD		3152  /**/
+#define ERR_ACN_DECODE_RESOLUTION_VE		3157  /**/
+#define ERR_ACN_DECODE_RESOLUTION_HE		3162  /**/
+#define ERR_ACN_DECODE_RESOLUTION_EXTRA		3167  /**/
 flag Resolution_ACN_Decode(Resolution* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- ResPayload --------------------------------------------*/
 
@@ -344,7 +344,7 @@ typedef DataEntryUrl DataEntryUrl_Profile;
 typedef asn1SccUint BitDepth;
 
 
-#define ERR_BITDEPTH		3545  /*(0..37 | 128..165)*/
+#define ERR_BITDEPTH		3510  /*(0..37 | 128..165)*/
 flag BitDepth_IsConstraintValid(const BitDepth* pVal, int* pErrCode);
 
 void BitDepth_Initialize(BitDepth* pVal);
@@ -352,11 +352,11 @@ void BitDepth_Initialize(BitDepth* pVal);
 #define BitDepth_REQUIRED_BYTES_FOR_ACN_ENCODING       1
 #define BitDepth_REQUIRED_BITS_FOR_ACN_ENCODING        8
 
-#define ERR_ACN_ENCODE_BITDEPTH		3548  /**/
+#define ERR_ACN_ENCODE_BITDEPTH		3513  /**/
 
 flag BitDepth_ACN_Encode(const BitDepth* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_BITDEPTH		3549  /**/
+#define ERR_ACN_DECODE_BITDEPTH		3514  /**/
 flag BitDepth_ACN_Decode(BitDepth* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Bpcc --------------------------------------------*/
 
@@ -386,38 +386,7 @@ typedef struct {
 
 } PclrHeader;
 
-#define ERR_PCLRHEADER_NE		3570  /*(1..1024)*/
-flag PclrHeader_ne_IsConstraintValid(const PclrHeader_ne* pVal, int* pErrCode);
 
-#define ERR_PCLRHEADER_DEPTHS		3587  /*(SIZE (1..255))*/
-#define ERR_PCLRHEADER_DEPTHS_ELM_2		3582  /**/
-flag PclrHeader_depths_IsConstraintValid(const PclrHeader_depths* pVal, int* pErrCode);
-
-#define ERR_PCLRHEADER		3592  /**/
-flag PclrHeader_IsConstraintValid(const PclrHeader* pVal, int* pErrCode);
-
-void PclrHeader_ne_Initialize(PclrHeader_ne* pVal);
-void PclrHeader_depths_Initialize(PclrHeader_depths* pVal);
-void PclrHeader_Initialize(PclrHeader* pVal);
-
-#define PclrHeader_REQUIRED_BYTES_FOR_ACN_ENCODING       258
-#define PclrHeader_REQUIRED_BITS_FOR_ACN_ENCODING        2064
-
-#define ERR_ACN_ENCODE_PCLRHEADER		3595  /**/
-#define ERR_ACN_ENCODE_PCLRHEADER_NE		3573  /**/
-#define ERR_ACN_ENCODE_PCLRHEADER_NPC_UNINITIALIZED		3596  /**/
-#define ERR_ACN_ENCODE_PCLRHEADER_NPC		3575  /**/
-#define ERR_ACN_ENCODE_PCLRHEADER_DEPTHS		3590  /**/
-#define ERR_ACN_ENCODE_PCLRHEADER_DEPTHS_ELM_2		3585  /**/
-
-flag PclrHeader_ACN_Encode(const PclrHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
-
-#define ERR_ACN_DECODE_PCLRHEADER		3597  /**/
-#define ERR_ACN_DECODE_PCLRHEADER_NE		3574  /**/
-#define ERR_ACN_DECODE_PCLRHEADER_NPC		3576  /**/
-#define ERR_ACN_DECODE_PCLRHEADER_DEPTHS		3591  /**/
-#define ERR_ACN_DECODE_PCLRHEADER_DEPTHS_ELM_2		3586  /**/
-flag PclrHeader_ACN_Decode(PclrHeader* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Pclr --------------------------------------------*/
 typedef struct {
     int nCount;
@@ -453,19 +422,19 @@ typedef struct {
 
 } ColrHeader;
 
-#define ERR_COLRHEADER_METH		3613  /*(0..255)*/
+#define ERR_COLRHEADER_METH		3578  /*(0..255)*/
 flag ColrHeader_meth_IsConstraintValid(const ColrHeader_meth* pVal, int* pErrCode);
 
-#define ERR_COLRHEADER_PREC		3618  /*(-128..127)*/
+#define ERR_COLRHEADER_PREC		3583  /*(-128..127)*/
 flag ColrHeader_prec_IsConstraintValid(const ColrHeader_prec* pVal, int* pErrCode);
 
-#define ERR_COLRHEADER_APPROX		3623  /*(0..255)*/
+#define ERR_COLRHEADER_APPROX		3588  /*(0..255)*/
 flag ColrHeader_approx_IsConstraintValid(const ColrHeader_approx* pVal, int* pErrCode);
 
-#define ERR_COLRHEADER_ENUMCS		3628  /*(0..4294967295)*/
+#define ERR_COLRHEADER_ENUMCS		3593  /*(0..4294967295)*/
 flag ColrHeader_enumcs_IsConstraintValid(const ColrHeader_enumcs* pVal, int* pErrCode);
 
-#define ERR_COLRHEADER		3633  /**/
+#define ERR_COLRHEADER		3598  /**/
 flag ColrHeader_IsConstraintValid(const ColrHeader* pVal, int* pErrCode);
 
 void ColrHeader_meth_Initialize(ColrHeader_meth* pVal);
@@ -477,21 +446,21 @@ void ColrHeader_Initialize(ColrHeader* pVal);
 #define ColrHeader_REQUIRED_BYTES_FOR_ACN_ENCODING       7
 #define ColrHeader_REQUIRED_BITS_FOR_ACN_ENCODING        56
 
-#define ERR_ACN_ENCODE_COLRHEADER		3636  /**/
-#define ERR_ACN_ENCODE_COLRHEADER_METH		3616  /**/
-#define ERR_ACN_ENCODE_COLRHEADER_PREC		3621  /**/
-#define ERR_ACN_ENCODE_COLRHEADER_APPROX		3626  /**/
-#define ERR_ACN_ENCODE_COLRHEADER_ENUMCS_PRESENT_WHEN_EXP_FAILED		3637  /**/
-#define ERR_ACN_ENCODE_COLRHEADER_ENUMCS		3631  /**/
+#define ERR_ACN_ENCODE_COLRHEADER		3601  /**/
+#define ERR_ACN_ENCODE_COLRHEADER_METH		3581  /**/
+#define ERR_ACN_ENCODE_COLRHEADER_PREC		3586  /**/
+#define ERR_ACN_ENCODE_COLRHEADER_APPROX		3591  /**/
+#define ERR_ACN_ENCODE_COLRHEADER_ENUMCS_PRESENT_WHEN_EXP_FAILED		3602  /**/
+#define ERR_ACN_ENCODE_COLRHEADER_ENUMCS		3596  /**/
 
 flag ColrHeader_ACN_Encode(const ColrHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_COLRHEADER		3638  /**/
-#define ERR_ACN_DECODE_COLRHEADER_METH		3617  /**/
-#define ERR_ACN_DECODE_COLRHEADER_PREC		3622  /**/
-#define ERR_ACN_DECODE_COLRHEADER_APPROX		3627  /**/
-#define ERR_ACN_DECODE_COLRHEADER_ENUMCS_PRESENT_WHEN_EXP_FAILED		3639  /**/
-#define ERR_ACN_DECODE_COLRHEADER_ENUMCS		3632  /**/
+#define ERR_ACN_DECODE_COLRHEADER		3603  /**/
+#define ERR_ACN_DECODE_COLRHEADER_METH		3582  /**/
+#define ERR_ACN_DECODE_COLRHEADER_PREC		3587  /**/
+#define ERR_ACN_DECODE_COLRHEADER_APPROX		3592  /**/
+#define ERR_ACN_DECODE_COLRHEADER_ENUMCS_PRESENT_WHEN_EXP_FAILED		3604  /**/
+#define ERR_ACN_DECODE_COLRHEADER_ENUMCS		3597  /**/
 flag ColrHeader_ACN_Decode(ColrHeader* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Colr --------------------------------------------*/
 typedef struct {
@@ -520,16 +489,16 @@ typedef struct {
 
 } CmapEntry;
 
-#define ERR_CMAPENTRY_CMP		3655  /*(0..16384)*/
+#define ERR_CMAPENTRY_CMP		3620  /*(0..16384)*/
 flag CmapEntry_cmp_IsConstraintValid(const CmapEntry_cmp* pVal, int* pErrCode);
 
-#define ERR_CMAPENTRY_MTYP		3660  /*(0..1)*/
+#define ERR_CMAPENTRY_MTYP		3625  /*(0..1)*/
 flag CmapEntry_mtyp_IsConstraintValid(const CmapEntry_mtyp* pVal, int* pErrCode);
 
-#define ERR_CMAPENTRY_PCOL		3665  /*(0..255)*/
+#define ERR_CMAPENTRY_PCOL		3630  /*(0..255)*/
 flag CmapEntry_pcol_IsConstraintValid(const CmapEntry_pcol* pVal, int* pErrCode);
 
-#define ERR_CMAPENTRY		3670  /**/
+#define ERR_CMAPENTRY		3635  /**/
 flag CmapEntry_IsConstraintValid(const CmapEntry* pVal, int* pErrCode);
 
 void CmapEntry_cmp_Initialize(CmapEntry_cmp* pVal);
@@ -540,17 +509,17 @@ void CmapEntry_Initialize(CmapEntry* pVal);
 #define CmapEntry_REQUIRED_BYTES_FOR_ACN_ENCODING       4
 #define CmapEntry_REQUIRED_BITS_FOR_ACN_ENCODING        32
 
-#define ERR_ACN_ENCODE_CMAPENTRY		3673  /**/
-#define ERR_ACN_ENCODE_CMAPENTRY_CMP		3658  /**/
-#define ERR_ACN_ENCODE_CMAPENTRY_MTYP		3663  /**/
-#define ERR_ACN_ENCODE_CMAPENTRY_PCOL		3668  /**/
+#define ERR_ACN_ENCODE_CMAPENTRY		3638  /**/
+#define ERR_ACN_ENCODE_CMAPENTRY_CMP		3623  /**/
+#define ERR_ACN_ENCODE_CMAPENTRY_MTYP		3628  /**/
+#define ERR_ACN_ENCODE_CMAPENTRY_PCOL		3633  /**/
 
 flag CmapEntry_ACN_Encode(const CmapEntry* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_CMAPENTRY		3674  /**/
-#define ERR_ACN_DECODE_CMAPENTRY_CMP		3659  /**/
-#define ERR_ACN_DECODE_CMAPENTRY_MTYP		3664  /**/
-#define ERR_ACN_DECODE_CMAPENTRY_PCOL		3669  /**/
+#define ERR_ACN_DECODE_CMAPENTRY		3639  /**/
+#define ERR_ACN_DECODE_CMAPENTRY_CMP		3624  /**/
+#define ERR_ACN_DECODE_CMAPENTRY_MTYP		3629  /**/
+#define ERR_ACN_DECODE_CMAPENTRY_PCOL		3634  /**/
 flag CmapEntry_ACN_Decode(CmapEntry* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Cmap --------------------------------------------*/
 
@@ -568,7 +537,7 @@ typedef struct {
 typedef asn1SccUint CdefCount;
 
 
-#define ERR_CDEFCOUNT		3690  /*(1..65535)*/
+#define ERR_CDEFCOUNT		3655  /*(1..65535)*/
 flag CdefCount_IsConstraintValid(const CdefCount* pVal, int* pErrCode);
 
 void CdefCount_Initialize(CdefCount* pVal);
@@ -576,11 +545,11 @@ void CdefCount_Initialize(CdefCount* pVal);
 #define CdefCount_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define CdefCount_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_CDEFCOUNT		3693  /**/
+#define ERR_ACN_ENCODE_CDEFCOUNT		3658  /**/
 
 flag CdefCount_ACN_Encode(const CdefCount* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_CDEFCOUNT		3694  /**/
+#define ERR_ACN_DECODE_CDEFCOUNT		3659  /**/
 flag CdefCount_ACN_Decode(CdefCount* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- CdefEntry --------------------------------------------*/
 typedef asn1SccUint CdefEntry_cn;
@@ -596,16 +565,16 @@ typedef struct {
 
 } CdefEntry;
 
-#define ERR_CDEFENTRY_CN		3695  /*(0..65535)*/
+#define ERR_CDEFENTRY_CN		3660  /*(0..65535)*/
 flag CdefEntry_cn_IsConstraintValid(const CdefEntry_cn* pVal, int* pErrCode);
 
-#define ERR_CDEFENTRY_TYP		3700  /*(0..2 | 65535)*/
+#define ERR_CDEFENTRY_TYP		3665  /*(0..2 | 65535)*/
 flag CdefEntry_typ_IsConstraintValid(const CdefEntry_typ* pVal, int* pErrCode);
 
-#define ERR_CDEFENTRY_ASOC		3705  /*(0..65535)*/
+#define ERR_CDEFENTRY_ASOC		3670  /*(0..65535)*/
 flag CdefEntry_asoc_IsConstraintValid(const CdefEntry_asoc* pVal, int* pErrCode);
 
-#define ERR_CDEFENTRY		3710  /**/
+#define ERR_CDEFENTRY		3675  /**/
 flag CdefEntry_IsConstraintValid(const CdefEntry* pVal, int* pErrCode);
 
 void CdefEntry_cn_Initialize(CdefEntry_cn* pVal);
@@ -616,17 +585,17 @@ void CdefEntry_Initialize(CdefEntry* pVal);
 #define CdefEntry_REQUIRED_BYTES_FOR_ACN_ENCODING       6
 #define CdefEntry_REQUIRED_BITS_FOR_ACN_ENCODING        48
 
-#define ERR_ACN_ENCODE_CDEFENTRY		3713  /**/
-#define ERR_ACN_ENCODE_CDEFENTRY_CN		3698  /**/
-#define ERR_ACN_ENCODE_CDEFENTRY_TYP		3703  /**/
-#define ERR_ACN_ENCODE_CDEFENTRY_ASOC		3708  /**/
+#define ERR_ACN_ENCODE_CDEFENTRY		3678  /**/
+#define ERR_ACN_ENCODE_CDEFENTRY_CN		3663  /**/
+#define ERR_ACN_ENCODE_CDEFENTRY_TYP		3668  /**/
+#define ERR_ACN_ENCODE_CDEFENTRY_ASOC		3673  /**/
 
 flag CdefEntry_ACN_Encode(const CdefEntry* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_CDEFENTRY		3714  /**/
-#define ERR_ACN_DECODE_CDEFENTRY_CN		3699  /**/
-#define ERR_ACN_DECODE_CDEFENTRY_TYP		3704  /**/
-#define ERR_ACN_DECODE_CDEFENTRY_ASOC		3709  /**/
+#define ERR_ACN_DECODE_CDEFENTRY		3679  /**/
+#define ERR_ACN_DECODE_CDEFENTRY_CN		3664  /**/
+#define ERR_ACN_DECODE_CDEFENTRY_TYP		3669  /**/
+#define ERR_ACN_DECODE_CDEFENTRY_ASOC		3674  /**/
 flag CdefEntry_ACN_Decode(CdefEntry* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- Cdef --------------------------------------------*/
 
@@ -648,7 +617,7 @@ typedef struct {
 } RreqMask;
 
 
-#define ERR_RREQMASK		3741  /*(SIZE (1 | 2 | 4 | 8))*/
+#define ERR_RREQMASK		3706  /*(SIZE (1 | 2 | 4 | 8))*/
 flag RreqMask_IsConstraintValid(const RreqMask* pVal, int* pErrCode);
 
 void RreqMask_Initialize(RreqMask* pVal);
@@ -656,56 +625,64 @@ void RreqMask_Initialize(RreqMask* pVal);
 #define RreqMask_REQUIRED_BYTES_FOR_ACN_ENCODING       9
 #define RreqMask_REQUIRED_BITS_FOR_ACN_ENCODING        67
 
-#define ERR_ACN_ENCODE_RREQMASK		3744  /**/
+#define ERR_ACN_ENCODE_RREQMASK		3709  /**/
 
 flag RreqMask_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_RREQMASK		3745  /**/
+#define ERR_ACN_DECODE_RREQMASK		3710  /**/
 flag RreqMask_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode);
-/*-- StandardFeature --------------------------------------------*/
-typedef asn1SccUint StandardFeature_sf;
+typedef asn1SccUint FeatureCode;
 
+
+#define ERR_FEATURECODE		3711  /*(0..65535)*/
+flag FeatureCode_IsConstraintValid(const FeatureCode* pVal, int* pErrCode);
+
+void FeatureCode_Initialize(FeatureCode* pVal);
+
+#define FeatureCode_REQUIRED_BYTES_FOR_ACN_ENCODING       2
+#define FeatureCode_REQUIRED_BITS_FOR_ACN_ENCODING        16
+
+#define ERR_ACN_ENCODE_FEATURECODE		3714  /**/
+
+flag FeatureCode_ACN_Encode(const FeatureCode* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
+
+#define ERR_ACN_DECODE_FEATURECODE		3715  /**/
+flag FeatureCode_ACN_Decode(FeatureCode* pVal, BitStream* pBitStrm, int* pErrCode);
+/*-- StandardFeature --------------------------------------------*/
 typedef struct {
-    StandardFeature_sf sf;
+    FeatureCode sf;
     RreqMask sm;
 
 } StandardFeature;
 
-#define ERR_STANDARDFEATURE_SF		3746  /*(0..65535)*/
-flag StandardFeature_sf_IsConstraintValid(const StandardFeature_sf* pVal, int* pErrCode);
 
-#define ERR_STANDARDFEATURE		3759  /**/
-#define ERR_STANDARDFEATURE_SM_2		3756  /**/
-flag StandardFeature_IsConstraintValid(const StandardFeature* pVal, int* pErrCode);
-
-void StandardFeature_sf_Initialize(StandardFeature_sf* pVal);
-void StandardFeature_Initialize(StandardFeature* pVal);
-
-#define StandardFeature_REQUIRED_BYTES_FOR_ACN_ENCODING       10
-#define StandardFeature_REQUIRED_BITS_FOR_ACN_ENCODING        80
-/*-- VendorFeature --------------------------------------------*/
 typedef struct {
     byte arr[16];
-} VendorFeature_vf;
+} VendorId;
 
+
+#define ERR_VENDORID		3762  /*(SIZE (16))*/
+flag VendorId_IsConstraintValid(const VendorId* pVal, int* pErrCode);
+
+void VendorId_Initialize(VendorId* pVal);
+
+#define VendorId_REQUIRED_BYTES_FOR_ACN_ENCODING       16
+#define VendorId_REQUIRED_BITS_FOR_ACN_ENCODING        128
+
+#define ERR_ACN_ENCODE_VENDORID		3765  /**/
+
+flag VendorId_ACN_Encode(const VendorId* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
+
+#define ERR_ACN_DECODE_VENDORID		3766  /**/
+flag VendorId_ACN_Decode(VendorId* pVal, BitStream* pBitStrm, int* pErrCode);
+/*-- VendorFeature --------------------------------------------*/
 typedef struct {
-    VendorFeature_vf vf;
+    VendorId vf;
     RreqMask vm;
 
 } VendorFeature;
 
-#define ERR_VENDORFEATURE_VF		3764  /*(SIZE (16))*/
-flag VendorFeature_vf_IsConstraintValid(const VendorFeature_vf* pVal, int* pErrCode);
 
-#define ERR_VENDORFEATURE		3777  /**/
-#define ERR_VENDORFEATURE_VM_2		3774  /**/
-flag VendorFeature_IsConstraintValid(const VendorFeature* pVal, int* pErrCode);
-
-void VendorFeature_vf_Initialize(VendorFeature_vf* pVal);
-void VendorFeature_Initialize(VendorFeature* pVal);
-
-#define VendorFeature_REQUIRED_BYTES_FOR_ACN_ENCODING       24
-#define VendorFeature_REQUIRED_BITS_FOR_ACN_ENCODING        192
 /*-- Rreq --------------------------------------------*/
 
 
@@ -743,16 +720,16 @@ typedef struct {
 
 } Fragment;
 
-#define ERR_FRAGMENT_OFF		3992  /*(0..18446744073709551615)*/
+#define ERR_FRAGMENT_OFF		3928  /*(0..18446744073709551615)*/
 flag Fragment_off_IsConstraintValid(const Fragment_off* pVal, int* pErrCode);
 
-#define ERR_FRAGMENT_LEN		3997  /*(1..4294967295)*/
+#define ERR_FRAGMENT_LEN		3933  /*(1..4294967295)*/
 flag Fragment_len_IsConstraintValid(const Fragment_len* pVal, int* pErrCode);
 
-#define ERR_FRAGMENT_DR		4002  /*(0..65535)*/
+#define ERR_FRAGMENT_DR		3938  /*(0..65535)*/
 flag Fragment_dr_IsConstraintValid(const Fragment_dr* pVal, int* pErrCode);
 
-#define ERR_FRAGMENT		4007  /**/
+#define ERR_FRAGMENT		3943  /**/
 flag Fragment_IsConstraintValid(const Fragment* pVal, int* pErrCode);
 
 void Fragment_off_Initialize(Fragment_off* pVal);
@@ -763,17 +740,17 @@ void Fragment_Initialize(Fragment* pVal);
 #define Fragment_REQUIRED_BYTES_FOR_ACN_ENCODING       14
 #define Fragment_REQUIRED_BITS_FOR_ACN_ENCODING        112
 
-#define ERR_ACN_ENCODE_FRAGMENT		4010  /**/
-#define ERR_ACN_ENCODE_FRAGMENT_OFF		3995  /**/
-#define ERR_ACN_ENCODE_FRAGMENT_LEN		4000  /**/
-#define ERR_ACN_ENCODE_FRAGMENT_DR		4005  /**/
+#define ERR_ACN_ENCODE_FRAGMENT		3946  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_OFF		3931  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_LEN		3936  /**/
+#define ERR_ACN_ENCODE_FRAGMENT_DR		3941  /**/
 
 flag Fragment_ACN_Encode(const Fragment* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_FRAGMENT		4011  /**/
-#define ERR_ACN_DECODE_FRAGMENT_OFF		3996  /**/
-#define ERR_ACN_DECODE_FRAGMENT_LEN		4001  /**/
-#define ERR_ACN_DECODE_FRAGMENT_DR		4006  /**/
+#define ERR_ACN_DECODE_FRAGMENT		3947  /**/
+#define ERR_ACN_DECODE_FRAGMENT_OFF		3932  /**/
+#define ERR_ACN_DECODE_FRAGMENT_LEN		3937  /**/
+#define ERR_ACN_DECODE_FRAGMENT_DR		3942  /**/
 flag Fragment_ACN_Decode(Fragment* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- FragmentList --------------------------------------------*/
 typedef asn1SccUint FragmentList_nf;
@@ -790,19 +767,7 @@ typedef struct {
 
 } FragmentList;
 
-#define ERR_FRAGMENTLIST_NF		4012  /*(1..65535)*/
-flag FragmentList_nf_IsConstraintValid(const FragmentList_nf* pVal, int* pErrCode);
 
-#define ERR_FRAGMENTLIST_FRAGMENTS		4022  /*(SIZE (1..16))*/
-#define ERR_FRAGMENTLIST_FRAGMENTS_ELM		4017  /**/
-flag FragmentList_fragments_IsConstraintValid(const FragmentList_fragments* pVal, int* pErrCode);
-
-#define ERR_FRAGMENTLIST		4027  /**/
-flag FragmentList_IsConstraintValid(const FragmentList* pVal, int* pErrCode);
-
-void FragmentList_nf_Initialize(FragmentList_nf* pVal);
-void FragmentList_fragments_Initialize(FragmentList_fragments* pVal);
-void FragmentList_Initialize(FragmentList* pVal);
 /*-- InnerPayload --------------------------------------------*/
 
 typedef enum {
@@ -981,29 +946,7 @@ typedef struct {
 typedef FragmentList FragmentList_Profile;
 
 
-#define ERR_FRAGMENTLIST_PROFILE_2		6011  /*(WITH COMPONENTS {
-    nf (1..1),
-    fragments (SIZE (1..1))
-})*/
-flag FragmentList_Profile_IsConstraintValid(const FragmentList_Profile* pVal, int* pErrCode);
 
-void FragmentList_Profile_Initialize(FragmentList_Profile* pVal);
-
-#define FragmentList_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       16
-#define FragmentList_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        128
-
-#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE		6009  /**/
-#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_NF		5994  /**/
-#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_FRAGMENTS		6004  /**/
-#define ERR_ACN_ENCODE_FRAGMENTLIST_PROFILE_FRAGMENTS_ELM		5999  /**/
-
-flag FragmentList_Profile_ACN_Encode(const FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
-
-#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE		6010  /**/
-#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_NF		5995  /**/
-#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_FRAGMENTS		6005  /**/
-#define ERR_ACN_DECODE_FRAGMENTLIST_PROFILE_FRAGMENTS_ELM		6000  /**/
-flag FragmentList_Profile_ACN_Decode(FragmentList_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- InnerPayload_Profile --------------------------------------------*/
 
 typedef enum {

@@ -25,13 +25,17 @@ static uint64_t sat_mul(uint64_t a, uint64_t b) {
     return a != 0 && b > UINT64_MAX / a ? UINT64_MAX : a * b;
 }
 
-int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t tile,
+int hv_geometry_init(hv_geometry *g, const hv_siz *hsiz, const Cod *cod, uint32_t tile,
                      char *error, size_t error_size) {
+    const SizFixed *siz = hsiz->fixed;
     int64_t ntx, nty, p, q;
     int NL = (int)cod->spcod.levels, c, r, b;
     int cbw = (int)cod->spcod.cbWidthExp + 2, cbh = (int)cod->spcod.cbHeightExp + 2;
 
     memset(g, 0, sizeof *g);
+    /* The components are read up to Csiz: there must be that many. */
+    if (hsiz->ncomponents != siz->csiz)
+        return hv_fail(error, error_size, "siz.csiz-count");
     /* B-5 to B-10: the tile's position in the grid and its extent. */
     ntx = ceildiv((int64_t)siz->xsiz - (int64_t)siz->xtosiz, (int64_t)siz->xtsiz);
     nty = ceildiv((int64_t)siz->ysiz - (int64_t)siz->ytosiz, (int64_t)siz->ytsiz);
@@ -52,8 +56,8 @@ int hv_geometry_init(hv_geometry *g, const Siz *siz, const Cod *cod, uint32_t ti
         return hv_fail(error, error_size, "out of memory");
 
     for (c = 0; c < g->ncomps; c++) {
-        int64_t xr = (int64_t)siz->components.arr[c].xrsiz;
-        int64_t yr = (int64_t)siz->components.arr[c].yrsiz;
+        int64_t xr = (int64_t)hsiz->components[c].xrsiz;
+        int64_t yr = (int64_t)hsiz->components[c].yrsiz;
         /* B-12: the tile-component. */
         int64_t cx0 = ceildiv(g->tx0, xr), cy0 = ceildiv(g->ty0, yr);
         int64_t cx1 = ceildiv(g->tx1, xr), cy1 = ceildiv(g->ty1, yr);

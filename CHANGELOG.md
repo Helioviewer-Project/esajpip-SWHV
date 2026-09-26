@@ -19,7 +19,12 @@ while letting HTTP connections be pooled or replaced independently of channels.
   `spec/check-model.sh --static` checks, without a compiler, that the code
   restating the model agrees with it.
 - A JPEG 2000 reader/writer library (`lib/`), built on code generated from
-  that description and sharing its rules, and the `hv_walk` tool.
+  that description and sharing its rules, and the `hv_walk` tool. It decodes
+  and encodes one header or one list element at a time (SIZ components, PLT
+  packet lengths, Reader Requirements features, palette column depths), up
+  to the end the segment or box length gives, so it holds no struct sized by
+  the standard's bound on a list; the header box checks keep where a `bpcc`
+  box's entries are rather than copying them.
 - `hv_transcode` (`transcode/`), a C port of hvJP2K's transcoder that
   rejects files it cannot make servable.
 - `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`),

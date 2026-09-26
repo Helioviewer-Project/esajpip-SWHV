@@ -34,16 +34,17 @@
 -- generated file structs gigabytes large. A vector exceeding a corpus bound
 -- is not a standard-invalid file; the harness never generates one.
 --
--- Bodies with a corpus bound are parameterized types with two instances:
--- the plain name (Plt, Com) carries the corpus bound and is what the
--- whole-file model uses; the -Std instance carries the standard's bound and
--- is what the reader/writer (jpeg2000-io.asn1) decodes one segment at a
--- time. QCD is small enough for the standard's bound in both (Qcd and
--- Qcd-Std are two instances with the same arguments). A WITH COMPONENTS
--- subtype would not do: asn1scc keeps the base type's allocation, while
--- each instance of a parameterized type gets its own. The -Std suffix means
--- the same in every module: the reader/writer's version of a type, at the
--- standard's bounds (jpeg2000-io.asn1, "The -Std suffix").
+-- Bodies with a corpus bound are parameterized types: the instance the
+-- whole-file model uses (Plt, Com) carries the corpus bound. The
+-- reader/writer (jpeg2000-io.asn1) reads PLT and COM one element at a time
+-- (Zplt, Iplt, Rcom), so no instance needs the standard's bound for them
+-- (Table A.37: Lplt 4 to 65,535; Table A.43: Lcom 5 to 65,535); it decodes
+-- QCD whole, as Qcd-Std, which is small enough for the standard's bound in
+-- both (Qcd and Qcd-Std are two instances with the same arguments). A
+-- WITH COMPONENTS subtype would not do: asn1scc keeps the base type's
+-- allocation, while each instance of a parameterized type gets its own. The -Std suffix means the same in every module: the
+-- reader/writer's version of a type, at the standard's bounds
+-- (jpeg2000-io.asn1, "The -Std suffix").
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -58,6 +59,13 @@ EXPORTS ALL;
 -- ---------------------------------------------------------------------------
 
 Siz ::= SEQUENCE {
+    fixed       SizFixed,
+    components  SEQUENCE (SIZE (1..16384)) OF Component  -- fills the segment; count == csiz
+}
+
+-- The fixed part of SIZ, which the reader decodes on its own before the
+-- components, one at a time (jpeg2000-io.asn1).
+SizFixed ::= SEQUENCE {
     rsiz        INTEGER (0..65535),           -- capability flags are preserved for the client;
                                               -- packet-layout features are checked separately
     xsiz        INTEGER (1..4294967295),      -- reference grid width
@@ -68,8 +76,7 @@ Siz ::= SEQUENCE {
     ytsiz       INTEGER (1..4294967295),      -- reference tile height
     xtosiz      INTEGER (0..4294967294),      -- tile grid horizontal offset
     ytosiz      INTEGER (0..4294967294),      -- tile grid vertical offset
-    csiz        INTEGER (1..16384),           -- number of components
-    components  SEQUENCE (SIZE (1..16384)) OF Component  -- fills the segment; count == csiz
+    csiz        INTEGER (1..16384)            -- number of components
 }
 
 Component ::= SEQUENCE {                      -- Ssiz, XRsiz, YRsiz (Table A.11)
@@ -141,12 +148,13 @@ Qcd-Std ::= QcdBody {1, 194}                  -- Table A.27: Lqcd 4 to 197
 -- ---------------------------------------------------------------------------
 
 PltBody {INTEGER:maxEntries} ::= SEQUENCE {
-    zplt        INTEGER (0..255),             -- index of this PLT segment
+    zplt        Zplt,
     entries     SEQUENCE (SIZE (1..maxEntries)) OF Iplt   -- fills the segment
 }
 
+Zplt ::= INTEGER (0..255)                     -- index of this PLT segment
+
 Plt ::= PltBody {128}                         -- corpus bound
-Plt-Std ::= PltBody {65532}                   -- Table A.37: Lplt 4 to 65,535, entries >= 1 byte
 
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
 -- byte follows. T.800 does not bound the byte count; the model stops at ten
@@ -180,12 +188,13 @@ IpltByteLast ::= SEQUENCE {
 -- ---------------------------------------------------------------------------
 
 ComBody {INTEGER:minCcom, INTEGER:maxCcom} ::= SEQUENCE {
-    rcom        INTEGER (0..1),               -- 0 binary, 1 Latin-1
+    rcom        Rcom,
     ccom        OCTET STRING (SIZE (minCcom..maxCcom))  -- fills the segment
 }
 
+Rcom ::= INTEGER (0..1)                       -- 0 binary, 1 Latin-1
+
 Com ::= ComBody {1, 4096}                     -- corpus bound; Lcom >= 5 (Table A.43)
-Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65,535
 
 -- ===========================================================================
 -- Layer 2: esajpip served profile (JPIP_PROFILE.md)
@@ -193,17 +202,26 @@ Com-Std ::= ComBody {1, 65531}                -- Table A.43: Lcom 5 to 65,535
 
 Siz-Profile ::= Siz (WITH COMPONENTS {
     ...,
+    fixed       (SizFixed-Profile),
+    components  (WITH COMPONENT (Component-Profile))
+})
+
+-- The profile's SIZ in the two parts the reader checks separately; Siz-Profile
+-- is stated through them, so the constraints are written once.
+SizFixed-Profile ::= SizFixed (WITH COMPONENTS {
+    ...,
     xsiz    (1..2147483647),
     ysiz    (1..2147483647),
     xosiz   (0..0),
     yosiz   (0..0),
     xtosiz  (0..0),
-    ytosiz  (0..0),
-    components (WITH COMPONENT (WITH COMPONENTS {
-        ...,
-        xrsiz (1..1),                         -- one shared precinct geometry
-        yrsiz (1..1)                          -- (ReadSIZMarker)
-    }))
+    ytosiz  (0..0)
+})
+
+Component-Profile ::= Component (WITH COMPONENTS {
+    ...,
+    xrsiz (1..1),                             -- one shared precinct geometry
+    yrsiz (1..1)                              -- (ReadSIZMarker)
 })
 
 -- A distinct SEQUENCE keeps the profile's ACN encoding explicit. ASN1SCC

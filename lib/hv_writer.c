@@ -2,7 +2,7 @@
 #include "hv_writer.h"
 
 #include "hv_codes.h"
-#include "jp2-boxes.h"        /* FragmentList-Profile */
+#include "jp2-boxes.h"        /* Fragment, the Reader Requirements features */
 
 #include <limits.h>
 #include <stdlib.h>
@@ -65,13 +65,16 @@ static int reserve(hv_out *out, size_t more) {
 }
 
 /* Runs a generated encoder at `at`, with room for its largest encoding:
- * the generated encoders do not check the room themselves. They also skip
- * zero bits instead of writing them, so the bytes they write must be zero
- * first. Past out->size they are (see hv_out_rewind), so an append (`at` =
- * out->size) clears nothing; an in-place patch clears exactly the `clear`
- * bytes of the header it replaces, which lie below out->size. What an
- * encoder that fails wrote past out->size is zeroed again. `what` names
- * the type in the error message. */
+ * the generated encoders do not check the room themselves. Every type
+ * here is small, a fixed part or one element of a list (at most 197 bytes,
+ * QcdSegment-Std), so the room costs nothing. They also skip zero bits
+ * instead of writing them (BitStream_AppendNBitZero only moves on), so the
+ * bytes they write must be zero first. Past out->size they are (see
+ * hv_out_rewind), so an append (`at` = out->size) clears nothing; an
+ * in-place patch clears exactly the `clear` bytes of the header it
+ * replaces, which lie below out->size. What an encoder that fails wrote
+ * past out->size is zeroed again. `what` names the type in the error
+ * message. */
 #define ENCODE(T, value, out, at, clear, written)                            \
     encode_##T((value), (out), (at), (clear), (written))
 
@@ -102,13 +105,18 @@ DEFINE_ENCODE(BoxHeader, "box header")
 DEFINE_ENCODE(MarkerCode, "marker code")
 DEFINE_ENCODE(SegmentLength, "marker segment length")
 DEFINE_ENCODE(SotSegment, "SOT segment")
-DEFINE_ENCODE(Rreq_Std, "Reader Requirements box contents")
-DEFINE_ENCODE(SizSegment_Std, "SIZ segment")
+DEFINE_ENCODE(SizFixed, "SIZ segment")
+DEFINE_ENCODE(Component, "SIZ segment")
 DEFINE_ENCODE(CodSegment_Std, "COD segment")
 DEFINE_ENCODE(QcdSegment_Std, "QCD segment")
-DEFINE_ENCODE(PltSegment_Std, "PLT segment")
-DEFINE_ENCODE(ComSegment_Std, "COM segment")
-DEFINE_ENCODE(FragmentList_Profile, "Fragment List box contents")
+DEFINE_ENCODE(Zplt, "PLT segment")
+DEFINE_ENCODE(Rcom, "COM segment")
+DEFINE_ENCODE(FragmentCount, "Fragment List box contents")
+DEFINE_ENCODE(Fragment, "Fragment List box contents")
+DEFINE_ENCODE(RreqHeader, "Reader Requirements box contents")
+DEFINE_ENCODE(RreqStandardFeature, "Reader Requirements box contents")
+DEFINE_ENCODE(FeatureCount, "Reader Requirements box contents")
+DEFINE_ENCODE(RreqVendorFeature, "Reader Requirements box contents")
 DEFINE_ENCODE(DataReferenceCount, "NDR")
 DEFINE_ENCODE(UrlHeader, "URL box VERS and FLAG")
 
@@ -149,15 +157,20 @@ DEFINE_APPEND(BoxHeader)
 DEFINE_APPEND(MarkerCode)
 DEFINE_APPEND(SegmentLength)
 DEFINE_APPEND(SotSegment)
-DEFINE_APPEND(SizSegment_Std)
+DEFINE_APPEND(SizFixed)
+DEFINE_APPEND(Component)
 DEFINE_APPEND(CodSegment_Std)
 DEFINE_APPEND(QcdSegment_Std)
-DEFINE_APPEND(PltSegment_Std)
-DEFINE_APPEND(ComSegment_Std)
-DEFINE_APPEND(FragmentList_Profile)
+DEFINE_APPEND(Zplt)
+DEFINE_APPEND(Rcom)
+DEFINE_APPEND(FragmentCount)
+DEFINE_APPEND(Fragment)
 DEFINE_APPEND(DataReferenceCount)
 DEFINE_APPEND(UrlHeader)
-DEFINE_APPEND(Rreq_Std)
+DEFINE_APPEND(RreqHeader)
+DEFINE_APPEND(RreqStandardFeature)
+DEFINE_APPEND(FeatureCount)
+DEFINE_APPEND(RreqVendorFeature)
 
 /* A marker code (A.1.1). */
 #define MARKER HV_FIXED(MarkerCode)
@@ -176,18 +189,49 @@ int hv_write_marker(hv_out *out, uint16_t code) {
     return APPEND(MarkerCode, &m, out);
 }
 
-int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size) {
-    SegmentLength l;
-    if (size > UINT16_MAX - HV_FIXED(SegmentLength))      /* Lxxx counts itself */
-        return out_fail(out, "marker segment body longer than 65,533 bytes");
-    l = size + 2;
-    if (hv_write_marker(out, code) != 0 || APPEND(SegmentLength, &l, out) != 0)
-        return -1;
-    return hv_write_bytes(out, body, size);
+/* A marker segment written piece by piece: the code and an Lxxx that
+ * end_segment sets to the bytes written since, as the other lengths the
+ * writer fills in (Psot, LBox). */
+static int begin_segment(hv_out *out, uint16_t code, size_t *start) {
+    SegmentLength l = HV_FIXED(SegmentLength);        /* a placeholder */
+    *start = out->size;
+    return hv_write_marker(out, code) != 0 ? -1 : APPEND(SegmentLength, &l, out);
 }
 
-int hv_write_siz(hv_out *out, const SizSegment_Std *siz) {
-    return hv_write_marker(out, HV_SIZ) != 0 ? -1 : APPEND(SizSegment_Std, siz, out);
+static int end_segment(hv_out *out, size_t start) {
+    SegmentLength l;
+    size_t length, written;
+
+    if (out->error != NULL)
+        return -1;
+    if (start > out->size || out->size - start < MARKER + HV_FIXED(SegmentLength))
+        return out_fail(out, "marker segment shorter than its code and Lxxx");
+    length = out->size - start - MARKER;                /* Lxxx counts itself */
+    if (length > UINT16_MAX)
+        return out_fail(out, "marker segment longer than 65,535 bytes (Lxxx)");
+    l = length;
+    return ENCODE(SegmentLength, &l, out, start + MARKER, HV_FIXED(SegmentLength), &written);
+}
+
+int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size) {
+    size_t start;
+    if (out->error != NULL)
+        return -1;
+    if (size > UINT16_MAX - HV_FIXED(SegmentLength))      /* Lxxx counts itself */
+        return out_fail(out, "marker segment body longer than 65,533 bytes");
+    if (begin_segment(out, code, &start) != 0 || hv_write_bytes(out, body, size) != 0)
+        return -1;
+    return end_segment(out, start);
+}
+
+int hv_write_siz(hv_out *out, const hv_siz *siz) {
+    size_t start, i;
+    if (begin_segment(out, HV_SIZ, &start) != 0 || APPEND(SizFixed, siz->fixed, out) != 0)
+        return -1;
+    for (i = 0; i < siz->ncomponents; i++)
+        if (APPEND(Component, &siz->components[i], out) != 0)
+            return -1;
+    return end_segment(out, start);
 }
 
 int hv_write_cod(hv_out *out, const CodSegment_Std *cod) {
@@ -198,12 +242,46 @@ int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd) {
     return hv_write_marker(out, HV_QCD) != 0 ? -1 : APPEND(QcdSegment_Std, qcd, out);
 }
 
-int hv_write_com(hv_out *out, const ComSegment_Std *com) {
-    return hv_write_marker(out, HV_COM) != 0 ? -1 : APPEND(ComSegment_Std, com, out);
+int hv_write_com(hv_out *out, Rcom rcom, const uint8_t *text, size_t size) {
+    size_t start;
+    if (out->error != NULL)
+        return -1;
+    if (size == 0)                                  /* Ccom: at least one byte */
+        return out_fail(out, "COM segment without text");
+    if (begin_segment(out, HV_COM, &start) != 0 || APPEND(Rcom, &rcom, out) != 0 ||
+        hv_write_bytes(out, text, size) != 0)
+        return -1;
+    return end_segment(out, start);
 }
 
-/* One Iplt entry: 7-bit groups, most significant first. Returns its bytes. */
-static int set_iplt(Iplt *p, uint64_t value) {
+/* Appends one Iplt entry. The generated Iplt_ACN_Encode, encoding an
+ * entry of 2 to 8 bytes, patches the `more` determinants of the absent
+ * bytes (b(n) to b8, present-when b(n-1).more ...) at the start of the
+ * stream, where it never placed them: it writes a 0 bit over bit 7 of the
+ * first byte, b0's `more`. Inside a whole PLT segment that bit was Lplt's,
+ * which the encoder set afterwards; an entry encoded on its own loses it.
+ * So the entry is encoded after a guard byte that takes those writes, and
+ * the bytes after it are appended. (asn1scc 4.9.3.0 with the patches of
+ * ../spec/asn1scc-patches.) */
+static int append_iplt(const Iplt *entry, hv_out *out) {
+    uint8_t buf[1 + HV_LARGEST(Iplt)];
+    BitStream s;
+    int err = 0;
+    size_t written;
+
+    if (out->error != NULL)
+        return -1;
+    memset(buf, 0, sizeof buf);
+    BitStream_AttachBuffer(&s, buf, (long)sizeof buf);
+    BitStream_AppendNBitZero(&s, 8);                    /* the guard byte */
+    if (!Iplt_ACN_Encode(entry, &s, &err, TRUE))
+        return out_fail(out, "invalid PLT segment");
+    written = (size_t)BitStream_GetLength(&s) - 1;
+    return hv_write_bytes(out, buf + 1, written);
+}
+
+/* One Iplt entry: 7-bit groups, most significant first. */
+static void set_iplt(Iplt *p, uint64_t value) {
     IpltByte *more[9] = {&p->b0, &p->b1, &p->b2, &p->b3, &p->b4,
                          &p->b5, &p->b6, &p->b7, &p->b8};
     unsigned groups[10];                          /* b0 to b9 of the model's Iplt */
@@ -230,46 +308,42 @@ static int set_iplt(Iplt *p, uint64_t value) {
     p->exist.b7 = n > 7;
     p->exist.b8 = n > 8;
     p->exist.b9 = n > 9;
-    return n;
 }
 
 int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
-    PltSegment_Std *plt;
-    size_t i = 0;
-    int zplt = 0, status = 0;
+    size_t i, start = 0, before;
+    Zplt zplt = 0;
+    int open = 0;
 
-    if (out->error != NULL)
-        return -1;
-    if ((plt = malloc(sizeof *plt)) == NULL)
-        return out_fail(out, "out of memory");
-    while (status == 0 && i < count) {
-        size_t bytes = 0;
-        if (zplt > UINT8_MAX) {                           /* Zplt, A.7.3 */
-            status = out_fail(out, "more than 256 PLT segments in a tile-part");
-            break;
+    for (i = 0; i < count; i++) {
+        Iplt entry;
+        if (out->error != NULL)
+            return -1;
+        if (lengths[i] == 0)
+            return out_fail(out, "zero packet length");
+        if (!open) {
+            if (zplt > UINT8_MAX)                       /* Zplt, A.7.3 */
+                return out_fail(out, "more than 256 PLT segments in a tile-part");
+            if (begin_segment(out, HV_PLT, &start) != 0 || APPEND(Zplt, &zplt, out) != 0)
+                return -1;
+            zplt++;
+            open = 1;
         }
-        plt->body.zplt = zplt++;
-        plt->body.entries.nCount = 0;
-        /* Lplt = its own 2 bytes + Zplt + entry bytes <= 65,535. */
-        while (i < count) {
-            Iplt entry;
-            int n;
-            if (lengths[i] == 0) {
-                status = out_fail(out, "zero packet length");
-                break;
-            }
-            n = set_iplt(&entry, lengths[i]);
-            if (bytes + n > UINT16_MAX - HV_FIXED(SegmentLength) - 1)
-                break;
-            plt->body.entries.arr[plt->body.entries.nCount++] = entry;
-            bytes += n;
-            i++;
+        set_iplt(&entry, lengths[i]);
+        before = out->size;
+        if (append_iplt(&entry, out) != 0)
+            return -1;
+        /* Lplt, which counts itself, Zplt and the entries, is at most
+         * 65,535: an entry that does not fit starts the next segment. */
+        if (out->size - start - MARKER > UINT16_MAX) {
+            hv_out_rewind(out, before);
+            if (end_segment(out, start) != 0)
+                return -1;
+            open = 0;
+            i--;
         }
-        if (status == 0)
-            status = hv_write_marker(out, HV_PLT) != 0 ? -1 : APPEND(PltSegment_Std, plt, out);
     }
-    free(plt);
-    return status;
+    return open ? end_segment(out, start) : out->error != NULL ? -1 : 0;
 }
 
 static SotSegment make_sot(uint16_t isot, uint32_t psot, uint8_t tpsot, uint8_t tnsot) {
@@ -367,15 +441,14 @@ int hv_write_box_header(hv_out *out, uint32_t type, uint64_t size) {
 }
 
 int hv_write_flst(hv_out *out, uint64_t offset, uint32_t length, uint16_t dr) {
-    FragmentList_Profile f;
-    memset(&f, 0, sizeof f);
-    f.nf = 1;
-    f.fragments.nCount = 1;
-    f.fragments.arr[0].off = offset;
-    f.fragments.arr[0].len = length;
-    f.fragments.arr[0].dr = dr;
-    return hv_write_box_header(out, HV_BOX_FLST, HV_FIXED(FragmentList_Profile)) != 0
-         ? -1 : APPEND(FragmentList_Profile, &f, out);
+    FragmentCount nf = 1;
+    Fragment f;
+    size_t start;
+    f.off = offset;
+    f.len = length;
+    f.dr = dr;
+    return hv_begin_box(out, HV_BOX_FLST, 0, &start) != 0 || APPEND(FragmentCount, &nf, out) != 0 ||
+           APPEND(Fragment, &f, out) != 0 ? -1 : hv_end_box(out, start);
 }
 
 int hv_write_ndr(hv_out *out, uint16_t ndr) {
@@ -385,15 +458,38 @@ int hv_write_ndr(hv_out *out, uint16_t ndr) {
 
 int hv_write_url(hv_out *out, const char *loc) {
     UrlHeader h = {0, 0};
-    size_t n = strlen(loc) + 1;
-    if (hv_write_box_header(out, HV_BOX_URL, HV_FIXED(UrlHeader) + (uint64_t)n) != 0 ||
-        APPEND(UrlHeader, &h, out) != 0)
-        return -1;
-    return hv_write_bytes(out, loc, n);
+    size_t start;
+    return hv_begin_box(out, HV_BOX_URL, 0, &start) != 0 || APPEND(UrlHeader, &h, out) != 0 ||
+           hv_write_bytes(out, loc, strlen(loc) + 1) != 0 ? -1 : hv_end_box(out, start);
 }
 
-int hv_write_rreq(hv_out *out, const Rreq_Std *rreq) {
-    size_t start;
-    return hv_begin_box(out, HV_BOX_RREQ, 0, &start) != 0 || APPEND(Rreq_Std, rreq, out) != 0
-         ? -1 : hv_end_box(out, start);
+int hv_write_rreq(hv_out *out, const RreqHeader *header, const RreqStandardFeature *standard,
+                  size_t nstandard, const RreqVendorFeature *vendor, size_t nvendor) {
+    int ml = header->fuam.nCount;           /* ML: the length of every mask */
+    FeatureCount nvf = nvendor;
+    size_t start, i;
+
+    if (out->error != NULL)
+        return -1;
+    if (header->nsf != nstandard)
+        return out_fail(out, "Reader Requirements NSF other than the standard features given");
+    if (header->dcm.nCount != ml)
+        return out_fail(out, "Reader Requirements masks of different lengths (ML)");
+    for (i = 0; i < nstandard; i++)
+        if (standard[i].sm.nCount != ml)
+            return out_fail(out, "Reader Requirements masks of different lengths (ML)");
+    for (i = 0; i < nvendor; i++)
+        if (vendor[i].vm.nCount != ml)
+            return out_fail(out, "Reader Requirements masks of different lengths (ML)");
+    if (hv_begin_box(out, HV_BOX_RREQ, 0, &start) != 0 || APPEND(RreqHeader, header, out) != 0)
+        return -1;
+    for (i = 0; i < nstandard; i++)
+        if (APPEND(RreqStandardFeature, &standard[i], out) != 0)
+            return -1;
+    if (APPEND(FeatureCount, &nvf, out) != 0)
+        return -1;
+    for (i = 0; i < nvendor; i++)
+        if (APPEND(RreqVendorFeature, &vendor[i], out) != 0)
+            return -1;
+    return hv_end_box(out, start);
 }

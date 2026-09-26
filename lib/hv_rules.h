@@ -28,6 +28,7 @@
 #ifndef HV_RULES_H
 #define HV_RULES_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "hv_codes.h"
@@ -38,11 +39,21 @@
 extern "C" {
 #endif
 
-/* SIZ (A.5.1, B.3): Csiz, the image area and the tile grid. Given the Sgcod
- * of a COD (NULL before there is one), also what the multiple component
- * transform requires of the first three components (A.6.1, G.2). The
- * profile adds zero origins, unit sampling and a single tile. */
-const char *hv_rule_siz(const Siz *siz, const Sgcod *sgcod, int profile);
+/* SIZ as the rules and the geometry see it, however it was decoded: the
+ * reader decodes SizFixed and then the components one at a time; the
+ * harness decodes the whole-file model's Siz and points into it. */
+typedef struct {
+    const SizFixed *fixed;
+    const Component *components;
+    size_t ncomponents;        /* components decoded (Csiz when the segment is valid) */
+} hv_siz;
+
+/* SIZ (A.5.1, B.3): Csiz against the components decoded (siz.csiz-count),
+ * the image area and the tile grid. Given the Sgcod of a COD (NULL before
+ * there is one), also what the multiple component transform requires of
+ * the first three components (A.6.1, G.2). The profile adds zero origins,
+ * unit sampling and a single tile. */
+const char *hv_rule_siz(const hv_siz *siz, const Sgcod *sgcod, int profile);
 
 /* COD (A.6.1): the precinct sizes and the code-block area. The profile
  * adds: no SOP markers. */
@@ -51,7 +62,7 @@ const char *hv_rule_cod(const Scod *scod, const Spcod *spcod, int profile);
 /* Not a check: the tiles of the grid SIZ describes that Isot (0 to 65,534)
  * can address, at most 65,535. 0 if SIZ has no tile grid (siz.tile-origin
  * and the other SIZ rules fail then). */
-uint32_t hv_rule_tiles(const Siz *siz);
+uint32_t hv_rule_tiles(const hv_siz *siz);
 
 /* The tile-parts of a codestream, counted per tile. The caller provides
  * `tiles` (hv_rule_tiles) and two zeroed arrays of that many entries. */
@@ -98,11 +109,11 @@ const char *hv_rule_plt_entry(hv_plt_count *count, uint64_t value, int profile);
 /* Not a check: the number of packets (B.6, B.7) of a codestream with one
  * tile, zero origins and unit sampling, from its SIZ and main COD; 0 when
  * it exceeds INT32_MAX, which the server's signed JPIP state cannot hold. */
-uint64_t hv_rule_packets(const Siz *siz, const Sgcod *sgcod, const Spcod *spcod);
+uint64_t hv_rule_packets(const hv_siz *siz, const Sgcod *sgcod, const Spcod *spcod);
 
 /* The counted PLT entries against hv_rule_packets: one entry per packet,
  * and in the profile a packet count the server can hold. */
-const char *hv_rule_plt_packets(const hv_plt_count *count, const Siz *siz,
+const char *hv_rule_plt_packets(const hv_plt_count *count, const hv_siz *siz,
                                 const Sgcod *sgcod, const Spcod *spcod, int profile);
 
 /* ------------------------------------------------------------------------
@@ -173,9 +184,8 @@ const char *hv_rule_jp2h_place(int jp2h, int late, int jp2c, int jpx);
  * hv_rule_header_child and its contents to the rule for its type; for a
  * Resolution box, pass its children to hv_rule_res_child and end it with
  * hv_rule_res_end. The first box of each type is recorded (the rules
- * require at most one of each but colr, and of ihdr only in jpch). About
- * 16 KiB. hv_header_init clears every field before bpcc_depth, which
- * therefore stays last: a new field goes above it. */
+ * require at most one of each but colr, and of ihdr only in jpch): its
+ * values, and of the bpcc box where its entries are, which are not copied. */
 typedef struct {
     uint32_t parent;            /* HV_BOX_JP2H, HV_BOX_JPCH or HV_BOX_JPLH */
     int jpx;                    /* in a JPX file */
@@ -184,17 +194,18 @@ typedef struct {
     int colr_ended;             /* a box followed a colr box */
     int meth1, meth2;           /* colr boxes with METH 1, METH 2 */
     Ihdr image;                 /* the first ihdr */
-    uint32_t bpcc_count;        /* entries of the first bpcc */
+    const uint8_t *bpcc_depths; /* the entries of the first bpcc, one byte
+                                 * each as in the box */
+    size_t bpcc_count;          /* how many */
     uint32_t npc;               /* palette columns of the first pclr */
+    uint64_t pclr_ne;           /* the pclr being read: NE */
+    uint64_t pclr_bytes;        /* and the bytes of an entry so far */
     uint32_t cmap_count;        /* entries of the first cmap */
     uint32_t cmap_cmp;          /* its largest CMP */
     int cmap_palette;           /* it has an entry with MTYP 1 */
     uint32_t cmap_pcol;         /* the largest PCOL of those entries */
     uint32_t cdef_cn;           /* the largest Cn of the first cdef */
     int resc, resd;             /* children of the current res box */
-    uint8_t bpcc_depth[16384];  /* the first 16,384 entries of the first
-                                 * bpcc (bpcc_count says how many are set);
-                                 * last, see above */
 } hv_header;
 
 void hv_header_init(hv_header *h, uint32_t parent, int jpx);
@@ -215,15 +226,21 @@ const char *hv_rule_ihdr(hv_header *h, const Ihdr *ihdr);
  * is "<box>.extent" (ihdr: "the length of the Image Header box shall be
  * 22 bytes", I.5.3.1). */
 const char *hv_rule_extent(uint32_t type, uint64_t extra);
-/* One bpcc entry, in order. */
-const char *hv_rule_bpcc_entry(hv_header *h, uint64_t depth);
+/* The n entries of a bpcc box, one byte each as in the box, each a
+ * BitDepth (the caller decodes them one at a time). For the first bpcc, h
+ * keeps the pointer: the entries must stay in place until
+ * hv_rule_codestream_header has read h. */
+const char *hv_rule_bpcc(hv_header *h, const uint8_t *depths, size_t n);
 /* METH, EnumCS, and `rest`, the bytes after them. In a JP2 file, METH 1 or
  * 2, and the first colr, if enumerated, sRGB, greyscale or sYCC (I.5.3.3);
  * in a JPX file, no two enumerated or two ICC colr in jp2h (M.11.7.1). */
 const char *hv_rule_colr(hv_header *h, const ColrHeader *colr, size_t rest);
-/* NE and the column depths, and `entries`, the bytes of the table: NE x
- * NPC values, each padded to whole bytes. */
-const char *hv_rule_pclr(hv_header *h, const PclrHeader *pclr, uint64_t entries);
+/* A pclr box in order: NE and NPC, the BitDepth of each of the NPC
+ * columns, then `entries`, the bytes of the table: NE x NPC values, each
+ * padded to whole bytes. */
+const char *hv_rule_pclr(hv_header *h, uint64_t ne, uint64_t npc);
+const char *hv_rule_pclr_column(hv_header *h, uint64_t depth);
+const char *hv_rule_pclr_end(hv_header *h, uint64_t entries);
 /* One cmap entry, in order: PCOL 0 when MTYP is 0. */
 const char *hv_rule_cmap_entry(hv_header *h, const CmapEntry *entry);
 /* The n cdef entries: no two with the same Typ and Asoc, except where
@@ -247,9 +264,9 @@ const char *hv_rule_res_end(hv_header *h);
  *     columns below NPC; cdef describes channels there are (JP2); and
  *     against SIZ, HEIGHT = Ysiz - YOsiz, WIDTH = Xsiz - XOsiz, NC = Csiz,
  *     BPC the components' common Ssiz or 255 when they differ, and each
- *     bpcc entry the component's Ssiz. */
+ *     bpcc entry the component's Ssiz (read where hv_rule_bpcc left it). */
 const char *hv_rule_codestream_header(const hv_header *h, const hv_header *defaults,
-                                      const Siz *siz, int jpx);
+                                      const hv_siz *siz, int jpx);
 
 #ifdef __cplusplus
 }

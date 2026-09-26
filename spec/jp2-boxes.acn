@@ -210,9 +210,11 @@ Resolution [] {
 -- and deferred-sibling-consumers).
 
 StandardFeature <INTEGER:ml> [] {
-    sf          [encoding pos-int, size 16, endianness big],
+    sf          [],
     sm          [size ml]
 }
+
+FeatureCode [encoding pos-int, size 16, endianness big]
 
 VendorFeature <INTEGER:ml> [] {
     vf          [],
@@ -309,7 +311,7 @@ DataReferences-Profile [] {
 
 FragmentList-Profile [] {
     nf          [encoding pos-int, size 16, endianness big],
-    fragments   []                  -- fixed SIZE (1..1): asn1scc refuses `size deduced`
+    fragments   [size deduced]
 }
 
 DataEntryUrl-Profile [] {

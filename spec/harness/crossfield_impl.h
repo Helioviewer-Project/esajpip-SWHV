@@ -28,7 +28,8 @@
 /* The rules on values are shared with the reader: ../../lib/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
                                           const CF_COD *cod) {
-    return hv_rule_siz(s, cod != NULL ? &cod->sgcod : NULL, layer >= CF_PROFILE);
+    hv_siz v = cf_siz_view(s);
+    return hv_rule_siz(&v, cod != NULL ? &cod->sgcod : NULL, layer >= CF_PROFILE);
 }
 
 static const char *CF_CAT3(cf_cod, CF_S, )(const CF_COD *c, cf_layer layer) {
@@ -43,9 +44,10 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     hv_plt_count count = { 0, 0 };
     hv_tile_parts seen = { 0, cf_tile_parts, cf_tile_tnsot };
     const CF_COD *main_cod = NULL;
+    const hv_siz siz = cf_siz_view(&cs->siz.body);
     const char *r;
 
-    seen.tiles = hv_rule_tiles(&cs->siz.body);
+    seen.tiles = hv_rule_tiles(&siz);
     memset(cf_tile_parts, 0, seen.tiles * sizeof *cf_tile_parts);
     memset(cf_tile_tnsot, 0, seen.tiles * sizeof *cf_tile_tnsot);
 
@@ -147,7 +149,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 if (!tp->rest.headers.arr[j].exist.cod) continue;
                 if ((r = CF_CAT3(cf_cod, CF_S, )(c, layer)) != NULL) return r;
                 /* A tile-part COD's MCT needs the same components. */
-                if ((r = hv_rule_siz(&cs->siz.body, &c->sgcod, layer >= CF_PROFILE)) != NULL)
+                if ((r = hv_rule_siz(&siz, &c->sgcod, layer >= CF_PROFILE)) != NULL)
                     return r;
             }
         }
@@ -161,10 +163,11 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     }
     if (layer == CF_STANDARD) {
         const CF_T(Siz) *s = &cs->siz.body;
+        const SizFixed *f = &s->fixed;
         if (!all_parts_have_plt || packet_layout_override ||
-            s->xosiz != 0 || s->yosiz != 0 ||
-            s->xtosiz != 0 || s->ytosiz != 0 ||
-            s->xtsiz < s->xsiz || s->ytsiz < s->ysiz)
+            f->xosiz != 0 || f->yosiz != 0 ||
+            f->xtosiz != 0 || f->ytosiz != 0 ||
+            f->xtsiz < f->xsiz || f->ytsiz < f->ysiz)
             return NULL;
         for (i = 0; i < s->components.nCount; ++i)
             if (s->components.arr[i].xrsiz != 1 ||
@@ -172,7 +175,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 return NULL;
     }
     if (main_cod != NULL && plts > 0)
-        return hv_rule_plt_packets(&count, &cs->siz.body, &main_cod->sgcod,
+        return hv_rule_plt_packets(&count, &siz, &main_cod->sgcod,
                                    &main_cod->spcod, layer >= CF_PROFILE);
     return NULL;
 }

@@ -26,6 +26,11 @@
 J2K-Headers DEFINITIONS ::= BEGIN
 
 Siz [] {
+    fixed       [],
+    components  [size deduced]
+}
+
+SizFixed [] {
     rsiz        [encoding pos-int, size 16, endianness big],
     xsiz        [encoding pos-int, size 32, endianness big],
     ysiz        [encoding pos-int, size 32, endianness big],
@@ -35,8 +40,7 @@ Siz [] {
     ytsiz       [encoding pos-int, size 32, endianness big],
     xtosiz      [encoding pos-int, size 32, endianness big],
     ytosiz      [encoding pos-int, size 32, endianness big],
-    csiz        [encoding pos-int, size 16, endianness big],
-    components  [size deduced]
+    csiz        [encoding pos-int, size 16, endianness big]
 }
 
 Component [] {
@@ -97,19 +101,18 @@ Qcd-Std [] {
 }
 
 PltBody [] {
-    zplt        [encoding pos-int, size 8],
+    zplt        [],
     entries     [size deduced]
 }
 
 Plt [] {
-    zplt        [encoding pos-int, size 8],
+    zplt        [],
     entries     [size deduced]
 }
 
-Plt-Std [] {
-    zplt        [encoding pos-int, size 8],
-    entries     [size deduced]
-}
+Zplt [encoding pos-int, size 8]
+
+Rcom [encoding pos-int, size 16, endianness big]
 
 Iplt [] {
     b0  [],
@@ -135,17 +138,12 @@ IpltByteLast [] {
 }
 
 ComBody [] {
-    rcom        [encoding pos-int, size 16, endianness big],
+    rcom        [],
     ccom        [size deduced]
 }
 
 Com [] {
-    rcom        [encoding pos-int, size 16, endianness big],
-    ccom        [size deduced]
-}
-
-Com-Std [] {
-    rcom        [encoding pos-int, size 16, endianness big],
+    rcom        [],
     ccom        [size deduced]
 }
 
@@ -153,6 +151,11 @@ Com-Std [] {
 -- State their wire encodings explicitly; they are byte-for-byte identical to
 -- the base marker-body types above and differ only in ASN.1 constraints.
 Siz-Profile [] {
+    fixed       [],
+    components  [size deduced]
+}
+
+SizFixed-Profile [] {
     rsiz        [encoding pos-int, size 16, endianness big],
     xsiz        [encoding pos-int, size 32, endianness big],
     ysiz        [encoding pos-int, size 32, endianness big],
@@ -162,8 +165,14 @@ Siz-Profile [] {
     ytsiz       [encoding pos-int, size 32, endianness big],
     xtosiz      [encoding pos-int, size 32, endianness big],
     ytosiz      [encoding pos-int, size 32, endianness big],
-    csiz        [encoding pos-int, size 16, endianness big],
-    components  [size deduced]
+    csiz        [encoding pos-int, size 16, endianness big]
+}
+
+Component-Profile [] {
+    isSigned    [true-value '1'B],
+    depthMinus1 [encoding pos-int, size 7],
+    xrsiz       [encoding pos-int, size 8],
+    yrsiz       [encoding pos-int, size 8]
 }
 
 Cod-Profile [] {
@@ -178,12 +187,12 @@ Qcd-Profile [] {
 }
 
 Plt-Profile [] {
-    zplt        [encoding pos-int, size 8],
+    zplt        [],
     entries     [size deduced]
 }
 
 Com-Profile [] {
-    rcom        [encoding pos-int, size 16, endianness big],
+    rcom        [],
     ccom        [size deduced]
 }
 

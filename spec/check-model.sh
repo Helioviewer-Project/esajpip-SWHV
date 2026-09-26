@@ -19,10 +19,17 @@
 #     SEQUENCE for every code in it;
 #   * the ACN encodings the model restates (profile types, -Std types,
 #     parameterized instances, the box wrappers) and the ASN.1 types it
-#     copies (Cod-Profile, SizSegment-Std, CodSegment-Std, Rreq-Std) agree;
+#     copies (Cod-Profile, CodSegment-Std) agree;
+#   * the parts of Rreq that the reader and writer handle one at a time
+#     (jpeg2000-io.asn1) are Rreq's: RreqHeader its ML, FUAM, DCM and NSF,
+#     FeatureCount its NSF and NVF, and RreqStandardFeature and
+#     RreqVendorFeature its StandardFeature and VendorFeature but for the
+#     mask's size (deduced, not ML);
+#   * PclrCounts (jpeg2000-io.asn1) is PclrHeader's NE and NPC, NPC
+#     bounded as the depths' count;
 #   * the profile limits restated in C: the tile-part limit
 #     (HV_PROFILE_TILE_PARTS) and the dimension limit of the harness
-#     (PROFILE_MAX_DIMENSION).
+#     (PROFILE_MAX_DIMENSION, against SizFixed-Profile).
 # The compiler checks run lib/generate.sh --check with the same Docker
 # image as the corpus, whatever ASN1SCC says, so that lib/generated and the
 # corpus come from one compiler.
@@ -375,7 +382,6 @@ compare_group() {
             acn) body=$(acn_body "$type") ;;
             wrapper) body=$(wrapper_body "$type") ;;
             asn1) body=$(asn1_body "$type") ;;
-            asn1-bounds) body=$(asn1_body "$type" | sed 's/SIZE ([0-9.]*)/SIZE (n)/g') ;;
         esac
         [ -n "$body" ] || fail "check-model.sh: no $what definition of $type"
         if [ -z "$first" ]; then
@@ -387,13 +393,15 @@ compare_group() {
     done
 }
 compare_group acn Siz Siz-Profile
+compare_group acn SizFixed SizFixed-Profile
+compare_group acn Component Component-Profile
 compare_group acn Cod Cod-Profile
 compare_group acn QcdBody Qcd Qcd-Profile Qcd-Std
-compare_group acn PltBody Plt Plt-Profile Plt-Std
-compare_group acn ComBody Com Com-Profile Com-Std
-compare_group acn SizSegment SizSegment-Profile SizSegment-Std CodSegment CodSegment-Profile \
-    CodSegment-Std QcdSegment QcdSegment-Profile QcdSegment-Std PltSegment PltSegment-Profile \
-    PltSegment-Std ComSegment ComSegment-Profile ComSegment-Std
+compare_group acn PltBody Plt Plt-Profile
+compare_group acn ComBody Com Com-Profile
+compare_group acn SizSegment SizSegment-Profile CodSegment CodSegment-Profile CodSegment-Std \
+    QcdSegment QcdSegment-Profile QcdSegment-Std PltSegment PltSegment-Profile ComSegment \
+    ComSegment-Profile
 compare_group acn Codestream Codestream-Profile
 compare_group acn TilePart TilePart-Profile
 compare_group acn TilePartRest TilePartRest-Profile
@@ -405,12 +413,65 @@ compare_group acn DataReferences DataReferences-Profile
 compare_group acn TopPayload TopPayload-Profile
 compare_group acn InnerPayload InnerPayload-Profile
 compare_group acn DataEntryUrl DataEntryUrl-Profile
-compare_group acn Rreq Rreq-Std
+compare_group acn FragmentList FragmentList-Profile
 compare_group wrapper TopBox InnerBox ResBox Jp2Box-Profile TopBox-Profile InnerBox-Profile
 compare_group asn1 Cod Cod-Profile
-compare_group asn1 SizSegment SizSegment-Std
 compare_group asn1 CodSegment CodSegment-Std
-compare_group asn1-bounds Rreq Rreq-Std
+
+# ---------------------------------------------------------------------------
+# Rreq in parts (jpeg2000-io.asn1). The whole-file model's features take ML
+# as an ACN parameter for the mask; the reader's copies have none, and their
+# mask fills what the reader hands them (`size deduced`). Otherwise each
+# part is encoded as that part of Rreq.
+# ---------------------------------------------------------------------------
+compare_feature() {
+    whole=$(asn1_body "$1")
+    copy=$(asn1_body "$2")
+    [ -n "$whole" ] && [ -n "$copy" ] || fail "check-model.sh: no asn1 definition of $1 or $2"
+    [ "$whole" = "$copy" ] || fail "asn1 definition of $2 differs from that of $1"
+    whole=$(acn_body "$1" | sed -e 's/^<INTEGER:ml> //' -e 's/\[size ml\] }$/[size deduced] }/')
+    copy=$(acn_body "$2")
+    [ -n "$whole" ] && [ -n "$copy" ] || fail "check-model.sh: no acn definition of $1 or $2"
+    [ "$whole" = "$copy" ] ||
+        fail "acn definition of $2 differs from that of $1 (but for the mask's size ml)"
+}
+compare_feature StandardFeature RreqStandardFeature
+compare_feature VendorFeature RreqVendorFeature
+rreq=$(asn1_body Rreq)
+header=$(asn1_body RreqHeader)
+[ -n "$rreq" ] && [ -n "$header" ] ||
+    fail "check-model.sh: no asn1 definition of Rreq or RreqHeader"
+[ "$(printf '%s\n' "$header" | sed 's/, nsf FeatureCount }$//')" = \
+  "$(printf '%s\n' "$rreq" | sed 's/, standard .*//')" ] ||
+    fail "asn1 definition of RreqHeader differs from the head of Rreq (FUAM, DCM, then NSF)"
+count=$(acn_body FeatureCount)
+rreq=$(acn_body Rreq)
+header=$(acn_body RreqHeader)
+[ -n "$count" ] && [ -n "$rreq" ] && [ -n "$header" ] ||
+    fail "check-model.sh: no acn definition of FeatureCount, Rreq or RreqHeader"
+[ "$(printf '%s\n' "$header" | sed 's/, nsf \[\] }$//')" = \
+  "$(printf '%s\n' "$rreq" | sed 's/, nsf .*//')" ] ||
+    fail "acn definition of RreqHeader differs from the head of Rreq (ML, FUAM, DCM, then NSF)"
+case $rreq in
+    *", nsf INTEGER $count, standard "*", nvf INTEGER $count, vendor "*) ;;
+    *) fail "acn definition of FeatureCount differs from that of Rreq's NSF or NVF" ;;
+esac
+
+# PclrHeader in parts: PclrCounts is its NE and NPC; the depths follow.
+pclr=$(asn1_body PclrHeader)
+counts=$(asn1_body PclrCounts)
+[ -n "$pclr" ] && [ -n "$counts" ] ||
+    fail "check-model.sh: no asn1 definition of PclrHeader or PclrCounts"
+[ "$counts" = "$(printf '%s\n' "$pclr" |
+    sed 's/ depths SEQUENCE (SIZE (\([0-9.]*\))) OF BitDepth }$/ npc INTEGER (\1) }/')" ] ||
+    fail "asn1 definition of PclrCounts differs from PclrHeader's NE and depth count"
+pclr=$(acn_body PclrHeader)
+counts=$(acn_body PclrCounts)
+[ -n "$pclr" ] && [ -n "$counts" ] ||
+    fail "check-model.sh: no acn definition of PclrHeader or PclrCounts"
+[ "$counts" = "$(printf '%s\n' "$pclr" |
+    sed -e 's/, npc INTEGER \[/, npc [/' -e 's/, depths \[size npc\] }$/ }/')" ] ||
+    fail "acn definition of PclrCounts differs from PclrHeader's NE and NPC"
 
 # ---------------------------------------------------------------------------
 # Profile limits restated in C.
@@ -425,14 +486,14 @@ if [ -z "$tnsot" ] || [ -z "$tpsot" ] || [ "$tnsot" != "$limit" ] ||
     fail "tile-part limit: TilePart-Profile tpsot 0..$tpsot, tnsot 0..$tnsot;" \
         "HV_PROFILE_TILE_PARTS $limit"
 fi
-# The dimension limit: Siz-Profile and the harness's PROFILE_MAX_DIMENSION.
-siz=$(asn1_body Siz-Profile)
+# The dimension limit: SizFixed-Profile and the harness's PROFILE_MAX_DIMENSION.
+siz=$(asn1_body SizFixed-Profile)
 xsiz=$(printf '%s\n' "$siz" | sed -n 's/.* xsiz (1\.\.\([0-9]*\)).*/\1/p')
 ysiz=$(printf '%s\n' "$siz" | sed -n 's/.* ysiz (1\.\.\([0-9]*\)).*/\1/p')
 dimension=$(sed -n 's/^#define PROFILE_MAX_DIMENSION \([0-9]*\)u.*/\1/p' \
     "$repo/spec/harness/vectors.c")
 if [ -z "$xsiz" ] || [ "$xsiz" != "$ysiz" ] || [ "$xsiz" != "$dimension" ]; then
-    fail "dimension limit: Siz-Profile xsiz 1..$xsiz, ysiz 1..$ysiz;" \
+    fail "dimension limit: SizFixed-Profile xsiz 1..$xsiz, ysiz 1..$ysiz;" \
         "PROFILE_MAX_DIMENSION $dimension"
 fi
 
