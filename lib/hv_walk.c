@@ -22,8 +22,6 @@
 static int verbose, rewrite, profile, headers;
 static unsigned flags;
 
-enum { JP2C = 0x6A703263, SOC = 0xFF4F, SOD = 0xFF93, EOC = 0xFFD9 };
-
 static void fourcc(uint32_t t, char out[5]) {
     int i;
     for (i = 0; i < 4; i++) {
@@ -79,12 +77,12 @@ static int rewrite_item(const uint8_t *buf, const hv_item *item, walk_result *r,
         return hv_begin_tile_part(out, (uint16_t)item->sot.isot, (uint8_t)item->sot.tpsot,
                                   (uint8_t)item->sot.tnsot, tp_start);
     case HV_TILE_DATA:
-        if (hv_write_marker(out, SOD) != 0 ||
+        if (hv_write_marker(out, HV_SOD) != 0 ||
             hv_write_bytes(out, buf + item->start, item->end - item->start) != 0)
             return -1;
         return hv_end_tile_part(out, *tp_start);
     case HV_END:
-        return hv_write_marker(out, EOC);
+        return hv_write_marker(out, HV_EOC);
     case HV_SEGMENT:
     case HV_TILE_SEGMENT:
         if (item->siz)
@@ -119,7 +117,7 @@ static int walk_codestream(const uint8_t *buf, size_t start, size_t end, walk_re
     size_t tp_start = 0;
     int status = hv_codestream_open(&cs, buf, start, end, flags);
 
-    if (status == 0 && rewrite && hv_write_marker(&r->out, SOC) != 0)
+    if (status == 0 && rewrite && hv_write_marker(&r->out, HV_SOC) != 0)
         status = -2;
     while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1) {
         if (item.kind == HV_TILE_PART)
@@ -170,7 +168,7 @@ static int walk_boxes(const uint8_t *buf, hv_boxes *it, int depth, walk_result *
             if (hv_begin_box(&r->out, box.type, box.payload - box.start == 16, &start) != 0)
                 goto write_failed;
         }
-        if (box.type == JP2C) {
+        if (box.type == HV_BOX_JP2C) {
             if (walk_codestream(buf, box.payload, box.end, r) != 0)
                 return -1;
         } else if (hv_is_superbox(box.type)) {

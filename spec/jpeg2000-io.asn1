@@ -46,6 +46,15 @@ BoxHeader ::= SEQUENCE {
     xlbox       INTEGER (16..18446744073709551615) OPTIONAL   -- present iff lbox = 1
 }
 
+-- File Type box, T.800 I.5.2 / T.801 M.11.1.2: BR and MinV, then the
+-- compatibility list, entries of the same kind as BR, filling the box.
+Brand ::= INTEGER (0..4294967295)                 -- four-character code, big-endian
+
+FtypHeader ::= SEQUENCE {
+    brand       Brand,
+    minor       INTEGER (0..4294967295)
+}
+
 -- ---------------------------------------------------------------------------
 -- Codestream markers, T.800 A.1.1
 -- ---------------------------------------------------------------------------
@@ -90,8 +99,10 @@ Rreq-Std ::= SEQUENCE {
     extra       Extra                                  -- empty (rreq.extent)
 }
 
--- The Fragment List box of the served profile, one fragment: FragmentList-
--- Profile in jp2-boxes.asn1 (16 bytes).
+-- Fragment List box (M.11.3.1): NF, then NF fragments (Fragment in
+-- jp2-boxes.asn1), which the walker counts. The served profile's box, one
+-- fragment, is FragmentList-Profile in jp2-boxes.asn1.
+FragmentCount ::= INTEGER (0..65535)
 
 -- SOT marker segment after the FF90 code, A.4.2 (Table A.5).
 SotSegment ::= SEQUENCE {

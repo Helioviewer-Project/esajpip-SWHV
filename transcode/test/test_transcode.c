@@ -22,8 +22,6 @@
 #error "TRANSCODE_FIXTURES must name the fixture directory"
 #endif
 
-enum { JP2C = 0x6A703263 };
-
 static int failures, checks;
 
 static void check(int ok, const char *format, ...) {
@@ -125,9 +123,9 @@ static bytes box_payload(const bytes *file, uint32_t type) {
 static bytes without_com(bytes cs) {
     bytes out = bytes_copy(cs.data, 2);
     size_t p = 2;
-    while (p + 4 <= cs.size && get16(cs.data + p) != 0xFF90) {
+    while (p + 4 <= cs.size && get16(cs.data + p) != HV_SOT) {
         size_t n = 2 + get16(cs.data + p + 2);
-        if (get16(cs.data + p) != 0xFF64)
+        if (get16(cs.data + p) != HV_COM)
             append(&out, cs.data + p, n);
         p += n;
     }
@@ -249,7 +247,7 @@ static void test_references(void) {
         ref = read_file(path);
         hv_out_init(&out);
         if (strcmp(e->d_name, ORIGIN_FIXTURE) == 0) {
-            bytes in_cs = box_payload(&input, JP2C);
+            bytes in_cs = box_payload(&input, HV_BOX_JP2C);
             result r;
             check(hv_transcode_file(input.data, input.size, 7, 7, 1, &out, error,
                                     sizeof error) != 0 &&
@@ -259,7 +257,7 @@ static void test_references(void) {
             check(r.status == 0, "%s: codestream rejected: %s", e->d_name, r.error);
             if (r.status == 0) {
                 a = without_com(r.out);
-                b = without_com(box_payload(&ref, JP2C));
+                b = without_com(box_payload(&ref, HV_BOX_JP2C));
                 check(a.size == b.size && memcmp(a.data, b.data, a.size) == 0,
                       "%s: codestream differs from Kakadu's (COM aside)", e->d_name);
                 bytes_free(&a);
@@ -291,7 +289,7 @@ static void test_references(void) {
             check(bo.type == br.type, "%s: box order differs from the reference", e->d_name);
             if (bo.type != br.type)
                 break;
-            if (bo.type != JP2C) {
+            if (bo.type != HV_BOX_JP2C) {
                 check(bo.end - bo.payload == br.end - br.payload &&
                       memcmp(out.data + bo.payload, ref.data + br.payload, bo.end - bo.payload) == 0,
                       "%s: a box differs from the reference", e->d_name);
@@ -326,7 +324,7 @@ static bytes fixture_codestream(const char *dir, const char *name, bytes *file) 
     char path[4096];
     snprintf(path, sizeof path, "%s/%s/%s", TRANSCODE_FIXTURES, dir, name);
     *file = read_file(path);
-    return box_payload(file, JP2C);
+    return box_payload(file, HV_BOX_JP2C);
 }
 
 /* A codestream split at its first SOT: the main header and the tile's
@@ -348,12 +346,12 @@ static void split_codestream(split *s, const char *dir, const char *name) {
     uint64_t v = 0;
     memset(s, 0, sizeof *s);
     s->cs = fixture_codestream(dir, name, &s->file);
-    for (sot = 2; get16(s->cs.data + sot) != 0xFF90; sot += 2 + get16(s->cs.data + sot + 2)) {}
+    for (sot = 2; get16(s->cs.data + sot) != HV_SOT; sot += 2 + get16(s->cs.data + sot + 2)) {}
     s->main.data = s->cs.data;
     s->main.size = sot;
-    for (p = sot + 12; get16(s->cs.data + p) != 0xFF93; p += 2 + get16(s->cs.data + p + 2)) {
+    for (p = sot + 12; get16(s->cs.data + p) != HV_SOD; p += 2 + get16(s->cs.data + p + 2)) {
         size_t k;
-        if (get16(s->cs.data + p) != 0xFF58)
+        if (get16(s->cs.data + p) != HV_PLT)
             continue;
         end = p + 2 + get16(s->cs.data + p + 2);
         for (k = p + 5; k < end; k++) {
@@ -376,13 +374,13 @@ static void split_codestream(split *s, const char *dir, const char *name) {
 static void tile_part(bytes *b, unsigned isot, unsigned tpsot, unsigned tnsot,
                       const uint8_t *data, size_t size, int psot_zero) {
     uint8_t h[14];
-    put16(h, 0xFF90);
+    put16(h, HV_SOT);
     put16(h + 2, 10);
     put16(h + 4, isot);
     put32(h + 6, psot_zero ? 0 : (uint32_t)(14 + size));
     h[10] = (uint8_t)tpsot;
     h[11] = (uint8_t)tnsot;
-    put16(h + 12, 0xFF93);
+    put16(h + 12, HV_SOD);
     append(b, h, 14);
     append(b, data, size);
 }
@@ -568,7 +566,7 @@ static void test_headers(void) {
     size_t siz = 2, cod = siz + 2 + get16(rgb.data + siz + 2), sot = cod, n;
     uint8_t *p;
 
-    while (get16(rgb.data + sot) != 0xFF90)
+    while (get16(rgb.data + sot) != HV_SOT)
         sot += 2 + get16(rgb.data + sot + 2);
 
     b.data = rgb.data;
@@ -703,7 +701,7 @@ static void expect_file_output(const char *name, const bytes *file, const bytes 
     if (hv_transcode_file(file->data, file->size, 7, 7, 0, &out, error, sizeof error) != 0) {
         check(0, "%s: rejected: %s", name, error);
     } else {
-        bytes got = {out.data, out.size}, got_cs = box_payload(&got, JP2C);
+        bytes got = {out.data, out.size}, got_cs = box_payload(&got, HV_BOX_JP2C);
         expect_served(name, out.data, out.size);
         check(r.status == 0 && got_cs.size == r.out.size &&
               memcmp(got_cs.data, r.out.data, got_cs.size) == 0,
@@ -729,7 +727,7 @@ static void test_served_profile(void) {
     size_t sot = 2, i;
     result plain, with_rgn;
 
-    while (get16(cs.data + sot) != 0xFF90)
+    while (get16(cs.data + sot) != HV_SOT)
         sot += 2 + get16(cs.data + sot + 2);
 
     /* The fixture, wrapped minimally: accepted. */
@@ -743,7 +741,7 @@ static void test_served_profile(void) {
     expect_file_error("JPX brand", &f, "file.ftyp-brand at 12");
     bytes_free(&f);
     {
-        bytes box = box_payload(&file, JP2C);           /* 8-byte box header */
+        bytes box = box_payload(&file, HV_BOX_JP2C);           /* 8-byte box header */
         b = bytes_copy(file.data, file.size);
         append(&b, box.data - 8, box.size + 8);
         expect_file_error("two codestreams", &b, "jp2.one-codestream");
@@ -770,7 +768,7 @@ static void test_served_profile(void) {
     if (plain.status == 0 && with_rgn.status == 0) {
         size_t out_sot = 2;
         bytes expected;
-        while (get16(plain.out.data + out_sot) != 0xFF90)
+        while (get16(plain.out.data + out_sot) != HV_SOT)
             out_sot += 2 + get16(plain.out.data + out_sot + 2);
         expected = concat3(plain.out.data, out_sot, rgn, sizeof rgn, plain.out.data + out_sot,
                            plain.out.size - out_sot);
@@ -940,7 +938,7 @@ static size_t find_all(const bytes *b, const uint8_t *pattern, size_t n, size_t 
 
 static void set_psot(bytes *b) {
     size_t sot = 2;
-    while (get16(b->data + sot) != 0xFF90)
+    while (get16(b->data + sot) != HV_SOT)
         sot += 2 + get16(b->data + sot + 2);
     put32(b->data + sot + 6, (uint32_t)(b->size - 2 - sot));
 }
@@ -987,10 +985,10 @@ static void test_packet_rules(void) {
     /* EPH missing after one header: without the PLT, which would no longer
      * add up. */
     noplt = bytes_copy(cs.data, cs.size);
-    for (sot = 2; get16(noplt.data + sot) != 0xFF90; sot += 2 + get16(noplt.data + sot + 2)) {}
-    for (p = sot + 12; get16(noplt.data + p) != 0xFF93;) {
+    for (sot = 2; get16(noplt.data + sot) != HV_SOT; sot += 2 + get16(noplt.data + sot + 2)) {}
+    for (p = sot + 12; get16(noplt.data + p) != HV_SOD;) {
         size_t n = 2 + get16(noplt.data + p + 2);
-        if (get16(noplt.data + p) == 0xFF58) {
+        if (get16(noplt.data + p) == HV_PLT) {
             memmove(noplt.data + p, noplt.data + p + n, noplt.size - p - n);
             noplt.size -= n;
         } else {
@@ -1099,7 +1097,7 @@ static void test_archive(const char *dirs) {
             } else {
                 bytes result_file = {out.data, out.size};
                 expect_served(path, out.data, out.size);
-                cs = box_payload(&result_file, JP2C);
+                cs = box_payload(&result_file, HV_BOX_JP2C);
                 expect_stable(path, &cs);
             }
             hv_out_free(&out);

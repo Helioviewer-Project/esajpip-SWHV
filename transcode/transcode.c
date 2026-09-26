@@ -23,9 +23,6 @@
 #define MAX_CODE_BLOCKS 250000
 #define MAX_OUTPUT_PACKETS 2000000
 
-enum { COD = 0xFF52, COC = 0xFF53, TLM = 0xFF55, PLM = 0xFF57, PLT = 0xFF58,
-       POC = 0xFF5F, PPM = 0xFF60, COM = 0xFF64,
-       SOC = 0xFF4F, SOD = 0xFF93, EOC = 0xFFD9 };
 
 typedef struct {
     char *error;
@@ -139,25 +136,25 @@ static int read_codestream(transcode *t, size_t start, size_t end, int ppx, int 
     hv_item item;
     int status = hv_codestream_open(&t->cs, t->buf, start, end, HV_ACCEPT_PLT_PADDING | flags);
 
-    if (status == 0 && hv_write_marker(out, SOC) != 0)
+    if (status == 0 && hv_write_marker(out, HV_SOC) != 0)
         return fail(&t->e, "%s", out->error);
     while (status == 0 && (status = hv_codestream_next(&t->cs, &item)) == 1) {
         status = 0;
         switch (item.kind) {
         case HV_SEGMENT:
-            if (item.code == COC || item.code == POC || item.code == PPM)
+            if (item.code == HV_COC || item.code == HV_POC || item.code == HV_PPM)
                 return fail(&t->e, "unsupported main header marker 0x%04X", item.code);
-            if (item.code == COD) {
+            if (item.code == HV_COD) {
                 t->cod = new_cod(item.cod, ppx, ppy);
                 if (hv_write_cod(out, &t->cod) != 0)
                     return fail(&t->e, "%s", out->error);
-            } else if (item.code != TLM && item.code != PLM &&
+            } else if (item.code != HV_TLM && item.code != HV_PLM &&
                        hv_write_bytes(out, t->buf + item.start, item.end - item.start) != 0) {
                 return fail(&t->e, "%s", out->error);
             }
             break;
         case HV_TILE_SEGMENT:
-            if (item.code != PLT && item.code != COM)
+            if (item.code != HV_PLT && item.code != HV_COM)
                 return fail(&t->e, "unsupported tile-part marker 0x%04X", item.code);
             break;
         case HV_TILE_PART:
@@ -236,12 +233,12 @@ static int write_tile(transcode *t, int ppx, int ppy, hv_out *out) {
         return -1;
     if (hv_begin_tile_part(out, 0, 0, 1, &tp_start) != 0 ||
         hv_write_plt(out, t->lengths, t->out_count) != 0 ||
-        hv_write_marker(out, SOD) != 0)
+        hv_write_marker(out, HV_SOD) != 0)
         return fail(&t->e, "%s", out->error);
     if (hv_write_packets(&t->out, t->out_packets, t->out_count, t->buf, &t->cb, out,
                          t->lengths, t->e.error, t->e.error_size) != 0)
         return -1;
-    if (hv_end_tile_part(out, tp_start) != 0 || hv_write_marker(out, EOC) != 0)
+    if (hv_end_tile_part(out, tp_start) != 0 || hv_write_marker(out, HV_EOC) != 0)
         return fail(&t->e, "%s", out->error);
     return 0;
 }

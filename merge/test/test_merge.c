@@ -22,8 +22,6 @@
 #error "TRANSCODE_FIXTURES must name the transcoder's fixture directory"
 #endif
 
-enum { BOX_JP2H = 0x6A703268, BOX_RREQ = 0x72726571, BOX_FTYP = 0x66747970 };
-
 static int failures, checks;
 
 static void check(int ok, const char *format, ...) {
@@ -169,7 +167,7 @@ static int rreq_features(const bytes *jpx, int *features, int max) {
     int k = 0;
     hv_boxes_file(&it, jpx->data, jpx->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
-        if (box.type == BOX_RREQ) {
+        if (box.type == HV_BOX_RREQ) {
             const uint8_t *p = jpx->data + box.payload;
             int ml = p[0], nsf = p[1 + 2 * ml] << 8 | p[2 + 2 * ml], i;
             for (i = 0; i < nsf && k < max; i++)
@@ -234,10 +232,10 @@ static void test_links(void) {
             break;
         if (x.type == HV_BOX_JP2C) {
             check(y.type == HV_BOX_FTBL, "linked merge: box %zu is not an ftbl", n);
-        } else if (x.type == BOX_FTYP) {
-            check(y.end - y.payload == 12 && get32(linked.data + y.payload + 8) == 0x6A707820,
+        } else if (x.type == HV_BOX_FTYP) {
+            check(y.end - y.payload == 12 && get32(linked.data + y.payload + 8) == HV_BRAND_JPX,
                   "linked merge: ftyp does not list jpx alone");
-        } else if (x.type != BOX_RREQ) {
+        } else if (x.type != HV_BOX_RREQ) {
             check(x.end - x.start == y.end - y.start &&
                   memcmp(embedded.data + x.start, linked.data + y.start, x.end - x.start) == 0,
                   "linked merge: box %zu differs from the embedded merge", n);
@@ -263,7 +261,7 @@ static bytes add_to_jp2h(const bytes *jp2, const uint8_t *boxes, size_t n) {
     memcpy(out.data, jp2->data, jp2->size);
     hv_boxes_file(&it, jp2->data, jp2->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
-        if (box.type == BOX_JP2H) {
+        if (box.type == HV_BOX_JP2H) {
             memcpy(out.data + box.end, boxes, n);
             memcpy(out.data + box.end + n, jp2->data + box.end, jp2->size - box.end);
             put32(out.data + box.start, (uint32_t)(box.end - box.start + n));
@@ -345,7 +343,7 @@ static void test_headers(void) {
     bad.size = files[2].size;
     hv_boxes_file(&it, bad.data, bad.size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
-        if (box.type == BOX_JP2H)
+        if (box.type == HV_BOX_JP2H)
             break;
     in[0] = inputs[0];
     in[1] = inputs[2];
@@ -388,7 +386,7 @@ static void test_errors(void) {
     no_jp2h.data = malloc(files[0].size);
     hv_boxes_file(&it, files[0].data, files[0].size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
-        if (box.type == BOX_JP2H) {
+        if (box.type == HV_BOX_JP2H) {
             memcpy(no_jp2h.data, files[0].data, box.start);
             memcpy(no_jp2h.data + box.start, files[0].data + box.end, files[0].size - box.end);
             no_jp2h.size = files[0].size - (box.end - box.start);

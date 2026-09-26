@@ -13,18 +13,29 @@
  * ------------------------------------------------------------------------ */
 
 /* Attaches exactly `size` bytes at `pos`, so a decoder can never read past
- * the enclosing box, segment or codestream. */
+ * the enclosing box, segment or codestream. DECODE_USED also returns the
+ * bytes the decoder read: the reader takes every field's position from the
+ * model's layout this way, never from its own arithmetic. */
 #define DECODE(T, value, buf, pos, size)                                     \
-    decode_##T((value), (buf) + (pos), (size))
+    decode_##T((value), (buf) + (pos), (size), NULL)
+#define DECODE_USED(T, value, buf, pos, size, used)                          \
+    decode_##T((value), (buf) + (pos), (size), (used))
 
 #define DEFINE_DECODE(T)                                                     \
-    static int decode_##T(T *value, const uint8_t *at, size_t size) {       \
+    static int decode_##T(T *value, const uint8_t *at, size_t size, size_t *used) { \
         BitStream s;                                                         \
         int err = 0;                                                         \
         if (size > (size_t)LONG_MAX) size = (size_t)LONG_MAX;               \
         BitStream_AttachBuffer(&s, (unsigned char *)at, (long)size);        \
-        return T##_ACN_Decode(value, &s, &err) ? 0 : -1;                   \
+        if (!T##_ACN_Decode(value, &s, &err))                               \
+            return -1;                                                       \
+        if (used != NULL)                                                    \
+            *used = (size_t)BitStream_GetLength(&s);                         \
+        return 0;                                                            \
     }
+
+/* A marker code (A.1.1). */
+#define MARKER HV_FIXED(MarkerCode)
 
 DEFINE_DECODE(BoxHeader)
 DEFINE_DECODE(MarkerCode)
@@ -37,7 +48,10 @@ DEFINE_DECODE(PltSegment_Std)
 DEFINE_DECODE(ComSegment_Std)
 DEFINE_DECODE(DataReferenceCount)
 DEFINE_DECODE(UrlHeader)
+DEFINE_DECODE(FragmentCount)
 DEFINE_DECODE(FragmentList_Profile)
+DEFINE_DECODE(FtypHeader)
+DEFINE_DECODE(Brand)
 DEFINE_DECODE(Ihdr)
 DEFINE_DECODE(BitDepth)
 DEFINE_DECODE(ColrHeader)
@@ -77,12 +91,12 @@ int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at) {
         return 0;
     avail = it->end - it->pos;
     *at = it->pos;
-    if (DECODE(BoxHeader, &h, it->buf, it->pos, min_size(avail, 16)) != 0) {
+    if (DECODE_USED(BoxHeader, &h, it->buf, it->pos, min_size(avail, HV_FIXED(BoxHeader)),
+                    &header) != 0) {
         *error = "invalid or truncated box header";
         return -1;
     }
     if (h.lbox == 1) {
-        header = 16;
         if (h.xlbox > avail) {
             *error = "box overruns its container";
             return -1;
@@ -95,11 +109,9 @@ int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at) {
             *error = "LBox = 0 inside a box that does not run to the end of the file";
             return -1;
         }
-        header = 8;
         size = avail;
         it->done = 1;
     } else {
-        header = 8;
         if (h.lbox > avail) {
             *error = "box overruns its container";
             return -1;
@@ -117,17 +129,17 @@ int hv_boxes_next(hv_boxes *it, hv_box *box, const char **error, size_t *at) {
 
 int hv_is_superbox(uint32_t type) {
     switch (type) {
-    case 0x6A703268: /* jp2h, T.800 I.5.3 */
-    case 0x72657320: /* res , T.800 I.5.3.7 */
-    case 0x75696E66: /* uinf, T.800 I.7.3 */
-    case 0x6674626C: /* ftbl, T.801 M.11.3 */
-    case 0x6A706368: /* jpch, T.801 M.11.6 */
-    case 0x6A706C68: /* jplh, T.801 M.11.7 */
-    case 0x63677270: /* cgrp, T.801 M.11.7.1 */
-    case 0x636F6D70: /* comp, T.801 M.11.10 */
-    case 0x61736F63: /* asoc, T.801 M.11.11 */
-    case 0x64726570: /* drep, T.801 M.11.15 */
-    case 0x6A326378: /* j2cx, T.801 M.11.23 */
+    case HV_BOX_JP2H: /* T.800 I.5.3 */
+    case HV_BOX_RES:  /* T.800 I.5.3.7 */
+    case HV_BOX_UINF: /* T.800 I.7.3 */
+    case HV_BOX_FTBL: /* T.801 M.11.3 */
+    case HV_BOX_JPCH: /* T.801 M.11.6 */
+    case HV_BOX_JPLH: /* T.801 M.11.7 */
+    case HV_BOX_CGRP: /* T.801 M.11.7.1 */
+    case HV_BOX_COMP: /* T.801 M.11.10 */
+    case HV_BOX_ASOC: /* T.801 M.11.11 */
+    case HV_BOX_DREP: /* T.801 M.11.15 */
+    case HV_BOX_J2CX: /* T.801 M.11.23 */
         return 1;
     default:
         return 0;
@@ -138,37 +150,38 @@ int hv_is_superbox(uint32_t type) {
  * File rules of the served profile: JP2 and JPX
  * ------------------------------------------------------------------------ */
 
-enum { BOX_FTYP = 0x66747970, BOX_RREQ = 0x72726571,
-       BRAND_JP2 = 0x6A703220, BRAND_JPX = 0x6A707820 };
-
-static uint32_t get32(const uint8_t *p) {
-    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-}
-
-/* The size and the signature box, before any box is read. */
+/* The size and the signature box, before any box is read: the whole box,
+ * header included, is fixed (T.800 I.5.1). */
 static const char *check_start(const uint8_t *buf, size_t size) {
-    static const uint8_t signature[12] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
-                                          0x0D, 0x0A, 0x87, 0x0A};
+    static const uint8_t signature[] = {0, 0, 0, 12, 0x6A, 0x50, 0x20, 0x20,
+                                        0x0D, 0x0A, 0x87, 0x0A};
     if (size > INT_MAX)
         return "file.size-limit";
-    if (size < 12 || memcmp(buf, signature, 12) != 0)
+    if (size < sizeof signature || memcmp(buf, signature, sizeof signature) != 0)
         return "file.signature";
     return NULL;
 }
 
 /* The second box: File Type, with the brand and a compatibility entry
- * (T.800 I.5.2, T.801 M.11.1.2): brand, MinV, then the list. */
+ * (T.800 I.5.2, T.801 M.11.1.2): FtypHeader, then at least one Brand,
+ * filling the box. */
 static const char *check_ftyp(const uint8_t *buf, const hv_box *box, uint32_t brand) {
-    size_t length = box->end - box->payload, i;
+    FtypHeader h;
+    Brand entry;
+    size_t length = box->end - box->payload, used, i;
     int compatible = 0;
-    if (box->type != BOX_FTYP)
+    if (box->type != HV_BOX_FTYP)
         return "file.ftyp-second";
-    if (length < 12 || length % 4 != 0)
-        return "ftyp: contents shorter than 12 bytes or not a multiple of 4";
-    if (get32(buf + box->payload) != brand)
+    if (DECODE_USED(FtypHeader, &h, buf, box->payload, length, &used) != 0 ||
+        length - used < HV_FIXED(Brand) || (length - used) % HV_FIXED(Brand) != 0)
+        return "ftyp: not BR, MinV and one or more compatibility entries";
+    if (h.brand != brand)
         return "file.ftyp-brand";
-    for (i = box->payload + 8; i < box->end; i += 4)
-        compatible |= get32(buf + i) == brand;
+    for (i = box->payload + used; i < box->end; i += HV_FIXED(Brand)) {
+        if (DECODE(Brand, &entry, buf, i, HV_FIXED(Brand)) != 0)
+            return "ftyp: invalid compatibility entry";
+        compatible |= entry == brand;
+    }
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
@@ -188,7 +201,7 @@ const char *hv_check_jp2(const uint8_t *buf, size_t size, hv_box *jp2c, size_t *
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
         *at = box.start;
-        if (n == 1 && (error = check_ftyp(buf, &box, BRAND_JP2)) != NULL)
+        if (n == 1 && (error = check_ftyp(buf, &box, HV_BRAND_JP2)) != NULL)
             return error;
         if (box.type == HV_BOX_JP2C && codestreams++ == 0)
             *jp2c = box;
@@ -232,24 +245,29 @@ void hv_jpx_free(hv_jpx *jpx) {
 static const char *check_url(const uint8_t *buf, const hv_box *box, hv_link *url) {
     UrlHeader h;
     const char *error;
-    size_t n = box->end - box->payload;
-    if (n < 4 || DECODE(UrlHeader, &h, buf, box->payload, 4) != 0)
+    size_t n = box->end - box->payload, used;
+    if (DECODE_USED(UrlHeader, &h, buf, box->payload, n, &used) != 0)
         return "url: shorter than VERS and FLAG";
-    if ((error = hv_rule_url(h.vers, h.flag, buf + box->payload + 4, n - 4)) != NULL)
+    if ((error = hv_rule_url(h.vers, h.flag, buf + box->payload + used, n - used)) != NULL)
         return error;
-    url->loc = buf + box->payload + 4;
-    url->loc_size = n - 5;                       /* without the NUL */
+    url->loc = buf + box->payload + used;
+    url->loc_size = n - used - 1;                /* without the NUL */
     return NULL;
 }
 
 /* One flst box of an ftbl: its fragment recorded in link. */
 static const char *check_flst(const uint8_t *buf, const hv_box *box, hv_link *link) {
     FragmentList_Profile f;
+    FragmentCount nf = 0;
     const char *error;
-    size_t n = box->end - box->payload;
-    int fragments = n >= 2 && (n - 2) % 14 == 0 ? (int)((n - 2) / 14) : 0;
-    if ((error = hv_rule_flst(n >= 2 ? (uint64_t)buf[box->payload] << 8 | buf[box->payload + 1] : 0,
-                              fragments)) != NULL)
+    size_t n = box->end - box->payload, used = n;
+    int fragments = 0;
+    /* NF, then as many whole fragments as the box holds (0 if it holds a
+     * part of one), for hv_rule_flst. */
+    if (DECODE_USED(FragmentCount, &nf, buf, box->payload, n, &used) == 0 &&
+        (n - used) % HV_FIXED(Fragment) == 0)
+        fragments = (int)((n - used) / HV_FIXED(Fragment));
+    if ((error = hv_rule_flst(nf, fragments)) != NULL)
         return error;
     if (DECODE(FragmentList_Profile, &f, buf, box->payload, n) != 0)
         return "flst.one-fragment";
@@ -278,11 +296,11 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
         *at = box.start;
-        if (n == 1 && (error = check_ftyp(buf, &box, BRAND_JPX)) != NULL)
+        if (n == 1 && (error = check_ftyp(buf, &box, HV_BRAND_JPX)) != NULL)
             goto fail;
         n++;
         switch (box.type) {
-        case BOX_RREQ:
+        case HV_BOX_RREQ:
             count.rreq++;
             count.rreq_third |= n == 3;
             break;
@@ -325,13 +343,15 @@ const char *hv_check_jpx(const uint8_t *buf, size_t size, hv_jpx *jpx, size_t *a
         case HV_BOX_DTBL: {
             DataReferenceCount c;
             hv_box refs = box;
+            size_t used;
             count.dtbl++;
-            if (box.end - box.payload < 2 || DECODE(DataReferenceCount, &c, buf, box.payload, 2) != 0) {
+            if (DECODE_USED(DataReferenceCount, &c, buf, box.payload, box.end - box.payload,
+                            &used) != 0) {
                 error = "dtbl: shorter than NDR";
                 goto fail;
             }
             ndr = c;
-            refs.payload += 2;
+            refs.payload += used;
             hv_boxes_children(&children, buf, &refs);
             while ((status = hv_boxes_next(&children, &child, &error, at)) == 1) {
                 *at = child.start;
@@ -397,9 +417,9 @@ static int hex(int c) {
 }
 
 int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t out_size) {
-    const uint8_t *p = link->loc + 7, *end = link->loc + link->loc_size;
+    const uint8_t *p = link->loc + HV_FILE_SCHEME_LENGTH, *end = link->loc + link->loc_size;
     size_t n = 0;
-    if (link->loc_size < 8)
+    if (link->loc_size <= HV_FILE_SCHEME_LENGTH)
         return -1;
     if (*p != '/' && jpx_path != NULL) {
         const char *slash = strrchr(jpx_path, '/');
@@ -480,16 +500,16 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     switch (box->type) {
     case HV_BOX_IHDR: {
         Ihdr ihdr;
-        if (n < 14 || DECODE(Ihdr, &ihdr, buf, p, n) != 0)
+        if (DECODE(Ihdr, &ihdr, buf, p, n) != 0)
             return "ihdr: not 14 bytes of valid fields";
         return hv_rule_ihdr(h, &ihdr);
     }
     case HV_BOX_BPCC:
         if (n == 0)
             return "bpcc: empty";
-        for (i = 0; i < n && error == NULL; i++) {
+        for (i = 0; i < n && error == NULL; i += HV_FIXED(BitDepth)) {
             BitDepth depth;
-            if (DECODE(BitDepth, &depth, buf, p + i, 1) != 0)
+            if (DECODE(BitDepth, &depth, buf, p + i, HV_FIXED(BitDepth)) != 0)
                 return "bpcc: reserved bit depth";
             error = hv_rule_bpcc_entry(h, depth);
         }
@@ -497,17 +517,16 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     case HV_BOX_COLR: {
         ColrHeader colr;
         size_t used;
-        if (n < 3 || DECODE(ColrHeader, &colr, buf, p, n) != 0)
+        if (DECODE_USED(ColrHeader, &colr, buf, p, n, &used) != 0)
             return "colr: shorter than its fields";
-        used = colr.meth == 1 ? 7 : 3;
         return hv_rule_colr(h, &colr, n - used);
     }
     case HV_BOX_PCLR: {
         PclrHeader *pclr = malloc(sizeof *pclr);
-        size_t used = n >= 3 ? 3 + (size_t)buf[p + 2] : 0;
+        size_t used;
         if (pclr == NULL)
             return "out of memory";
-        if (n < 3 || used > n || DECODE(PclrHeader, pclr, buf, p, used) != 0)
+        if (DECODE_USED(PclrHeader, pclr, buf, p, n, &used) != 0)
             error = "pclr: invalid NE, NPC or bit depths";
         else
             error = hv_rule_pclr(h, pclr, n - used);
@@ -515,12 +534,12 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
         return error;
     }
     case HV_BOX_CMAP:
-        if (n == 0 || n % 4 != 0)
+        if (n == 0 || n % HV_FIXED(CmapEntry) != 0)
             return "cmap: not a whole number of entries";
-        for (i = 0; i < n && error == NULL; i += 4) {
+        for (i = 0; i < n && error == NULL; i += HV_FIXED(CmapEntry)) {
             CmapEntry entry;
             *at = p + i;
-            if (DECODE(CmapEntry, &entry, buf, p + i, 4) != 0)
+            if (DECODE(CmapEntry, &entry, buf, p + i, HV_FIXED(CmapEntry)) != 0)
                 return "cmap: invalid entry";
             error = hv_rule_cmap_entry(h, &entry);
         }
@@ -528,17 +547,19 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
     case HV_BOX_CDEF: {
         CdefCount count;
         CdefEntry *entries;
-        if (n < 2 || DECODE(CdefCount, &count, buf, p, 2) != 0 || n < 2 + 6 * (size_t)count)
+        size_t used;
+        if (DECODE_USED(CdefCount, &count, buf, p, n, &used) != 0 ||
+            (n - used) / HV_FIXED(CdefEntry) < count)
             return "cdef: N does not match the box";
         if ((entries = malloc((size_t)count * sizeof *entries)) == NULL)
             return "out of memory";
-        for (i = 0; i < count && error == NULL; i++)
-            if (DECODE(CdefEntry, &entries[i], buf, p + 2 + 6 * i, 6) != 0)
+        for (i = 0; i < count && error == NULL; i++, used += HV_FIXED(CdefEntry))
+            if (DECODE(CdefEntry, &entries[i], buf, p + used, HV_FIXED(CdefEntry)) != 0)
                 error = "cdef: invalid entry";
         if (error == NULL)
             error = hv_rule_cdef(h, entries, (size_t)count);
         if (error == NULL)
-            error = hv_rule_extent(HV_BOX_CDEF, n - 2 - 6 * (size_t)count);
+            error = hv_rule_extent(HV_BOX_CDEF, n - used);
         free(entries);
         return error;
     }
@@ -551,8 +572,7 @@ static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_h
             Resolution r;
             *at = child.start;
             if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
-                (child.end - child.payload < 10 ||
-                 DECODE(Resolution, &r, buf, child.payload, child.end - child.payload) != 0))
+                DECODE(Resolution, &r, buf, child.payload, child.end - child.payload) != 0)
                 return "res: invalid resc or resd";
             if ((error = hv_rule_res_child(h, child.type)) != NULL)
                 return error;
@@ -669,8 +689,8 @@ const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
         if (++boxes == 3)
-            rreq_third = box.type == BOX_RREQ;
-        if (box.type == BOX_RREQ && rreqs++ == 0)
+            rreq_third = box.type == HV_BOX_RREQ;
+        if (box.type == HV_BOX_RREQ && rreqs++ == 0)
             rreq = box;
         switch (box.type) {
         case HV_BOX_JP2H:
@@ -743,13 +763,6 @@ const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
  * Codestream
  * ------------------------------------------------------------------------ */
 
-enum {
-    SOC = 0xFF4F, SIZ = 0xFF51, COD = 0xFF52, COC = 0xFF53, TLM = 0xFF55,
-    PLM = 0xFF57, PLT = 0xFF58, QCD = 0xFF5C, QCC = 0xFF5D, RGN = 0xFF5E,
-    POC = 0xFF5F, PPM = 0xFF60, PPT = 0xFF61, CRG = 0xFF63, COM = 0xFF64,
-    SOT = 0xFF90, SOP = 0xFF91, EPH = 0xFF92, SOD = 0xFF93, EOC = 0xFFD9
-};
-
 enum { ST_SIZ, ST_MAIN, ST_TILE_HEADER, ST_AFTER_DATA, ST_DONE };
 
 static int fail(hv_codestream *cs, const char *error, size_t at) {
@@ -802,22 +815,23 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
     cs->start = start;
     cs->end = end;
     cs->flags = flags;
-    if (DECODE(MarkerCode, &m, buf, start, min_size(end - start, 2)) != 0 || m != SOC)
+    if (DECODE(MarkerCode, &m, buf, start, min_size(end - start, MARKER)) != 0 || m != HV_SOC)
         return fail(cs, "codestream does not start with SOC", start);
-    cs->pos = start + 2;
-    if (DECODE(MarkerCode, &m, buf, cs->pos, min_size(end - cs->pos, 2)) != 0 || m != SIZ)
+    cs->pos = start + MARKER;
+    if (DECODE(MarkerCode, &m, buf, cs->pos, min_size(end - cs->pos, MARKER)) != 0 || m != HV_SIZ)
         return fail(cs, "SOC is not followed by SIZ", cs->pos);
-    if (DECODE(SegmentLength, &l, buf, cs->pos + 2, min_size(end - cs->pos - 2, 2)) != 0 ||
-        l > end - cs->pos - 2)
+    if (DECODE(SegmentLength, &l, buf, cs->pos + MARKER,
+               min_size(end - cs->pos - MARKER, HV_FIXED(SegmentLength))) != 0 ||
+        l > end - cs->pos - MARKER)
         return fail(cs, "truncated SIZ", cs->pos);
     cs->siz = calloc(1, sizeof *cs->siz);
     if (cs->siz == NULL)
         return fail(cs, "out of memory", cs->pos);
-    if (DECODE(SizSegment_Std, cs->siz, buf, cs->pos + 2, l) != 0)
+    if (DECODE(SizSegment_Std, cs->siz, buf, cs->pos + MARKER, l) != 0)
         return fail(cs, "invalid SIZ", cs->pos);
     if ((error = check_siz(cs, &cs->siz->body, &cs->tiles)) != NULL)
         return fail(cs, error, cs->pos);
-    cs->siz_end = cs->pos + 2 + (size_t)l;
+    cs->siz_end = cs->pos + MARKER + (size_t)l;
     cs->parts = calloc(cs->tiles, sizeof *cs->parts);
     cs->tnsot = calloc(cs->tiles, sizeof *cs->tnsot);
     if (cs->parts == NULL || cs->tnsot == NULL)
@@ -848,18 +862,19 @@ static int read_segment(hv_codestream *cs, size_t limit, uint16_t *code, size_t 
     SegmentLength l;
     size_t pos = cs->pos;
 
-    if (DECODE(MarkerCode, &m, cs->buf, pos, min_size(limit - pos, 2)) != 0)
+    if (DECODE(MarkerCode, &m, cs->buf, pos, min_size(limit - pos, MARKER)) != 0)
         return fail(cs, "expected a marker", pos);
     *code = (uint16_t)m;
-    if (m == SOC || m == SOT || m == SOD || m == EOC || m == SOP || m == EPH ||
-        (m >= 0xFF30 && m <= 0xFF3F)) {
-        *end = pos + 2;               /* no marker segment */
+    if (m == HV_SOC || m == HV_SOT || m == HV_SOD || m == HV_EOC || m == HV_SOP || m == HV_EPH ||
+        (m >= HV_NO_SEGMENT_FIRST && m <= HV_NO_SEGMENT_LAST)) {
+        *end = pos + MARKER;          /* no marker segment */
         return 0;
     }
-    if (DECODE(SegmentLength, &l, cs->buf, pos + 2, min_size(limit - pos - 2, 2)) != 0 ||
-        l > limit - pos - 2)
+    if (DECODE(SegmentLength, &l, cs->buf, pos + MARKER,
+               min_size(limit - pos - MARKER, HV_FIXED(SegmentLength))) != 0 ||
+        l > limit - pos - MARKER)
         return fail(cs, "marker segment overruns its header", pos);
-    *end = pos + 2 + (size_t)l;
+    *end = pos + MARKER + (size_t)l;
     return 0;
 }
 
@@ -871,20 +886,23 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
 
     if (cs->state == ST_MAIN && (cs->cods != 1 || cs->qcds != 1))
         return fail(cs, "main header needs exactly one COD and one QCD", pos);
-    if (DECODE(SotSegment, sot, cs->buf, pos + 2, min_size(cs->end - pos - 2, 10)) != 0)
+    if (DECODE(SotSegment, sot, cs->buf, pos + MARKER,
+               min_size(cs->end - pos - MARKER, HV_FIXED(SotSegment))) != 0)
         return fail(cs, "invalid SOT", pos);
-    if (profile_full(cs) && cs->tile_parts == 64)
-        return fail(cs, "codestream.tile-part-limit", pos);
+    if ((error = hv_rule_tile_part_count((uint64_t)cs->tile_parts + 1, profile_full(cs))) != NULL)
+        return fail(cs, error, pos);
     if ((error = hv_rule_tile_part(&seen, sot->isot, sot->tpsot, sot->tnsot)) != NULL)
         return fail(cs, error, pos);
     if (sot->psot == 0) {
         /* A.4.2: the last tile-part; its data runs up to the EOC that ends
          * the codestream. */
-        if (cs->end - pos < 16 || cs->buf[cs->end - 2] != 0xFF || cs->buf[cs->end - 1] != 0xD9)
+        MarkerCode eoc;
+        if (cs->end - pos < MARKER + HV_FIXED(SotSegment) + MARKER + MARKER ||   /* SOD, EOC */
+            DECODE(MarkerCode, &eoc, cs->buf, cs->end - MARKER, MARKER) != 0 || eoc != HV_EOC)
             return fail(cs, "Psot = 0 but the codestream does not end with EOC", pos);
-        cs->tp_end = cs->end - 2;
+        cs->tp_end = cs->end - MARKER;
     } else {
-        if (sot->psot > cs->end - 2 - pos)
+        if (sot->psot > cs->end - MARKER - pos)       /* EOC after it */
             return fail(cs, "tile-part overruns the codestream", pos);
         cs->tp_end = pos + (size_t)sot->psot;
     }
@@ -893,10 +911,10 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     cs->tp_cod = cs->tp_qcd = cs->plts = 0;
     cs->plt_zeros = 0;
     cs->plt_sum = 0;
-    cs->pos = pos + 12;
+    cs->pos = pos + MARKER + HV_FIXED(SotSegment);
     cs->state = ST_TILE_HEADER;
     item->kind = HV_TILE_PART;
-    item->code = SOT;
+    item->code = HV_SOT;
     item->start = pos;
     item->end = cs->tp_end;
     item->sot = *sot;
@@ -906,13 +924,13 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
 static int decode_com(hv_codestream *cs, size_t pos, size_t len) {
     if (cs->com == NULL && (cs->com = malloc(sizeof *cs->com)) == NULL)
         return fail(cs, "out of memory", pos);
-    if (DECODE(ComSegment_Std, cs->com, cs->buf, pos + 2, len) != 0)
+    if (DECODE(ComSegment_Std, cs->com, cs->buf, pos + MARKER, len) != 0)
         return fail(cs, "invalid COM", pos);
     return 0;
 }
 
 static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *item) {
-    size_t pos = cs->pos, len = end - pos - 2;
+    size_t pos = cs->pos, len = end - pos - MARKER;
     const char *error;
     MainMarkerCode_Profile profile_code = code;
     int err;
@@ -920,32 +938,32 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     if (profile_headers(cs) && !MainMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
         return fail(cs, "main header: marker outside MainMarkerCode-Profile", pos);
     switch (code) {
-    case COD:
+    case HV_COD:
         if (++cs->cods > 1)
             return fail(cs, "second COD in the main header", pos);
-        if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + 2, len) != 0)
+        if (DECODE(CodSegment_Std, &cs->cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->cod.body)) != NULL)
             return fail(cs, error, pos);
         item->cod = &cs->cod;
         break;
-    case QCD:
+    case HV_QCD:
         if (++cs->qcds > 1)
             return fail(cs, "second QCD in the main header", pos);
-        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + 2, len) != 0)
+        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
         item->qcd = &cs->qcd;
         break;
-    case COM:
+    case HV_COM:
         if (decode_com(cs, pos, len) != 0)
             return -1;
         item->com = cs->com;
         break;
-    case COC: case QCC: case RGN: case POC: case TLM: case PLM: case PPM: case CRG:
+    case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG:
         break;                        /* bodies not modelled: skipped by length */
-    case SOC: case SIZ: case SOD: case SOP: case EPH:
+    case HV_SOC: case HV_SIZ: case HV_SOD: case HV_SOP: case HV_EPH:
         return fail(cs, "marker not allowed in the main header", pos);
-    case PLT: case PPT:
+    case HV_PLT: case HV_PPT:
         return fail(cs, "tile-part header marker in the main header", pos);
     default:
         break;                        /* unknown: reported, skipped by length */
@@ -959,7 +977,7 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
 }
 
 static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *item) {
-    size_t pos = cs->pos, len = end - pos - 2;
+    size_t pos = cs->pos, len = end - pos - MARKER;
     const char *error;
     TileMarkerCode_Profile profile_code = code;
     int err;
@@ -967,30 +985,30 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     if (profile_full(cs) && !TileMarkerCode_Profile_IsConstraintValid(&profile_code, &err))
         return fail(cs, "tile-part header: marker outside TileMarkerCode-Profile", pos);
     switch (code) {
-    case COD:
+    case HV_COD:
         if (cs->sot.tpsot != 0 || cs->tp_cod++)
             return fail(cs, "COD only once, in the first tile-part of a tile", pos);
-        if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + 2, len) != 0)
+        if (DECODE(CodSegment_Std, &cs->tile_cod, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid COD", pos);
         if ((error = check_cod(cs, &cs->tile_cod.body)) != NULL)
             return fail(cs, error, pos);
         item->cod = &cs->tile_cod;
         break;
-    case QCD:
+    case HV_QCD:
         if (cs->sot.tpsot != 0 || cs->tp_qcd++)
             return fail(cs, "QCD only once, in the first tile-part of a tile", pos);
-        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + 2, len) != 0)
+        if (DECODE(QcdSegment_Std, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid QCD", pos);
         item->qcd = &cs->qcd;
         break;
-    case PLT: {
+    case HV_PLT: {
         /* HV_ACCEPT_PLT_PADDING alone takes zero entries after the last
          * packet of each tile-part; the profile, after the last packet of
          * the codestream (hv_rule_plt_entry). */
         int i, per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) && !profile_full(cs);
         if (cs->plt == NULL && (cs->plt = malloc(sizeof *cs->plt)) == NULL)
             return fail(cs, "out of memory", pos);
-        if (DECODE(PltSegment_Std, cs->plt, cs->buf, pos + 2, len) != 0)
+        if (DECODE(PltSegment_Std, cs->plt, cs->buf, pos + MARKER, len) != 0)
             return fail(cs, "invalid PLT", pos);
         if (cs->plt->body.zplt != (asn1SccUint)cs->plts++)
             return fail(cs, "plt.zplt-sequence", pos);
@@ -1012,16 +1030,16 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->plt = cs->plt;
         break;
     }
-    case COM:
+    case HV_COM:
         if (decode_com(cs, pos, len) != 0)
             return -1;
         item->com = cs->com;
         break;
-    case COC: case QCC: case RGN: case POC: case PPT:
+    case HV_COC: case HV_QCC: case HV_RGN: case HV_POC: case HV_PPT:
         break;
-    case SOT: case EOC:
+    case HV_SOT: case HV_EOC:
         return fail(cs, "tile-part header without SOD", pos);
-    case SOC: case SIZ: case TLM: case PLM: case PPM: case CRG: case SOP: case EPH:
+    case HV_SOC: case HV_SIZ: case HV_TLM: case HV_PLM: case HV_PPM: case HV_CRG: case HV_SOP: case HV_EPH:
         return fail(cs, "marker not allowed in a tile-part header", pos);
     default:
         break;
@@ -1052,7 +1070,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
 
     case ST_SIZ:
         item->kind = HV_SEGMENT;
-        item->code = SIZ;
+        item->code = HV_SIZ;
         item->start = cs->pos;
         item->end = cs->siz_end;
         item->siz = cs->siz;
@@ -1064,9 +1082,9 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     case ST_AFTER_DATA:
         if (read_segment(cs, cs->end, &code, &end) != 0)
             return -1;
-        if (code == SOT)
+        if (code == HV_SOT)
             return start_tile_part(cs, item);
-        if (code == EOC) {
+        if (code == HV_EOC) {
             if (cs->tile_parts == 0)
                 return fail(cs, "codestream without a tile-part", cs->pos);
             if (end != cs->end)
@@ -1081,7 +1099,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
                                              &cs->cod.body.spcod, 1)) != NULL)
                 return fail(cs, error, cs->pos);
             item->kind = HV_END;
-            item->code = EOC;
+            item->code = HV_EOC;
             item->start = cs->pos;
             item->end = end;
             cs->pos = end;
@@ -1095,7 +1113,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
     case ST_TILE_HEADER:
         if (read_segment(cs, cs->tp_end, &code, &end) != 0)
             return -1;
-        if (code == SOD) {
+        if (code == HV_SOD) {
             if (profile_full(cs) && cs->plts == 0)
                 return fail(cs, "codestream.no-plt", cs->tp_start);
             if (cs->plts != 0 && cs->plt_sum != cs->tp_end - end)

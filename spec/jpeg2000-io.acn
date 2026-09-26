@@ -13,6 +13,13 @@ BoxHeader [] {
     xlbox       [encoding pos-int, size 64, endianness big, present-when (lbox == 1)]
 }
 
+Brand [encoding pos-int, size 32, endianness big]
+
+FtypHeader [] {
+    brand       [],
+    minor       [encoding pos-int, size 32, endianness big]
+}
+
 MarkerCode [encoding pos-int, size 16, endianness big]
 
 SegmentLength [encoding pos-int, size 16, endianness big]
@@ -48,6 +55,8 @@ UrlHeader [] {
     vers        [encoding pos-int, size 8],
     flag        [encoding pos-int, size 24, endianness big]
 }
+
+FragmentCount [encoding pos-int, size 16, endianness big]
 
 -- Rreq of jp2-boxes.acn
 Rreq-Std [] {

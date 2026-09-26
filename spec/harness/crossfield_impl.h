@@ -21,29 +21,6 @@
 #define CF_DEFAULT_COD
 #endif
 
-/* Marker codes and box types (decimal, as in the .asn1). */
-#define MC_SOC 65359
-#define MC_SIZ 65361
-#define MC_COD 65362
-#define MC_COC 65363
-#define MC_QCD 65372
-#define MC_TLM 65365
-#define MC_PLM 65367
-#define MC_PPM 65376
-#define MC_POC 65375
-#define MC_CRG 65379
-#define MC_PLT 65368
-#define MC_SOT 65424
-#define MC_EOC 65497
-#define BT_JP   1783636000UL
-#define BT_FTYP 1718909296UL
-#define BT_RREQ 1920099697UL
-#define BT_JPCH 1785750376UL
-#define BT_FTBL 1718903404UL
-#define BT_DTBL 1685348972UL
-#define BT_JP2C 1785737827UL
-#define BT_FLST 1718383476UL
-#define BT_URL  1970433056UL
 
 /* The body rules are shared with the reader: ../../lib/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
@@ -145,8 +122,8 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
         if (seg->exist.coc || seg->exist.poc) packet_layout_override = 1;
 #endif
         if (!seen_tile) {
-            if (code == MC_COD) { cod_before++; main_cod = &seg->cod.body; }
-            if (code == MC_QCD) qcd_before++;
+            if (code == HV_COD) { cod_before++; main_cod = &seg->cod.body; }
+            if (code == HV_QCD) qcd_before++;
         } else {
             /* T.800 A.3: after the first SOT only tile-parts and EOC follow. */
             return "codestream.segment-after-sot";
@@ -176,7 +153,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
 #endif
     }
     if (layer >= CF_PROFILE) {
-        if (tile_parts > 64) return "codestream.tile-part-limit";
+        if ((r = hv_rule_tile_part_count((uint64_t) tile_parts, 1)) != NULL) return r;
         if (plts == 0) return "codestream.no-plt";
     }
     if (layer == CF_STANDARD) {

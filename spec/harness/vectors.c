@@ -50,19 +50,6 @@
 #define FILE_BUFFER_BYTES Jp2Family_REQUIRED_BYTES_FOR_ACN_ENCODING
 #endif
 
-/* Marker codes and box types (decimal, as in the .asn1). */
-enum {
-    MC_SOC = 65359, MC_SIZ = 65361, MC_COD = 65362, MC_QCD = 65372,
-    MC_COC = 65363, MC_POC = 65375, MC_PPM = 65376,
-    MC_PLT = 65368, MC_COM = 65380, MC_SOT = 65424, MC_SOD = 65427, MC_EOC = 65497
-};
-enum {
-    BT_JP = 1783636000u, BT_FTYP = 1718909296u, BT_JP2H = 1785737832u,
-    BT_IHDR = 1768449138u, BT_COLR = 1668246642u, BT_JP2C = 1785737827u,
-    BT_JPCH = 1785750376u, BT_FTBL = 1718903404u, BT_FLST = 1718383476u,
-    BT_DTBL = 1685348972u, BT_URL = 1970433056u, BT_RREQ = 1920099697u,
-    BT_JPLH = 1785752680u
-};
 
 /* ------------------------------------------------------------------------ */
 /* Small utilities                                                          */
@@ -144,21 +131,21 @@ static int region_add(Regions *rs, Region reg) {
 }
 
 static int is_superbox(uint32_t t) {
-    return t == BT_JP2H || t == BT_JPCH || t == BT_FTBL || t == BT_DTBL ||
-           t == 1634955107u /* asoc */ || t == BT_JPLH || t == 1969843814u /* uinf */;
+    return t == HV_BOX_JP2H || t == HV_BOX_JPCH || t == HV_BOX_FTBL || t == HV_BOX_DTBL ||
+           t == HV_BOX_ASOC || t == HV_BOX_JPLH || t == HV_BOX_UINF;
 }
 
 static int walk_codestream(Regions *rs, const Bytes *b, size_t pos, size_t end, int parent) {
     size_t soc = pos;
-    if (end - pos < 2 || be16(b->data + pos) != MC_SOC) return 0;
+    if (end - pos < 2 || be16(b->data + pos) != HV_SOC) return 0;
     pos += 2;
     while (pos + 2 <= end) {
         uint16_t code = be16(b->data + pos);
-        if (code == MC_EOC) {
+        if (code == HV_EOC) {
             if (rs->soc_off == 0 && rs->eoc_end == 0) { rs->soc_off = soc; rs->eoc_end = pos + 2; }
             return 1;
         }
-        if (code == MC_SOT) {
+        if (code == HV_SOT) {
             uint32_t psot;
             size_t tp_end, p;
             int tp;
@@ -171,7 +158,7 @@ static int walk_codestream(Regions *rs, const Bytes *b, size_t pos, size_t end, 
             while (p + 2 <= tp_end) {
                 uint16_t c = be16(b->data + p);
                 uint16_t l;
-                if (c == MC_SOD) break;
+                if (c == HV_SOD) break;
                 if (p + 4 > tp_end) return 0;
                 l = be16(b->data + p + 2);
                 if (l < 2 || p + 2 + l > tp_end) return 0;
@@ -205,10 +192,10 @@ static int walk_boxes(Regions *rs, const Bytes *b, size_t pos, size_t end, int p
         box_end = pos + l;
         if (box_end > end) return 0;
         idx = region_add(rs, (Region) { "LBox", pos, box_end, pos, 4, pos + 8, parent });
-        if (t == BT_JP2C) {
+        if (t == HV_BOX_JP2C) {
             if (!walk_codestream(rs, b, pos + 8, box_end, idx)) return 0;
         } else if (is_superbox(t)) {
-            size_t child_start = pos + 8 + (t == BT_DTBL ? 2 : 0);
+            size_t child_start = pos + 8 + (t == HV_BOX_DTBL ? 2 : 0);
             if (!walk_boxes(rs, b, child_start, box_end, idx)) return 0;
         }
         pos = box_end;
@@ -280,7 +267,7 @@ static void build_tile_part(TilePart *tp, int levels, int with_plt) {
     if (with_plt) {
         TileSegment *ts = &tp->rest.headers.arr[0];
         Plt *plt;
-        ts->code = MC_PLT;
+        ts->code = HV_PLT;
         ts->exist.plt = 1;
         plt = &ts->plt.body;
         plt->zplt = 0;
@@ -298,18 +285,18 @@ static void build_tile_part(TilePart *tp, int levels, int with_plt) {
 static void build_codestream(Codestream *cs, int width, int height, int levels,
                              int custom_precincts, int with_plt) {
     MainSegment *seg;
-    cs->soc = MC_SOC;
-    cs->sizCode = MC_SIZ;
+    cs->soc = HV_SOC;
+    cs->sizCode = HV_SIZ;
     build_siz(&cs->siz.body, width, height);
     cs->segments.nCount = 3;
 
     seg = &cs->segments.arr[0];
-    seg->code = MC_COD;
+    seg->code = HV_COD;
     seg->exist.cod = 1;
     build_cod(&seg->cod.body, levels, custom_precincts);
 
     seg = &cs->segments.arr[1];
-    seg->code = MC_QCD;
+    seg->code = HV_QCD;
     seg->exist.qcd = 1;
     seg->qcd.body.sqcd = 0x40;          /* 2 guard bits, no quantization */
     {
@@ -320,7 +307,7 @@ static void build_codestream(Codestream *cs, int width, int height, int levels,
     }
 
     seg = &cs->segments.arr[2];
-    seg->code = MC_SOT;
+    seg->code = HV_SOT;
     seg->exist.tilePart = 1;
     build_tile_part(&seg->tilePart, levels, with_plt);
 }
@@ -328,7 +315,7 @@ static void build_codestream(Codestream *cs, int width, int height, int levels,
 static void add_opaque_box(Jp2Family *f, uint32_t type, const void *data, size_t n) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     switch (type) {
-        case BT_JP:   b->payload.kind = TopPayload_jP_PRESENT;   OCTETS(b->payload.u.jP.data, data, n); break;
+        case HV_BOX_JP:   b->payload.kind = TopPayload_jP_PRESENT;   OCTETS(b->payload.u.jP.data, data, n); break;
         default: die("add_opaque_box: unsupported type");
     }
 }
@@ -336,7 +323,7 @@ static void add_opaque_box(Jp2Family *f, uint32_t type, const void *data, size_t
 static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     TopBox *b;
     Ftyp *ftyp;
-    add_opaque_box(f, BT_JP, "\x0D\x0A\x87\x0A", 4);
+    add_opaque_box(f, HV_BOX_JP, "\x0D\x0A\x87\x0A", 4);
     b = &f->boxes.arr[f->boxes.nCount++];
     b->payload.kind = TopPayload_ftyp_PRESENT;
     ftyp = &b->payload.u.ftyp;
@@ -609,10 +596,10 @@ static int box_bounds_ok(const Bytes *b, size_t start, size_t end, int profile, 
         if (length < 8 || length > end - start) return 0;
         box_end = start + length;
         children = top && (profile == 2 ? 0
-                           : profile ? (type == BT_JPCH || type == BT_FTBL || type == BT_DTBL)
+                           : profile ? (type == HV_BOX_JPCH || type == HV_BOX_FTBL || type == HV_BOX_DTBL)
                            : is_superbox(type));
         if (children) {
-            child_start = start + 8 + (type == BT_DTBL ? 2 : 0);
+            child_start = start + 8 + (type == HV_BOX_DTBL ? 2 : 0);
             if (child_start > box_end || !box_bounds_ok(b, child_start, box_end, profile, 0))
                 return 0;
         }
@@ -923,7 +910,7 @@ static void rule_plt_second_part_long(Jp2Family *f, int box) {
 static void rule_com_in_tile_header(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
-    ts->code = MC_COM;
+    ts->code = HV_COM;
     ts->exist.com = 1;
     ts->com.body.rcom = 1;
     ts->com.body.ccom.nCount = 2;
@@ -982,7 +969,7 @@ static void rule_com_segment(Jp2Family *f, int box) {
     cs->segments.arr[3] = cs->segments.arr[2];
     seg = &cs->segments.arr[2];
     memset(&seg->exist, 0, sizeof seg->exist);
-    seg->code = MC_COM;
+    seg->code = HV_COM;
     seg->exist.com = 1;
     seg->com.body.rcom = 1;
     OCTETS(seg->com.body.ccom, "esajpip corpus", 14);
@@ -1063,7 +1050,7 @@ static void rule_iplt_too_short(Jp2Family *f, int box) {
 static void rule_tile_cod(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
-    ts->code = MC_COD;
+    ts->code = HV_COD;
     ts->exist.cod = 1;
     ts->cod.body = *cod_of(f, box);
 }
@@ -1071,7 +1058,7 @@ static void rule_tile_qcd(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
     TilePart *tp = tp_of(f, box);
     TileSegment *ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
-    ts->code = MC_QCD;
+    ts->code = HV_QCD;
     ts->exist.qcd = 1;
     ts->qcd.body = cs->segments.arr[1].qcd.body;
 }
@@ -1080,7 +1067,7 @@ static void rule_tile_cod_twice(Jp2Family *f, int box) {
     int n = tp->rest.headers.nCount, i;
     for (i = 0; i < 2; ++i) {                               /* two COD in the tile header */
         TileSegment *ts = &tp->rest.headers.arr[n + i];
-        ts->code = MC_COD;
+        ts->code = HV_COD;
         ts->exist.cod = 1;
         ts->cod.body = *cod_of(f, box);
     }
@@ -1093,7 +1080,7 @@ static void rule_tile_cod_second_part(Jp2Family *f, int box) {
     rule_two_tile_parts(f, box);
     tp = &cs->segments.arr[3].tilePart;             /* COD in tile-part 1 */
     ts = &tp->rest.headers.arr[tp->rest.headers.nCount++];
-    ts->code = MC_COD;
+    ts->code = HV_COD;
     ts->exist.cod = 1;
     ts->cod.body = *cod_of(f, box);
 }
@@ -1116,10 +1103,10 @@ static void add_main_opaque(Jp2Family *f, int box, int code) {
     seg = &cs->segments.arr[2];
     memset(&seg->exist, 0, sizeof seg->exist);
     seg->code = code;
-    if (code == MC_COC) {
+    if (code == HV_COC) {
         seg->exist.coc = 1;
         OCTETS(seg->coc.body.data, "\x00\x00\x00", 3);
-    } else if (code == MC_POC) {
+    } else if (code == HV_POC) {
         seg->exist.poc = 1;
         OCTETS(seg->poc.body.data, "\x00\x00\x00", 3);
     } else {
@@ -1128,9 +1115,9 @@ static void add_main_opaque(Jp2Family *f, int box, int code) {
     }
     cs->segments.nCount = 4;
 }
-static void rule_main_coc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_COC); }
-static void rule_main_poc(Jp2Family *f, int box) { add_main_opaque(f, box, MC_POC); }
-static void rule_main_ppm(Jp2Family *f, int box) { add_main_opaque(f, box, MC_PPM); }
+static void rule_main_coc(Jp2Family *f, int box) { add_main_opaque(f, box, HV_COC); }
+static void rule_main_poc(Jp2Family *f, int box) { add_main_opaque(f, box, HV_POC); }
+static void rule_main_ppm(Jp2Family *f, int box) { add_main_opaque(f, box, HV_PPM); }
 static void rule_ftyp_brand(Jp2Family *f, int box) {
     (void) box;
     memcpy(f->boxes.arr[1].payload.u.ftyp.brand.arr, "abcd", 4);           /* wrong brand */
@@ -1921,7 +1908,7 @@ static void emit_insertion_mutants(Bytes valid, cf_kind kind, const char *base_n
     for (i = 0; i < rs.n && tp < 0; ++i)
         if (strcmp(rs.r[i].kind, "Psot") == 0) { tp = i; sot = rs.r[i].start; }
     for (i = tp + 1; i < rs.n && plt == 0; ++i)
-        if (rs.r[i].parent == tp && be16(valid.data + rs.r[i].start) == MC_PLT)
+        if (rs.r[i].parent == tp && be16(valid.data + rs.r[i].start) == HV_PLT)
             plt = rs.r[i].payload_start + 1;              /* first Iplt, after Zplt */
     free(rs.r);
     if (tp < 0 || plt == 0) die("insertion mutants: no tile-part with PLT");
@@ -1950,7 +1937,7 @@ static void emit_rreq_mutants(Bytes valid, const char *base_name) {
     unsigned ml;
     char name[256];
     Bytes m;
-    if (be32(valid.data + rreq + 4) != BT_RREQ) die("rreq mutants: rreq is not the third box");
+    if (be32(valid.data + rreq + 4) != HV_BOX_RREQ) die("rreq mutants: rreq is not the third box");
     ml = valid.data[payload];
     nsf = payload + 1 + 2 * ml;
     nvf = nsf + 2 + (2 + ml) * be16(valid.data + nsf);
@@ -2158,7 +2145,7 @@ int main(int argc, char **argv) {
     dec_jpx = xcalloc(sizeof *dec_jpx);
 
     /* Sanity: the box-type constants in the model are the four-cc values. */
-    if (be32((const unsigned char *) "jp2c") != BT_JP2C || be32((const unsigned char *) "flst") != BT_FLST)
+    if (be32((const unsigned char *) "jp2c") != HV_BOX_JP2C || be32((const unsigned char *) "flst") != HV_BOX_FLST)
         die("box type constants do not match four-cc values");
 
     run_base(base_jp2(0, 0), NULL);

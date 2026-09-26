@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 
+#include "hv_codes.h"
 #include "j2k-headers.h"
 #include "jp2-boxes.h"
 
@@ -56,6 +57,12 @@ const char *hv_rule_tile_part(hv_tile_parts *t, uint64_t isot, uint64_t tpsot, u
  * tile-parts. */
 const char *hv_rule_tile_parts_end(const hv_tile_parts *t);
 
+/* The profile's limit on the tile-parts of a codestream: the server
+ * indexes at most 64 (PacketIndex::MAX_SEGMENTS; TPsot 0 to 63 in
+ * ../spec/j2k-codestream.asn1). `parts` counts them so far. */
+enum { HV_PROFILE_TILE_PARTS = 64 };
+const char *hv_rule_tile_part_count(uint64_t parts, int profile);
+
 /* The value of one PLT entry (A.7.3): 7-bit groups, most significant
  * first. "plt.value-overflow" when it does not fit 64 bits. */
 const char *hv_rule_iplt(const Iplt *entry, uint64_t *value);
@@ -85,15 +92,14 @@ const char *hv_rule_plt_packets(const hv_plt_count *count, const Siz *siz,
  * JPX boxes, T.801 Annex M (listed at the end of ../spec/jp2-boxes.asn1)
  * ------------------------------------------------------------------------ */
 
-enum {
-    HV_BOX_JP2C = 0x6A703263, HV_BOX_JPCH = 0x6A706368, HV_BOX_FTBL = 0x6674626C,
-    HV_BOX_DTBL = 0x6474626C, HV_BOX_FLST = 0x666C7374, HV_BOX_URL = 0x75726C20
-};
-
 /* A box inside a top-level jpch, ftbl or dtbl: jp2c, jpch, ftbl and dtbl
  * only at the top level (M.11.2, M.11.6), flst only in ftbl, url only in
  * dtbl, and a dtbl holds url boxes only. */
 const char *hv_rule_child(uint32_t parent, uint32_t child);
+
+/* The only URL scheme the profile links with, and its length. */
+#define HV_FILE_SCHEME "file://"
+enum { HV_FILE_SCHEME_LENGTH = sizeof HV_FILE_SCHEME - 1 };
 
 /* The profile's Data Entry URL box (ReadUrlBox, ReadJPX): VERS and FLAG 0,
  * and LOC, `n` bytes with its NUL, a file:// URL naming a .jp2 file. */
@@ -123,13 +129,6 @@ const char *hv_rule_jpx(const hv_jpx_boxes *boxes, int profile);
  * end of ../spec/jp2-boxes.asn1). Standard layer only: the server reads
  * none of them.
  * ------------------------------------------------------------------------ */
-
-enum {
-    HV_BOX_JP2H = 0x6A703268, HV_BOX_JPLH = 0x6A706C68, HV_BOX_IHDR = 0x69686472,
-    HV_BOX_BPCC = 0x62706363, HV_BOX_COLR = 0x636F6C72, HV_BOX_PCLR = 0x70636C72,
-    HV_BOX_CMAP = 0x636D6170, HV_BOX_CDEF = 0x63646566, HV_BOX_RES = 0x72657320,
-    HV_BOX_RESC = 0x72657363, HV_BOX_RESD = 0x72657364, HV_BOX_RREQ = 0x72726571
-};
 
 /* Where the JP2 Header box is, among the top-level boxes: how many there
  * are, whether one follows the first codestream (a jp2c box in a JP2 file;

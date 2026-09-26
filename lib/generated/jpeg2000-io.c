@@ -1473,6 +1473,125 @@ flag BoxHeader_ACN_Decode(BoxHeader* pVal, BitStream* pBitStrm, int* pErrCode)
 }
 
 
+flag Brand_IsConstraintValid(const Brand* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 4294967295UL);
+    *pErrCode = ret ? 0 :  ERR_BRAND;
+
+	return ret;
+}
+
+void Brand_Initialize(Brand* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+
+flag Brand_ACN_Encode(const Brand* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? Brand_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (*(pVal)));
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag Brand_ACN_Decode(Brand* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_BRAND;
+
+    return ret && Brand_IsConstraintValid(pVal, pErrCode);
+}
+
+
+flag FtypHeader_minor_IsConstraintValid(const FtypHeader_minor* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 4294967295UL);
+    *pErrCode = ret ? 0 :  ERR_FTYPHEADER_MINOR;
+
+	return ret;
+}
+
+flag FtypHeader_IsConstraintValid(const FtypHeader* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = Brand_IsConstraintValid((&(pVal->brand)), pErrCode);
+    if (ret) {
+        ret = FtypHeader_minor_IsConstraintValid((&(pVal->minor)), pErrCode);
+    }   /*COVERAGE_IGNORE*/
+
+	return ret;
+}
+
+void FtypHeader_minor_Initialize(FtypHeader_minor* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+void FtypHeader_Initialize(FtypHeader* pVal)
+{
+	(void)pVal;
+
+
+	/*set brand */
+	Brand_Initialize((&(pVal->brand)));
+	/*set minor */
+	FtypHeader_minor_Initialize((&(pVal->minor)));
+}
+
+flag FtypHeader_ACN_Encode(const FtypHeader* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? FtypHeader_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    /*Encode brand */
+	    ret = Brand_ACN_Encode((&(pVal->brand)), pBitStrm, pErrCode, FALSE);
+	    if (ret) {
+	        /*Encode minor */
+	        Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, pVal->minor);
+	    }   /*COVERAGE_IGNORE*/
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag FtypHeader_ACN_Decode(FtypHeader* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	/*Decode brand */
+	ret = Brand_ACN_Decode((&(pVal->brand)), pBitStrm, pErrCode);
+	if (ret) {
+	    /*Decode minor */
+	    ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(pBitStrm, (&(pVal->minor)));
+	    *pErrCode = ret ? 0 : ERR_ACN_DECODE_FTYPHEADER_MINOR;
+	}   /*COVERAGE_IGNORE*/
+
+    return ret && FtypHeader_IsConstraintValid(pVal, pErrCode);
+}
+
+
 flag MarkerCode_IsConstraintValid(const MarkerCode* pVal, int* pErrCode)
 {
     flag ret = TRUE;
@@ -1694,6 +1813,50 @@ flag UrlHeader_ACN_Decode(UrlHeader* pVal, BitStream* pBitStrm, int* pErrCode)
 	}   /*COVERAGE_IGNORE*/
 
     return ret && UrlHeader_IsConstraintValid(pVal, pErrCode);
+}
+
+
+flag FragmentCount_IsConstraintValid(const FragmentCount* pVal, int* pErrCode)
+{
+    flag ret = TRUE;
+    ret = ((*(pVal)) <= 65535UL);
+    *pErrCode = ret ? 0 :  ERR_FRAGMENTCOUNT;
+
+	return ret;
+}
+
+void FragmentCount_Initialize(FragmentCount* pVal)
+{
+	(void)pVal;
+
+
+	(*(pVal)) = 0UL;
+}
+
+flag FragmentCount_ACN_Encode(const FragmentCount* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints)
+{
+    flag ret = TRUE;
+
+    *pErrCode = 0;
+	ret = bCheckConstraints ? FragmentCount_IsConstraintValid(pVal, pErrCode) : TRUE ;
+	if (ret && *pErrCode == 0) {
+	    Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, (*(pVal)));
+    } /*COVERAGE_IGNORE*/
+
+
+    return ret;
+}
+
+flag FragmentCount_ACN_Decode(FragmentCount* pVal, BitStream* pBitStrm, int* pErrCode)
+{
+    flag ret = TRUE;
+	*pErrCode = 0;
+
+
+	ret = Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(pBitStrm, pVal);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_FRAGMENTCOUNT;
+
+    return ret && FragmentCount_IsConstraintValid(pVal, pErrCode);
 }
 
 

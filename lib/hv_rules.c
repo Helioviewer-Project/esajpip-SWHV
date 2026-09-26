@@ -71,6 +71,10 @@ const char *hv_rule_tile_parts_end(const hv_tile_parts *t) {
     return NULL;
 }
 
+const char *hv_rule_tile_part_count(uint64_t parts, int profile) {
+    return profile && parts > HV_PROFILE_TILE_PARTS ? "codestream.tile-part-limit" : NULL;
+}
+
 const char *hv_rule_iplt(const Iplt *e, uint64_t *value) {
     uint64_t v = e->b0.bits;
 #define HV_IPLT_STEP(n)                                                      \
@@ -142,10 +146,12 @@ const char *hv_rule_child(uint32_t parent, uint32_t child) {
 const char *hv_rule_url(uint64_t vers, uint64_t flag, const uint8_t *loc, size_t n) {
     if (vers != 0 || flag != 0) return "url.version-flags";
     if (n == 0 || memchr(loc, 0, n) != loc + n - 1) return "url.terminator";
+    static const char jp2[] = ".jp2";
     n--;                                           /* the characters */
-    if (n < 8) return "url.length";
-    if (memcmp(loc, "file://", 7) != 0) return "url.file-scheme";
-    if (memcmp(loc + n - 4, ".jp2", 4) != 0) return "url.jp2-target";
+    if (n <= HV_FILE_SCHEME_LENGTH) return "url.length";   /* the scheme and a path */
+    if (memcmp(loc, HV_FILE_SCHEME, HV_FILE_SCHEME_LENGTH) != 0) return "url.file-scheme";
+    if (n < sizeof jp2 - 1 || memcmp(loc + n - (sizeof jp2 - 1), jp2, sizeof jp2 - 1) != 0)
+        return "url.jp2-target";
     return NULL;
 }
 

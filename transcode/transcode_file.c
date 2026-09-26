@@ -6,7 +6,6 @@
 #include "hv_reader.h"
 #include "transcode.h"
 
-enum { JP2C = 0x6A703263, XML = 0x786D6C20 };
 
 /* ------------------------------------------------------------------------
  * XML (-x)
@@ -169,23 +168,23 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, in
 
     hv_boxes_file(&it, buf, size);
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
-        if (box.type == JP2C) {
+        if (box.type == HV_BOX_JP2C) {
             /* The transcoded codestream goes straight into its box. */
-            if (hv_begin_box(out, JP2C, 0, &start) != 0 ||
+            if (hv_begin_box(out, HV_BOX_JP2C, 0, &start) != 0 ||
                 hv_transcode_codestream(buf, box.payload, box.end, ppx, ppy, HV_PROFILE_HEADERS,
                                         out, error, error_size) != 0 ||
                 hv_end_box(out, start) != 0)
                 return -1;
             continue;
         }
-        if (box.type == XML && !done_xml) {
+        if (box.type == HV_BOX_XML && !done_xml) {
             size_t x0, x1;
             if (xml_root(buf + box.payload, box.end - box.payload, &x0, &x1) != 0) {
                 snprintf(error, error_size, "XML box at %zu has no well-formed root element",
                          box.start);
                 return -1;
             }
-            if (hv_begin_box(out, XML, 0, &start) != 0 ||
+            if (hv_begin_box(out, HV_BOX_XML, 0, &start) != 0 ||
                 hv_write_bytes(out, buf + box.payload + x0, x1 - x0) != 0 ||
                 hv_end_box(out, start) != 0)
                 return -1;

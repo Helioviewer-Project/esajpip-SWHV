@@ -18,7 +18,9 @@ pdus=$pdus,SizSegment-Std,CodSegment-Std,QcdSegment-Std,PltSegment-Std,ComSegmen
 # The served profile (layer 2) types the reader checks decoded values against.
 pdus=$pdus,Siz-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
 # JPX boxes.
-pdus=$pdus,DataReferenceCount,UrlHeader,FragmentList-Profile,Rreq-Std
+pdus=$pdus,DataReferenceCount,UrlHeader,FragmentCount,Fragment,FragmentList-Profile,Rreq-Std
+# File Type box.
+pdus=$pdus,FtypHeader,Brand
 # JP2 header boxes, one box or entry at a time.
 pdus=$pdus,Ihdr,BitDepth,ColrHeader,PclrHeader,CmapEntry,CdefCount,CdefEntry,Resolution
 models="j2k-headers j2k-codestream jp2-boxes jpeg2000-io"

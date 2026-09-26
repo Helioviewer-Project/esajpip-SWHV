@@ -14,13 +14,6 @@
 #include "hv_reader.h"
 #include "hv_writer.h"
 
-enum {
-    BOX_JP2H = 0x6A703268, BOX_XML = 0x786D6C20, BOX_IHDR = 0x69686472, BOX_BPCC = 0x62706363,
-    BOX_COLR = 0x636F6C72, BOX_PCLR = 0x70636C72, BOX_CMAP = 0x636D6170, BOX_CDEF = 0x63646566,
-    BOX_RES = 0x72657320, BOX_JPLH = 0x6A706C68, BOX_CGRP = 0x63677270, BOX_ASOC = 0x61736F63,
-    BOX_NLST = 0x6E6C7374, BOX_RREQ = 0x72726571, BOX_FTYP = 0x66747970
-};
-
 #define MAX_COLR 16
 
 /* One input: its boxes, type 0 where absent. */
@@ -78,21 +71,21 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
         return fail(error, size, "%s: %s at %zu", in->path, message, at);
     hv_boxes_file(&it, in->buf, in->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1) {
-        if (box.type == BOX_JP2H && s->jp2h.type == 0)
+        if (box.type == HV_BOX_JP2H && s->jp2h.type == 0)
             s->jp2h = box;
-        else if (box.type == BOX_XML && s->xml.type == 0)
+        else if (box.type == HV_BOX_XML && s->xml.type == 0)
             s->xml = box;
     }
     /* hv_check_jp2h: one jp2h, ihdr first and NC = Csiz (at most 16 384),
      * at most one bpcc, pclr, cmap, cdef and res. */
     hv_boxes_children(&it, in->buf, &s->jp2h);
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
-        hv_box *first = box.type == BOX_IHDR ? &s->ihdr : box.type == BOX_BPCC ? &s->bpcc
-                      : box.type == BOX_PCLR ? &s->pclr : box.type == BOX_CMAP ? &s->cmap
-                      : box.type == BOX_CDEF ? &s->cdef : box.type == BOX_RES ? &s->res : NULL;
+        hv_box *first = box.type == HV_BOX_IHDR ? &s->ihdr : box.type == HV_BOX_BPCC ? &s->bpcc
+                      : box.type == HV_BOX_PCLR ? &s->pclr : box.type == HV_BOX_CMAP ? &s->cmap
+                      : box.type == HV_BOX_CDEF ? &s->cdef : box.type == HV_BOX_RES ? &s->res : NULL;
         if (first != NULL && first->type == 0)
             *first = box;
-        if (box.type == BOX_COLR) {
+        if (box.type == HV_BOX_COLR) {
             if (s->ncolr == MAX_COLR)
                 return fail(error, size, "%s: more than %d Colour Specification boxes", in->path,
                             MAX_COLR);
@@ -175,7 +168,7 @@ static int copy_colr(hv_out *out, const source *s, const hv_box *box) {
     size_t n = box->end - box->payload, i;
     const uint8_t *p = s->in->buf + box->payload;
     uint8_t byte;
-    if (hv_write_box_header(out, BOX_COLR, n) != 0)
+    if (hv_write_box_header(out, HV_BOX_COLR, n) != 0)
         return -1;
     for (i = 0; i < n; i++) {
         byte = colr_byte(p, i);
@@ -191,11 +184,11 @@ static int write_jp2h(hv_out *out, const source *s) {
     hv_box box;
     const char *message;
     size_t at, start;
-    if (hv_begin_box(out, BOX_JP2H, 0, &start) != 0)
+    if (hv_begin_box(out, HV_BOX_JP2H, 0, &start) != 0)
         return -1;
     hv_boxes_children(&it, s->in->buf, &s->jp2h);
     while (hv_boxes_next(&it, &box, &message, &at) == 1)
-        if ((box.type == BOX_COLR ? copy_colr(out, s, &box) : copy_box(out, s, &box)) != 0)
+        if ((box.type == HV_BOX_COLR ? copy_colr(out, s, &box) : copy_box(out, s, &box)) != 0)
             return -1;
     return hv_end_box(out, start);
 }
@@ -224,7 +217,7 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
     if (j->end - j->start == j0->end - j0->start &&
         memcmp(s->in->buf + j->start, first->in->buf + j0->start, j->end - j->start) == 0)
         return hv_write_box_header(out, HV_BOX_JPCH, 0) != 0 ? -1
-             : hv_write_box_header(out, BOX_JPLH, 0);
+             : hv_write_box_header(out, HV_BOX_JPLH, 0);
 
     if (hv_begin_box(out, HV_BOX_JPCH, 0, &start) != 0 || copy_box(out, s, &s->ihdr) != 0)
         return -1;
@@ -240,17 +233,17 @@ static int write_headers(hv_out *out, const source *s, const source *first) {
         generated_cmap(s, cmap, &n);
         if ((first->cmap.type == 0 || n != first->cmap.end - first->cmap.payload ||
              memcmp(cmap, first->in->buf + first->cmap.payload, n) != 0) &&
-            (hv_write_box_header(out, BOX_CMAP, n) != 0 || hv_write_bytes(out, cmap, n) != 0))
+            (hv_write_box_header(out, HV_BOX_CMAP, n) != 0 || hv_write_bytes(out, cmap, n) != 0))
             return -1;
     } else if (s->cmap.type != 0 && !same_box(s, &s->cmap, first, &first->cmap) &&
                copy_box(out, s, &s->cmap) != 0) {
         return -1;
     }
-    if (hv_end_box(out, start) != 0 || hv_begin_box(out, BOX_JPLH, 0, &start) != 0)
+    if (hv_end_box(out, start) != 0 || hv_begin_box(out, HV_BOX_JPLH, 0, &start) != 0)
         return -1;
     if (!same_colrs(s, first)) {
         int k;
-        if (hv_begin_box(out, BOX_CGRP, 0, &group) != 0)
+        if (hv_begin_box(out, HV_BOX_CGRP, 0, &group) != 0)
             return -1;
         for (k = 0; k < s->ncolr; k++)
             if (copy_colr(out, s, &s->colr[k]) != 0)
@@ -419,7 +412,7 @@ int hv_merge_files(const hv_merge_input *inputs, size_t n, int links, FILE *file
             uint8_t nlst[16] = {0, 0, 0, 16, 'n', 'l', 's', 't'};
             put32(nlst + 8, 0x01000000u + (uint32_t)i);
             put32(nlst + 12, 0x02000000u + (uint32_t)i);
-            if (hv_write_box_header(&w.out, BOX_ASOC, 16 + (uint64_t)box) != 0 ||
+            if (hv_write_box_header(&w.out, HV_BOX_ASOC, 16 + (uint64_t)box) != 0 ||
                 hv_write_bytes(&w.out, nlst, sizeof nlst) != 0 ||
                 (xml->to_end ? copy_box(&w.out, &s[i], xml) != 0
                              : write_through(&w, inputs[i].buf + xml->start, box) != 0))

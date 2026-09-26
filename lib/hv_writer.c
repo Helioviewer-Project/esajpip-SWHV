@@ -1,6 +1,7 @@
 /* hv_writer.c: see hv_writer.h. */
 #include "hv_writer.h"
 
+#include "hv_codes.h"
 #include "jp2-boxes.h"        /* FragmentList-Profile */
 
 #include <limits.h>
@@ -134,7 +135,8 @@ DEFINE_APPEND(DataReferenceCount)
 DEFINE_APPEND(UrlHeader)
 DEFINE_APPEND(Rreq_Std)
 
-enum { SIZ = 0xFF51, COD = 0xFF52, PLT = 0xFF58, QCD = 0xFF5C, COM = 0xFF64, SOT = 0xFF90 };
+/* A marker code (A.1.1). */
+#define MARKER HV_FIXED(MarkerCode)
 
 int hv_write_bytes(hv_out *out, const void *bytes, size_t size) {
     if (reserve(out, size) != 0)
@@ -152,7 +154,7 @@ int hv_write_marker(hv_out *out, uint16_t code) {
 
 int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t size) {
     SegmentLength l;
-    if (size > 65535 - 2)
+    if (size > UINT16_MAX - HV_FIXED(SegmentLength))      /* Lxxx counts itself */
         return fail(out, "marker segment body longer than 65 533 bytes");
     l = size + 2;
     if (hv_write_marker(out, code) != 0 || APPEND(SegmentLength, &l, out) != 0)
@@ -161,26 +163,26 @@ int hv_write_segment(hv_out *out, uint16_t code, const uint8_t *body, size_t siz
 }
 
 int hv_write_siz(hv_out *out, const SizSegment_Std *siz) {
-    return hv_write_marker(out, SIZ) != 0 ? -1 : APPEND(SizSegment_Std, siz, out);
+    return hv_write_marker(out, HV_SIZ) != 0 ? -1 : APPEND(SizSegment_Std, siz, out);
 }
 
 int hv_write_cod(hv_out *out, const CodSegment_Std *cod) {
-    return hv_write_marker(out, COD) != 0 ? -1 : APPEND(CodSegment_Std, cod, out);
+    return hv_write_marker(out, HV_COD) != 0 ? -1 : APPEND(CodSegment_Std, cod, out);
 }
 
 int hv_write_qcd(hv_out *out, const QcdSegment_Std *qcd) {
-    return hv_write_marker(out, QCD) != 0 ? -1 : APPEND(QcdSegment_Std, qcd, out);
+    return hv_write_marker(out, HV_QCD) != 0 ? -1 : APPEND(QcdSegment_Std, qcd, out);
 }
 
 int hv_write_com(hv_out *out, const ComSegment_Std *com) {
-    return hv_write_marker(out, COM) != 0 ? -1 : APPEND(ComSegment_Std, com, out);
+    return hv_write_marker(out, HV_COM) != 0 ? -1 : APPEND(ComSegment_Std, com, out);
 }
 
 /* One Iplt entry: 7-bit groups, most significant first. Returns its bytes. */
 static int set_iplt(Iplt *p, uint64_t value) {
     IpltByte *more[9] = {&p->b0, &p->b1, &p->b2, &p->b3, &p->b4,
                          &p->b5, &p->b6, &p->b7, &p->b8};
-    unsigned groups[10];
+    unsigned groups[10];                          /* b0 to b9 of the model's Iplt */
     int n = 0, i;
 
     do {
@@ -218,13 +220,13 @@ int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
         return fail(out, "out of memory");
     while (status == 0 && i < count) {
         size_t bytes = 0;
-        if (zplt > 255) {
+        if (zplt > UINT8_MAX) {                           /* Zplt, A.7.3 */
             status = fail(out, "more than 256 PLT segments in a tile-part");
             break;
         }
         plt->body.zplt = zplt++;
         plt->body.entries.nCount = 0;
-        /* Lplt = 3 + entry bytes <= 65 535. */
+        /* Lplt = its own 2 bytes + Zplt + entry bytes <= 65 535. */
         while (i < count) {
             Iplt entry;
             int n;
@@ -233,14 +235,14 @@ int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
                 break;
             }
             n = set_iplt(&entry, lengths[i]);
-            if (bytes + n > 65535 - 3)
+            if (bytes + n > UINT16_MAX - HV_FIXED(SegmentLength) - 1)
                 break;
             plt->body.entries.arr[plt->body.entries.nCount++] = entry;
             bytes += n;
             i++;
         }
         if (status == 0)
-            status = hv_write_marker(out, PLT) != 0 ? -1 : APPEND(PltSegment_Std, plt, out);
+            status = hv_write_marker(out, HV_PLT) != 0 ? -1 : APPEND(PltSegment_Std, plt, out);
     }
     free(plt);
     return status;
@@ -248,7 +250,7 @@ int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
 
 static SotSegment make_sot(uint16_t isot, uint32_t psot, uint8_t tpsot, uint8_t tnsot) {
     SotSegment sot;
-    sot.lsot = 10;
+    sot.lsot = HV_FIXED(SotSegment);            /* Lsot: the segment, marker code aside */
     sot.isot = isot;
     sot.psot = psot;
     sot.tpsot = tpsot;
@@ -260,7 +262,7 @@ int hv_begin_tile_part(hv_out *out, uint16_t isot, uint8_t tpsot, uint8_t tnsot,
                        size_t *start) {
     SotSegment sot = make_sot(isot, 0, tpsot, tnsot);
     *start = out->size;
-    if (hv_write_marker(out, SOT) != 0)
+    if (hv_write_marker(out, HV_SOT) != 0)
         return -1;
     return APPEND(SotSegment, &sot, out);
 }
@@ -271,23 +273,23 @@ int hv_end_tile_part(hv_out *out, size_t start) {
 
     if (out->error != NULL)
         return -1;
-    if (start > out->size || out->size - start < 14)
+    if (start > out->size || out->size - start < MARKER + HV_FIXED(SotSegment) + MARKER)
         return fail(out, "tile-part shorter than SOT and SOD");
     length = out->size - start;
     if (length > UINT32_MAX)
         return fail(out, "tile-part longer than Psot can state");
-    if (DECODE(SotSegment, &sot, out, start + 2, 10) != 0)
+    if (DECODE(SotSegment, &sot, out, start + MARKER, HV_FIXED(SotSegment)) != 0)
         return -1;
     sot.psot = length;
-    return ENCODE(SotSegment, &sot, out, start + 2, 10, &written);
+    return ENCODE(SotSegment, &sot, out, start + MARKER, HV_FIXED(SotSegment), &written);
 }
 
 int hv_begin_box(hv_out *out, uint32_t type, int extended, size_t *start) {
     BoxHeader h;
     memset(&h, 0, sizeof h);
-    h.lbox = extended ? 1 : 8;
+    h.lbox = extended ? 1 : HV_BOX_HEADER;           /* placeholders for hv_end_box */
     h.tbox = type;
-    h.xlbox = 16;
+    h.xlbox = HV_BOX_HEADER_XL;
     h.exist.xlbox = extended != 0;
     *start = out->size;
     return APPEND(BoxHeader, &h, out);
@@ -299,39 +301,42 @@ int hv_end_box(hv_out *out, size_t start) {
 
     if (out->error != NULL)
         return -1;
-    if (start > out->size || out->size - start < 8)
+    if (start > out->size || out->size - start < HV_BOX_HEADER)
         return fail(out, "box shorter than its header");
     length = out->size - start;
-    if (DECODE(BoxHeader, &h, out, start, length < 16 ? length : 16) != 0)
+    if (DECODE(BoxHeader, &h, out, start, length < HV_BOX_HEADER_XL ? length : HV_BOX_HEADER_XL) != 0)
         return -1;
     if (h.exist.xlbox) {
         h.xlbox = length;
     } else if (length > HV_LBOX_MAX) {
-        /* The box outgrew LBox: move its payload up 8 bytes to make room
-         * for XLBox (I.4). */
-        if (reserve(out, 8) != 0)
+        /* The box outgrew LBox: move its payload up to make room for XLBox
+         * (I.4). */
+        size_t more = HV_BOX_HEADER_XL - HV_BOX_HEADER;
+        if (reserve(out, more) != 0)
             return -1;
-        memmove(out->data + start + 16, out->data + start + 8, length - 8);
-        out->size += 8;
+        memmove(out->data + start + HV_BOX_HEADER_XL, out->data + start + HV_BOX_HEADER,
+                length - HV_BOX_HEADER);
+        out->size += more;
         h.lbox = 1;
-        h.xlbox = length + 8;
+        h.xlbox = length + more;
         h.exist.xlbox = TRUE;
     } else {
         h.lbox = length;
     }
-    return ENCODE(BoxHeader, &h, out, start, h.exist.xlbox ? 16 : 8, &written);
+    return ENCODE(BoxHeader, &h, out, start, h.exist.xlbox ? HV_BOX_HEADER_XL : HV_BOX_HEADER,
+                  &written);
 }
 
 int hv_write_box_header(hv_out *out, uint32_t type, uint64_t size) {
     BoxHeader h;
     memset(&h, 0, sizeof h);
     h.tbox = type;
-    if (size > HV_LBOX_MAX - 8) {
+    if (size > HV_LBOX_MAX - HV_BOX_HEADER) {
         h.lbox = 1;
-        h.xlbox = size + 16;
+        h.xlbox = size + HV_BOX_HEADER_XL;
         h.exist.xlbox = TRUE;
     } else {
-        h.lbox = size + 8;
+        h.lbox = size + HV_BOX_HEADER;
     }
     return APPEND(BoxHeader, &h, out);
 }
@@ -344,7 +349,8 @@ int hv_write_flst(hv_out *out, uint64_t offset, uint32_t length, uint16_t dr) {
     f.fragments.arr[0].off = offset;
     f.fragments.arr[0].len = length;
     f.fragments.arr[0].dr = dr;
-    return hv_write_box_header(out, 0x666C7374, 16) != 0 ? -1 : APPEND(FragmentList_Profile, &f, out);
+    return hv_write_box_header(out, HV_BOX_FLST, HV_FIXED(FragmentList_Profile)) != 0
+         ? -1 : APPEND(FragmentList_Profile, &f, out);
 }
 
 int hv_write_ndr(hv_out *out, uint16_t ndr) {
@@ -355,13 +361,14 @@ int hv_write_ndr(hv_out *out, uint16_t ndr) {
 int hv_write_url(hv_out *out, const char *loc) {
     UrlHeader h = {0, 0};
     size_t n = strlen(loc) + 1;
-    if (hv_write_box_header(out, 0x75726C20, 4 + (uint64_t)n) != 0 || APPEND(UrlHeader, &h, out) != 0)
+    if (hv_write_box_header(out, HV_BOX_URL, HV_FIXED(UrlHeader) + (uint64_t)n) != 0 ||
+        APPEND(UrlHeader, &h, out) != 0)
         return -1;
     return hv_write_bytes(out, loc, n);
 }
 
 int hv_write_rreq(hv_out *out, const Rreq_Std *rreq) {
     size_t start;
-    return hv_begin_box(out, 0x72726571, 0, &start) != 0 || APPEND(Rreq_Std, rreq, out) != 0
+    return hv_begin_box(out, HV_BOX_RREQ, 0, &start) != 0 || APPEND(Rreq_Std, rreq, out) != 0
          ? -1 : hv_end_box(out, start);
 }
