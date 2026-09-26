@@ -58,9 +58,11 @@ int hv_codeblocks_init(hv_codeblocks *cb, size_t nblocks);
 void hv_codeblocks_free(hv_codeblocks *cb);
 
 /* Decodes the packet headers of a tile and records every contribution in
- * cb. A packet may not span tile-parts. sop/eph: Scod bits 1 and 2 (SOP
- * and EPH markers may be present; they are skipped). Returns 0, or -1 with
- * a message in error. */
+ * cb. A packet may not span tile-parts. sop/eph: Scod bits 1 and 2. With
+ * sop, a packet may start with an SOP marker segment, whose Lsop and Nsop
+ * are checked (A.8.1); with eph, every header must end with EPH (A.8.2).
+ * Bit stuffing is checked (B.10.1). Returns 0, or -1 with a message in
+ * error. */
 int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
                     const hv_tile_data *tile, int sop, int eph, hv_codeblocks *cb,
                     char *error, size_t error_size);

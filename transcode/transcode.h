@@ -10,8 +10,8 @@
  * Supported input: one tile (any number of tile-parts), any progression
  * order, no COC, POC, PPM, RGN or tile-part header markers other than PLT
  * and COM, and code-block styles without selective arithmetic coding bypass
- * or termination on each coding pass. SOP and EPH markers are skipped and
- * not written; TLM and PLM are dropped; COM is kept. */
+ * or termination on each coding pass. SOP and EPH markers are checked
+ * (A.8) and not written; TLM and PLM are dropped; COM is kept. */
 #ifndef HV_TRANSCODE_H
 #define HV_TRANSCODE_H
 

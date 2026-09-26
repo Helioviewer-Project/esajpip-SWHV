@@ -74,17 +74,31 @@ static size_t add_contribution(hv_codeblocks *cb, size_t blk, int layer, int pas
  * only 7 bits, its most significant bit is a stuffed 0.
  * ------------------------------------------------------------------------ */
 
+/* How decoding a packet header ended. */
+typedef enum {
+    HEADER_OK,
+    HEADER_OVERRUN,             /* it runs past its tile-part */
+    HEADER_STUFFING,            /* a byte after 0xFF has its top bit set */
+    HEADER_NOMEM
+} header_status;
+
 typedef struct {
     const uint8_t *p, *end;     /* next byte; end of the tile-part */
     unsigned buf;
     int ct;
-    int overrun;                /* a read went past end; later reads give 0 */
+    header_status error;        /* set, later reads give 0 */
 } bit_reader;
 
 static int read_bit(bit_reader *rd) {
     if (rd->ct == 0) {
+        if (rd->error != HEADER_OK)
+            return 0;
         if (rd->p >= rd->end) {
-            rd->overrun = 1;
+            rd->error = HEADER_OVERRUN;
+            return 0;
+        }
+        if (rd->buf == 0xFF && (*rd->p & 0x80)) {
+            rd->error = HEADER_STUFFING;
             return 0;
         }
         rd->ct = rd->buf == 0xFF ? 7 : 8;
@@ -96,7 +110,7 @@ static int read_bit(bit_reader *rd) {
 
 static uint64_t read_bits(bit_reader *rd, int64_t n) {
     uint64_t value = 0;
-    for (; n > 0 && !rd->overrun; n--) {
+    for (; n > 0 && rd->error == HEADER_OK; n--) {
         int b = read_bit(rd);
         if (value < HUGE_LENGTH) {
             value = value * 2 + (unsigned)b;
@@ -107,9 +121,15 @@ static uint64_t read_bits(bit_reader *rd, int64_t n) {
     return value;
 }
 
-/* The header's end: past the stuffed byte after a final 0xFF. */
-static const uint8_t *read_end(const bit_reader *rd) {
-    return rd->buf == 0xFF ? rd->p + 1 : rd->p;
+/* The header's end: past the stuffed byte after a final 0xFF, which B.10.1
+ * requires. When that byte is past the tile-part, the caller finds the
+ * header's end past the tile-part's. */
+static const uint8_t *read_end(bit_reader *rd) {
+    if (rd->buf != 0xFF)
+        return rd->p;
+    if (rd->p < rd->end && (*rd->p & 0x80))
+        rd->error = HEADER_STUFFING;
+    return rd->p + 1;
 }
 
 typedef struct {
@@ -248,7 +268,7 @@ static int tree_decode(tag_trees *t, bit_reader *rd, size_t leaf, int32_t thresh
         while (low < threshold && low < t->value[n]) {
             if (read_bit(rd))
                 t->value[n] = low;
-            else if (rd->overrun)
+            else if (rd->error != HEADER_OK)
                 return 0;
             else
                 low++;
@@ -445,11 +465,12 @@ static int marker_at(const uint8_t *buf, size_t pos, size_t end, uint8_t code) {
     return pos + 1 < end && buf[pos] == 0xFF && buf[pos + 1] == code;
 }
 
-/* Decodes one packet header at buf[*pos, end) and records its
- * contributions (offsets not yet set). 0, or -1 on overrun. */
-static int decode_header(const precinct_ref *p, int l, const uint8_t *buf, size_t *pos,
-                         size_t end, pass_state *s, hv_codeblocks *cb, int *nomem) {
-    bit_reader rd = {buf + *pos, buf + end, 0, 0, 0};
+/* Decodes one packet header at buf[*pos, end), records its contributions
+ * (offsets not yet set) and moves *pos past it. */
+static header_status decode_header(const precinct_ref *p, int l, const uint8_t *buf,
+                                   size_t *pos, size_t end, pass_state *s,
+                                   hv_codeblocks *cb) {
+    bit_reader rd = {buf + *pos, buf + end, 0, 0, HEADER_OK};
     int b;
 
     if (read_bit(&rd)) {        /* zero-length packet otherwise (B.10.3) */
@@ -465,8 +486,8 @@ static int decode_header(const precinct_ref *p, int l, const uint8_t *buf, size_
                     hv_block *blk = &cb->blocks[k];
                     uint64_t length;
                     int passes;
-                    if (rd.overrun)
-                        return -1;
+                    if (rd.error != HEADER_OK)
+                        return rd.error;
                     if (blk->first_layer < 0) {
                         if (!tree_decode(&s->incl, &rd, leaf, l + 1))
                             continue;
@@ -480,19 +501,17 @@ static int decode_header(const precinct_ref *p, int l, const uint8_t *buf, size_
                     while (read_bit(&rd))
                         s->lblock[k]++;
                     length = read_bits(&rd, s->lblock[k] + floorlog2((uint64_t)passes));
-                    if (rd.overrun)
-                        return -1;
-                    if (add_contribution(cb, k, l, passes, length) == HV_NONE) {
-                        *nomem = 1;
-                        return -1;
-                    }
+                    if (rd.error != HEADER_OK)
+                        return rd.error;
+                    if (add_contribution(cb, k, l, passes, length) == HV_NONE)
+                        return HEADER_NOMEM;
                 }
         }
     }
-    if (rd.overrun)
-        return -1;
+    if (rd.error != HEADER_OK)
+        return rd.error;
     *pos = (size_t)(read_end(&rd) - buf);
-    return 0;
+    return rd.error;
 }
 
 int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
@@ -504,7 +523,7 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
     int zero_psot = tile->zero_psot;
     pass_state s;
     size_t pkt, part = 0, pos = nparts ? parts[0].start : 0, rest, i;
-    int status = 0, nomem = 0;
+    int status = 0;
 
     if (state_init(&s, g, NULL, cb->nblocks, g->layers) != 0) {
         state_free(&s);
@@ -529,25 +548,49 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
             status = fail(error, error_size, "Psot=0 is only valid for the last tile-part");
             break;
         }
-        if (sop && marker_at(buf, pos, end, 0x91))
-            pos += 6;           /* SOP marker segment (A.8.1) */
-        if (pos > end)
-            pos = end;          /* the header then overruns the tile-part */
-        if (decode_header(&p, packets[pkt].layer, buf, &pos, end, &s, cb, &nomem) != 0) {
+        /* SOP marker segment (A.8.1), allowed by Scod bit 1: Lsop = 4, and
+         * Nsop numbers the tile's packets from 0, rolling over after 65535. */
+        if (sop && marker_at(buf, pos, end, 0x91)) {
+            if (end - pos < 6 || buf[pos + 2] != 0 || buf[pos + 3] != 4 ||
+                ((size_t)buf[pos + 4] << 8 | buf[pos + 5]) != (pkt & 0xFFFF)) {
+                status = fail(error, error_size, "invalid SOP marker segment before packet %zu",
+                              pkt);
+                break;
+            }
+            pos += 6;
+        }
+        switch (decode_header(&p, packets[pkt].layer, buf, &pos, end, &s, cb)) {
+        case HEADER_OK:
+            break;
+        case HEADER_OVERRUN:
             status = fail(error, error_size,
-                          nomem ? "out of memory"
-                          : last_part ? "truncated input is not supported: incomplete packet header"
-                                      : "packet crosses a tile-part boundary");
+                          last_part ? "truncated input is not supported: incomplete packet header"
+                                    : "packet crosses a tile-part boundary");
+            break;
+        case HEADER_STUFFING:
+            status = fail(error, error_size, "invalid bit stuffing in packet header %zu", pkt);
+            break;
+        case HEADER_NOMEM:
+            status = fail(error, error_size, "out of memory");
             break;
         }
+        if (status != 0)
+            break;
         if (pos > end) {        /* the stuffed byte after a final 0xFF */
             status = fail(error, error_size,
                           last_part ? "truncated input is not supported: packet data overruns the tile"
                                     : "packet crosses a tile-part boundary");
             break;
         }
-        if (eph && marker_at(buf, pos, end, 0x92))
-            pos += 2;           /* EPH marker (A.8.2) */
+        /* EPH marker (A.8.2): required after every header by Scod bit 2. */
+        if (eph) {
+            if (!marker_at(buf, pos, end, 0x92)) {
+                status = fail(error, error_size, "missing EPH marker after packet header %zu",
+                              pkt);
+                break;
+            }
+            pos += 2;
+        }
         /* The packet body: the contributions' bytes in header order. */
         for (i = first; i < cb->ncontrib; i++) {
             hv_contribution *c = &cb->contrib[i];

@@ -34,7 +34,7 @@ As in hvJP2K: one tile (any number of tile-parts, Psot = 0 allowed on the
 last one), any progression order, no COC, POC, PPM or RGN, only PLT and COM
 in tile-part headers, and code-block styles without selective arithmetic
 coding bypass or termination on each coding pass. The new precincts must
-keep the code-block partition. SOP and EPH markers are skipped and not
+keep the code-block partition. SOP and EPH markers are checked and not
 written; TLM and PLM are dropped; the input's PLT is ignored (so its
 trailing zero entries are accepted); every other main-header segment,
 COM included, is copied as read.
@@ -47,13 +47,22 @@ at most 250,000 code-blocks (under 100 bytes of state each) and at most
 of output). The input's packets need no bound of their own: each takes at
 least a byte of its tile's data.
 
-Packet-level errors use the same messages as hvJP2K, with one difference:
-hvJP2K reads a tile's tile-parts as one concatenated block, `hv_transcode`
-reads each in place. A packet in a tile-part other than the last that runs
-past its tile-part is reported as "packet crosses a tile-part boundary"
-even when the data after it would also run out, where hvJP2K reports
-"packet data overruns the tile". Header errors come from the reader and use
-its messages.
+Packet headers are read as T.800 requires, where hvJP2K is lenient: an
+SOP marker segment must have Lsop = 4 and Nsop equal to the packet's index
+in the tile, modulo 65,536 (A.8.1); when COD signals EPH, every packet
+header must end with it (A.8.2); and the byte after each 0xFF in a header
+must have its top bit clear (B.10.1). hvJP2K skips six bytes after any SOP
+code, skips EPH where it finds it, and ignores the stuffed bit. None of the
+4,014 EUI files, 200 AIA files from JSOC (10 wavelengths, 2015 to 2026),
+hvJP2K fixtures or test corpus files breaks these rules.
+
+Packet-level errors otherwise use hvJP2K's messages, except for the rules
+above, the memory bounds, and one case: hvJP2K reads a tile's tile-parts
+as one concatenated block, `hv_transcode` reads each in place. A packet in
+a tile-part other than the last that runs past its tile-part is reported
+as "packet crosses a tile-part boundary" even when the data after it would
+also run out, where hvJP2K reports "packet data overruns the tile". Header
+errors come from the reader and use its messages.
 
 ## XML (-x)
 
