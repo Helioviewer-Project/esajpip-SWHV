@@ -1,4 +1,4 @@
-Sibling DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
     Item ::= SEQUENCE { data OCTET STRING (SIZE (1..4)) }
     Msg ::= SEQUENCE { head OCTET STRING (SIZE (1..4)), payload Item }
 END

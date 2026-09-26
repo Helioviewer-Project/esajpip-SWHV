@@ -8,6 +8,8 @@ retest each bug against the new revision and remove any patch it supersedes.
 The numbered filenames show the application order directly. Keep retired
 series in separate `reference/<upstream-base>/` directories so their numbers
 do not mix with those of another series.
+Each active patch has a matching numbered directory in
+[`../asn1scc-issues/`](../asn1scc-issues/) with its report and reproducer.
 
 Applied now, in `series` order:
 
@@ -17,24 +19,23 @@ Applied now, in `series` order:
   `StgC/acn_c.stg` now copy only when `ret` is true; a `-fsanitize=bool`
   check on test case 001 is added to `v4Tests/scripts/runWireTests.sh`.
   Report and reproducer:
-  [`../asn1scc-issues/deferred-determinant-uninit/`](../asn1scc-issues/deferred-determinant-uninit/).
+  [`../asn1scc-issues/0001-deferred-determinant-uninit/`](../asn1scc-issues/0001-deferred-determinant-uninit/).
 - `0002-deferred-sequence-of-arguments.patch`: with `--acn-v2`, a determinant
   passed as an argument to the elements of a SEQUENCE OF child was not
   deferred: the encoder computed it from `arr[i1]` outside the element loop,
   with `i1` uninitialized. The two collectors of deferred determinants in
   `BackendAst/DAstACNDeferred.fs` now look through SEQUENCE OF to the
   element's reference type. Test case `25-ACNV2-BOUNDARIES/016` and its
-  wire test in `v4Tests/scripts/runWireTests.sh`.
+  wire test in `v4Tests/scripts/runWireTests.sh`. Report and reproducer:
+  [`../asn1scc-issues/0002-deferred-sequence-of-arguments/`](../asn1scc-issues/0002-deferred-sequence-of-arguments/).
 - `0003-deferred-sibling-consumers.patch`: a deferred determinant that a sibling
   also consumes (`head [size len]` beside `payload <len> []`): the decoder
   now keeps the ordinary variable the sibling reads (it did not compile),
   and the encoder patches the determinant from the sibling too, or fails on
   a mismatch (it wrote a wrong encoding). Test cases `017` and `018` (the
   JPEG 2000 Reader Requirements box, which needs both patches) and their
-  wire tests.
-
-  Report and reproducers for both:
-  [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
+  wire tests. Report and reproducer:
+  [`../asn1scc-issues/0003-deferred-sibling-consumers/`](../asn1scc-issues/0003-deferred-sibling-consumers/).
 - `0004-icdpdus-reference-init.patch`: with `-icdPdus`, the init function of a
   referenced type that is not complex (an OCTET STRING type assignment, say)
   was dropped although a PDU's init function calls it, so the generated C
@@ -43,7 +44,7 @@ Applied now, in `series` order:
   `v4Tests/test-cases/icd-pdus/001` and `v4Tests/scripts/runIcdPdusTests.sh`,
   which `../build-asn1scc.sh` runs. `lib/generate.sh` relies on it (the
   model's `RreqMask` and `Extra`). Report and reproducer:
-  [`../asn1scc-issues/icdpdus-reference-init/`](../asn1scc-issues/icdpdus-reference-init/).
+  [`../asn1scc-issues/0004-icdpdus-reference-init/`](../asn1scc-issues/0004-icdpdus-reference-init/).
 - `0005-deferred-fixed-size-determinant.patch`: with `--acn-v2`, deferred size
   determinants for fixed-size OCTET STRING values were generated from a
   nonexistent C `nCount` member. `BackendAst/DAstACNDeferred.fs` now uses the
@@ -52,7 +53,7 @@ Applied now, in `series` order:
   runtime size expression. Test case `25-ACNV2-BOUNDARIES/019` compiles the
   generated C and checks its exact wire bytes and round trip in
   `v4Tests/scripts/runWireTests.sh`. Report and reproducer:
-  [`../asn1scc-issues/deferred-sequence-of-determinant/`](../asn1scc-issues/deferred-sequence-of-determinant/).
+  [`../asn1scc-issues/0005-deferred-fixed-size-determinant/`](../asn1scc-issues/0005-deferred-fixed-size-determinant/).
 - `0006-containing-subtype-constraints.patch`: the validator of an
   `OCTET STRING (CONTAINING Subtype)` called the base type's validator when
   `Subtype` was a constrained reference type. The wrapper now calls the
@@ -60,7 +61,7 @@ Applied now, in `series` order:
   Generated C changes only at the three affected profile checks in this
   model. Test case `25-ACNV2-BOUNDARIES/020` checks both rejection and an
   accepted value. Report and reproducer:
-  [`../asn1scc-issues/containing-subtype-constraints/`](../asn1scc-issues/containing-subtype-constraints/).
+  [`../asn1scc-issues/0006-containing-subtype-constraints/`](../asn1scc-issues/0006-containing-subtype-constraints/).
 
 ## Reference: the former fixes for deferred ACN
 

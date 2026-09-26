@@ -1,4 +1,4 @@
-Fixed DEFINITIONS ::= BEGIN
+Min DEFINITIONS ::= BEGIN
     Item <INTEGER:len> [] { data [size len] }
     Msg [] {
         len INTEGER [encoding pos-int, size 8],

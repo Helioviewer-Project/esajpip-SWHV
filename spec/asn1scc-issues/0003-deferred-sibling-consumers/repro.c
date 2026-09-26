@@ -1,10 +1,10 @@
-/* Encodes sibling.asn1's Msg twice: head and payload.data of 2 bytes each
+/* Encodes min.asn1's Msg twice: head and payload.data of 2 bytes each
  * (len = 2), then a head of 3 bytes, which no single len can size with
  * data of 2 and the encoder must reject. */
 #include <stdio.h>
 #include <string.h>
 
-#include "sibling.h"
+#include "min.h"
 
 static int encode(const Msg *msg, byte *buf, long size, long *n, int *error) {
     BitStream bs;
