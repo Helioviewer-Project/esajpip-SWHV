@@ -214,7 +214,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | --- | --- |
 | `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
-| `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` in full, other boxes opaque. Imports the codestream. |
+| `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`) in full, other boxes opaque. Imports the codestream. |
 | `jpeg2000-io.asn1` / `.acn` | Header types for the reader/writer in `../lib/`: box header (LBox, TBox, XLBox), marker code, Lxxx, SOT, and the SIZ/COD/QCD/PLT/COM segments at the standard's bounds (`*Segment-Std`). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. The reader also checks values against the profile types `Siz-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile` (`../lib/generate.sh`). |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
 | `asn1scc-patches/` | Local compiler fixes that upstream does not have yet, applied to `VERSION` in `series` order, and a reference archive of the former fixes (not applied). |

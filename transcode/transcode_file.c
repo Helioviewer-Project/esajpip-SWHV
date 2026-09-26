@@ -212,7 +212,8 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, int xml
     int status;
 
     error[0] = 0;
-    if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL) {
+    if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL ||
+        (rule = hv_check_jp2h(buf, size, &at)) != NULL) {
         snprintf(error, error_size, "%s at %zu", rule, at);
         return -1;
     }

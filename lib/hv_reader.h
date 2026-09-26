@@ -103,6 +103,23 @@ int hv_link_path(const hv_link *link, const char *jpx_path, char *out, size_t ou
  * (flst.source-extent). NULL, or the rule that fails and *at its offset. */
 const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, size_t *at);
 
+/* The JP2 header boxes (T.800 I.5.3; the standard layer of
+ * ../spec/jp2-boxes.asn1, whose rules are hv_rules.c's). The server reads
+ * none of them, but a client decodes the image by them, so a tool that
+ * writes a file checks them.
+ *
+ * hv_check_jp2h, for a JP2 file: one or more codestreams; exactly one jp2h,
+ * before the first; its children decoded by the model's types and checked
+ * by hv_rules.c; and ihdr and bpcc against the first codestream's SIZ.
+ * hv_check_jpx_headers, for a JPX file: jp2h, if any, before the first
+ * codestream or header box; the children of jp2h, jplh and jpch; and each
+ * codestream's header (its jpch over jp2h's defaults, T.801 M.11.6)
+ * against its SIZ where the codestream is embedded.
+ * Both expect framing hv_boxes_next accepts. NULL, or the rule that fails
+ * (the manifest's name where it has one) and *at its offset. */
+const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at);
+const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at);
+
 /* ------------------------------------------------------------------------
  * Codestream, T.800 Annex A
  * ------------------------------------------------------------------------ */

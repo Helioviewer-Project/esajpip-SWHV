@@ -73,7 +73,8 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     s->in = in;
     if ((message = hv_check_jp2(in->buf, in->size, &s->jp2c, &at)) != NULL ||
         (message = hv_codestream_check(in->buf, s->jp2c.payload, s->jp2c.end, HV_PROFILE, &at)) !=
-            NULL)
+            NULL ||
+        (message = hv_check_jp2h(in->buf, in->size, &at)) != NULL)
         return fail(error, size, "%s: %s at %zu", in->path, message, at);
     hv_boxes_file(&it, in->buf, in->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1) {
@@ -82,8 +83,8 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
         else if (box.type == BOX_XML && s->xml.type == 0)
             s->xml = box;
     }
-    if (s->jp2h.type == 0)
-        return fail(error, size, "%s: no JP2 Header box", in->path);
+    /* hv_check_jp2h: one jp2h, ihdr first and NC = Csiz (at most 16 384),
+     * at most one bpcc, pclr, cmap, cdef and res. */
     hv_boxes_children(&it, in->buf, &s->jp2h);
     while ((status = hv_boxes_next(&it, &box, &message, &at)) == 1) {
         hv_box *first = box.type == BOX_IHDR ? &s->ihdr : box.type == BOX_BPCC ? &s->bpcc
@@ -100,8 +101,6 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     }
     if (status < 0)
         return fail(error, size, "%s: %s at %zu", in->path, message, at);
-    if (s->ihdr.type == 0 || s->ihdr.end - s->ihdr.payload < 14)
-        return fail(error, size, "%s: no Image Header box in the JP2 Header box", in->path);
     s->rsiz = get16(in->buf + s->jp2c.payload + 6);     /* SOC, SIZ, Lsiz, Rsiz */
     return 0;
 }
@@ -202,7 +201,8 @@ static int write_jp2h(hv_out *out, const source *s) {
 }
 
 /* Component Mapping for an input without the palette of the first: every
- * component used directly (CMP = i, MTYP = 0, PCOL = 0). */
+ * component used directly (CMP = i, MTYP = 0, PCOL = 0). NC is the checked
+ * Csiz, at most 16 384. */
 static int generated_cmap(const source *s, uint8_t *payload, size_t *n) {
     unsigned nc = get16(s->in->buf + s->ihdr.payload + 8), i;
     for (i = 0; i < nc; i++) {

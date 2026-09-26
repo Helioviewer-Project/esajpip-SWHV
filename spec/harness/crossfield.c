@@ -1,6 +1,8 @@
 /* crossfield.c — instantiates crossfield_impl.h for both struct families,
+ * checks the JP2 header boxes at layer 1 (the only layer that types them),
  * and checks a .jp2 at layer 2, whose box types differ (Jp2File_Profile). */
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include "crossfield.h"
 
@@ -25,20 +27,10 @@ static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
     return compatible ? NULL : "file.ftyp-compatibility";
 }
 
-/* The box type of a layer-1 inner box for hv_rule_child (0: any other). */
-static uint32_t cf_inner_type(const InnerBox *b) {
-    switch (b->payload.kind) {
-        case InnerPayload_flst_PRESENT: return HV_BOX_FLST;
-        case InnerPayload_url_PRESENT:  return HV_BOX_URL;
-        case InnerPayload_jp2c_PRESENT: return HV_BOX_JP2C;
-        default:                        return 0;
-    }
-}
-
 /* Layer-1 family: boxes have `other`; codestream markers do not. */
 #define CF_S
 #define CF_FILE Jp2Family
-#define CF_FN cf_check_family
+#define CF_FN cf_check_family_
 #include "crossfield_impl.h"
 #undef CF_S
 #undef CF_FILE
@@ -60,6 +52,135 @@ static uint32_t cf_inner_type(const InnerBox *b) {
 #undef CF_COD
 #undef CF_MAIN_OTHER
 #undef CF_TILE_PLT_ONLY
+
+/* The header box type of a layer-1 inner box, as far as hv_rule_header_child
+ * distinguishes them (1: any other). */
+static uint32_t cf_header_type(const InnerBox *b) {
+    switch (b->payload.kind) {
+        case InnerPayload_ihdr_PRESENT: return HV_BOX_IHDR;
+        case InnerPayload_bpcc_PRESENT: return HV_BOX_BPCC;
+        case InnerPayload_colr_PRESENT: return HV_BOX_COLR;
+        case InnerPayload_pclr_PRESENT: return HV_BOX_PCLR;
+        case InnerPayload_cmap_PRESENT: return HV_BOX_CMAP;
+        case InnerPayload_cdef_PRESENT: return HV_BOX_CDEF;
+        case InnerPayload_res_PRESENT:  return HV_BOX_RES;
+        default:                        return 1;
+    }
+}
+
+/* One header box (jp2h, jpch or jplh), child by child (hv_rules.c). */
+static const char *cf_header(const Superbox *sb, uint32_t parent, cf_kind kind, hv_header *h) {
+    int i, j;
+    const char *r;
+    hv_header_init(h, parent, kind == CF_JPX);
+    for (i = 0; i < sb->children.nCount; ++i) {
+        const InnerPayload *p = &sb->children.arr[i].payload;
+        if ((r = hv_rule_header_child(h, cf_header_type(&sb->children.arr[i]))) != NULL) return r;
+        switch (p->kind) {
+            case InnerPayload_ihdr_PRESENT:
+                r = hv_rule_ihdr(h, &p->u.ihdr);
+                break;
+            case InnerPayload_bpcc_PRESENT:
+                for (j = 0; j < p->u.bpcc.depths.nCount && r == NULL; ++j)
+                    r = hv_rule_bpcc_entry(h, p->u.bpcc.depths.arr[j]);
+                break;
+            case InnerPayload_colr_PRESENT:
+                r = hv_rule_colr(h, &p->u.colr.header, (size_t) p->u.colr.rest.nCount);
+                break;
+            case InnerPayload_pclr_PRESENT:
+                r = hv_rule_pclr(h, &p->u.pclr.header, (uint64_t) p->u.pclr.entries.nCount);
+                break;
+            case InnerPayload_cmap_PRESENT:
+                for (j = 0; j < p->u.cmap.entries.nCount && r == NULL; ++j)
+                    r = hv_rule_cmap_entry(h, &p->u.cmap.entries.arr[j]);
+                break;
+            case InnerPayload_cdef_PRESENT:
+                r = hv_rule_cdef(h, p->u.cdef.entries.arr, (size_t) p->u.cdef.entries.nCount);
+                break;
+            case InnerPayload_res_PRESENT:
+                for (j = 0; j < p->u.res.children.nCount && r == NULL; ++j) {
+                    int kind_ = p->u.res.children.arr[j].payload.kind;
+                    r = hv_rule_res_child(h, kind_ == resc_PRESENT ? HV_BOX_RESC
+                                           : kind_ == resd_PRESENT ? HV_BOX_RESD : 1);
+                }
+                if (r == NULL) r = hv_rule_res_end(h);
+                break;
+            default:
+                break;
+        }
+        if (r != NULL) return r;
+    }
+    return NULL;
+}
+
+/* The header boxes of the file, T.800 I.5.3 and T.801 M.11.5 to M.11.7:
+ * where jp2h is, what each header box holds, and each codestream's header
+ * against its SIZ (a linked codestream's SIZ is in another file). */
+static const char *cf_headers(const Jp2Family *file, cf_kind kind) {
+    static hv_header jp2h, jpch, jplh;
+    const Superbox *jp2h_box = NULL;
+    int i, n = 0, jp2c = 0, late = 0, codestreams = 0, headers = 0, stream = 0, jpchs = 0;
+    const char *r;
+
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        switch (file->boxes.arr[i].payload.kind) {
+            case TopPayload_jp2h_PRESENT:
+                if (jp2h_box == NULL) jp2h_box = &file->boxes.arr[i].payload.u.jp2h;
+                late |= codestreams > 0 || headers > 0;
+                n++;
+                break;
+            case TopPayload_jp2c_PRESENT: jp2c++; codestreams++; break;
+            case TopPayload_ftbl_PRESENT: codestreams += kind == CF_JPX; break;
+            case TopPayload_jpch_PRESENT: jpchs++; headers++; break;
+            case TopPayload_jplh_PRESENT: headers++; break;
+            default: break;
+        }
+        if (kind == CF_JP2) headers = 0;        /* T.800 I.2: before the jp2c box */
+    }
+    if ((r = hv_rule_jp2h_place(n, late, jp2c, kind == CF_JPX)) != NULL) return r;
+    if (jp2h_box != NULL && (r = cf_header(jp2h_box, HV_BOX_JP2H, kind, &jp2h)) != NULL)
+        return r;
+
+    if (kind == CF_JP2) {
+        for (i = 0; i < file->boxes.nCount; ++i)
+            if (file->boxes.arr[i].payload.kind == TopPayload_jp2c_PRESENT) break;
+        return hv_rule_codestream_header(&jp2h, NULL, &file->boxes.arr[i].payload.u.jp2c.siz.body);
+    }
+
+    /* JPX: codestream k has jpch k (M.11.6; the counts agree, hv_rule_jpx),
+     * or only jp2h's defaults when there is no jpch. */
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const TopPayload *p = &file->boxes.arr[i].payload;
+        if (p->kind == TopPayload_jplh_PRESENT &&
+            (r = cf_header(&p->u.jplh, HV_BOX_JPLH, kind, &jplh)) != NULL)
+            return r;
+    }
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const TopPayload *p = &file->boxes.arr[i].payload;
+        const Siz *siz;
+        int k, seen = 0;
+        if (p->kind != TopPayload_jp2c_PRESENT && p->kind != TopPayload_ftbl_PRESENT) continue;
+        siz = p->kind == TopPayload_jp2c_PRESENT ? &p->u.jp2c.siz.body : NULL;
+        if (jpchs == 0) {
+            r = hv_rule_codestream_header(NULL, jp2h_box ? &jp2h : NULL, siz);
+        } else {
+            for (k = 0; k < file->boxes.nCount; ++k)
+                if (file->boxes.arr[k].payload.kind == TopPayload_jpch_PRESENT && seen++ == stream)
+                    break;
+            if ((r = cf_header(&file->boxes.arr[k].payload.u.jpch, HV_BOX_JPCH, kind, &jpch)) != NULL)
+                return r;
+            r = hv_rule_codestream_header(&jpch, jp2h_box ? &jp2h : NULL, siz);
+        }
+        if (r != NULL) return r;
+        stream++;
+    }
+    return NULL;
+}
+
+const char *cf_check_family(const Jp2Family *file, cf_layer layer, cf_kind kind) {
+    const char *r = cf_check_family_(file, layer, kind);
+    return r != NULL || layer != CF_STANDARD ? r : cf_headers(file, kind);
+}
 
 const char *cf_check_jpx_profile(const JpxFile_Profile *file) {
     return cf_check_profile_common_(file, CF_PROFILE, CF_JPX);

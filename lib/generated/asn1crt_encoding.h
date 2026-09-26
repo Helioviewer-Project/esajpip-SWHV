@@ -33,6 +33,8 @@ void bitstream_push_data_if_required(BitStream* pStrm);
 
 void BitStream_AppendNBitZero(BitStream* pBitStrm, int nbits);
 void BitStream_EncodeNonNegativeInteger(BitStream* pBitStrm, asn1SccUint v);
+void BitStream_AppendNBitOne(BitStream* pBitStrm, int nbits);
+void BitStream_EncodeNonNegativeIntegerNeg(BitStream* pBitStrm, asn1SccUint v, flag negate);
 flag BitStream_DecodeNonNegativeInteger(BitStream* pBitStrm, asn1SccUint* v, int nBits);
 flag BitStream_ReadPartialByte(BitStream* pBitStrm, byte *v, byte nbits);
 void BitStream_AppendPartialByte(BitStream* pBitStrm, byte v, byte nbits, flag negate);
@@ -45,6 +47,8 @@ void BitStream_AppendByte(BitStream* pBitStrm, byte v, flag negate);
 flag BitStream_AppendByte0(BitStream* pBitStrm, byte v);
 
 asn1SccSint BitStream_GetLength(BitStream* pBitStrm);
+void BitStream_AppendBitOne(BitStream* pBitStrm);
+flag BitStream_PeekBit(BitStream* pBitStrm);
 flag BitStream_ReadBit(BitStream* pBitStrm, flag* v);
 flag BitStream_ReadByte(BitStream* pBitStrm, byte* v);
 

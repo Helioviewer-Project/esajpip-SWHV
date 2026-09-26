@@ -50,9 +50,11 @@ As hvJP2K writes it:
 
 Every input must be a JP2 file the server serves (`hv_check_jp2`, and its
 codestream with `HV_PROFILE`), so the JPX file is one it serves too
-(`hv_check_jpx`), and must have a JP2 Header box with an Image Header box,
-which the JPX headers are made of. hvJP2K checks neither the profile nor
-the link targets: it merges files without PLT, which the server then
+(`hv_check_jpx`), and must have valid header boxes (`hv_check_jp2h`: T.800
+I.5.3, with `ihdr` and `bpcc` agreeing with SIZ), which the JPX headers are
+made of, so theirs are valid too (`hv_check_jpx_headers`). The tests check
+both of every JPX file they write. hvJP2K checks neither the profile, nor
+the header boxes, nor the link targets: it merges files without PLT, which the server then
 rejects. Errors name the file and the rule, as in `siz.zero-origin`. The
 output must be at most `INT_MAX` bytes (`file.size-limit`), a link must
 name a `.jp2` file (`url.jp2-target`), and a linked JPX file holds at most
@@ -69,7 +71,8 @@ fresh header, as glymur writes it, where only an XLBox form would differ.
 | --- | --- |
 | `hv_merge.c` | The command: options, `-s`, mapping the inputs, writing the output file. |
 | `merge.h` / `.c` | `hv_merge_files`: checks the inputs, and writes the JPX file box by box to a stream. |
-| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and served, the reader requirement cases of hvJP2K's tests, and rejected inputs; `cli_test.sh`: the command. |
+| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and served, the reader requirement cases of hvJP2K's tests, and rejected inputs, header boxes included; `cli_test.sh`: the command. |
+| `fuzz_merge.c` | libFuzzer target: two JP2 files from one input, merged; an accepted merge must pass `hv_check_jpx`, `hv_check_jpx_headers` and `HV_PROFILE` for each codestream. |
 
 ## Build and test
 
@@ -87,3 +90,11 @@ lib/test/run.sh             # or: lib/test/run.sh sanitize
 ```
 
 The fixtures are described in `test/fixtures/FIXTURES.md`.
+
+Fuzzing (Clang):
+
+```sh
+cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON
+cmake --build fuzz --target fuzz_merge
+fuzz/merge/fuzz_merge -max_len=262144 corpus/
+```

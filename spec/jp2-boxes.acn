@@ -7,6 +7,7 @@
 --   lbox : wire = payload bytes + 8   (LBox counts LBox and TBox)
 --   boxtype : keep listed TBox values; decode all others as 'abcd' so
 --             the opaque `other` branch handles every unknown type
+--   resboxtype : the same inside a Resolution box, keeping resc and resd
 -- The payload of every box is a CONTAINING region sized by LBox; superbox
 -- children and opaque data use `size deduced` inside it. The whole file is
 -- the top-level region for Jp2Family.boxes.
@@ -96,6 +97,95 @@ InnerPayload <InnerBoxType:tbox, INTEGER:length> [] {
     cdef        [present-when tbox == 1667523942, size length],
     jp2c        [present-when tbox == 1785737827, size length],
     other       [present-when tbox == 1633837924, size length]
+}
+
+-- JP2 header boxes, T.800 I.5.3
+
+Ihdr [] {
+    height      [encoding pos-int, size 32, endianness big],
+    width       [encoding pos-int, size 32, endianness big],
+    nc          [encoding pos-int, size 16, endianness big],
+    bpc         [encoding pos-int, size 8],
+    c           [encoding pos-int, size 8],
+    unkc        [encoding pos-int, size 8],
+    ipr         [encoding pos-int, size 8]
+}
+
+BitDepth [encoding pos-int, size 8]
+
+Bpcc [] {
+    depths      [size deduced]
+}
+
+ColrHeader [] {
+    meth        [encoding pos-int, size 8],
+    prec        [encoding twos-complement, size 8],
+    approx      [encoding pos-int, size 8],
+    enumcs      [present-when (meth == 1), encoding pos-int, size 32, endianness big]
+}
+
+Colr [] {
+    header      [],
+    rest        [size deduced]
+}
+
+PclrHeader [] {
+    ne          [encoding pos-int, size 16, endianness big],
+    npc         INTEGER [encoding pos-int, size 8],
+    depths      [size npc]
+}
+
+Pclr [] {
+    header      [],
+    entries     [size deduced]
+}
+
+CmapEntry [] {
+    cmp         [encoding pos-int, size 16, endianness big],
+    mtyp        [encoding pos-int, size 8],
+    pcol        [encoding pos-int, size 8]
+}
+
+Cmap [] {
+    entries     [size deduced]
+}
+
+CdefCount [encoding pos-int, size 16, endianness big]
+
+CdefEntry [] {
+    cn          [encoding pos-int, size 16, endianness big],
+    typ         [encoding pos-int, size 16, endianness big],
+    asoc        [encoding pos-int, size 16, endianness big]
+}
+
+Cdef [] {
+    n           CdefCount [],
+    entries     [size n]
+}
+
+Res [] {
+    children    [size deduced]
+}
+
+ResBox [] {
+    lbox        INTEGER [encoding pos-int, size 32, endianness big, mapping-function lbox],
+    resType     ResBoxType [encoding pos-int, size 32, endianness big, mapping-function resboxtype],
+    payload     <resType, lbox> []
+}
+
+ResPayload <ResBoxType:tbox, INTEGER:length> [] {
+    resc        [present-when tbox == 1919251299, size length],
+    resd        [present-when tbox == 1919251300, size length],
+    other       [present-when tbox == 1633837924, size length]
+}
+
+Resolution [] {
+    vn          [encoding pos-int, size 16, endianness big],
+    vd          [encoding pos-int, size 16, endianness big],
+    hn          [encoding pos-int, size 16, endianness big],
+    hd          [encoding pos-int, size 16, endianness big],
+    ve          [encoding twos-complement, size 8],
+    he          [encoding twos-complement, size 8]
 }
 
 FragmentList [] {

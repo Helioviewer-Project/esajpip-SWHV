@@ -9,6 +9,7 @@
  *   psot : Psot counts from the SOT marker code  wire = n + 12
  *   lbox : LBox counts LBox and TBox             wire = n + 8
  *   boxtype : unknown wire type to opaque `other` on decode only
+ *   resboxtype : as boxtype, inside a Resolution box: resc and resd
  *   jp2boxtype : as boxtype, for a .jp2 at the profile layer, where every
  *             type but jp2c, jP and ftyp is `other`
  */
@@ -31,6 +32,7 @@ asn1SccSint MAPPING_DECODE_NAME(psot)(asn1SccSint n);
 asn1SccSint MAPPING_ENCODE_NAME(lbox)(asn1SccSint n);
 asn1SccSint MAPPING_DECODE_NAME(lbox)(asn1SccSint n);
 asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type);
+asn1SccUint MAPPING_DECODE_NAME(resboxtype)(asn1SccUint type);
 asn1SccUint MAPPING_DECODE_NAME(jp2boxtype)(asn1SccUint type);
 
 #endif

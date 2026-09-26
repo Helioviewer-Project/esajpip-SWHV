@@ -60,7 +60,8 @@ enum {
     BT_JP = 1783636000u, BT_FTYP = 1718909296u, BT_JP2H = 1785737832u,
     BT_IHDR = 1768449138u, BT_COLR = 1668246642u, BT_JP2C = 1785737827u,
     BT_JPCH = 1785750376u, BT_FTBL = 1718903404u, BT_FLST = 1718383476u,
-    BT_DTBL = 1685348972u, BT_URL = 1970433056u, BT_RREQ = 1920099697u
+    BT_DTBL = 1685348972u, BT_URL = 1970433056u, BT_RREQ = 1920099697u,
+    BT_JPLH = 1785752680u
 };
 
 /* ------------------------------------------------------------------------ */
@@ -144,7 +145,7 @@ static int region_add(Regions *rs, Region reg) {
 
 static int is_superbox(uint32_t t) {
     return t == BT_JP2H || t == BT_JPCH || t == BT_FTBL || t == BT_DTBL ||
-           t == 1634955107u /* asoc */ || t == 1785752680u /* jplh */ || t == 1969843814u /* uinf */;
+           t == 1634955107u /* asoc */ || t == BT_JPLH || t == 1969843814u /* uinf */;
 }
 
 static int walk_codestream(Regions *rs, const Bytes *b, size_t pos, size_t end, int parent) {
@@ -373,21 +374,41 @@ static void add_rreq(Jp2Family *f, int linked) {
         OCTETS(b->payload.u.rreq.data, embedded_requirements, sizeof embedded_requirements);
 }
 
+/* Canonical files. Sizes 4x4 leave room for origin/tile mutants. */
+#define BASE_W 4
+#define BASE_H 4
+
+/* Header boxes (T.800 I.5.3) for the base codestream: one unsigned 8-bit
+ * component. */
+static void set_ihdr(InnerBox *c, int width, int height) {
+    Ihdr *ihdr = &c->payload.u.ihdr;
+    c->payload.kind = InnerPayload_ihdr_PRESENT;
+    ihdr->height = height;
+    ihdr->width = width;
+    ihdr->nc = 1;
+    ihdr->bpc = 7;
+    ihdr->c = 7;
+    ihdr->unkc = 0;
+    ihdr->ipr = 0;
+}
+
+static void set_colr(InnerBox *c, int meth, uint32_t enumcs) {
+    ColrHeader *h = &c->payload.u.colr.header;
+    c->payload.kind = InnerPayload_colr_PRESENT;
+    h->meth = meth;
+    h->prec = 0;
+    h->approx = 0;
+    h->exist.enumcs = meth == 1;
+    h->enumcs = enumcs;
+    c->payload.u.colr.rest.nCount = 0;
+}
+
 static void add_jp2h(Jp2Family *f, int width, int height) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
-    InnerBox *c;
-    unsigned char ihdr[14], colr[7];
     b->payload.kind = TopPayload_jp2h_PRESENT;
     b->payload.u.jp2h.children.nCount = 2;
-    put32(ihdr, (uint32_t) height); put32(ihdr + 4, (uint32_t) width);
-    put16(ihdr + 8, 1); ihdr[10] = 7; ihdr[11] = 7; ihdr[12] = 0; ihdr[13] = 0;
-    c = &b->payload.u.jp2h.children.arr[0];
-    c->payload.kind = InnerPayload_ihdr_PRESENT;
-    OCTETS(c->payload.u.ihdr.data, ihdr, sizeof ihdr);
-    colr[0] = 1; colr[1] = 0; colr[2] = 0; put32(colr + 3, 17);   /* greyscale */
-    c = &b->payload.u.jp2h.children.arr[1];
-    c->payload.kind = InnerPayload_colr_PRESENT;
-    OCTETS(c->payload.u.colr.data, colr, sizeof colr);
+    set_ihdr(&b->payload.u.jp2h.children.arr[0], width, height);
+    set_colr(&b->payload.u.jp2h.children.arr[1], 1, 17);          /* greyscale */
 }
 
 static Codestream *add_jp2c(Jp2Family *f, int width, int height, int levels,
@@ -398,10 +419,13 @@ static Codestream *add_jp2c(Jp2Family *f, int width, int height, int levels,
     return &b->payload.u.jp2c;
 }
 
+/* A Codestream Header box with the image header of a base codestream, as
+ * hvJP2K writes one where the codestream's header differs from jp2h's. */
 static void add_jpch(Jp2Family *f) {
     TopBox *b = &f->boxes.arr[f->boxes.nCount++];
     b->payload.kind = TopPayload_jpch_PRESENT;
-    b->payload.u.jpch.children.nCount = 0;
+    b->payload.u.jpch.children.nCount = 1;
+    set_ihdr(&b->payload.u.jpch.children.arr[0], BASE_W, BASE_H);
 }
 
 static void add_ftbl(Jp2Family *f, uint64_t off, uint32_t len, int dr) {
@@ -433,10 +457,6 @@ static void add_dtbl(Jp2Family *f, const char *const *urls, int n) {
     }
 }
 
-/* Canonical files. Sizes 4x4 leave room for origin/tile mutants. */
-#define BASE_W 4
-#define BASE_H 4
-
 typedef struct {
     const char *name;
     cf_kind kind;
@@ -460,9 +480,10 @@ static Base base_jp2(int levels, int custom_precincts) {
 }
 
 static Base base_jpx_embedded(void) {
-    Base b = { "jpx-embedded", CF_JPX, new_family(), 5 };
+    Base b = { "jpx-embedded", CF_JPX, new_family(), 6 };
     add_signature_and_ftyp(b.file, "jpx ");
     add_rreq(b.file, 0);
+    add_jp2h(b.file, BASE_W, BASE_H);
     add_jpch(b.file);
     add_jpch(b.file);
     add_jp2c(b.file, BASE_W, BASE_H, 0, 0, 1);
@@ -477,6 +498,7 @@ static Base base_jpx_linked(const char *const *urls, const uint64_t *off, const 
     int i;
     add_signature_and_ftyp(b.file, "jpx ");
     add_rreq(b.file, 1);
+    add_jp2h(b.file, BASE_W, BASE_H);
     for (i = 0; i < n; ++i) add_jpch(b.file);
     for (i = 0; i < n; ++i) add_ftbl(b.file, off[i], len[i], i + 1);
     add_dtbl(b.file, urls, n);
@@ -919,21 +941,21 @@ static void rule_tile_parts_n(Jp2Family *f, int box, int n) {
 }
 static void rule_tile_parts_64(Jp2Family *f, int box) { rule_tile_parts_n(f, box, 64); }
 static void rule_jpx_jp2c_before_jpch(Jp2Family *f, int box) {
-    TopBox *arr = f->boxes.arr;                       /* jP ftyp rreq jpch jpch jp2c jp2c */
+    TopBox *arr = f->boxes.arr;                       /* jP ftyp rreq jp2h jpch jpch jp2c jp2c */
     TopBox *jp2c = xcalloc(sizeof *jp2c);
     (void) box;
-    *jp2c = arr[5];
+    *jp2c = arr[6];
+    arr[6] = arr[5];
     arr[5] = arr[4];
-    arr[4] = arr[3];
-    arr[3] = *jp2c;                                   /* jP ftyp rreq jp2c jpch jpch jp2c */
+    arr[4] = *jp2c;                                   /* jP ftyp rreq jp2h jp2c jpch jpch jp2c */
     free(jp2c);
 }
-static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 6; }
+static void rule_jpx_missing_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 7; }
 static void rule_jpx_no_jpch(Jp2Family *f, int box) {
-    (void) box;
-    f->boxes.arr[3] = f->boxes.arr[5];
+    (void) box;                                       /* jP ftyp rreq jp2h jp2c jp2c */
     f->boxes.arr[4] = f->boxes.arr[6];
-    f->boxes.nCount = 5;
+    f->boxes.arr[5] = f->boxes.arr[7];
+    f->boxes.nCount = 6;
 }
 static void rule_tile_parts_65(Jp2Family *f, int box) {
     Codestream *cs = cs_of(f, box);
@@ -1117,7 +1139,7 @@ static void rule_ftyp_two_compat(Jp2Family *f, int box) {
     memcpy(ftyp->compat.arr[0].arr, "jpxb", 4);
 }
 static void rule_jp2c_in_jpch(Jp2Family *f, int box) {
-    Superbox *sb = &f->boxes.arr[3].payload.u.jpch;        /* jpx-embedded: first jpch */
+    Superbox *sb = &f->boxes.arr[4].payload.u.jpch;        /* jpx-embedded: first jpch */
     InnerBox *c = &sb->children.arr[sb->children.nCount++];
     (void) box;
     c->payload.kind = InnerPayload_jp2c_PRESENT;
@@ -1229,24 +1251,24 @@ static const RuleMutant rule_mutants[] = {
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
-static void rule_dr_zero(Jp2Family *f, int box) { (void) box; f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 0; }
-static void rule_dr_out_of_range(Jp2Family *f, int box) { (void) box; f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 3; }
+static void rule_dr_zero(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 0; }
+static void rule_dr_out_of_range(Jp2Family *f, int box) { (void) box; f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].dr = 3; }
 static void rule_two_flst(Jp2Family *f, int box) {
-    Superbox *sb = &f->boxes.arr[5].payload.u.ftbl;
+    Superbox *sb = &f->boxes.arr[6].payload.u.ftbl;
     (void) box;
     sb->children.arr[1] = sb->children.arr[0];
     sb->children.nCount = 2;
 }
-static void rule_ndr_mismatch(Jp2Family *f, int box) { (void) box; f->boxes.arr[7].payload.u.dtbl.ndr = 3; }
+static void rule_ndr_mismatch(Jp2Family *f, int box) { (void) box; f->boxes.arr[8].payload.u.dtbl.ndr = 3; }
 static void rule_url_scheme(Jp2Family *f, int box) {
     (void) box;
-    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc, "http://x/frame1.jp2");
+    strcpy((char *) f->boxes.arr[8].payload.u.dtbl.references.arr[0].payload.u.url.loc, "http://x/frame1.jp2");
 }
 static void rule_url_jpx_target(Jp2Family *f, int box) {
     (void) box;
-    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
+    strcpy((char *) f->boxes.arr[8].payload.u.dtbl.references.arr[0].payload.u.url.loc, "file://./frame1.jpx");
 }
-static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
+static void rule_url_version(Jp2Family *f, int box) { (void) box; f->boxes.arr[8].payload.u.dtbl.references.arr[0].payload.u.url.vers = 1; }
 /* A third codestream as jp2c beside the two ftbl ones, with its own jpch so
  * that the codestream count still matches and mixing is the only violation. */
 static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
@@ -1254,44 +1276,44 @@ static void rule_mixed_linked_embedded(Jp2Family *f, int box) {
     add_jp2c(f, BASE_W, BASE_H, 0, 0, 1);
     add_jpch(f);
 }
-static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 7; }
+static void rule_no_dtbl(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 8; }
 static void rule_two_dtbl(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[8] = f->boxes.arr[7];                    /* second top-level dtbl */
-    f->boxes.nCount = 9;
+    f->boxes.arr[9] = f->boxes.arr[8];                    /* second top-level dtbl */
+    f->boxes.nCount = 10;
 }
 static void rule_fragment_early(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off--;
+    f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off--;
 }
 static void rule_fragment_late(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off++;
+    f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].off++;
 }
 static void rule_fragment_short(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len--;
+    f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len--;
 }
 static void rule_fragment_long(Jp2Family *f, int box) {
     (void) box;
-    f->boxes.arr[5].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len++;
+    f->boxes.arr[6].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0].len++;
 }
 static void rule_missing_companion(Jp2Family *f, int box) {
     (void) box;
-    strcpy((char *) f->boxes.arr[7].payload.u.dtbl.references.arr[0].payload.u.url.loc,
+    strcpy((char *) f->boxes.arr[8].payload.u.dtbl.references.arr[0].payload.u.url.loc,
            "file://./jpx-missing-frame.jp2");
 }
 
 static void rule_flst_in_jpch(Jp2Family *f, int box) {
-    Superbox *jpch = &f->boxes.arr[3].payload.u.jpch;      /* a copy of the first flst */
+    Superbox *jpch = &f->boxes.arr[4].payload.u.jpch;      /* a copy of the first flst */
     (void) box;
-    jpch->children.arr[jpch->children.nCount++] = f->boxes.arr[5].payload.u.ftbl.children.arr[0];
+    jpch->children.arr[jpch->children.nCount++] = f->boxes.arr[6].payload.u.ftbl.children.arr[0];
 }
 static void rule_url_in_ftbl(Jp2Family *f, int box) {
-    Superbox *ftbl = &f->boxes.arr[5].payload.u.ftbl;      /* a copy of the first url */
+    Superbox *ftbl = &f->boxes.arr[6].payload.u.ftbl;      /* a copy of the first url */
     (void) box;
     ftbl->children.arr[ftbl->children.nCount++] =
-        f->boxes.arr[7].payload.u.dtbl.references.arr[0];
+        f->boxes.arr[8].payload.u.dtbl.references.arr[0];
 }
 
 /* Appended entries only: array positions are in fixture names. */
@@ -1315,6 +1337,427 @@ static const RuleMutant linked_rule_mutants[] = {
     { "url.missing-companion", rule_missing_companion, "structurally valid JPX with unavailable companion", CF_JPX, 0, X_PROF },
     { "box.flst-placement", rule_flst_in_jpch, "flst inside a jpch (T.801 M.11.3: in ftbl)", CF_JPX, 0, X_STD },
     { "box.url-placement", rule_url_in_ftbl, "url inside an ftbl (T.801 M.11.2: in dtbl)", CF_JPX, 0, X_STD },
+};
+
+/* ------------------------------------------------------------------------ */
+/* 5b'. Header box mutants (T.800 I.5.3, T.801 M.11.5 to M.11.7)             */
+/* ------------------------------------------------------------------------ */
+
+/* A codestream mutant keeps the image header in step with its SIZ, so that
+ * it violates what it means to and no header rule: the ihdr of jp2h (JP2)
+ * or of codestream k's jpch (JPX). A SIZ outside what an ihdr can state
+ * (an empty image, a reserved depth, components that differ) is left: the
+ * codestream rules reject it first. */
+static void sync_ihdr(InnerBox *c, const Siz *s) {
+    Ihdr *ihdr = &c->payload.u.ihdr;
+    int i;
+    if (c->payload.kind != InnerPayload_ihdr_PRESENT ||
+        s->ysiz <= s->yosiz || s->xsiz <= s->xosiz || s->ysiz - s->yosiz > 4294967295u ||
+        s->xsiz - s->xosiz > 4294967295u || s->csiz < 1 || s->csiz > 16384 ||
+        s->components.nCount < 1)
+        return;
+    for (i = 0; i < s->components.nCount; ++i)
+        if (s->components.arr[i].depthMinus1 > 37 ||
+            s->components.arr[i].depthMinus1 != s->components.arr[0].depthMinus1 ||
+            s->components.arr[i].isSigned != s->components.arr[0].isSigned)
+            return;
+    ihdr->height = s->ysiz - s->yosiz;
+    ihdr->width = s->xsiz - s->xosiz;
+    ihdr->nc = s->csiz;
+    ihdr->bpc = s->components.arr[0].depthMinus1 | (s->components.arr[0].isSigned ? 128 : 0);
+}
+
+static void sync_headers(Jp2Family *f) {
+    Superbox *header = NULL;
+    int i, k, stream = 0;
+    for (i = 0; i < f->boxes.nCount; ++i) {
+        TopPayload *p = &f->boxes.arr[i].payload;
+        if (p->kind == TopPayload_jp2h_PRESENT && header == NULL) header = &p->u.jp2h;
+        if (p->kind != TopPayload_jp2c_PRESENT) continue;
+        if (stream++ == 0 && header != NULL && header->children.nCount > 0)
+            sync_ihdr(&header->children.arr[0], &p->u.jp2c.siz.body);
+        for (k = 0; k < f->boxes.nCount; ++k) {
+            TopPayload *q = &f->boxes.arr[k].payload;
+            int seen = 0, j;
+            if (q->kind != TopPayload_jpch_PRESENT) continue;
+            for (j = 0; j < k; ++j) seen += f->boxes.arr[j].payload.kind == TopPayload_jpch_PRESENT;
+            if (seen == stream - 1 && q->u.jpch.children.nCount > 0)
+                sync_ihdr(&q->u.jpch.children.arr[0], &p->u.jp2c.siz.body);
+        }
+    }
+}
+
+/* The JP2 base is jP ftyp jp2h jp2c; the embedded JPX base jP ftyp rreq
+ * jp2h jpch jpch jp2c jp2c, each jpch holding an ihdr. */
+static Superbox *jp2h_of(Jp2Family *f) { return &f->boxes.arr[2].payload.u.jp2h; }
+static Superbox *jpx_jp2h_of(Jp2Family *f) { return &f->boxes.arr[3].payload.u.jp2h; }
+static Superbox *jpch_of(Jp2Family *f) { return &f->boxes.arr[4].payload.u.jpch; }
+
+/* Inserts a child at position `at` of a header box. */
+static InnerBox *insert_child(Superbox *sb, int at) {
+    int i;
+    for (i = sb->children.nCount; i > at; --i) sb->children.arr[i] = sb->children.arr[i - 1];
+    sb->children.nCount++;
+    memset(&sb->children.arr[at], 0, sizeof sb->children.arr[at]);
+    return &sb->children.arr[at];
+}
+static InnerBox *append_child(Superbox *sb) { return insert_child(sb, sb->children.nCount); }
+
+static void set_bpcc(InnerBox *c, int n, int depth) {
+    int i;
+    c->payload.kind = InnerPayload_bpcc_PRESENT;
+    c->payload.u.bpcc.depths.nCount = n;
+    for (i = 0; i < n; ++i) c->payload.u.bpcc.depths.arr[i] = depth;
+}
+
+/* A palette of NE 2 entries in `columns` unsigned 8-bit columns. */
+static void set_pclr_columns(InnerBox *c, int columns) {
+    Pclr *p = &c->payload.u.pclr;
+    int i;
+    c->payload.kind = InnerPayload_pclr_PRESENT;
+    p->header.ne = 2;
+    p->header.depths.nCount = columns;
+    for (i = 0; i < columns; ++i) {
+        p->header.depths.arr[i] = 7;
+        p->entries.arr[i] = 0x00;
+        p->entries.arr[columns + i] = 0xFF;
+    }
+    p->entries.nCount = 2 * columns;
+}
+static void set_pclr(InnerBox *c) { set_pclr_columns(c, 1); }
+
+/* Channel i from palette column i of component 0. */
+static void set_cmap_columns(InnerBox *c, int columns) {
+    int i;
+    c->payload.kind = InnerPayload_cmap_PRESENT;
+    c->payload.u.cmap.entries.nCount = columns;
+    for (i = 0; i < columns; ++i) {
+        c->payload.u.cmap.entries.arr[i].cmp = 0;
+        c->payload.u.cmap.entries.arr[i].mtyp = 1;
+        c->payload.u.cmap.entries.arr[i].pcol = i;
+    }
+}
+
+static void set_cmap(InnerBox *c, int cmp, int mtyp, int pcol) {
+    CmapEntry *e = &c->payload.u.cmap.entries.arr[0];
+    c->payload.kind = InnerPayload_cmap_PRESENT;
+    c->payload.u.cmap.entries.nCount = 1;
+    e->cmp = cmp;
+    e->mtyp = mtyp;
+    e->pcol = pcol;
+}
+
+static void set_cdef(InnerBox *c, int n, int cn, int typ, int asoc) {
+    int i;
+    c->payload.kind = InnerPayload_cdef_PRESENT;
+    c->payload.u.cdef.entries.nCount = n;
+    for (i = 0; i < n; ++i) {
+        c->payload.u.cdef.entries.arr[i].cn = cn;
+        c->payload.u.cdef.entries.arr[i].typ = typ;
+        c->payload.u.cdef.entries.arr[i].asoc = asoc;
+    }
+}
+
+/* A Resolution box: resc (72 dpi, 2835 grid points per metre, as 2835/1)
+ * and resd children as given; `other` adds an unknown box. */
+static void set_res(InnerBox *c, int resc, int resd, int other) {
+    Res *r = &c->payload.u.res;
+    int n = 0, i;
+    c->payload.kind = InnerPayload_res_PRESENT;
+    for (i = 0; i < resc + resd; ++i) {
+        ResBox *b = &r->children.arr[n++];
+        Resolution *v;
+        b->payload.kind = i < resc ? resc_PRESENT : resd_PRESENT;
+        v = i < resc ? &b->payload.u.resc : &b->payload.u.resd;
+        v->vn = 2835; v->vd = 1; v->hn = 2835; v->hd = 1; v->ve = 0; v->he = 0;
+    }
+    if (other) {
+        r->children.arr[n].payload.kind = ResPayload_other_PRESENT;
+        OCTETS(r->children.arr[n].payload.u.other.data, "\x01", 1);
+        n++;
+    }
+    r->children.nCount = n;
+}
+
+static void set_xml(InnerBox *c) {
+    c->payload.kind = InnerPayload_xml_PRESENT;
+    OCTETS(c->payload.u.xml.data, "<a/>", 4);
+}
+
+/* JP2 mutants: jp2h is box 2, holding ihdr and a greyscale colr. */
+static void hdr_palette(Jp2Family *f, int box) {
+    (void) box;
+    set_pclr(append_child(jp2h_of(f)));
+    set_cmap(append_child(jp2h_of(f)), 0, 1, 0);
+}
+static void hdr_resolution(Jp2Family *f, int box) { (void) box; set_res(append_child(jp2h_of(f)), 1, 1, 0); }
+static void hdr_other_child(Jp2Family *f, int box) { (void) box; set_xml(append_child(jp2h_of(f))); }
+static void hdr_second_colr(Jp2Family *f, int box) { (void) box; set_colr(append_child(jp2h_of(f)), 1, 17); }
+/* Three channels from a three-column palette: grey and two auxiliary
+ * channels of unspecified type, which may share the pair (65535, 65535). */
+static void hdr_cdef_unspecified(Jp2Family *f, int box) {
+    InnerBox *c;
+    (void) box;
+    set_pclr_columns(append_child(jp2h_of(f)), 3);
+    set_cmap_columns(append_child(jp2h_of(f)), 3);
+    c = append_child(jp2h_of(f));
+    set_cdef(c, 3, 0, 65535, 65535);
+    c->payload.u.cdef.entries.arr[0].typ = 0;
+    c->payload.u.cdef.entries.arr[0].asoc = 1;
+    c->payload.u.cdef.entries.arr[1].cn = 1;
+    c->payload.u.cdef.entries.arr[2].cn = 2;
+}
+/* Grey and opacity from a two-column palette. */
+static void hdr_cdef_opacity(Jp2Family *f, int box) {
+    InnerBox *c;
+    (void) box;
+    set_pclr_columns(append_child(jp2h_of(f)), 2);
+    set_cmap_columns(append_child(jp2h_of(f)), 2);
+    c = append_child(jp2h_of(f));
+    set_cdef(c, 2, 0, 0, 1);
+    c->payload.u.cdef.entries.arr[1].cn = 1;
+    c->payload.u.cdef.entries.arr[1].typ = 1;
+    c->payload.u.cdef.entries.arr[1].asoc = 0;
+}
+static void hdr_no_jp2h(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[2] = f->boxes.arr[3];
+    f->boxes.nCount = 3;
+}
+static void hdr_two_jp2h(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[4] = f->boxes.arr[3];
+    f->boxes.arr[3] = f->boxes.arr[2];
+    f->boxes.nCount = 5;
+}
+static void hdr_jp2h_after_jp2c(Jp2Family *f, int box) {
+    TopBox *jp2h = xcalloc(sizeof *jp2h);
+    (void) box;
+    *jp2h = f->boxes.arr[2];
+    f->boxes.arr[2] = f->boxes.arr[3];
+    f->boxes.arr[3] = *jp2h;
+    free(jp2h);
+}
+static void hdr_no_jp2c(Jp2Family *f, int box) { (void) box; f->boxes.nCount = 3; }
+static void hdr_colr_first(Jp2Family *f, int box) {
+    Superbox *sb = jp2h_of(f);
+    InnerBox *ihdr = xcalloc(sizeof *ihdr);
+    (void) box;
+    *ihdr = sb->children.arr[0];
+    sb->children.arr[0] = sb->children.arr[1];
+    sb->children.arr[1] = *ihdr;
+    free(ihdr);
+}
+static void hdr_no_colr(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.nCount = 1; }
+static void hdr_colr_split(Jp2Family *f, int box) {
+    (void) box;
+    set_xml(append_child(jp2h_of(f)));
+    set_colr(append_child(jp2h_of(f)), 1, 16);
+}
+static void hdr_bpcc_not_varying(Jp2Family *f, int box) { (void) box; set_bpcc(append_child(jp2h_of(f)), 1, 7); }
+static void hdr_bpc_255_no_bpcc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 255; }
+static void hdr_two_bpcc(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 255;
+    set_bpcc(append_child(jp2h_of(f)), 1, 7);
+    set_bpcc(append_child(jp2h_of(f)), 1, 7);
+}
+static void hdr_bpcc_count(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 255;
+    set_bpcc(append_child(jp2h_of(f)), 2, 7);
+}
+static void hdr_bpcc_depth(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 255;
+    set_bpcc(append_child(jp2h_of(f)), 1, 8);
+}
+static void hdr_ihdr_height(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.height = BASE_H + 1; }
+static void hdr_ihdr_width(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.width = BASE_W + 1; }
+static void hdr_ihdr_nc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.nc = 2; }
+static void hdr_ihdr_bpc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 8; }
+static void hdr_ihdr_signed(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 135; }
+static void hdr_ihdr_c(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.c = 0; }
+static void hdr_ihdr_unkc(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.unkc = 2; }
+static void hdr_ihdr_nc_zero(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.nc = 0; }
+static void hdr_ihdr_bpc_38(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[0].payload.u.ihdr.bpc = 38; }
+static void hdr_colr_method(Jp2Family *f, int box) { (void) box; set_colr(&jp2h_of(f)->children.arr[1], 3, 0); }
+static void hdr_colr_enumcs(Jp2Family *f, int box) { (void) box; jp2h_of(f)->children.arr[1].payload.u.colr.header.enumcs = 12; }
+static void hdr_colr_enumcs_length(Jp2Family *f, int box) {
+    (void) box;
+    OCTETS(jp2h_of(f)->children.arr[1].payload.u.colr.rest, "\x00", 1);
+}
+static void hdr_colr_prec_approx(Jp2Family *f, int box) {
+    (void) box;
+    jp2h_of(f)->children.arr[1].payload.u.colr.header.prec = -1;
+    jp2h_of(f)->children.arr[1].payload.u.colr.header.approx = 1;
+}
+static void hdr_pclr_no_cmap(Jp2Family *f, int box) { (void) box; set_pclr(append_child(jp2h_of(f))); }
+static void hdr_cmap_no_pclr(Jp2Family *f, int box) { (void) box; set_cmap(append_child(jp2h_of(f)), 0, 0, 0); }
+static void hdr_two_pclr(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_pclr(append_child(jp2h_of(f)));
+}
+static void hdr_two_cmap(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_cmap(append_child(jp2h_of(f)), 0, 1, 0);
+}
+static void hdr_pclr_entries(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    jp2h_of(f)->children.arr[2].payload.u.pclr.entries.nCount = 1;
+}
+static void hdr_pclr_ne_zero(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    jp2h_of(f)->children.arr[2].payload.u.pclr.header.ne = 0;
+    jp2h_of(f)->children.arr[2].payload.u.pclr.entries.nCount = 0;
+}
+static void hdr_cmap_pcol_zero(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_cmap(&jp2h_of(f)->children.arr[3], 0, 0, 1);
+}
+static void hdr_cmap_component(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_cmap(&jp2h_of(f)->children.arr[3], 1, 1, 0);
+}
+static void hdr_cmap_palette_column(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_cmap(&jp2h_of(f)->children.arr[3], 0, 1, 1);
+}
+static void hdr_cmap_mtyp(Jp2Family *f, int box) {
+    hdr_palette(f, box);
+    set_cmap(&jp2h_of(f)->children.arr[3], 0, 2, 0);
+}
+static void hdr_cdef_pairs(Jp2Family *f, int box) { (void) box; set_cdef(append_child(jp2h_of(f)), 2, 0, 0, 1); }
+static void hdr_cdef_channel(Jp2Family *f, int box) { (void) box; set_cdef(append_child(jp2h_of(f)), 1, 1, 0, 1); }
+static void hdr_cdef_typ(Jp2Family *f, int box) { (void) box; set_cdef(append_child(jp2h_of(f)), 1, 0, 3, 1); }
+static void hdr_two_cdef(Jp2Family *f, int box) {
+    (void) box;
+    set_cdef(append_child(jp2h_of(f)), 1, 0, 0, 1);
+    set_cdef(append_child(jp2h_of(f)), 1, 0, 0, 1);
+}
+static void hdr_two_res(Jp2Family *f, int box) {
+    (void) box;
+    set_res(append_child(jp2h_of(f)), 1, 0, 0);
+    set_res(append_child(jp2h_of(f)), 0, 1, 0);
+}
+static void hdr_res_two_resc(Jp2Family *f, int box) { (void) box; set_res(append_child(jp2h_of(f)), 2, 0, 0); }
+static void hdr_res_empty(Jp2Family *f, int box) { (void) box; set_res(append_child(jp2h_of(f)), 0, 0, 1); }
+static void hdr_res_other(Jp2Family *f, int box) { (void) box; set_res(append_child(jp2h_of(f)), 0, 1, 1); }
+static void hdr_res_zero(Jp2Family *f, int box) {
+    (void) box;
+    set_res(append_child(jp2h_of(f)), 1, 0, 0);
+    jp2h_of(f)->children.arr[2].payload.u.res.children.arr[0].payload.u.resc.vd = 0;
+}
+
+/* JPX mutants on the embedded base. */
+static void remove_box(Jp2Family *f, int at) {
+    int i;
+    for (i = at + 1; i < f->boxes.nCount; ++i) f->boxes.arr[i - 1] = f->boxes.arr[i];
+    f->boxes.nCount--;
+}
+static void hdr_jpx_no_ihdr(Jp2Family *f, int box) {
+    (void) box;
+    jpch_of(f)->children.nCount = 0;
+    remove_box(f, 3);
+}
+static void hdr_jpx_defaults(Jp2Family *f, int box) {
+    (void) box;
+    f->boxes.arr[4].payload.u.jpch.children.nCount = 0;
+    f->boxes.arr[5].payload.u.jpch.children.nCount = 0;
+}
+static void hdr_jpx_no_jp2h(Jp2Family *f, int box) { (void) box; remove_box(f, 3); }
+static void hdr_jpx_late_jp2h(Jp2Family *f, int box) {
+    (void) box;
+    remove_box(f, 3);
+    add_jp2h(f, BASE_W, BASE_H);
+}
+static void hdr_jpx_two_ihdr(Jp2Family *f, int box) { (void) box; set_ihdr(append_child(jpch_of(f)), BASE_W, BASE_H); }
+static void hdr_jpx_ihdr_width(Jp2Family *f, int box) { (void) box; jpch_of(f)->children.arr[0].payload.u.ihdr.width = BASE_W + 1; }
+static void hdr_jpx_palette(Jp2Family *f, int box) {
+    (void) box;
+    set_pclr(append_child(jpch_of(f)));
+    set_cmap(append_child(jpch_of(f)), 0, 1, 0);
+}
+static void hdr_jpx_pclr_no_cmap(Jp2Family *f, int box) { (void) box; set_pclr(append_child(jpch_of(f))); }
+static void hdr_jpx_two_enumerated(Jp2Family *f, int box) {
+    (void) box;
+    set_colr(append_child(jpx_jp2h_of(f)), 1, 16);
+}
+static void hdr_jpx_jplh(Jp2Family *f, int box) {
+    TopBox *b = &f->boxes.arr[f->boxes.nCount++];     /* after the codestreams */
+    (void) box;
+    b->payload.kind = TopPayload_jplh_PRESENT;
+    b->payload.u.jplh.children.nCount = 0;
+    set_res(append_child(&b->payload.u.jplh), 0, 1, 0);
+}
+static void hdr_jpx_jplh_cdef_pairs(Jp2Family *f, int box) {
+    hdr_jpx_jplh(f, box);
+    set_cdef(append_child(&f->boxes.arr[f->boxes.nCount - 1].payload.u.jplh), 2, 0, 0, 1);
+}
+
+/* Appended entries only: array positions are in fixture names. */
+static const RuleMutant header_mutants[] = {
+    { "jp2h.palette", hdr_palette, "pclr (2 entries) and cmap through it: valid", CF_JP2, 0, X_VALID },
+    { "jp2h.resolution", hdr_resolution, "res with resc and resd: valid", CF_JP2, 0, X_VALID },
+    { "jp2h.other-box", hdr_other_child, "xml box in jp2h after colr: valid and skipped (T.800 I.5.3)", CF_JP2, 0, X_VALID },
+    { "jp2h.second-colr", hdr_second_colr, "second enumerated colr (greyscale): valid, readers use the first", CF_JP2, 0, X_VALID },
+    { "colr.prec-approx", hdr_colr_prec_approx, "PREC -1 and APPROX 1: writer fields readers ignore, valid", CF_JP2, 0, X_VALID },
+    { "cdef.pairs", hdr_cdef_unspecified, "grey and two unspecified channels from a palette: the pair (65535, 65535) may repeat, valid", CF_JP2, 0, X_VALID },
+    { "res.resc-resd", hdr_res_other, "resd and an unknown box in res: valid", CF_JP2, 0, X_VALID },
+    { "jp2.one-jp2h", hdr_no_jp2h, "no jp2h (T.800 I.5.3)", CF_JP2, 0, X_STD },
+    { "jp2.one-jp2h", hdr_two_jp2h, "two jp2h boxes", CF_JP2, 0, X_STD },
+    { "jp2h.position", hdr_jp2h_after_jp2c, "jp2h after jp2c (T.800 I.2)", CF_JP2, 0, X_STD },
+    { "jp2.codestream", hdr_no_jp2c, "no jp2c (T.800 I.2)", CF_JP2, 0, X_STD },
+    { "jp2h.ihdr-first", hdr_colr_first, "colr before ihdr", CF_JP2, 0, X_STD },
+    { "jp2h.colr", hdr_no_colr, "no colr", CF_JP2, 0, X_STD },
+    { "jp2h.colr-contiguous", hdr_colr_split, "colr, xml, colr", CF_JP2, 0, X_STD },
+    { "ihdr.bpcc", hdr_bpcc_not_varying, "bpcc with BPC 7 (I.5.3.2: only when BPC is 255)", CF_JP2, 0, X_STD },
+    { "ihdr.bpcc", hdr_bpc_255_no_bpcc, "BPC 255 without bpcc", CF_JP2, 0, X_STD },
+    { "header.one-bpcc", hdr_two_bpcc, "two bpcc", CF_JP2, 0, X_STD },
+    { "bpcc.count", hdr_bpcc_count, "BPC 255, bpcc of 2 entries for NC 1 (and BPC 255 for equal depths)", CF_JP2, 0, X_STD },
+    { "bpcc.depth", hdr_bpcc_depth, "BPC 255, bpcc entry 8 for Ssiz 7 (and BPC 255 for equal depths)", CF_JP2, 0, X_STD },
+    { "ihdr.height", hdr_ihdr_height, "HEIGHT = Ysiz - YOsiz + 1", CF_JP2, 0, X_STD },
+    { "ihdr.width", hdr_ihdr_width, "WIDTH = Xsiz - XOsiz + 1", CF_JP2, 0, X_STD },
+    { "ihdr.nc", hdr_ihdr_nc, "NC 2 for Csiz 1", CF_JP2, 0, X_STD },
+    { "ihdr.bpc", hdr_ihdr_bpc, "BPC 8 for Ssiz 7", CF_JP2, 0, X_STD },
+    { "ihdr.bpc", hdr_ihdr_signed, "BPC signed for unsigned Ssiz", CF_JP2, 0, X_STD },
+    { "ihdr.c", hdr_ihdr_c, "C 0 (uncompressed, T.801 only)", CF_JP2, 0, X_STD },
+    { "ihdr.unkc", hdr_ihdr_unkc, "UnkC 2 (reserved)", CF_JP2, 0, X_STD },
+    { "ihdr.nc", hdr_ihdr_nc_zero, "NC 0", CF_JP2, 0, X_STD },
+    { "ihdr.bpc", hdr_ihdr_bpc_38, "BPC 38 (reserved)", CF_JP2, 0, X_STD },
+    { "colr.method", hdr_colr_method, "METH 3 (JP2: 1 or 2)", CF_JP2, 0, X_STD },
+    { "colr.enumcs", hdr_colr_enumcs, "first colr EnumCS 12 (CMYK; JP2: 16, 17 or 18)", CF_JP2, 0, X_STD },
+    { "colr.enumcs-length", hdr_colr_enumcs_length, "METH 1 with a byte after EnumCS", CF_JP2, 0, X_STD },
+    { "header.pclr-cmap", hdr_pclr_no_cmap, "pclr without cmap", CF_JP2, 0, X_STD },
+    { "header.pclr-cmap", hdr_cmap_no_pclr, "cmap without pclr", CF_JP2, 0, X_STD },
+    { "header.one-pclr", hdr_two_pclr, "two pclr", CF_JP2, 0, X_STD },
+    { "header.one-cmap", hdr_two_cmap, "two cmap", CF_JP2, 0, X_STD },
+    { "pclr.entries-length", hdr_pclr_entries, "NE 2 x 1 byte, 1 byte of entries", CF_JP2, 0, X_STD },
+    { "pclr.ne", hdr_pclr_ne_zero, "NE 0", CF_JP2, 0, X_STD },
+    { "cmap.pcol-zero", hdr_cmap_pcol_zero, "MTYP 0 with PCOL 1", CF_JP2, 0, X_STD },
+    { "cmap.component", hdr_cmap_component, "CMP 1 for NC 1", CF_JP2, 0, X_STD },
+    { "cmap.palette-column", hdr_cmap_palette_column, "PCOL 1 for NPC 1", CF_JP2, 0, X_STD },
+    { "cmap.mtyp", hdr_cmap_mtyp, "MTYP 2 (reserved)", CF_JP2, 0, X_STD },
+    { "cdef.pairs", hdr_cdef_pairs, "two descriptions Typ 0, Asoc 1", CF_JP2, 0, X_STD },
+    { "cdef.channel", hdr_cdef_channel, "Cn 1 for one channel", CF_JP2, 0, X_STD },
+    { "cdef.typ", hdr_cdef_typ, "Typ 3 (reserved)", CF_JP2, 0, X_STD },
+    { "header.one-cdef", hdr_two_cdef, "two cdef", CF_JP2, 0, X_STD },
+    { "header.one-res", hdr_two_res, "two res", CF_JP2, 0, X_STD },
+    { "res.resc-resd", hdr_res_two_resc, "two resc in res", CF_JP2, 0, X_STD },
+    { "res.resc-resd", hdr_res_empty, "res with neither resc nor resd", CF_JP2, 0, X_STD },
+    { "res.vd", hdr_res_zero, "resc VRcD 0", CF_JP2, 0, X_STD },
+    { "cdef.opacity", hdr_cdef_opacity, "grey and opacity channels from a palette: valid", CF_JP2, 0, X_VALID },
+    { "jpx.header-defaults", hdr_jpx_defaults, "jp2h ihdr and colr as the default for both codestreams, empty jpch: valid", CF_JPX, 0, X_VALID },
+    { "jpch.palette", hdr_jpx_palette, "pclr and cmap in a jpch: valid", CF_JPX, 0, X_VALID },
+    { "jpx.no-jp2h", hdr_jpx_no_jp2h, "no jp2h, an ihdr in each jpch (T.801: jp2h optional)", CF_JPX, 0, X_VALID },
+    { "jplh.res", hdr_jpx_jplh, "jplh with res: valid", CF_JPX, 0, X_VALID },
+    { "jpch.ihdr", hdr_jpx_no_ihdr, "no jp2h, first jpch empty (T.801 M.11.6)", CF_JPX, 0, X_STD },
+    { "jp2h.position", hdr_jpx_late_jp2h, "jp2h after the codestreams (T.801 M.11.5)", CF_JPX, 0, X_STD },
+    { "header.one-ihdr", hdr_jpx_two_ihdr, "two ihdr in a jpch", CF_JPX, 0, X_STD },
+    { "ihdr.width", hdr_jpx_ihdr_width, "jpch ihdr WIDTH = Xsiz - XOsiz + 1", CF_JPX, 0, X_STD },
+    { "header.pclr-cmap", hdr_jpx_pclr_no_cmap, "pclr in a jpch without cmap", CF_JPX, 0, X_STD },
+    { "colr.one-method", hdr_jpx_two_enumerated, "two enumerated colr in jp2h (T.801 M.11.7.1)", CF_JPX, 0, X_STD },
+    { "cdef.pairs", hdr_jpx_jplh_cdef_pairs, "jplh cdef with two descriptions Typ 0, Asoc 1", CF_JPX, 0, X_STD },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -1484,6 +1927,7 @@ static void run_base(Base base, const char *companions) {
             if (fm->needs_precincts != has_precincts) continue;
             *work = *base.file;
             fm->set(work, base.jp2c_box, fm->value);
+            sync_headers(work);
             m = encode_family(work, 0);
             snprintf(name, sizeof name, "%s-%s-%lld", base.name, fm->field, (long long) fm->value);
             emit(m, base.kind, name, fm->field, fm->note, companions, fm->expect);
@@ -1496,8 +1940,20 @@ static void run_base(Base base, const char *companions) {
             if (rm->needs_precincts != has_precincts) continue;
             *work = *base.file;
             rm->apply(work, base.jp2c_box);
+            sync_headers(work);
             m = encode_family(work, 0);
             snprintf(name, sizeof name, "%s-rule-%s-%zu", base.name, rm->name, i);
+            emit(m, base.kind, name, rm->name, rm->note, companions, rm->expect);
+            free(m.data);
+        }
+        for (i = 0; i < sizeof header_mutants / sizeof *header_mutants; ++i) {
+            const RuleMutant *rm = &header_mutants[i];
+            Bytes m;
+            if (rm->only_kind != (int) base.kind || has_precincts) continue;
+            *work = *base.file;
+            rm->apply(work, base.jp2c_box);
+            m = encode_family(work, 0);
+            snprintf(name, sizeof name, "%s-header-%s-%zu", base.name, rm->name, i);
             emit(m, base.kind, name, rm->name, rm->note, companions, rm->expect);
             free(m.data);
         }
@@ -1562,7 +2018,7 @@ static void emit_unknown_box_types(void) {
     free(base.file);
 
     base = base_jpx_embedded();
-    superbox = &base.file->boxes.arr[3].payload.u.jpch;
+    superbox = &base.file->boxes.arr[4].payload.u.jpch;
     child = &superbox->children.arr[superbox->children.nCount++];
     child->payload.kind = InnerPayload_other_PRESENT;
     OCTETS(child->payload.u.other.data, "\x01", 1);
@@ -1698,7 +2154,7 @@ int main(int argc, char **argv) {
             for (graph = 0; graph < 3; ++graph) {
                 Base linked = base_jpx_linked(graph_urls, off, len, 2);
                 for (stream = 0; stream < 2; ++stream) {
-                    Fragment *fragment = &linked.file->boxes.arr[5 + stream].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0];
+                    Fragment *fragment = &linked.file->boxes.arr[6 + stream].payload.u.ftbl.children.arr[0].payload.u.flst.fragments.arr[0];
                     int reference = references[graph][stream];
                     fragment->dr = reference;
                     fragment->off = off[reference - 1];

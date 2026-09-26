@@ -19,6 +19,8 @@ pdus=$pdus,SizSegment-Std,CodSegment-Std,QcdSegment-Std,PltSegment-Std,ComSegmen
 pdus=$pdus,Siz-Profile,MainMarkerCode-Profile,TileMarkerCode-Profile
 # JPX boxes.
 pdus=$pdus,DataReferenceCount,UrlHeader,FragmentList-Profile
+# JP2 header boxes, one box or entry at a time.
+pdus=$pdus,Ihdr,BitDepth,ColrHeader,PclrHeader,CmapEntry,CdefCount,CdefEntry,Resolution
 models="j2k-headers j2k-codestream jp2-boxes jpeg2000-io"
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/hv-generated.XXXXXX")

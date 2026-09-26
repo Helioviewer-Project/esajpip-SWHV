@@ -6,8 +6,9 @@
  * codestream (asoc, nlst). A port of hvJP2K's jpx_merge.
  *
  * Every input must be a JP2 file the server serves (hv_check_jp2 and
- * HV_PROFILE) with a JP2 Header box, so the output is a JPX file the
- * server serves (hv_check_jpx), at most INT_MAX bytes. */
+ * HV_PROFILE) with the header boxes T.800 requires (hv_check_jp2h), so the
+ * output is a JPX file the server serves (hv_check_jpx) with valid header
+ * boxes (hv_check_jpx_headers), at most INT_MAX bytes. */
 #ifndef HV_MERGE_H
 #define HV_MERGE_H
 

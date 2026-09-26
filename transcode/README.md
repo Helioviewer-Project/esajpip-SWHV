@@ -36,8 +36,11 @@ model (`../lib/`): the file rules of `hv_check_jp2` (signature, file type
 with the `jp2 ` brand and compatibility entry, exactly one `jp2c`, at most
 `INT_MAX` bytes; JPX files and raw codestreams fail) and the main-header
 rules of `HV_PROFILE_HEADERS` (zero origins, unit sampling, one tile,
-dimensions up to `INT32_MAX`, no COC, POC or PPM). What else the profile
-asks for, the transcoder writes: the tile-parts and a COD without SOP.
+dimensions up to `INT32_MAX`, no COC, POC or PPM). The header boxes, which
+the output keeps as read, must pass `hv_check_jp2h` (T.800 I.5.3: one
+`jp2h` before the codestream, its boxes well formed and in order, and
+`ihdr` and `bpcc` agreeing with SIZ). What else the profile asks for, the
+transcoder writes: the tile-parts and a COD without SOP.
 Errors from the shared rules name the rule, as in `siz.zero-origin`. The
 output is at most `INT_MAX` bytes and passes the whole profile
 (`HV_PROFILE`): the tests check every file they transcode, and the fuzz

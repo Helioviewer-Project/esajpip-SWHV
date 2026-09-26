@@ -158,6 +158,27 @@ flag Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_64(BitStream* pBitStrm, as
 
 
 
+void Acn_Enc_Int_TwosComplement_ConstSize(BitStream* pBitStrm, asn1SccSint intVal, int encodedSizeInBits)
+{
+	if (intVal >= 0) {
+		BitStream_AppendNBitZero(pBitStrm, encodedSizeInBits - GetNumberOfBitsForNonNegativeInteger((asn1SccUint)intVal));
+		BitStream_EncodeNonNegativeInteger(pBitStrm, (asn1SccUint)intVal);
+	}
+	else {
+		BitStream_AppendNBitOne(pBitStrm, encodedSizeInBits - GetNumberOfBitsForNonNegativeInteger((asn1SccUint)(-(intVal + 1))));
+		BitStream_EncodeNonNegativeIntegerNeg(pBitStrm, (asn1SccUint)(-(intVal + 1)), 1);
+	}
+	CHECK_BIT_STREAM(pBitStrm);
+
+}
+
+
+
+
+void Acn_Enc_Int_TwosComplement_ConstSize_8(BitStream* pBitStrm, asn1SccSint intVal)
+{
+	Acn_Enc_Int_PositiveInteger_ConstSize_8(pBitStrm, int2uint(intVal));
+}
 
 
 
@@ -174,15 +195,43 @@ flag Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_64(BitStream* pBitStrm, as
 
 
 
+flag Acn_Dec_Int_TwosComplement_ConstSize(BitStream* pBitStrm, asn1SccSint* pIntVal, int encodedSizeInBits)
+{
 
 
+	int i;
+	flag valIsNegative = BitStream_PeekBit(pBitStrm);
+	int nBytes = encodedSizeInBits / 8;
+	int rstBits = encodedSizeInBits % 8;
+	byte b = 0;
+	asn1SccUint decoded = valIsNegative ? MAX_INT : 0;
+	if (encodedSizeInBits < 1 || encodedSizeInBits > WORD_SIZE * 8)
+		return FALSE;
 
+	for (i = 0; i<nBytes; i++) {
+		if (!BitStream_ReadByte(pBitStrm, &b))
+			return FALSE;
+		decoded = (decoded << 8) | b;
+	}
 
+	if (rstBits>0)
+	{
+		if (!BitStream_ReadPartialByte(pBitStrm, &b, (byte)rstBits))
+			return FALSE;
+		decoded = (decoded << rstBits) | b;
+	}
+	*pIntVal = uint2int(decoded, WORD_SIZE);
+	return TRUE;
+}
 
-
-
-
-
+flag Acn_Dec_Int_TwosComplement_ConstSize_8(BitStream* pBitStrm, asn1SccSint* pIntVal)
+{
+	asn1SccUint tmp = 0;
+	if (!Acn_Dec_Int_PositiveInteger_ConstSize_8(pBitStrm, &tmp))
+		return FALSE;
+	*pIntVal = uint2int(tmp, 1);
+	return TRUE;
+}
 
 
 

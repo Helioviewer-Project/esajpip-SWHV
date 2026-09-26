@@ -198,8 +198,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
 }
 
 /* The box type of an inner box, as far as the rules of hv_rule_child
- * distinguish them (0: any other). jpch holds layer-1 boxes at both layers
- * (cf_inner_type, crossfield.c). */
+ * distinguish them (0: any other). */
 static uint32_t CF_CAT3(cf_inner_type, CF_S, _)(const CF_T(InnerBox) *b) {
     switch (b->payload.kind) {
         case CF_K(InnerPayload, flst): return HV_BOX_FLST;
@@ -258,8 +257,8 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
                 break;
             case CF_K(TopPayload, jpch):
                 for (j = 0; j < b->payload.u.jpch.children.nCount; ++j)
-                    if ((r = hv_rule_child(HV_BOX_JPCH,
-                                           cf_inner_type(&b->payload.u.jpch.children.arr[j]))) != NULL)
+                    if ((r = hv_rule_child(HV_BOX_JPCH, CF_CAT3(cf_inner_type, CF_S, _)(
+                                               &b->payload.u.jpch.children.arr[j]))) != NULL)
                         return r;
                 count.jpch++;
                 break;

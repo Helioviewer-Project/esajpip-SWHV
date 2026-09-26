@@ -2,7 +2,7 @@
 #include "hv_reader.h"
 
 #include "j2k-codestream.h"   /* MainMarkerCode-Profile, TileMarkerCode-Profile */
-#include "jp2-boxes.h"        /* FragmentList-Profile */
+#include "jp2-boxes.h"        /* FragmentList-Profile, the JP2 header boxes */
 
 #include <limits.h>
 #include <stdlib.h>
@@ -38,6 +38,14 @@ DEFINE_DECODE(ComSegment_Std)
 DEFINE_DECODE(DataReferenceCount)
 DEFINE_DECODE(UrlHeader)
 DEFINE_DECODE(FragmentList_Profile)
+DEFINE_DECODE(Ihdr)
+DEFINE_DECODE(BitDepth)
+DEFINE_DECODE(ColrHeader)
+DEFINE_DECODE(PclrHeader)
+DEFINE_DECODE(CmapEntry)
+DEFINE_DECODE(CdefCount)
+DEFINE_DECODE(CdefEntry)
+DEFINE_DECODE(Resolution)
 
 static size_t min_size(size_t a, size_t b) { return a < b ? a : b; }
 
@@ -446,6 +454,253 @@ const char *hv_check_link(const uint8_t *buf, size_t size, const hv_link *link, 
     if (link->offset != jp2c.payload || link->length != jp2c.end - jp2c.payload)
         return "flst.source-extent";
     return NULL;
+}
+
+/* ------------------------------------------------------------------------
+ * JP2 header boxes (standard layer)
+ * ------------------------------------------------------------------------ */
+
+/* The header box type for hv_rule_header_child (1: any other). */
+static uint32_t header_type(uint32_t type) {
+    switch (type) {
+    case HV_BOX_IHDR: case HV_BOX_BPCC: case HV_BOX_COLR: case HV_BOX_PCLR:
+    case HV_BOX_CMAP: case HV_BOX_CDEF: case HV_BOX_RES:
+        return type;
+    default:
+        return 1;
+    }
+}
+
+/* One child of a header box, decoded with the model's types. */
+static const char *read_header_child(const uint8_t *buf, const hv_box *box, hv_header *h,
+                                     size_t *at) {
+    size_t n = box->end - box->payload, p = box->payload, i;
+    const char *error = NULL;
+
+    switch (box->type) {
+    case HV_BOX_IHDR: {
+        Ihdr ihdr;
+        if (n != 14 || DECODE(Ihdr, &ihdr, buf, p, n) != 0)
+            return "ihdr: not 14 bytes of valid fields";
+        return hv_rule_ihdr(h, &ihdr);
+    }
+    case HV_BOX_BPCC:
+        if (n == 0)
+            return "bpcc: empty";
+        for (i = 0; i < n && error == NULL; i++) {
+            BitDepth depth;
+            if (DECODE(BitDepth, &depth, buf, p + i, 1) != 0)
+                return "bpcc: reserved bit depth";
+            error = hv_rule_bpcc_entry(h, depth);
+        }
+        return error;
+    case HV_BOX_COLR: {
+        ColrHeader colr;
+        size_t used;
+        if (n < 3 || DECODE(ColrHeader, &colr, buf, p, n) != 0)
+            return "colr: shorter than its fields";
+        used = colr.meth == 1 ? 7 : 3;
+        return hv_rule_colr(h, &colr, n - used);
+    }
+    case HV_BOX_PCLR: {
+        PclrHeader *pclr = malloc(sizeof *pclr);
+        size_t used = n >= 3 ? 3 + (size_t)buf[p + 2] : 0;
+        if (pclr == NULL)
+            return "out of memory";
+        if (n < 3 || used > n || DECODE(PclrHeader, pclr, buf, p, used) != 0)
+            error = "pclr: invalid NE, NPC or bit depths";
+        else
+            error = hv_rule_pclr(h, pclr, n - used);
+        free(pclr);
+        return error;
+    }
+    case HV_BOX_CMAP:
+        if (n == 0 || n % 4 != 0)
+            return "cmap: not a whole number of entries";
+        for (i = 0; i < n && error == NULL; i += 4) {
+            CmapEntry entry;
+            *at = p + i;
+            if (DECODE(CmapEntry, &entry, buf, p + i, 4) != 0)
+                return "cmap: invalid entry";
+            error = hv_rule_cmap_entry(h, &entry);
+        }
+        return error;
+    case HV_BOX_CDEF: {
+        CdefCount count;
+        CdefEntry *entries;
+        if (n < 2 || DECODE(CdefCount, &count, buf, p, 2) != 0 || n != 2 + 6 * (size_t)count)
+            return "cdef: N does not match the box";
+        if ((entries = malloc((size_t)count * sizeof *entries)) == NULL)
+            return "out of memory";
+        for (i = 0; i < count && error == NULL; i++)
+            if (DECODE(CdefEntry, &entries[i], buf, p + 2 + 6 * i, 6) != 0)
+                error = "cdef: invalid entry";
+        if (error == NULL)
+            error = hv_rule_cdef(h, entries, (size_t)count);
+        free(entries);
+        return error;
+    }
+    case HV_BOX_RES: {
+        hv_boxes it;
+        hv_box child;
+        int status;
+        hv_boxes_children(&it, buf, box);
+        while ((status = hv_boxes_next(&it, &child, &error, at)) == 1) {
+            Resolution r;
+            *at = child.start;
+            if ((child.type == HV_BOX_RESC || child.type == HV_BOX_RESD) &&
+                (child.end - child.payload != 10 ||
+                 DECODE(Resolution, &r, buf, child.payload, 10) != 0))
+                return "res: invalid resc or resd";
+            if ((error = hv_rule_res_child(h, child.type)) != NULL)
+                return error;
+        }
+        if (status < 0)
+            return error;
+        *at = box->start;
+        return hv_rule_res_end(h);
+    }
+    default:
+        return NULL;
+    }
+}
+
+/* A header box (jp2h, jpch or jplh), child by child. */
+static const char *read_header(const uint8_t *buf, const hv_box *box, uint32_t parent, int jpx,
+                               hv_header *h, size_t *at) {
+    hv_boxes it;
+    hv_box child;
+    const char *error;
+    int status;
+
+    hv_header_init(h, parent, jpx);
+    hv_boxes_children(&it, buf, box);
+    while ((status = hv_boxes_next(&it, &child, &error, at)) == 1) {
+        *at = child.start;
+        if ((error = hv_rule_header_child(h, header_type(child.type))) != NULL ||
+            (error = read_header_child(buf, &child, h, at)) != NULL)
+            return error;
+    }
+    return status < 0 ? error : NULL;
+}
+
+/* The codestream in buf[start, end): its SIZ against the header. */
+static const char *check_codestream_header(const uint8_t *buf, size_t start, size_t end,
+                                           const hv_header *h, const hv_header *defaults,
+                                           size_t *at) {
+    hv_codestream cs;
+    const char *error;
+    *at = start;
+    if (hv_codestream_open(&cs, buf, start, end, 0) != 0) {
+        error = cs.error;
+        *at = cs.error_at;
+    } else {
+        error = hv_rule_codestream_header(h, defaults, hv_codestream_siz(&cs));
+    }
+    hv_codestream_close(&cs);
+    return error;
+}
+
+const char *hv_check_jp2h(const uint8_t *buf, size_t size, size_t *at) {
+    hv_boxes it;
+    hv_box box, jp2h = {0}, jp2c = {0};
+    hv_header *h;
+    const char *error;
+    int status, n = 0, late = 0, codestreams = 0;
+
+    *at = 0;
+    hv_boxes_file(&it, buf, size);
+    while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
+        if (box.type == HV_BOX_JP2H) {
+            late |= codestreams > 0;
+            if (n++ == 0)
+                jp2h = box;
+        } else if (box.type == HV_BOX_JP2C && codestreams++ == 0) {
+            jp2c = box;
+        }
+    }
+    if (status < 0)
+        return error;
+    *at = size;
+    if ((error = hv_rule_jp2h_place(n, late, codestreams, 0)) != NULL)
+        return error;
+    if ((h = malloc(sizeof *h)) == NULL)
+        return "out of memory";
+    *at = jp2h.start;
+    if ((error = read_header(buf, &jp2h, HV_BOX_JP2H, 0, h, at)) == NULL)
+        error = check_codestream_header(buf, jp2c.payload, jp2c.end, h, NULL, at);
+    free(h);
+    return error;
+}
+
+const char *hv_check_jpx_headers(const uint8_t *buf, size_t size, size_t *at) {
+    hv_boxes it;
+    hv_box box, jp2h = {0};
+    hv_header *h;
+    const char *error = NULL;
+    int status, n = 0, late = 0, later = 0, jpchs = 0, codestreams = 0, stream = 0;
+
+    *at = 0;
+    hv_boxes_file(&it, buf, size);
+    while ((status = hv_boxes_next(&it, &box, &error, at)) == 1) {
+        switch (box.type) {
+        case HV_BOX_JP2H:
+            late |= later;
+            if (n++ == 0)
+                jp2h = box;
+            break;
+        case HV_BOX_JPCH: jpchs++; later = 1; break;
+        case HV_BOX_JP2C: case HV_BOX_FTBL: codestreams++; later = 1; break;
+        case HV_BOX_JPLH: later = 1; break;
+        default: break;
+        }
+    }
+    if (status < 0)
+        return error;
+    *at = size;
+    if ((error = hv_rule_jp2h_place(n, late, 0, 1)) != NULL)
+        return error;
+    if (jpchs > 0 && jpchs != codestreams)
+        return "jpx.codestream-count";
+    if ((h = malloc(3 * sizeof *h)) == NULL)       /* jp2h, jpch, jplh */
+        return "out of memory";
+    if (n > 0) {
+        *at = jp2h.start;
+        error = read_header(buf, &jp2h, HV_BOX_JP2H, 1, &h[0], at);
+    }
+    hv_boxes_file(&it, buf, size);
+    while (error == NULL && hv_boxes_next(&it, &box, &error, at) == 1)
+        if (box.type == HV_BOX_JPLH) {
+            *at = box.start;
+            error = read_header(buf, &box, HV_BOX_JPLH, 1, &h[2], at);
+        }
+    /* Codestream k and jpch k (T.801 M.11.6), in box order. */
+    hv_boxes_file(&it, buf, size);
+    while (error == NULL && hv_boxes_next(&it, &box, &error, at) == 1) {
+        hv_boxes headers;
+        hv_box jpch;
+        int k = 0;
+        if (box.type != HV_BOX_JP2C && box.type != HV_BOX_FTBL)
+            continue;
+        if (jpchs > 0) {
+            hv_boxes_file(&headers, buf, size);
+            while (hv_boxes_next(&headers, &jpch, &error, at) == 1)
+                if (jpch.type == HV_BOX_JPCH && k++ == stream)
+                    break;
+            *at = jpch.start;
+            if ((error = read_header(buf, &jpch, HV_BOX_JPCH, 1, &h[1], at)) != NULL)
+                break;
+        }
+        *at = box.start;
+        if (box.type == HV_BOX_JP2C)
+            error = check_codestream_header(buf, box.payload, box.end, jpchs ? &h[1] : NULL,
+                                            n ? &h[0] : NULL, at);
+        else
+            error = hv_rule_codestream_header(jpchs ? &h[1] : NULL, n ? &h[0] : NULL, NULL);
+        stream++;
+    }
+    free(h);
+    return error;
 }
 
 /* ------------------------------------------------------------------------

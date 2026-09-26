@@ -21,6 +21,11 @@ while letting HTTP connections be pooled or replaced independently of channels.
   rejects files it cannot make servable.
 - `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`), writing the
   same bytes, from inputs the server serves only.
+- The JP2 header boxes (T.800 I.5.3, T.801 M.11.5 to M.11.7) in the model,
+  with their rules shared by the corpus and the reader (`hv_check_jp2h`,
+  `hv_check_jpx_headers`, `hv_walk -H`). `hv_transcode` and `hv_merge` reject
+  inputs whose header boxes are invalid or disagree with the codestream; the
+  server, which does not read them, is unchanged.
 
 ### Changed
 

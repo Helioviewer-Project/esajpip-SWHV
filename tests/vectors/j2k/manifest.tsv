@@ -138,6 +138,56 @@ jp2-rule-main.packet-headers-moved-48.jp2	jp2	valid	invalid	decode	main.packet-h
 jp2-rule-sot.two-tiles-49.jp2	jp2	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
 jp2-rule-siz.mct-components-50.jp2	jp2	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
 jp2-rule-ftbl.one-flst-51.jp2	jp2	invalid	valid	ftbl.one-flst	ftbl.one-flst	empty ftbl in a .jp2: standard invalid, opaque to the profile (ReadJP2)	-
+jp2-header-jp2h.palette-0.jp2	jp2	valid	valid	-	jp2h.palette	pclr (2 entries) and cmap through it: valid	-
+jp2-header-jp2h.resolution-1.jp2	jp2	valid	valid	-	jp2h.resolution	res with resc and resd: valid	-
+jp2-header-jp2h.other-box-2.jp2	jp2	valid	valid	-	jp2h.other-box	xml box in jp2h after colr: valid and skipped (T.800 I.5.3)	-
+jp2-header-jp2h.second-colr-3.jp2	jp2	valid	valid	-	jp2h.second-colr	second enumerated colr (greyscale): valid, readers use the first	-
+jp2-header-colr.prec-approx-4.jp2	jp2	valid	valid	-	colr.prec-approx	PREC -1 and APPROX 1: writer fields readers ignore, valid	-
+jp2-header-cdef.pairs-5.jp2	jp2	valid	valid	-	cdef.pairs	grey and two unspecified channels from a palette: the pair (65535, 65535) may repeat, valid	-
+jp2-header-res.resc-resd-6.jp2	jp2	valid	valid	-	res.resc-resd	resd and an unknown box in res: valid	-
+jp2-header-jp2.one-jp2h-7.jp2	jp2	invalid	valid	jp2.one-jp2h	jp2.one-jp2h	no jp2h (T.800 I.5.3)	-
+jp2-header-jp2.one-jp2h-8.jp2	jp2	invalid	valid	jp2.one-jp2h	jp2.one-jp2h	two jp2h boxes	-
+jp2-header-jp2h.position-9.jp2	jp2	invalid	valid	jp2h.position	jp2h.position	jp2h after jp2c (T.800 I.2)	-
+jp2-header-jp2.codestream-10.jp2	jp2	invalid	invalid	jp2.codestream	jp2.codestream	no jp2c (T.800 I.2)	-
+jp2-header-jp2h.ihdr-first-11.jp2	jp2	invalid	valid	jp2h.ihdr-first	jp2h.ihdr-first	colr before ihdr	-
+jp2-header-jp2h.colr-12.jp2	jp2	invalid	valid	jp2h.colr	jp2h.colr	no colr	-
+jp2-header-jp2h.colr-contiguous-13.jp2	jp2	invalid	valid	jp2h.colr-contiguous	jp2h.colr-contiguous	colr, xml, colr	-
+jp2-header-ihdr.bpcc-14.jp2	jp2	invalid	valid	ihdr.bpcc	ihdr.bpcc	bpcc with BPC 7 (I.5.3.2: only when BPC is 255)	-
+jp2-header-ihdr.bpcc-15.jp2	jp2	invalid	valid	ihdr.bpcc	ihdr.bpcc	BPC 255 without bpcc	-
+jp2-header-header.one-bpcc-16.jp2	jp2	invalid	valid	header.one-bpcc	header.one-bpcc	two bpcc	-
+jp2-header-bpcc.count-17.jp2	jp2	invalid	valid	bpcc.count	bpcc.count	BPC 255, bpcc of 2 entries for NC 1 (and BPC 255 for equal depths)	-
+jp2-header-bpcc.depth-18.jp2	jp2	invalid	valid	bpcc.depth	bpcc.depth	BPC 255, bpcc entry 8 for Ssiz 7 (and BPC 255 for equal depths)	-
+jp2-header-ihdr.height-19.jp2	jp2	invalid	valid	ihdr.height	ihdr.height	HEIGHT = Ysiz - YOsiz + 1	-
+jp2-header-ihdr.width-20.jp2	jp2	invalid	valid	ihdr.width	ihdr.width	WIDTH = Xsiz - XOsiz + 1	-
+jp2-header-ihdr.nc-21.jp2	jp2	invalid	valid	ihdr.nc	ihdr.nc	NC 2 for Csiz 1	-
+jp2-header-ihdr.bpc-22.jp2	jp2	invalid	valid	ihdr.bpc	ihdr.bpc	BPC 8 for Ssiz 7	-
+jp2-header-ihdr.bpc-23.jp2	jp2	invalid	valid	ihdr.bpc	ihdr.bpc	BPC signed for unsigned Ssiz	-
+jp2-header-ihdr.c-24.jp2	jp2	invalid	valid	decode	ihdr.c	C 0 (uncompressed, T.801 only)	-
+jp2-header-ihdr.unkc-25.jp2	jp2	invalid	valid	decode	ihdr.unkc	UnkC 2 (reserved)	-
+jp2-header-ihdr.nc-26.jp2	jp2	invalid	valid	decode	ihdr.nc	NC 0	-
+jp2-header-ihdr.bpc-27.jp2	jp2	invalid	valid	decode	ihdr.bpc	BPC 38 (reserved)	-
+jp2-header-colr.method-28.jp2	jp2	invalid	valid	colr.method	colr.method	METH 3 (JP2: 1 or 2)	-
+jp2-header-colr.enumcs-29.jp2	jp2	invalid	valid	colr.enumcs	colr.enumcs	first colr EnumCS 12 (CMYK; JP2: 16, 17 or 18)	-
+jp2-header-colr.enumcs-length-30.jp2	jp2	invalid	valid	colr.enumcs-length	colr.enumcs-length	METH 1 with a byte after EnumCS	-
+jp2-header-header.pclr-cmap-31.jp2	jp2	invalid	valid	header.pclr-cmap	header.pclr-cmap	pclr without cmap	-
+jp2-header-header.pclr-cmap-32.jp2	jp2	invalid	valid	header.pclr-cmap	header.pclr-cmap	cmap without pclr	-
+jp2-header-header.one-pclr-33.jp2	jp2	invalid	valid	header.one-pclr	header.one-pclr	two pclr	-
+jp2-header-header.one-cmap-34.jp2	jp2	invalid	valid	header.one-cmap	header.one-cmap	two cmap	-
+jp2-header-pclr.entries-length-35.jp2	jp2	invalid	valid	pclr.entries-length	pclr.entries-length	NE 2 x 1 byte, 1 byte of entries	-
+jp2-header-pclr.ne-36.jp2	jp2	invalid	valid	decode	pclr.ne	NE 0	-
+jp2-header-cmap.pcol-zero-37.jp2	jp2	invalid	valid	cmap.pcol-zero	cmap.pcol-zero	MTYP 0 with PCOL 1	-
+jp2-header-cmap.component-38.jp2	jp2	invalid	valid	cmap.component	cmap.component	CMP 1 for NC 1	-
+jp2-header-cmap.palette-column-39.jp2	jp2	invalid	valid	cmap.palette-column	cmap.palette-column	PCOL 1 for NPC 1	-
+jp2-header-cmap.mtyp-40.jp2	jp2	invalid	valid	decode	cmap.mtyp	MTYP 2 (reserved)	-
+jp2-header-cdef.pairs-41.jp2	jp2	invalid	valid	cdef.pairs	cdef.pairs	two descriptions Typ 0, Asoc 1	-
+jp2-header-cdef.channel-42.jp2	jp2	invalid	valid	cdef.channel	cdef.channel	Cn 1 for one channel	-
+jp2-header-cdef.typ-43.jp2	jp2	invalid	valid	decode	cdef.typ	Typ 3 (reserved)	-
+jp2-header-header.one-cdef-44.jp2	jp2	invalid	valid	header.one-cdef	header.one-cdef	two cdef	-
+jp2-header-header.one-res-45.jp2	jp2	invalid	valid	header.one-res	header.one-res	two res	-
+jp2-header-res.resc-resd-46.jp2	jp2	invalid	valid	res.resc-resd	res.resc-resd	two resc in res	-
+jp2-header-res.resc-resd-47.jp2	jp2	invalid	valid	res.resc-resd	res.resc-resd	res with neither resc nor resd	-
+jp2-header-res.vd-48.jp2	jp2	invalid	valid	decode	res.vd	resc VRcD 0	-
+jp2-header-cdef.opacity-49.jp2	jp2	valid	valid	-	cdef.opacity	grey and opacity channels from a palette: valid	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-
@@ -207,68 +257,85 @@ jpx-embedded-len-c-7.jpx	jpx	invalid	invalid	decode	LBox@0xc	length patched	-
 jpx-embedded-len-20-23.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
 jpx-embedded-len-20-25.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
 jpx-embedded-len-20-7.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
+jpx-embedded-len-38-44.jpx	jpx	invalid	invalid	decode	LBox@0x38	length patched	-
+jpx-embedded-len-38-46.jpx	jpx	invalid	invalid	decode	LBox@0x38	length patched	-
 jpx-embedded-len-38-7.jpx	jpx	invalid	invalid	decode	LBox@0x38	length patched	-
-jpx-embedded-len-38-9.jpx	jpx	invalid	invalid	decode	LBox@0x38	length patched	-
-jpx-embedded-len-40-7.jpx	jpx	invalid	invalid	decode	LBox@0x40	length patched	-
-jpx-embedded-len-40-9.jpx	jpx	invalid	invalid	decode	LBox@0x40	length patched	-
-jpx-embedded-len-48-95.jpx	jpx	invalid	invalid	decode	LBox@0x48	length patched	-
-jpx-embedded-len-48-97.jpx	jpx	invalid	invalid	decode	LBox@0x48	length patched	-
-jpx-embedded-len-48-7.jpx	jpx	invalid	invalid	decode	LBox@0x48	length patched	-
-jpx-embedded-len-54-40.jpx	jpx	invalid	invalid	decode	Lxxx@0x54	length patched	-
-jpx-embedded-len-54-42.jpx	jpx	invalid	invalid	decode	Lxxx@0x54	length patched	-
-jpx-embedded-len-54-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x54	length patched	-
-jpx-embedded-len-7f-11.jpx	jpx	invalid	invalid	decode	Lxxx@0x7f	length patched	-
-jpx-embedded-len-7f-13.jpx	jpx	invalid	invalid	decode	Lxxx@0x7f	length patched	-
-jpx-embedded-len-7f-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x7f	length patched	-
-jpx-embedded-len-8d-3.jpx	jpx	invalid	invalid	decode	Lxxx@0x8d	length patched	-
-jpx-embedded-len-8d-5.jpx	jpx	invalid	invalid	decode	Lxxx@0x8d	length patched	-
-jpx-embedded-len-8d-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x8d	length patched	-
-jpx-embedded-len-97-20.jpx	jpx	invalid	invalid	decode	Psot@0x97	length patched	-
-jpx-embedded-len-97-22.jpx	jpx	invalid	invalid	decode	Psot@0x97	length patched	-
-jpx-embedded-len-97-13.jpx	jpx	invalid	invalid	decode	Psot@0x97	length patched	-
-jpx-embedded-len-9f-3.jpx	jpx	invalid	invalid	decode	Lxxx@0x9f	length patched	-
-jpx-embedded-len-9f-5.jpx	jpx	invalid	invalid	decode	Lxxx@0x9f	length patched	-
-jpx-embedded-len-9f-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x9f	length patched	-
-jpx-embedded-len-a8-95.jpx	jpx	invalid	invalid	decode	LBox@0xa8	length patched	-
-jpx-embedded-len-a8-97.jpx	jpx	invalid	invalid	decode	LBox@0xa8	length patched	-
-jpx-embedded-len-a8-7.jpx	jpx	invalid	invalid	decode	LBox@0xa8	length patched	-
-jpx-embedded-len-b4-40.jpx	jpx	invalid	invalid	decode	Lxxx@0xb4	length patched	-
-jpx-embedded-len-b4-42.jpx	jpx	invalid	invalid	decode	Lxxx@0xb4	length patched	-
-jpx-embedded-len-b4-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xb4	length patched	-
-jpx-embedded-len-df-11.jpx	jpx	invalid	invalid	decode	Lxxx@0xdf	length patched	-
-jpx-embedded-len-df-13.jpx	jpx	invalid	invalid	decode	Lxxx@0xdf	length patched	-
-jpx-embedded-len-df-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xdf	length patched	-
-jpx-embedded-len-ed-3.jpx	jpx	invalid	invalid	decode	Lxxx@0xed	length patched	-
-jpx-embedded-len-ed-5.jpx	jpx	invalid	invalid	decode	Lxxx@0xed	length patched	-
-jpx-embedded-len-ed-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xed	length patched	-
-jpx-embedded-len-f7-20.jpx	jpx	invalid	invalid	decode	Psot@0xf7	length patched	-
-jpx-embedded-len-f7-22.jpx	jpx	invalid	invalid	decode	Psot@0xf7	length patched	-
-jpx-embedded-len-f7-13.jpx	jpx	invalid	invalid	decode	Psot@0xf7	length patched	-
-jpx-embedded-len-ff-3.jpx	jpx	invalid	invalid	decode	Lxxx@0xff	length patched	-
-jpx-embedded-len-ff-5.jpx	jpx	invalid	invalid	decode	Lxxx@0xff	length patched	-
-jpx-embedded-len-ff-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xff	length patched	-
-jpx-embedded-code-52-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x52	code FF70: undefined marker	-
-jpx-embedded-code-52-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x52	code FF90: SOT where a segment was	-
-jpx-embedded-code-7d-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x7d	code FF70: undefined marker	-
-jpx-embedded-code-7d-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x7d	code FF51: SIZ out of place	-
-jpx-embedded-code-7d-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x7d	code FF90: SOT where a segment was	-
-jpx-embedded-code-8b-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x8b	code FF70: undefined marker	-
-jpx-embedded-code-8b-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x8b	code FF51: SIZ out of place	-
-jpx-embedded-code-8b-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x8b	code FF90: SOT where a segment was	-
-jpx-embedded-code-9d-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x9d	code FF70: undefined marker	-
-jpx-embedded-code-9d-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x9d	code FF51: SIZ out of place	-
-jpx-embedded-code-9d-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x9d	code FF90: SOT where a segment was	-
-jpx-embedded-code-b2-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xb2	code FF70: undefined marker	-
-jpx-embedded-code-b2-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xb2	code FF90: SOT where a segment was	-
-jpx-embedded-code-dd-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xdd	code FF70: undefined marker	-
-jpx-embedded-code-dd-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xdd	code FF51: SIZ out of place	-
-jpx-embedded-code-dd-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xdd	code FF90: SOT where a segment was	-
-jpx-embedded-code-eb-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xeb	code FF70: undefined marker	-
-jpx-embedded-code-eb-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xeb	code FF51: SIZ out of place	-
-jpx-embedded-code-eb-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xeb	code FF90: SOT where a segment was	-
-jpx-embedded-code-fd-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF70: undefined marker	-
-jpx-embedded-code-fd-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF51: SIZ out of place	-
-jpx-embedded-code-fd-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xfd	code FF90: SOT where a segment was	-
+jpx-embedded-len-40-21.jpx	jpx	invalid	valid	decode	LBox@0x40	length patched	-
+jpx-embedded-len-40-23.jpx	jpx	invalid	valid	decode	LBox@0x40	length patched	-
+jpx-embedded-len-40-7.jpx	jpx	invalid	valid	decode	LBox@0x40	length patched	-
+jpx-embedded-len-56-14.jpx	jpx	invalid	valid	decode	LBox@0x56	length patched	-
+jpx-embedded-len-56-16.jpx	jpx	invalid	valid	decode	LBox@0x56	length patched	-
+jpx-embedded-len-56-7.jpx	jpx	invalid	valid	decode	LBox@0x56	length patched	-
+jpx-embedded-len-65-29.jpx	jpx	invalid	invalid	decode	LBox@0x65	length patched	-
+jpx-embedded-len-65-31.jpx	jpx	invalid	invalid	decode	LBox@0x65	length patched	-
+jpx-embedded-len-65-7.jpx	jpx	invalid	invalid	decode	LBox@0x65	length patched	-
+jpx-embedded-len-6d-21.jpx	jpx	invalid	invalid	decode	LBox@0x6d	length patched	-
+jpx-embedded-len-6d-23.jpx	jpx	invalid	invalid	decode	LBox@0x6d	length patched	-
+jpx-embedded-len-6d-7.jpx	jpx	invalid	invalid	decode	LBox@0x6d	length patched	-
+jpx-embedded-len-83-29.jpx	jpx	invalid	invalid	decode	LBox@0x83	length patched	-
+jpx-embedded-len-83-31.jpx	jpx	invalid	invalid	decode	LBox@0x83	length patched	-
+jpx-embedded-len-83-7.jpx	jpx	invalid	invalid	decode	LBox@0x83	length patched	-
+jpx-embedded-len-8b-21.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
+jpx-embedded-len-8b-23.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
+jpx-embedded-len-8b-7.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
+jpx-embedded-len-a1-95.jpx	jpx	invalid	invalid	decode	LBox@0xa1	length patched	-
+jpx-embedded-len-a1-97.jpx	jpx	invalid	invalid	decode	LBox@0xa1	length patched	-
+jpx-embedded-len-a1-7.jpx	jpx	invalid	invalid	decode	LBox@0xa1	length patched	-
+jpx-embedded-len-ad-40.jpx	jpx	invalid	invalid	decode	Lxxx@0xad	length patched	-
+jpx-embedded-len-ad-42.jpx	jpx	invalid	invalid	decode	Lxxx@0xad	length patched	-
+jpx-embedded-len-ad-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xad	length patched	-
+jpx-embedded-len-d8-11.jpx	jpx	invalid	invalid	decode	Lxxx@0xd8	length patched	-
+jpx-embedded-len-d8-13.jpx	jpx	invalid	invalid	decode	Lxxx@0xd8	length patched	-
+jpx-embedded-len-d8-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xd8	length patched	-
+jpx-embedded-len-e6-3.jpx	jpx	invalid	invalid	decode	Lxxx@0xe6	length patched	-
+jpx-embedded-len-e6-5.jpx	jpx	invalid	invalid	decode	Lxxx@0xe6	length patched	-
+jpx-embedded-len-e6-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xe6	length patched	-
+jpx-embedded-len-f0-20.jpx	jpx	invalid	invalid	decode	Psot@0xf0	length patched	-
+jpx-embedded-len-f0-22.jpx	jpx	invalid	invalid	decode	Psot@0xf0	length patched	-
+jpx-embedded-len-f0-13.jpx	jpx	invalid	invalid	decode	Psot@0xf0	length patched	-
+jpx-embedded-len-f8-3.jpx	jpx	invalid	invalid	decode	Lxxx@0xf8	length patched	-
+jpx-embedded-len-f8-5.jpx	jpx	invalid	invalid	decode	Lxxx@0xf8	length patched	-
+jpx-embedded-len-f8-1.jpx	jpx	invalid	invalid	decode	Lxxx@0xf8	length patched	-
+jpx-embedded-len-101-95.jpx	jpx	invalid	invalid	decode	LBox@0x101	length patched	-
+jpx-embedded-len-101-97.jpx	jpx	invalid	invalid	decode	LBox@0x101	length patched	-
+jpx-embedded-len-101-7.jpx	jpx	invalid	invalid	decode	LBox@0x101	length patched	-
+jpx-embedded-len-10d-40.jpx	jpx	invalid	invalid	decode	Lxxx@0x10d	length patched	-
+jpx-embedded-len-10d-42.jpx	jpx	invalid	invalid	decode	Lxxx@0x10d	length patched	-
+jpx-embedded-len-10d-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x10d	length patched	-
+jpx-embedded-len-138-11.jpx	jpx	invalid	invalid	decode	Lxxx@0x138	length patched	-
+jpx-embedded-len-138-13.jpx	jpx	invalid	invalid	decode	Lxxx@0x138	length patched	-
+jpx-embedded-len-138-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x138	length patched	-
+jpx-embedded-len-146-3.jpx	jpx	invalid	invalid	decode	Lxxx@0x146	length patched	-
+jpx-embedded-len-146-5.jpx	jpx	invalid	invalid	decode	Lxxx@0x146	length patched	-
+jpx-embedded-len-146-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x146	length patched	-
+jpx-embedded-len-150-20.jpx	jpx	invalid	invalid	decode	Psot@0x150	length patched	-
+jpx-embedded-len-150-22.jpx	jpx	invalid	invalid	decode	Psot@0x150	length patched	-
+jpx-embedded-len-150-13.jpx	jpx	invalid	invalid	decode	Psot@0x150	length patched	-
+jpx-embedded-len-158-3.jpx	jpx	invalid	invalid	decode	Lxxx@0x158	length patched	-
+jpx-embedded-len-158-5.jpx	jpx	invalid	invalid	decode	Lxxx@0x158	length patched	-
+jpx-embedded-len-158-1.jpx	jpx	invalid	invalid	decode	Lxxx@0x158	length patched	-
+jpx-embedded-code-ab-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xab	code FF70: undefined marker	-
+jpx-embedded-code-ab-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xab	code FF90: SOT where a segment was	-
+jpx-embedded-code-d6-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xd6	code FF70: undefined marker	-
+jpx-embedded-code-d6-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xd6	code FF51: SIZ out of place	-
+jpx-embedded-code-d6-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xd6	code FF90: SOT where a segment was	-
+jpx-embedded-code-e4-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xe4	code FF70: undefined marker	-
+jpx-embedded-code-e4-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xe4	code FF51: SIZ out of place	-
+jpx-embedded-code-e4-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xe4	code FF90: SOT where a segment was	-
+jpx-embedded-code-f6-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0xf6	code FF70: undefined marker	-
+jpx-embedded-code-f6-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0xf6	code FF51: SIZ out of place	-
+jpx-embedded-code-f6-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0xf6	code FF90: SOT where a segment was	-
+jpx-embedded-code-10b-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x10b	code FF70: undefined marker	-
+jpx-embedded-code-10b-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x10b	code FF90: SOT where a segment was	-
+jpx-embedded-code-136-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x136	code FF70: undefined marker	-
+jpx-embedded-code-136-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x136	code FF51: SIZ out of place	-
+jpx-embedded-code-136-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x136	code FF90: SOT where a segment was	-
+jpx-embedded-code-144-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x144	code FF70: undefined marker	-
+jpx-embedded-code-144-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x144	code FF51: SIZ out of place	-
+jpx-embedded-code-144-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x144	code FF90: SOT where a segment was	-
+jpx-embedded-code-156-65392.jpx	jpx	invalid	invalid	decode	Lxxx@0x156	code FF70: undefined marker	-
+jpx-embedded-code-156-65361.jpx	jpx	invalid	invalid	decode	Lxxx@0x156	code FF51: SIZ out of place	-
+jpx-embedded-code-156-65424.jpx	jpx	invalid	invalid	decode	Lxxx@0x156	code FF90: SOT where a segment was	-
 jpx-embedded-main-ppt.jpx	jpx	invalid	invalid	decode	main.marker-code	PPT, a tile-part header marker, in the main header	-
 jpx-embedded-main-sop.jpx	jpx	invalid	invalid	decode	main.marker-code	SOP, a packet marker, in the main header	-
 jpx-embedded-main-ff30-length.jpx	jpx	invalid	invalid	decode	main.marker-code	FF30 read with a length: FF30 to FF3F have no segment (A.1.3)	-
@@ -364,6 +431,17 @@ jpx-embedded-rule-plt.value-overflow-46.jpx	jpx	invalid	invalid	plt.value-overfl
 jpx-embedded-rule-main.packet-headers-moved-48.jpx	jpx	valid	invalid	decode	main.packet-headers-moved	PPM in the main header: profile invalid	-
 jpx-embedded-rule-sot.two-tiles-49.jpx	jpx	valid	invalid	decode	sot.two-tiles	two tiles, TPsot 0 and TNsot 1 in each: standard valid, profile invalid	-
 jpx-embedded-rule-siz.mct-components-50.jpx	jpx	invalid	invalid	siz.mct-components	siz.mct-components	MCT in a tile-part COD with one component	-
+jpx-embedded-header-jpx.header-defaults-50.jpx	jpx	valid	valid	-	jpx.header-defaults	jp2h ihdr and colr as the default for both codestreams, empty jpch: valid	-
+jpx-embedded-header-jpch.palette-51.jpx	jpx	valid	valid	-	jpch.palette	pclr and cmap in a jpch: valid	-
+jpx-embedded-header-jpx.no-jp2h-52.jpx	jpx	valid	valid	-	jpx.no-jp2h	no jp2h, an ihdr in each jpch (T.801: jp2h optional)	-
+jpx-embedded-header-jplh.res-53.jpx	jpx	valid	valid	-	jplh.res	jplh with res: valid	-
+jpx-embedded-header-jpch.ihdr-54.jpx	jpx	invalid	valid	jpch.ihdr	jpch.ihdr	no jp2h, first jpch empty (T.801 M.11.6)	-
+jpx-embedded-header-jp2h.position-55.jpx	jpx	invalid	valid	jp2h.position	jp2h.position	jp2h after the codestreams (T.801 M.11.5)	-
+jpx-embedded-header-header.one-ihdr-56.jpx	jpx	invalid	valid	header.one-ihdr	header.one-ihdr	two ihdr in a jpch	-
+jpx-embedded-header-ihdr.width-57.jpx	jpx	invalid	valid	ihdr.width	ihdr.width	jpch ihdr WIDTH = Xsiz - XOsiz + 1	-
+jpx-embedded-header-header.pclr-cmap-58.jpx	jpx	invalid	valid	header.pclr-cmap	header.pclr-cmap	pclr in a jpch without cmap	-
+jpx-embedded-header-colr.one-method-59.jpx	jpx	invalid	valid	colr.one-method	colr.one-method	two enumerated colr in jp2h (T.801 M.11.7.1)	-
+jpx-embedded-header-cdef.pairs-60.jpx	jpx	invalid	valid	cdef.pairs	cdef.pairs	jplh cdef with two descriptions Typ 0, Asoc 1	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-
@@ -383,31 +461,48 @@ jpx-linked-len-c-7.jpx	jpx	invalid	invalid	decode	LBox@0xc	length patched	-
 jpx-linked-len-20-26.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
 jpx-linked-len-20-28.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
 jpx-linked-len-20-7.jpx	jpx	invalid	invalid	decode	LBox@0x20	length patched	-
+jpx-linked-len-3b-44.jpx	jpx	invalid	invalid	decode	LBox@0x3b	length patched	-
+jpx-linked-len-3b-46.jpx	jpx	invalid	invalid	decode	LBox@0x3b	length patched	-
 jpx-linked-len-3b-7.jpx	jpx	invalid	invalid	decode	LBox@0x3b	length patched	-
-jpx-linked-len-3b-9.jpx	jpx	invalid	invalid	decode	LBox@0x3b	length patched	-
-jpx-linked-len-43-7.jpx	jpx	invalid	invalid	decode	LBox@0x43	length patched	-
-jpx-linked-len-43-9.jpx	jpx	invalid	invalid	decode	LBox@0x43	length patched	-
-jpx-linked-len-4b-31.jpx	jpx	invalid	invalid	decode	LBox@0x4b	length patched	-
-jpx-linked-len-4b-33.jpx	jpx	invalid	invalid	decode	LBox@0x4b	length patched	-
-jpx-linked-len-4b-7.jpx	jpx	invalid	invalid	decode	LBox@0x4b	length patched	-
-jpx-linked-len-53-23.jpx	jpx	invalid	invalid	decode	LBox@0x53	length patched	-
-jpx-linked-len-53-25.jpx	jpx	invalid	invalid	decode	LBox@0x53	length patched	-
-jpx-linked-len-53-7.jpx	jpx	invalid	invalid	decode	LBox@0x53	length patched	-
-jpx-linked-len-6b-31.jpx	jpx	invalid	invalid	decode	LBox@0x6b	length patched	-
-jpx-linked-len-6b-33.jpx	jpx	invalid	invalid	decode	LBox@0x6b	length patched	-
-jpx-linked-len-6b-7.jpx	jpx	invalid	invalid	decode	LBox@0x6b	length patched	-
-jpx-linked-len-73-23.jpx	jpx	invalid	invalid	decode	LBox@0x73	length patched	-
-jpx-linked-len-73-25.jpx	jpx	invalid	invalid	decode	LBox@0x73	length patched	-
-jpx-linked-len-73-7.jpx	jpx	invalid	invalid	decode	LBox@0x73	length patched	-
-jpx-linked-len-8b-95.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
-jpx-linked-len-8b-97.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
-jpx-linked-len-8b-7.jpx	jpx	invalid	invalid	decode	LBox@0x8b	length patched	-
-jpx-linked-len-95-42.jpx	jpx	invalid	invalid	decode	LBox@0x95	length patched	-
-jpx-linked-len-95-44.jpx	jpx	invalid	invalid	decode	LBox@0x95	length patched	-
-jpx-linked-len-95-7.jpx	jpx	invalid	invalid	decode	LBox@0x95	length patched	-
-jpx-linked-len-c0-42.jpx	jpx	invalid	invalid	decode	LBox@0xc0	length patched	-
-jpx-linked-len-c0-44.jpx	jpx	invalid	invalid	decode	LBox@0xc0	length patched	-
-jpx-linked-len-c0-7.jpx	jpx	invalid	invalid	decode	LBox@0xc0	length patched	-
+jpx-linked-len-43-21.jpx	jpx	invalid	valid	decode	LBox@0x43	length patched	-
+jpx-linked-len-43-23.jpx	jpx	invalid	valid	decode	LBox@0x43	length patched	-
+jpx-linked-len-43-7.jpx	jpx	invalid	valid	decode	LBox@0x43	length patched	-
+jpx-linked-len-59-14.jpx	jpx	invalid	valid	decode	LBox@0x59	length patched	-
+jpx-linked-len-59-16.jpx	jpx	invalid	valid	decode	LBox@0x59	length patched	-
+jpx-linked-len-59-7.jpx	jpx	invalid	valid	decode	LBox@0x59	length patched	-
+jpx-linked-len-68-29.jpx	jpx	invalid	invalid	decode	LBox@0x68	length patched	-
+jpx-linked-len-68-31.jpx	jpx	invalid	invalid	decode	LBox@0x68	length patched	-
+jpx-linked-len-68-7.jpx	jpx	invalid	invalid	decode	LBox@0x68	length patched	-
+jpx-linked-len-70-21.jpx	jpx	invalid	invalid	decode	LBox@0x70	length patched	-
+jpx-linked-len-70-23.jpx	jpx	invalid	invalid	decode	LBox@0x70	length patched	-
+jpx-linked-len-70-7.jpx	jpx	invalid	invalid	decode	LBox@0x70	length patched	-
+jpx-linked-len-86-29.jpx	jpx	invalid	invalid	decode	LBox@0x86	length patched	-
+jpx-linked-len-86-31.jpx	jpx	invalid	invalid	decode	LBox@0x86	length patched	-
+jpx-linked-len-86-7.jpx	jpx	invalid	invalid	decode	LBox@0x86	length patched	-
+jpx-linked-len-8e-21.jpx	jpx	invalid	invalid	decode	LBox@0x8e	length patched	-
+jpx-linked-len-8e-23.jpx	jpx	invalid	invalid	decode	LBox@0x8e	length patched	-
+jpx-linked-len-8e-7.jpx	jpx	invalid	invalid	decode	LBox@0x8e	length patched	-
+jpx-linked-len-a4-31.jpx	jpx	invalid	invalid	decode	LBox@0xa4	length patched	-
+jpx-linked-len-a4-33.jpx	jpx	invalid	invalid	decode	LBox@0xa4	length patched	-
+jpx-linked-len-a4-7.jpx	jpx	invalid	invalid	decode	LBox@0xa4	length patched	-
+jpx-linked-len-ac-23.jpx	jpx	invalid	invalid	decode	LBox@0xac	length patched	-
+jpx-linked-len-ac-25.jpx	jpx	invalid	invalid	decode	LBox@0xac	length patched	-
+jpx-linked-len-ac-7.jpx	jpx	invalid	invalid	decode	LBox@0xac	length patched	-
+jpx-linked-len-c4-31.jpx	jpx	invalid	invalid	decode	LBox@0xc4	length patched	-
+jpx-linked-len-c4-33.jpx	jpx	invalid	invalid	decode	LBox@0xc4	length patched	-
+jpx-linked-len-c4-7.jpx	jpx	invalid	invalid	decode	LBox@0xc4	length patched	-
+jpx-linked-len-cc-23.jpx	jpx	invalid	invalid	decode	LBox@0xcc	length patched	-
+jpx-linked-len-cc-25.jpx	jpx	invalid	invalid	decode	LBox@0xcc	length patched	-
+jpx-linked-len-cc-7.jpx	jpx	invalid	invalid	decode	LBox@0xcc	length patched	-
+jpx-linked-len-e4-95.jpx	jpx	invalid	invalid	decode	LBox@0xe4	length patched	-
+jpx-linked-len-e4-97.jpx	jpx	invalid	invalid	decode	LBox@0xe4	length patched	-
+jpx-linked-len-e4-7.jpx	jpx	invalid	invalid	decode	LBox@0xe4	length patched	-
+jpx-linked-len-ee-42.jpx	jpx	invalid	invalid	decode	LBox@0xee	length patched	-
+jpx-linked-len-ee-44.jpx	jpx	invalid	invalid	decode	LBox@0xee	length patched	-
+jpx-linked-len-ee-7.jpx	jpx	invalid	invalid	decode	LBox@0xee	length patched	-
+jpx-linked-len-119-42.jpx	jpx	invalid	invalid	decode	LBox@0x119	length patched	-
+jpx-linked-len-119-44.jpx	jpx	invalid	invalid	decode	LBox@0x119	length patched	-
+jpx-linked-len-119-7.jpx	jpx	invalid	invalid	decode	LBox@0x119	length patched	-
 jpx-linked-rule-jpx.reader-requirements-0.jpx	jpx	invalid	valid	jpx.reader-requirements	jpx.reader-requirements	no rreq box: standard invalid, profile accepted	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-file.unknown-box-1.jpx	jpx	valid	valid	-	file.unknown-box	unknown top-level box: valid and skipped	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2
 jpx-linked-rule-flst.dr-external-2.jpx	jpx	valid	invalid	flst.dr-external	flst.dr-external	DR = 0 (this file): profile invalid	jpx-linked-frame1.jp2,jpx-linked-frame2.jp2

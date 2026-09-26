@@ -650,18 +650,34 @@ static void test_headers(void) {
  * The served profile: what hv_transcode_file accepts
  * ------------------------------------------------------------------------ */
 
+static uint32_t get32(const uint8_t *p) { return (uint32_t)get16(p) << 16 | get16(p + 2); }
+
 /* A minimal JP2 file around a codestream: signature, file type with this
- * brand and compatibility entry, codestream box. */
+ * brand and compatibility entry, a JP2 Header box as SIZ describes the
+ * image (ihdr; colr greyscale or sRGB; its components share one depth),
+ * codestream box. */
 static bytes jp2_file(const bytes *cs, const char *brand) {
-    uint8_t h[40] = {0, 0, 0, 12, 'j', 'P', ' ', ' ', 0x0D, 0x0A, 0x87, 0x0A,
+    uint8_t h[32] = {0, 0, 0, 12, 'j', 'P', ' ', ' ', 0x0D, 0x0A, 0x87, 0x0A,
                      0, 0, 0, 20, 'f', 't', 'y', 'p'};
+    uint8_t jp2h[45] = {0, 0, 0, 45, 'j', 'p', '2', 'h', 0, 0, 0, 22, 'i', 'h', 'd', 'r'};
+    const uint8_t *siz = cs->data + 4;          /* Lsiz */
+    unsigned nc = get16(siz + 36);
     bytes b = {NULL, 0};
     memcpy(h + 20, brand, 4);
     memset(h + 24, 0, 4);
     memcpy(h + 28, brand, 4);
-    put32(h + 32, (uint32_t)(8 + cs->size));
-    memcpy(h + 36, "jp2c", 4);
+    put32(jp2h + 16, get32(siz + 8) - get32(siz + 16));     /* Ysiz - YOsiz */
+    put32(jp2h + 20, get32(siz + 4) - get32(siz + 12));     /* Xsiz - XOsiz */
+    put16(jp2h + 24, nc);
+    jp2h[26] = siz[38];                                     /* Ssiz of component 0 */
+    jp2h[27] = 7;
+    memcpy(jp2h + 30, "\0\0\0\x0F" "colr" "\x01\0\0", 11);   /* METH 1, PREC, APPROX */
+    put32(jp2h + 41, nc == 1 ? 17 : 16);                    /* greyscale or sRGB */
     append(&b, h, sizeof h);
+    append(&b, jp2h, sizeof jp2h);
+    put32(h, (uint32_t)(8 + cs->size));
+    memcpy(h + 4, "jp2c", 4);
+    append(&b, h, 8);
     append(&b, cs->data, cs->size);
     return b;
 }
@@ -778,8 +794,8 @@ static void test_boxes(void) {
     /* A last superbox with LBox = 0 whose last child has LBox = 0 too. */
     static const uint8_t to_end[] = {0, 0, 0, 0, 'a', 's', 'o', 'c',
                                      0, 0, 0, 0, 'l', 'b', 'l', ' ', 'x'};
-    static const uint8_t bad_child[] = {0, 0, 0, 17, 'j', 'p', '2', 'h',
-                                        0, 0, 0, 7, 'i', 'h', 'd', 'r', 'x'};
+    static const uint8_t bad_child[] = {0, 0, 0, 17, 'u', 'i', 'n', 'f',
+                                        0, 0, 0, 7, 'u', 'l', 's', 't', 'x'};
     static const uint8_t bad_xml[] = {0, 0, 0, 11, 'x', 'm', 'l', ' ', '<', 'a', '>'};
     bytes file, cs = fixture_codestream("input", "solo_fsi174_127x129_RLCP_PLT.jp2", &file);
     bytes f = jp2_file(&cs, "jp2 "), g;
@@ -808,7 +824,7 @@ static void test_boxes(void) {
 
     g = bytes_copy(f.data, f.size);
     append(&g, bad_child, sizeof bad_child);
-    expect_file_error("jp2h child with LBox 7", &g, "invalid or truncated box header at ");
+    expect_file_error("uinf child with LBox 7", &g, "invalid or truncated box header at ");
     bytes_free(&g);
 
     g = bytes_copy(f.data, f.size);

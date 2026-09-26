@@ -1,8 +1,9 @@
 /* hv_rules.h: the cross-field rules of the model on marker segment bodies
- * and tile-parts (listed at the end of ../spec/j2k-headers.asn1 and
- * ../spec/j2k-codestream.asn1). They are written once, here, and used both
- * by the reader (hv_reader.c) and by the model's harness
- * (../spec/harness/crossfield_impl.h), which labels the corpus in
+ * and tile-parts, JPX boxes and JP2 header boxes (listed at the end of
+ * ../spec/j2k-headers.asn1, ../spec/j2k-codestream.asn1 and
+ * ../spec/jp2-boxes.asn1). They are written once, here, and used both by
+ * the reader (hv_reader.c) and by the model's harness
+ * (../spec/harness/crossfield_impl.h, crossfield.c), which labels the corpus in
  * ../tests/vectors/j2k. With HV_PROFILE the reader applies every JP2 rule
  * the profile labels come from; its T.800 mode leaves some out (see
  * README.md, "What the reader checks").
@@ -17,6 +18,7 @@
 #include <stdint.h>
 
 #include "j2k-headers.h"
+#include "jp2-boxes.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -115,6 +117,98 @@ typedef struct {
  * profile, at least one jpch, embedded or linked codestreams but not both,
  * and a dtbl where they are linked. */
 const char *hv_rule_jpx(const hv_jpx_boxes *boxes, int profile);
+
+/* ------------------------------------------------------------------------
+ * JP2 header boxes, T.800 I.5.3 and T.801 M.11.5 to M.11.7 (listed at the
+ * end of ../spec/jp2-boxes.asn1). Standard layer only: the server reads
+ * none of them.
+ * ------------------------------------------------------------------------ */
+
+enum {
+    HV_BOX_JP2H = 0x6A703268, HV_BOX_JPLH = 0x6A706C68, HV_BOX_IHDR = 0x69686472,
+    HV_BOX_BPCC = 0x62706363, HV_BOX_COLR = 0x636F6C72, HV_BOX_PCLR = 0x70636C72,
+    HV_BOX_CMAP = 0x636D6170, HV_BOX_CDEF = 0x63646566, HV_BOX_RES = 0x72657320,
+    HV_BOX_RESC = 0x72657363, HV_BOX_RESD = 0x72657364
+};
+
+/* Where the JP2 Header box is, among the top-level boxes: how many there
+ * are, whether one follows the first codestream (a jp2c box in a JP2 file;
+ * a jp2c, ftbl, jpch or jplh box in a JPX file, T.801 M.11.5), and, in a
+ * JP2 file, how many jp2c boxes there are. JP2 (T.800 I.2, I.5.3, I.5.4):
+ * one or more codestreams, exactly one jp2h, before the first codestream. */
+const char *hv_rule_jp2h_place(int jp2h, int late, int jp2c, int jpx);
+
+/* The contents of one header box: a JP2 Header box (jp2h), or in a JPX
+ * file a Codestream Header box (jpch) or Compositing Layer Header box
+ * (jplh). Start with hv_header_init, then pass each child box in order to
+ * hv_rule_header_child and its contents to the rule for its type; for a
+ * Resolution box, pass its children to hv_rule_res_child and end it with
+ * hv_rule_res_end. The first box of each type is recorded (the rules
+ * require at most one of each but colr). About 16 KiB. */
+typedef struct {
+    uint32_t parent;            /* HV_BOX_JP2H, HV_BOX_JPCH or HV_BOX_JPLH */
+    int jpx;                    /* in a JPX file */
+    int children;
+    int ihdr, bpcc, colr, pclr, cmap, cdef, res;   /* boxes of each type */
+    int colr_ended;             /* a box followed a colr box */
+    int meth1, meth2;           /* colr boxes with METH 1, METH 2 */
+    Ihdr image;                 /* the first ihdr */
+    uint32_t bpcc_count;        /* entries of the first bpcc */
+    uint8_t bpcc_depth[16384];  /* its first 16 384 entries */
+    uint32_t npc;               /* palette columns of the first pclr */
+    uint32_t cmap_count;        /* entries of the first cmap */
+    uint32_t cmap_cmp;          /* its largest CMP */
+    int cmap_palette;           /* it has an entry with MTYP 1 */
+    uint32_t cmap_pcol;         /* the largest PCOL of those entries */
+    uint32_t cdef_cn;           /* the largest Cn of the first cdef */
+    int resc, resd;             /* children of the current res box */
+} hv_header;
+
+void hv_header_init(hv_header *h, uint32_t parent, int jpx);
+
+/* The next child box: the box order and counts. jp2h starts with ihdr and
+ * holds its colr boxes contiguously (T.800 I.5.3); a header box holds at
+ * most one ihdr, bpcc, pclr, cmap, cdef and res. */
+const char *hv_rule_header_child(hv_header *h, uint32_t type);
+
+/* The contents of each child type. Each checks what the box alone
+ * determines and records what hv_rule_codestream_header needs. The decoded
+ * values must satisfy their types' constraints (Ihdr_IsConstraintValid and
+ * so on). */
+const char *hv_rule_ihdr(hv_header *h, const Ihdr *ihdr);
+/* One bpcc entry, in order. */
+const char *hv_rule_bpcc_entry(hv_header *h, uint64_t depth);
+/* METH, EnumCS, and `rest`, the bytes after them. In a JP2 file, METH 1 or
+ * 2, and the first colr, if enumerated, sRGB, greyscale or sYCC (I.5.3.3);
+ * in a JPX file, no two enumerated or two ICC colr in jp2h (M.11.7.1). */
+const char *hv_rule_colr(hv_header *h, const ColrHeader *colr, size_t rest);
+/* NE and the column depths, and `entries`, the bytes of the table: NE x
+ * NPC values, each padded to whole bytes. */
+const char *hv_rule_pclr(hv_header *h, const PclrHeader *pclr, uint64_t entries);
+/* One cmap entry, in order: PCOL 0 when MTYP is 0. */
+const char *hv_rule_cmap_entry(hv_header *h, const CmapEntry *entry);
+/* The n cdef entries: no two with the same Typ and Asoc, except where
+ * either is 65 535 (unspecified; I.5.3.6). */
+const char *hv_rule_cdef(hv_header *h, const CdefEntry *entries, size_t n);
+/* A child of a res box, then its end: resc, resd or both, each once. */
+const char *hv_rule_res_child(hv_header *h, uint32_t type);
+const char *hv_rule_res_end(hv_header *h);
+
+/* The header of one codestream: its own header box h (NULL for none) over
+ * the JP2 Header box's defaults (NULL for none), and SIZ, the codestream's
+ * (NULL when the codestream is not at hand: its checks are skipped).
+ *   JP2 (T.800 I.5.3), h the jp2h and no defaults: at least one colr; bpcc
+ *     exactly when BPC is 255; pclr exactly with cmap.
+ *   JPX (T.801 M.11.6), h the jpch and defaults the jp2h: an ihdr in
+ *     either; bpcc when BPC is 255; pclr needs cmap, and an MTYP 1 cmap
+ *     entry needs pclr.
+ *   Both: bpcc has NC entries; cmap maps components below NC and palette
+ *     columns below NPC; cdef describes channels there are (JP2); and
+ *     against SIZ, HEIGHT = Ysiz - YOsiz, WIDTH = Xsiz - XOsiz, NC = Csiz,
+ *     BPC the components' common Ssiz or 255 when they differ, and each
+ *     bpcc entry the component's Ssiz. */
+const char *hv_rule_codestream_header(const hv_header *h, const hv_header *defaults,
+                                      const Siz *siz);
 
 #ifdef __cplusplus
 }

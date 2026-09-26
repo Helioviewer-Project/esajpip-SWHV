@@ -34,7 +34,8 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
 /* Transcodes the JP2 file in buf[0, size) for the JPIP server and appends
  * the result to out. The input must be one the output can serve: it must
  * pass the served profile's file rules (hv_check_jp2: no JPX, no raw
- * codestream) and main-header rules (HV_PROFILE_HEADERS). What else the
+ * codestream) and main-header rules (HV_PROFILE_HEADERS), and have the
+ * header boxes T.800 requires (hv_check_jp2h), which it keeps. What else the
  * profile asks for is written here: the tile-parts, and a COD without SOP.
  * The output passes HV_PROFILE and is at most INT_MAX bytes. The boxes are
  * kept in order: the codestream box is transcoded, every other box is

@@ -5,6 +5,11 @@
  * hv_check_jpx, then every codestream with HV_PROFILE, embedded or in the
  * linked files (hv_check_link).
  *
+ * The header box checks (hv_check_jp2h, hv_check_jpx_headers) are of the
+ * standard layer: they accept every standard-valid vector, and reject each
+ * vector the manifest labels standard-invalid by a header rule, with that
+ * rule's name.
+ *
  *   test_profile <vector directory> */
 #include <limits.h>
 #include <stdio.h>
@@ -95,11 +100,45 @@ static uint8_t *vector(const char *dir, const char *name, size_t *size) {
     return buf;
 }
 
+/* The rules of hv_check_jp2h and hv_check_jpx_headers, by name. */
+static int header_rule(const char *name) {
+    static const char *const prefixes[] = {
+        "jp2.one-jp2h", "jp2.codestream", "jp2h.", "jpch.ihdr", "header.", "ihdr.", "bpcc.",
+        "colr.", "pclr.", "cmap.", "cdef.", "res."};
+    size_t i;
+    for (i = 0; i < sizeof prefixes / sizeof *prefixes; i++)
+        if (strncmp(name, prefixes[i], strlen(prefixes[i])) == 0)
+            return 1;
+    return 0;
+}
+
+/* The header boxes of one vector against its standard label. */
+static int check_headers(const char *name, const char *kind, const uint8_t *buf, size_t size,
+                         const char *standard, const char *reason, const char *field) {
+    char detail[8192];
+    size_t at;
+    const char *error = strcmp(kind, "jpx") == 0 ? hv_check_jpx_headers(buf, size, &at)
+                                                 : hv_check_jp2h(buf, size, &at);
+    snprintf(detail, sizeof detail, "%s: reader %s, manifest %s (%s)", name,
+             error ? error : "valid", standard, reason);
+    if (strcmp(standard, "valid") == 0) {
+        check(error == NULL, "header boxes", detail);
+    } else if (header_rule(reason)) {
+        check(error != NULL && strcmp(error, reason) == 0, "header rule", detail);
+        return 1;
+    } else if (strcmp(reason, "decode") == 0 && strstr(name, "-header-") != NULL &&
+               header_rule(field)) {
+        check(error != NULL, "header box contents", detail);
+        return 1;
+    }
+    return 0;
+}
+
 /* The corpus: every row of the manifest. */
 static void check_corpus(const char *dir) {
     char path[4096], line[8192];
     FILE *manifest;
-    int jp2 = 0, jpx = 0, valid = 0;
+    int jp2 = 0, jpx = 0, valid = 0, header_invalid = 0;
 
     snprintf(path, sizeof path, "%s/manifest.tsv", dir);
     if ((manifest = fopen(path, "r")) == NULL) {
@@ -110,19 +149,19 @@ static void check_corpus(const char *dir) {
           strncmp(line, "file\tkind\tstandard\tprofile\treason\t", 34) == 0,
           "manifest header", NULL);
     while (fgets(line, sizeof line, manifest) != NULL) {
-        char *field[5], *p = line, detail[8192];
+        char *field[6], *p = line, detail[8192];
         const char *error;
         uint8_t *buf;
         size_t size;
         int i, expected;
 
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < 6; i++) {
             field[i] = p;
             if ((p = strchr(p, '\t')) == NULL)
                 break;
             *p++ = 0;
         }
-        if (i < 5) {
+        if (i < 6) {
             check(0, "manifest row", line);
             continue;
         }
@@ -140,12 +179,15 @@ static void check_corpus(const char *dir) {
         snprintf(detail, sizeof detail, "%s: reader %s, manifest %s (%s)", field[0],
                  error ? error : "valid", field[3], field[4]);
         check((error == NULL) == expected, "profile label", detail);
+        header_invalid += check_headers(field[0], field[1], buf, size, field[2], field[4], field[5]);
         valid += expected;
         free(buf);
     }
     fclose(manifest);
-    printf("%d JP2 and %d JPX vectors, %d profile-valid\n", jp2, jpx, valid);
-    check(jp2 > 0 && jpx > 0 && valid > 0, "corpus has JP2 and JPX vectors, some valid", NULL);
+    printf("%d JP2 and %d JPX vectors, %d profile-valid, %d invalid by header rules\n", jp2, jpx,
+           valid, header_invalid);
+    check(jp2 > 0 && jpx > 0 && valid > 0 && header_invalid > 0,
+          "corpus has JP2 and JPX vectors, some valid, some with invalid headers", NULL);
 }
 
 /* HV_PROFILE_HEADERS: the main header only. */

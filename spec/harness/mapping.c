@@ -50,6 +50,17 @@ asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
     }
 }
 
+/* Inside a Resolution box: its two child types, every other type `other`. */
+asn1SccUint MAPPING_DECODE_NAME(resboxtype)(asn1SccUint type) {
+    switch (type) {
+        case 1919251299u: /* resc */
+        case 1919251300u: /* resd */
+            return type;
+        default:
+            return 1633837924u; /* abcd: `other` choice determinant */
+    }
+}
+
 /* A .jp2 at the profile layer: ReadJP2 reads only these; every other box,
  * superboxes included, is opaque `other`. */
 asn1SccUint MAPPING_DECODE_NAME(jp2boxtype)(asn1SccUint type) {

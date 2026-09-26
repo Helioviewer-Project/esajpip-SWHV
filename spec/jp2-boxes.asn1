@@ -1,8 +1,8 @@
 -- jp2-boxes.asn1
 --
 -- JP2 / JPX file structure (ITU-T T.800 Annex I, T.801 Annex M): the box
--- tree, with the boxes esajpip interprets modelled in full and everything
--- else opaque. Together with j2k-codestream.asn1 this makes a generated
+-- tree, with the boxes esajpip interprets and the JP2 header boxes (T.800
+-- I.5.3) modelled in full, and everything else opaque. Together with j2k-codestream.asn1 this makes a generated
 -- vector a complete .jp2 or .jpx file.
 --
 -- Design (encodings in jp2-boxes.acn):
@@ -14,8 +14,11 @@
 --     deduced-size specification was written for.
 --   * asn1scc forbids recursive types, so nesting is two levels: TopBox
 --     (may be a superbox) contains InnerBox (never a superbox). This covers
---     jpch/ftbl/dtbl and one level of asoc children in the standard model.
---     The server preserves asoc contents without interpreting them.
+--     jp2h/jpch/jplh/ftbl/dtbl and one level of asoc children in the
+--     standard model. The server preserves asoc contents without
+--     interpreting them. The one third level modelled is the Resolution box
+--     (res, in jp2h or jplh), whose children are a type of their own
+--     (ResBox). A Colour Group box (cgrp, in jplh) is opaque.
 --   * jp2c carries a full Codestream (CONTAINING), so a JP2 vector exercises
 --     the codestream framing and the marker bodies in one file.
 --
@@ -29,7 +32,11 @@
 --     codestreams inside a Multiple Codestream box, are outside the model;
 --     every jpch, jp2c and ftbl here is top level, as the server requires.
 --   * Reader Requirements contents are opaque because the server ignores
---     them. The standard layer checks the box's required count and position;
+--     them.
+--   * ICC profiles (colr METH 2) are opaque; so are the reserved fields of
+--     colr boxes with other METH values, and the Palette box's entries,
+--     whose length is a cross-field rule. The IPR, XML and UUID boxes in
+--     jp2h are opaque as elsewhere. The standard layer checks the box's required count and position;
 --     the harness writes accurate contents for its base JPX files.
 --
 -- Cross-field rules are at the end (harness/crossfield_impl.h and
@@ -48,13 +55,14 @@ IMPORTS Codestream, Codestream-Profile FROM J2K-Codestream;
 -- Box types as the big-endian value of the four-character code.
 -- Superboxes and interpreted boxes:
 --   jpch 0x6A706368  ftbl 0x6674626C  dtbl 0x6474626C  asoc 0x61736F63
---   jp2c 0x6A703263  flst 0x666C7374  url  0x75726C20
+--   jp2c 0x6A703263  flst 0x666C7374  url  0x75726C20  jp2h 0x6A703268
+--   jplh 0x6A706C68  ftyp 0x66747970
+--   ihdr 0x69686472  bpcc 0x62706363  colr 0x636F6C72  pclr 0x70636C72
+--   cmap 0x636D6170  cdef 0x63646566  res  0x72657320  resc 0x72657363
+--   resd 0x72657364
 -- Opaque, permitted anywhere their level allows:
---   jP   0x6A502020  ftyp 0x66747970  jp2h 0x6A703268  jplh 0x6A706C68
---   rreq 0x72726571  uuid 0x75756964  xml  0x786D6C20  nlst 0x6E6C7374
---   lbl  0x6C626C20  uinf 0x75696E66  ihdr 0x69686472  colr 0x636F6C72
---   free 0x66726565  bpcc 0x62706363  res  0x72657320  pclr 0x70636C72
---   cmap 0x636D6170  cdef 0x63646566
+--   jP   0x6A502020  rreq 0x72726571  uuid 0x75756964  xml  0x786D6C20
+--   nlst 0x6E6C7374  lbl  0x6C626C20  uinf 0x75696E66  free 0x66726565
 
 -- T.800 I.8 and T.801 M.12 require readers to skip box types they do not
 -- understand, so both layers admit every four-cc and decode unlisted types
@@ -132,16 +140,129 @@ InnerPayload ::= CHOICE {
     xml         OCTET STRING (CONTAINING OpaqueBox),
     nlst        OCTET STRING (CONTAINING OpaqueBox),
     lbl         OCTET STRING (CONTAINING OpaqueBox),
-    ihdr        OCTET STRING (CONTAINING OpaqueBox),
-    colr        OCTET STRING (CONTAINING OpaqueBox),
+    ihdr        OCTET STRING (CONTAINING Ihdr),
+    colr        OCTET STRING (CONTAINING Colr),
     free        OCTET STRING (CONTAINING OpaqueBox),
-    bpcc        OCTET STRING (CONTAINING OpaqueBox),
-    res         OCTET STRING (CONTAINING OpaqueBox),
-    pclr        OCTET STRING (CONTAINING OpaqueBox),
-    cmap        OCTET STRING (CONTAINING OpaqueBox),
-    cdef        OCTET STRING (CONTAINING OpaqueBox),
+    bpcc        OCTET STRING (CONTAINING Bpcc),
+    res         OCTET STRING (CONTAINING Res),
+    pclr        OCTET STRING (CONTAINING Pclr),
+    cmap        OCTET STRING (CONTAINING Cmap),
+    cdef        OCTET STRING (CONTAINING Cdef),
     jp2c        OCTET STRING (CONTAINING OpaqueBox),
     other       OCTET STRING (CONTAINING OpaqueBox)
+}
+
+-- ---------------------------------------------------------------------------
+-- JP2 header boxes, T.800 I.5.3 (in JPX: T.801 M.11.5 to M.11.7, in jp2h,
+-- jpch and jplh). Field values are T.800's; where T.801 admits more (C,
+-- METH, EnumCS), the JPX files modelled here carry JPEG 2000 codestreams
+-- only, and the other values are rules of the file kind (listed at the end).
+-- ---------------------------------------------------------------------------
+
+-- Image Header box, I.5.3.1: 14 bytes.
+Ihdr ::= SEQUENCE {
+    height      INTEGER (1..4294967295),   -- Ysiz - YOsiz
+    width       INTEGER (1..4294967295),   -- Xsiz - XOsiz
+    nc          INTEGER (1..16384),        -- Csiz
+    bpc         INTEGER (0..37 | 128..165 | 255),   -- common Ssiz, or 255: see bpcc
+    c           INTEGER (7),               -- JPEG 2000 (T.801 Table M.19: 7)
+    unkc        INTEGER (0..1),
+    ipr         INTEGER (0..1)
+}
+
+-- A component or palette column's bit depth, Tables I.11 and I.13: the
+-- depth minus one in the low 7 bits (1 to 38 bits), the sign in the high
+-- bit. Ssiz without its reserved values.
+BitDepth ::= INTEGER (0..37 | 128..165)
+
+-- Bits Per Component box, I.5.3.2: one BitDepth per component, filling
+-- the box; the count is NC.
+Bpcc ::= SEQUENCE {
+    depths      SEQUENCE (SIZE (1..16)) OF BitDepth     -- corpus bound; the standard's is 16 384
+}
+
+-- Colour Specification box, I.5.3.3: METH, PREC, APPROX, then EnumCS when
+-- METH is 1; the rest of the box is the ICC profile when METH is 2, fields
+-- T.800 reserves for other values, and nothing when METH is 1 (a rule).
+-- PREC and APPROX bind writers only (T.800: readers ignore them; T.801
+-- M.11.7.2: APPROX 1 to 4 in JPX), as ftyp's MinV, so neither layer
+-- constrains them.
+ColrHeader ::= SEQUENCE {
+    meth        INTEGER (0..255),          -- 1 enumerated, 2 restricted ICC; others: rules
+    prec        INTEGER (-128..127),
+    approx      INTEGER (0..255),
+    enumcs      INTEGER (0..4294967295) OPTIONAL   -- present iff meth = 1
+}
+
+Colr ::= SEQUENCE {
+    header      ColrHeader,
+    rest        OCTET STRING (SIZE (0..4096))    -- fills the box (corpus bound)
+}
+
+-- Palette box, I.5.3.4: NE, NPC (the count of depths), a BitDepth per
+-- column, then NE x NPC entries, each padded to whole bytes (a rule).
+PclrHeader ::= SEQUENCE {
+    ne          INTEGER (1..1024),
+    depths      SEQUENCE (SIZE (1..255)) OF BitDepth
+}
+
+Pclr ::= SEQUENCE {
+    header      PclrHeader,
+    entries     OCTET STRING (SIZE (0..4096))    -- fills the box (corpus bound)
+}
+
+-- Component Mapping box, I.5.3.5: one entry per channel, filling the box.
+CmapEntry ::= SEQUENCE {
+    cmp         INTEGER (0..16384),        -- component index
+    mtyp        INTEGER (0..1),            -- 0 direct, 1 through the palette
+    pcol        INTEGER (0..255)           -- palette column; 0 when mtyp = 0 (a rule)
+}
+
+Cmap ::= SEQUENCE {
+    entries     SEQUENCE (SIZE (1..16)) OF CmapEntry    -- corpus bound
+}
+
+-- Channel Definition box, I.5.3.6: N (the count of entries), then N
+-- descriptions.
+CdefCount ::= INTEGER (1..65535)
+
+CdefEntry ::= SEQUENCE {
+    cn          INTEGER (0..65535),        -- channel index
+    typ         INTEGER (0..2 | 65535),    -- colour, opacity, premultiplied opacity, unspecified
+    asoc        INTEGER (0..65535)         -- 0 whole image, colour index, 65535 none
+}
+
+Cdef ::= SEQUENCE {
+    entries     SEQUENCE (SIZE (1..16)) OF CdefEntry    -- corpus bound; the standard's is 65 535
+}
+
+-- Resolution box, I.5.3.7: a superbox holding resc and/or resd, each once
+-- (a rule). Unknown boxes are skipped (I.8).
+Res ::= SEQUENCE {
+    children    SEQUENCE (SIZE (1..4)) OF ResBox        -- fill the box (corpus bound)
+}
+
+ResBoxType ::= INTEGER (0..4294967295)
+
+ResBox ::= SEQUENCE {
+    payload     ResPayload
+}
+
+ResPayload ::= CHOICE {
+    resc        OCTET STRING (CONTAINING Resolution),
+    resd        OCTET STRING (CONTAINING Resolution),
+    other       OCTET STRING (CONTAINING OpaqueBox)
+}
+
+-- Capture and Default Display Resolution boxes, I.5.3.7.1 and I.5.3.7.2:
+-- grid points per metre, (VN / VD) * 10^VE and (HN / HD) * 10^HE.
+Resolution ::= SEQUENCE {
+    vn          INTEGER (1..65535),
+    vd          INTEGER (1..65535),
+    hn          INTEGER (1..65535),
+    hd          INTEGER (1..65535),
+    ve          INTEGER (-128..127),
+    he          INTEGER (-128..127)
 }
 
 -- T.801 Annex M, Fragment List box: NF fragments of (OFF u64, LEN u32, DR u16).
@@ -203,7 +324,7 @@ TopBox-Profile ::= SEQUENCE {
 }
 
 TopPayload-Profile ::= CHOICE {
-    jpch        OCTET STRING (CONTAINING Superbox),
+    jpch        OCTET STRING (CONTAINING Superbox-Profile),
     ftbl        OCTET STRING (CONTAINING Superbox-Profile),
     dtbl        OCTET STRING (CONTAINING DataReferences-Profile),
     asoc        OCTET STRING (CONTAINING OpaqueBox),
@@ -304,6 +425,51 @@ END
 --   Every CONTAINING region is exactly filled: automatic (size deduced /
 --     null-terminated loc followed by nothing — the harness checks that the
 --     url box ends right after the terminator).
+--
+-- Header boxes, standard layer only (hv_rules.c; the reader's
+-- hv_check_jp2h and hv_check_jpx_headers). The server reads none of them:
+-- Jp2Payload-Profile and TopPayload-Profile keep jp2h and jplh opaque, and
+-- jpch's children are InnerBox-Profile, whose header boxes are opaque.
+--   JP2 file (T.800 I.2, I.5.3, I.5.4): one or more jp2c
+--     (jp2.codestream); exactly one jp2h (jp2.one-jp2h), before the first
+--     jp2c (jp2h.position).
+--   JPX file (T.801 M.11.5): jp2h optional, before the first jp2c, ftbl,
+--     jpch or jplh (jp2h.position).
+--   jp2h starts with ihdr (jp2h.ihdr-first) and holds its colr boxes
+--     contiguously (jp2h.colr-contiguous). A header box holds at most one
+--     bpcc, pclr, cmap, cdef and res (header.one-<box>); a jpch at most one
+--     ihdr (header.one-ihdr; elsewhere a second ihdr is ignored, I.5.3.1).
+--   colr: nothing after EnumCS when METH is 1 (colr.enumcs-length). JP2:
+--     METH 1 or 2 (colr.method), and EnumCS 16, 17 or 18 in the first colr
+--     (colr.enumcs). JPX: no two enumerated and no two ICC colr in jp2h
+--     (colr.one-method, M.11.7.1).
+--   pclr: NE x NPC entries, each of its column's depth padded to whole
+--     bytes (pclr.entries-length).
+--   cmap: PCOL 0 when MTYP is 0 (cmap.pcol-zero).
+--   cdef: no two descriptions with the same Typ and Asoc, except where
+--     either is 65535 (cdef.pairs).
+--   res: resc, resd or both, each at most once (res.resc-resd).
+--   The header of each codestream: in a JP2 file jp2h; in a JPX file
+--     codestream k's jpch over jp2h's defaults (M.11.6), or jp2h alone when
+--     there is no jpch.
+--     JP2: at least one colr (jp2h.colr); bpcc exactly when BPC is 255
+--       (ihdr.bpcc); pclr exactly with cmap (header.pclr-cmap).
+--     JPX: an ihdr in jpch or jp2h (jpch.ihdr); bpcc when BPC is 255
+--       (ihdr.bpcc); pclr needs cmap and an MTYP 1 entry needs pclr
+--       (header.pclr-cmap).
+--     Both: bpcc has NC entries (bpcc.count); cmap components below NC
+--       (cmap.component) and palette columns below NPC
+--       (cmap.palette-column); JP2: cdef channels below the channel count,
+--       cmap's or NC (cdef.channel).
+--     Against the codestream's SIZ (T.800 I.5.3.1, I.5.3.2), where the
+--       codestream is in the file: HEIGHT = Ysiz - YOsiz (ihdr.height),
+--       WIDTH = Xsiz - XOsiz (ihdr.width), NC = Csiz (ihdr.nc), BPC the
+--       components' common Ssiz or 255 when they differ (ihdr.bpc), each
+--       bpcc entry the component's Ssiz (bpcc.depth).
+--   Not checked: that cdef is absent when the channels are the colours in
+--     order and that it describes every colour (I.5.3.6); a colour group
+--     in JPX (M.11.7.1: cgrp is opaque), opct against cdef, and the header
+--     of a linked codestream against the linked file's SIZ.
 --
 -- Profile only (ReadJP2 / ReadJPX):
 --   Jp2File-Profile: exactly one jp2c among the top-level boxes.

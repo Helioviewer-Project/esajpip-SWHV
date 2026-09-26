@@ -28,6 +28,8 @@ void Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_16(BitStream* pBitStrm, as
 void Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_32(BitStream* pBitStrm, asn1SccUint intVal);
 void Acn_Enc_Int_PositiveInteger_ConstSize_big_endian_64(BitStream* pBitStrm, asn1SccUint intVal);
 
+void Acn_Enc_Int_TwosComplement_ConstSize(BitStream* pBitStrm, asn1SccSint intVal, int encodedSizeInBits);
+void Acn_Enc_Int_TwosComplement_ConstSize_8(BitStream* pBitStrm, asn1SccSint intVal);
 
 
 
@@ -40,6 +42,8 @@ flag Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_16(BitStream* pBitStrm, as
 flag Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_32(BitStream* pBitStrm, asn1SccUint* pIntVal);
 flag Acn_Dec_Int_PositiveInteger_ConstSize_big_endian_64(BitStream* pBitStrm, asn1SccUint* pIntVal);
 
+flag Acn_Dec_Int_TwosComplement_ConstSize(BitStream* pBitStrm, asn1SccSint* pIntVal, int encodedSizeInBits);
+flag Acn_Dec_Int_TwosComplement_ConstSize_8(BitStream* pBitStrm, asn1SccSint* pIntVal);
 
 /*encoding ends when 'F' is reached*/
 
@@ -258,6 +262,7 @@ static inline flag Acn_PatchDet_##name(asn1SccUint v, BitStream* bs,            
 }
 
 /* Signed (two's complement) integer encoding classes */
+DEFINE_ACN_DET_ENCODERS_SIGNED(I8,      Acn_Enc_Int_TwosComplement_ConstSize_8, 8)
 
 /* Boolean determinant: 1-bit default encoding (writes 0 or 1 as a single bit) */
 static inline void Acn_Enc_Bool_1bit(BitStream* bs, asn1SccUint v) {
@@ -339,6 +344,7 @@ static inline flag Acn_PatchDet_##name(asn1SccUint v, BitStream* bs, int nBits, 
 }
 
 DEFINE_ACN_DET_ENCODERS_CONSTSIZE(ConstSize, Acn_Enc_Int_PositiveInteger_ConstSize)
+DEFINE_ACN_DET_ENCODERS_SIGNED_CONSTSIZE(TwosComplement_ConstSize, Acn_Enc_Int_TwosComplement_ConstSize)
 
 /* IA5String determinant: fixed-size ASCII string (7 bits per character).
  * Defined in asn1crt_encoding_acn.c (not inline) to avoid header pruning

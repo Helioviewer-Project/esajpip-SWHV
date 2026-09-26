@@ -95,7 +95,19 @@ or  00010000
     xxx1????
 */
 
+void BitStream_AppendBitOne(BitStream* pBitStrm)
+{
+	pBitStrm->buf[pBitStrm->currentByte] |= masks[pBitStrm->currentBit];
 
+	if (pBitStrm->currentBit<7)
+		pBitStrm->currentBit++;
+	else {
+		pBitStrm->currentBit = 0;
+		pBitStrm->currentByte++;
+		bitstream_push_data_if_required(pBitStrm);
+	}
+	assert(pBitStrm->currentByte * 8 + pBitStrm->currentBit <= pBitStrm->count * 8);
+}
 
 /*
 	Append bit zero.
@@ -131,7 +143,18 @@ void BitStream_AppendNBitZero(BitStream* pBitStrm, int nbits)
 	}
 }
 
+void BitStream_AppendNBitOne(BitStream* pBitStrm, int nbits)
+{
+	int i;
 
+	while (nbits >= 8) {
+		BitStream_AppendByte(pBitStrm, 0xFF, FALSE);
+		nbits -= 8;
+	}
+	for (i = 0; i<nbits; i++)
+		BitStream_AppendBitOne(pBitStrm);
+
+}
 
 void BitStream_AppendBits(BitStream* pBitStrm, const byte* srcBuffer, int nbits)
 {
@@ -186,7 +209,13 @@ flag BitStream_ReadBit(BitStream* pBitStrm, flag* v)
 	return pBitStrm->currentByte * 8 + pBitStrm->currentBit <= pBitStrm->count * 8;
 }
 
-
+flag BitStream_PeekBit(BitStream* pBitStrm) {
+	/* This legacy API returns the bit value, not a success flag. */
+	if (pBitStrm->currentByte < 0 || pBitStrm->currentByte >= pBitStrm->count ||
+		pBitStrm->currentBit < 0 || pBitStrm->currentBit > 7)
+		return FALSE;
+	return pBitStrm->buf[pBitStrm->currentByte] & masks[pBitStrm->currentBit];
+}
 
 
 /*
@@ -626,7 +655,28 @@ flag BitStream_DecodeNonNegativeInteger(BitStream* pBitStrm, asn1SccUint* v, int
 }
 
 
+void BitStream_EncodeNonNegativeIntegerNeg(BitStream* pBitStrm, asn1SccUint v, flag negate)
+{
+#if WORD_SIZE==8
+	if (v<0x100000000LL)
+		BitStream_EncodeNonNegativeInteger32Neg(pBitStrm, (asn1SccUint32)v, negate);
+	else {
+		int nBits;
+		asn1SccUint32 hi = (asn1SccUint32)(v >> 32);
+		asn1SccUint32 lo = (asn1SccUint32)v;
+		BitStream_EncodeNonNegativeInteger32Neg(pBitStrm, hi, negate);
 
+		/*bug !!!!*/
+		if (negate)
+			lo = ~lo;
+		nBits = GetNumberOfBitsForNonNegativeInteger(lo);
+		BitStream_AppendNBitZero(pBitStrm, 32 - nBits);
+		BitStream_EncodeNonNegativeInteger32Neg(pBitStrm, lo, 0);
+	}
+#else
+	BitStream_EncodeNonNegativeInteger32Neg(pBitStrm, v, negate);
+#endif
+}
 
 int GetNumberOfBitsForNonNegativeInteger32(asn1SccUint32 v)
 {

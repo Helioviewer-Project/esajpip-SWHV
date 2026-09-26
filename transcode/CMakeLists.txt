@@ -10,8 +10,9 @@ if(ESAJPIP_TOOL_TESTS)
     add_subdirectory(test)
 endif()
 
-# fuzz_transcode: a libFuzzer target (Clang only).
-option(ESAJPIP_FUZZ "Build the libFuzzer target fuzz_transcode" OFF)
+# fuzz_transcode: a libFuzzer target (Clang only); fuzz_merge is in
+# ../merge/CMakeLists.txt.
+option(ESAJPIP_FUZZ "Build the libFuzzer targets fuzz_transcode and fuzz_merge" OFF)
 if(ESAJPIP_FUZZ)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR "ESAJPIP_FUZZ requires Clang")
