@@ -72,8 +72,10 @@ flag CodSegment_Std_body_Containing_ACN_Encode(const Cod* pVal, BitStream* pBitS
             AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
             asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
             ret = Acn_PatchDet_U16_BE((asn1SccUint)lxxx_encode(acn_nCount), pBitStrm, CodSegment_Std_body_length, pErrCode);
-            *pErrCode = ERR_ACN_ENCODE_CODSEGMENT_STD_BODY_2;
-            if (!ret) return FALSE;
+            if (!ret) {
+                *pErrCode = ERR_ACN_ENCODE_CODSEGMENT_STD_BODY_2; /*COVERAGE_IGNORE*/
+                return FALSE; /*COVERAGE_IGNORE*/
+            }
         }
     }
 
@@ -215,8 +217,10 @@ flag QcdSegment_Std_body_Containing_ACN_Encode(const Qcd_Std* pVal, BitStream* p
             AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
             asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
             ret = Acn_PatchDet_U16_BE((asn1SccUint)lxxx_encode(acn_nCount), pBitStrm, QcdSegment_Std_body_length, pErrCode);
-            *pErrCode = ERR_ACN_ENCODE_QCDSEGMENT_STD_BODY_2;
-            if (!ret) return FALSE;
+            if (!ret) {
+                *pErrCode = ERR_ACN_ENCODE_QCDSEGMENT_STD_BODY_2; /*COVERAGE_IGNORE*/
+                return FALSE; /*COVERAGE_IGNORE*/
+            }
         }
     }
 
@@ -970,8 +974,10 @@ flag RreqHeader_fuam_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* 
 
     ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
     ret = Acn_PatchDet_U8((asn1SccUint)pVal->nCount, pBitStrm, RreqHeader_fuam_ml, pErrCode);
-    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-    if (!ret) return FALSE;
+    if (!ret) {
+        *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+        return FALSE; /*COVERAGE_IGNORE*/
+    }
 
 
     return ret;
@@ -992,8 +998,10 @@ flag RreqHeader_dcm_ACN_Encode(const RreqMask* pVal, BitStream* pBitStrm, int* p
 
     ret = BitStream_EncodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
     ret = Acn_PatchDet_U8((asn1SccUint)pVal->nCount, pBitStrm, RreqHeader_dcm_ml, pErrCode);
-    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-    if (!ret) return FALSE;
+    if (!ret) {
+        *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+        return FALSE; /*COVERAGE_IGNORE*/
+    }
 
 
     return ret;

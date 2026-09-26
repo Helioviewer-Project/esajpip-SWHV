@@ -110,6 +110,7 @@ DEFINE_ENCODE(Component, "SIZ segment")
 DEFINE_ENCODE(CodSegment_Std, "COD segment")
 DEFINE_ENCODE(QcdSegment_Std, "QCD segment")
 DEFINE_ENCODE(Zplt, "PLT segment")
+DEFINE_ENCODE(Iplt, "PLT segment")
 DEFINE_ENCODE(Rcom, "COM segment")
 DEFINE_ENCODE(FragmentCount, "Fragment List box contents")
 DEFINE_ENCODE(Fragment, "Fragment List box contents")
@@ -162,6 +163,7 @@ DEFINE_APPEND(Component)
 DEFINE_APPEND(CodSegment_Std)
 DEFINE_APPEND(QcdSegment_Std)
 DEFINE_APPEND(Zplt)
+DEFINE_APPEND(Iplt)
 DEFINE_APPEND(Rcom)
 DEFINE_APPEND(FragmentCount)
 DEFINE_APPEND(Fragment)
@@ -254,32 +256,6 @@ int hv_write_com(hv_out *out, Rcom rcom, const uint8_t *text, size_t size) {
     return end_segment(out, start);
 }
 
-/* Appends one Iplt entry. The generated Iplt_ACN_Encode, encoding an
- * entry of 2 to 8 bytes, patches the `more` determinants of the absent
- * bytes (b(n) to b8, present-when b(n-1).more ...) at the start of the
- * stream, where it never placed them: it writes a 0 bit over bit 7 of the
- * first byte, b0's `more`. Inside a whole PLT segment that bit was Lplt's,
- * which the encoder set afterwards; an entry encoded on its own loses it.
- * So the entry is encoded after a guard byte that takes those writes, and
- * the bytes after it are appended. (asn1scc 4.9.3.0 with the patches of
- * ../spec/asn1scc-patches.) */
-static int append_iplt(const Iplt *entry, hv_out *out) {
-    uint8_t buf[1 + HV_LARGEST(Iplt)];
-    BitStream s;
-    int err = 0;
-    size_t written;
-
-    if (out->error != NULL)
-        return -1;
-    memset(buf, 0, sizeof buf);
-    BitStream_AttachBuffer(&s, buf, (long)sizeof buf);
-    BitStream_AppendNBitZero(&s, 8);                    /* the guard byte */
-    if (!Iplt_ACN_Encode(entry, &s, &err, TRUE))
-        return out_fail(out, "invalid PLT segment");
-    written = (size_t)BitStream_GetLength(&s) - 1;
-    return hv_write_bytes(out, buf + 1, written);
-}
-
 /* One Iplt entry: 7-bit groups, most significant first. */
 static void set_iplt(Iplt *p, uint64_t value) {
     IpltByte *more[9] = {&p->b0, &p->b1, &p->b2, &p->b3, &p->b4,
@@ -331,7 +307,7 @@ int hv_write_plt(hv_out *out, const uint64_t *lengths, size_t count) {
         }
         set_iplt(&entry, lengths[i]);
         before = out->size;
-        if (append_iplt(&entry, out) != 0)
+        if (APPEND(Iplt, &entry, out) != 0)
             return -1;
         /* Lplt, which counts itself, Zplt and the entries, is at most
          * 65,535: an entry that does not fit starts the next segment. */

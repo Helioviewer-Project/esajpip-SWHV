@@ -62,6 +62,15 @@ Applied now, in `series` order:
   model. Test case `25-ACNV2-BOUNDARIES/020` checks both rejection and an
   accepted value. Report and reproducer:
   [`../asn1scc-issues/0006-containing-subtype-constraints/`](../asn1scc-issues/0006-containing-subtype-constraints/).
+- `0007-deferred-patch-epilogue.patch`: with `--acn-v2`, an absent OPTIONAL
+  producer was patched at the zero-initialized bitstream position, corrupting
+  the first byte. The generator now patches only encoded producers and rejects
+  a present direct consumer whose producer is absent. Deferred
+  C/Rust patch templates now set the error code only on failure, backporting
+  [upstream commit d6fc8618](https://github.com/esa/asn1scc/commit/d6fc8618).
+  Test case `25-ACNV2-BOUNDARIES/021` checks exact wire bytes, successful
+  error codes, and the inconsistent-presence failure. Report and reproducer:
+  [`../asn1scc-issues/0007-deferred-patch-epilogue/`](../asn1scc-issues/0007-deferred-patch-epilogue/).
 
 ## Reference: the former fixes for deferred ACN
 

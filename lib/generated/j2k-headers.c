@@ -1974,32 +1974,98 @@ flag Iplt_ACN_Encode(const Iplt* pVal, BitStream* pBitStrm, int* pErrCode, flag 
 	                                        }
 	                                        if (ret) {
 	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b1 == 1), pBitStrm, &Iplt_b0_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b2 == 1), pBitStrm, &Iplt_b1_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b3 == 1), pBitStrm, &Iplt_b2_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b4 == 1), pBitStrm, &Iplt_b3_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b5 == 1), pBitStrm, &Iplt_b4_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b6 == 1), pBitStrm, &Iplt_b5_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b7 == 1), pBitStrm, &Iplt_b6_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b8 == 1), pBitStrm, &Iplt_b7_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
-	                                            ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b9 == 1), pBitStrm, &Iplt_b8_more, pErrCode);
-	                                            *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH;
-	                                            if (!ret) return FALSE;
+	                                            if (!ret) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (!pVal->exist.b1 && pVal->exist.b2) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b1) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b2 == 1), pBitStrm, &Iplt_b1_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b2 && pVal->exist.b3) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b2) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b3 == 1), pBitStrm, &Iplt_b2_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b3 && pVal->exist.b4) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b3) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b4 == 1), pBitStrm, &Iplt_b3_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b4 && pVal->exist.b5) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b4) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b5 == 1), pBitStrm, &Iplt_b4_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b5 && pVal->exist.b6) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b5) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b6 == 1), pBitStrm, &Iplt_b5_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b6 && pVal->exist.b7) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b6) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b7 == 1), pBitStrm, &Iplt_b6_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b7 && pVal->exist.b8) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b7) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b8 == 1), pBitStrm, &Iplt_b7_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
+	                                            if (!pVal->exist.b8 && pVal->exist.b9) {
+	                                                *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                return FALSE; /*COVERAGE_IGNORE*/
+	                                            }
+	                                            if (pVal->exist.b8) {
+	                                                ret = Acn_PatchDet_BOOL1((asn1SccUint)(pVal->exist.b9 == 1), pBitStrm, &Iplt_b8_more, pErrCode);
+	                                                if (!ret) {
+	                                                    *pErrCode = ERR_ACN_DET_CONSISTENCY_MISMATCH; /*COVERAGE_IGNORE*/
+	                                                    return FALSE; /*COVERAGE_IGNORE*/
+	                                                }
+	                                            }
 	                                        }   /*COVERAGE_IGNORE*/
 	                                    }   /*COVERAGE_IGNORE*/
 	                                }   /*COVERAGE_IGNORE*/
