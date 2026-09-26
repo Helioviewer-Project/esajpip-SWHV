@@ -3,8 +3,8 @@
  * Usage:  vectors <output-directory>
  *
  * Produces complete .jp2 / .jpx files plus manifest.tsv. Every vector is
- * labelled at both layers by decoding it with the generated decoders, running
- * the generated constraint checkers, and applying crossfield.c. Labels are
+ * labelled at both layers by decoding it with the generated decoders, which
+ * also check the ASN.1 constraints, and applying crossfield.c. Labels are
  * evaluated mechanically; the model, rules and mutant expectations are
  * human-authored and checked against the cited standards.
  *
@@ -15,12 +15,15 @@
  *      and the codestream extent inside a jp2c. Independent of the model.
  *   3. Base builders: canonical profile-valid JP2, embedded JPX, linked JPX.
  *   4. Labelling and emission.
- *   5. Mutation catalogues: field, rule, length, region.
+ *   5. Mutation catalogues: field, rule, header box, and byte-level
+ *      (signature, length, code, insertion, rreq).
+ *   Driver: the bases and their mutants, unknown box types, associations,
+ *      and the linked-JPX reference graphs.
  *
- * Build (see spec/README.md):
- *   GEN=$(ls /tmp/j2k-gen/[a-z]*.c | grep -v -e mainprogram -e test_case -e auto_tcs)
- *   cc -O1 -g -fsanitize=address,undefined -I/tmp/j2k-gen \
- *      vectors.c crossfield.c mapping.c $GEN -o vectors
+ * Build: spec/check-model.sh compiles this file with crossfield.c,
+ * mapping.c, ../../lib/hv_rules.c (with lib/ on the include path) and the
+ * generated C of the four modules and the asn1scc runtime, then runs it;
+ * its command is the reference.
  */
 #include <errno.h>
 #include <stdint.h>
@@ -327,10 +330,11 @@ static void add_signature_and_ftyp(Jp2Family *f, const char *brand) {
     b->payload.kind = TopPayload_ftyp_PRESENT;
     ftyp = &b->payload.u.ftyp;
     FIXED_OCTETS(ftyp->brand, brand, 4);
-    /* MinV: T.800 I.5.2 requires 0 in a JP2 file, T.801 M.8 requires 1 in a
-     * JPX file. Readers shall parse the file whatever the value, and esajpip
-     * ignores it, so neither layer constrains it; the base vectors carry the
-     * conforming value so that a valid vector is valid to a strict reader. */
+    /* MinV: T.800 I.5.2 requires 0 in a JP2 file, T.801 Annex M requires 1
+     * in a JPX file. Readers shall parse the file whatever the value, and
+     * esajpip ignores it, so neither layer constrains it; the base vectors
+     * carry the conforming value so that a valid vector is valid to a strict
+     * reader. */
     ftyp->minor = memcmp(brand, "jpx ", 4) == 0 ? 1 : 0;
     ftyp->compat.nCount = 1;
     FIXED_OCTETS(ftyp->compat.arr[0], brand, 4);
@@ -980,7 +984,7 @@ static void rule_iplt_five_bytes(Jp2Family *f, int box) {
     e->b1.bits = 0; e->exist.b2 = 1;
     e->b2.bits = 0; e->exist.b3 = 1;
     e->b3.bits = 0; e->exist.b4 = 1;
-    e->b4.bits = 1;                                        /* 5 bytes: profile max, valid */
+    e->b4.bits = 1;                                        /* 5 bytes: valid */
 }
 static void rule_iplt_six_bytes(Jp2Family *f, int box) {
     Iplt *e = &tp_of(f, box)->rest.headers.arr[0].plt.body.entries.arr[0];
@@ -1821,7 +1825,7 @@ static const RuleMutant header_mutants[] = {
 };
 
 /* ------------------------------------------------------------------------ */
-/* 5c. Length and region mutants (byte level)                                */
+/* 5c. Byte-level mutants: signature, length, code, insertion, rreq          */
 /* ------------------------------------------------------------------------ */
 
 /* Signature box contents corrupted (LBox/TBox intact): the only invalid

@@ -1,8 +1,9 @@
 /* mapping.c — see mapping.h. The length decode mappings are not
- * clamped: a wire value below the offset (e.g. Lcod = 1) maps to a negative
- * payload length, which the generated decoder then rejects as an invalid
- * size determinant. That is the behaviour the corpus wants for
- * invalid-length vectors. */
+ * clamped. mapping.h declares them with asn1SccSint, but the generated code
+ * declares and calls every mapping function with asn1SccUint (the same
+ * width), so a wire value below the offset (e.g. Lcod = 1) reaches the
+ * generated decoder as a huge payload length, which it then rejects. That
+ * is the behaviour the corpus wants for invalid-length vectors. */
 #include "mapping.h"
 
 asn1SccSint MAPPING_ENCODE_NAME(lxxx)(asn1SccSint n) { return n + 2; }
@@ -16,10 +17,11 @@ asn1SccSint MAPPING_DECODE_NAME(lbox)(asn1SccSint n) { return n - 8; }
 
 /* Normalize types unknown to both box grammars for the opaque `other` branch.
  * Preserve all recognized types, at both levels: a type the CHOICE at its
- * level has no alternative for (a jpch inside a jpch, an ihdr at the top
- * level) then fails to decode, which is how the model rejects its
- * placement (box.nested-superbox in hv_rule_child). The original wire type
- * is irrelevant to this validity-only model. */
+ * level has no alternative for (a jpch or an asoc inside a superbox, an
+ * ihdr at the top level) then fails to decode, which is how the model
+ * rejects its placement: the corpus reason is `decode`, and
+ * box.nested-superbox (hv_rule_child) never fires in the harness. The
+ * original wire type is irrelevant to this validity-only model. */
 asn1SccUint MAPPING_DECODE_NAME(boxtype)(asn1SccUint type) {
     switch (type) {
         case 1634955107u: /* asoc */

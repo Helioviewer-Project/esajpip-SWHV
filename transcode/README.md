@@ -27,13 +27,13 @@ written to a temporary file next to it with the input's permissions
 (without the setuid, setgid and sticky bits) and renamed into place, so
 input and output may be the same file; an output that is a symbolic link is
 written where the link points. On error nothing is written. Superboxes
-nested more than `HV_BOX_DEPTH_MAX` (32) deep are refused. Exit status: 0, 1 on error, 2 on
-usage errors.
+nested more than `HV_BOX_DEPTH_MAX` (32) deep are refused. Exit status: 0,
+1 on error, 2 on usage errors.
 
 ## Supported input
 
 The output is for the JPIP server, so the input must be a JP2 file within
-the server's profile (`../JPIP_PROFILE.md`) except for its tile-parts,
+the served profile (`../JPIP_PROFILE.md`) except for its tile-parts,
 which are rewritten. The reader checks this with the rules shared with the
 model (`../lib/`): the file rules of `hv_check_jp2` (signature, file type
 with the `jp2 ` brand and compatibility entry, exactly one `jp2c`, at most
@@ -69,9 +69,11 @@ Three bounds keep memory in check where a header can declare much more
 than its data holds: at most 65,536 component-resolutions (components
 times resolutions, 360 bytes of layout each, checked before allocating),
 at most 250,000 code-blocks (under 100 bytes of state each) and at most
-2,000,000 packets in the output (about 20 bytes each, plus at least a byte
-of output). The input's packets need no bound of their own: each takes at
-least a byte of its tile's data.
+2,000,000 packets in the output (20 bytes each, plus at least a byte of
+output, and 64 bytes per precinct: 40 to put the packets in order, 24 to
+index its tag trees). The input's packets need no bound of their own: each
+takes at least a byte of its tile's data. Each contribution of a
+code-block to a layer that they signal takes 32 bytes.
 
 Packet headers are read as T.800 requires, where hvJP2K is lenient: an
 SOP marker segment must have Lsop = 4 and Nsop equal to the packet's index
@@ -111,7 +113,9 @@ declarations), so the two can differ for XML that lxml would rewrite.
 
 ## Build and test
 
-With the rest of the repository:
+With the rest of the repository, so configuring needs the server's
+dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
+llhttp and libuv before it adds `lib/`, `transcode/` and `merge/`.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
@@ -133,9 +137,10 @@ lib/test/run.sh             # or: lib/test/run.sh sanitize
 TRANSCODE_ARCHIVE=~/AIA:~/EUI lib/test/run.sh
 ```
 
-The build goes to `build/tool-tests-<mode>`, or to
-`ESAJPIP_TEST_BUILD_DIR`, which `../tests/run.sh` also reads: set it for
-one runner at a time.
+CTest options go after the mode, which must then be given
+(`lib/test/run.sh [normal|sanitize] [CTest options]`). The build goes to
+`build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
+`../tests/run.sh` also reads: set it for one runner at a time.
 
 `test_transcode` checks that every file in `test/fixtures/input/`
 transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
@@ -143,12 +148,12 @@ transcodes, with `-x`, to its Kakadu reference in `test/fixtures/kakadu/`
 to itself (the origin-129 file is rejected, and only its codestream is
 compared); what the profile accepts and rejects; the boxes around the
 codestream (LBox = 0 on a superbox and its child, a malformed child, `-x`
-on malformed XML); tile-parts split
-every way T.800 allows and broken in the ways it does not; malformed main
-headers; 2,000 corrupted tiles, each rejected or giving a stable output;
-the SOP, EPH and bit-stuffing rules; and the memory bounds. `cli_test.sh`
-checks the command: options, exit status, in-place replacement keeping the
-mode, and nothing written or left behind on failure. With
+on malformed XML); tile-parts split every way T.800 allows and broken in
+the ways it does not; malformed main headers; 2,000 corrupted tiles, each
+rejected or giving a stable output; the SOP, EPH and bit-stuffing rules;
+and the memory bounds. `cli_test.sh` checks the command: options, exit
+status, in-place replacement keeping the mode, and nothing written or left
+behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
 in `test/fixtures/FIXTURES.md`. The same run includes the reader's tests

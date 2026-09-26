@@ -5,10 +5,10 @@
  * and a url in a final dtbl), and the first XML box, associated with the
  * codestream (asoc, nlst). A port of hvJP2K's jpx_merge.
  *
- * Every input must be a JP2 file the server serves (hv_check_jp2 and
- * HV_PROFILE) with the header boxes T.800 requires (hv_check_jp2h), so the
- * output is a JPX file the server serves (hv_check_jpx) with valid header
- * boxes (hv_check_jpx_headers), at most INT_MAX bytes. */
+ * Every input must be a JP2 file within the served profile (hv_check_jp2
+ * and HV_PROFILE) with the header boxes T.800 requires (hv_check_jp2h), so
+ * the output is a JPX file within the served profile (hv_check_jpx) with
+ * valid header boxes (hv_check_jpx_headers), at most INT_MAX bytes. */
 #ifndef HV_MERGE_H
 #define HV_MERGE_H
 
@@ -25,9 +25,10 @@ typedef struct {
 /* The inputs, opened when needed: open fills *in for input i, whose path
  * stays valid until hv_merge_files returns and whose bytes stay valid until
  * close; 0, or -1 with a message in error. hv_merge_files opens the first
- * input once and keeps it open. It opens every later input twice, checking
- * the size and parsed structure again before writing from the second open.
- * At most two inputs are open at a time. */
+ * input once, checks it and keeps it open. It opens every later input
+ * twice and checks it both times: in the first pass, and in the second,
+ * where its size and parsed structure must be as in the first before the
+ * output is written from it. At most two inputs are open at a time. */
 typedef struct {
     int (*open)(void *context, size_t i, hv_merge_input *in, char *error, size_t error_size);
     void (*close)(void *context, size_t i, hv_merge_input *in);

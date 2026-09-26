@@ -14,11 +14,14 @@
 --     deduced-size specification was written for.
 --   * asn1scc forbids recursive types, so nesting is two levels: TopBox
 --     (may be a superbox) contains InnerBox (never a superbox). This covers
---     jp2h/jpch/jplh/ftbl/dtbl and one level of asoc children in the
---     standard model. The server preserves asoc contents without
---     interpreting them. The one third level modelled is the Resolution box
---     (res, in jp2h or jplh), whose children are a type of their own
---     (ResBox). A Colour Group box (cgrp, in jplh) is opaque.
+--     the children of jp2h/jpch/jplh/ftbl/dtbl/uinf and of a top-level
+--     asoc in the standard model. InnerPayload has no asoc, jpch, ftbl or
+--     dtbl alternative and harness/mapping.c keeps those types, so a
+--     nested asoc, like a nested jpch, ftbl or dtbl, fails to decode. The
+--     server preserves asoc contents without interpreting them. The one
+--     third level modelled is the Resolution box (res, in jp2h or jplh),
+--     whose children are a type of their own (ResBox). A Colour Group box
+--     (cgrp, in jplh) is opaque.
 --   * jp2c carries a full Codestream (CONTAINING), so a JP2 vector exercises
 --     the codestream framing and the marker bodies in one file.
 --
@@ -102,7 +105,7 @@ TopPayload ::= CHOICE {
     other       OCTET STRING (CONTAINING OpaqueBox)
 }
 
--- T.800 I.5.2 / T.801 M.11, File Type box: brand, minor version, then a
+-- T.800 I.5.2 / T.801 Annex M, File Type box: brand, minor version, then a
 -- compatibility list filling the box (so the box is >= 12 bytes and a
 -- multiple of 4 by construction). Which brand is required and that the
 -- list contains it depend on the file extension: cross-field rules.
@@ -439,7 +442,7 @@ END
 -- only the signature and ftyp rules, as Jp2Payload-Profile keeps every
 -- other box opaque):
 --   T.800 I.4: the first box is jP with payload 0D0A870A, the second is ftyp.
---   T.800 I.5.2 / T.801 M.8: the ftyp brand is 'jp2 ' for a .jp2 and
+--   T.800 I.5.2 / T.801 Annex M: the ftyp brand is 'jp2 ' for a .jp2 and
 --     'jpx ' for a .jpx, and the compatibility list contains that brand. The
 --     standard states this per format -- a conforming JP2 file carries 'jp2 '
 --     in a CLi field, a conforming JPX file carries 'jpx ' -- which for the
@@ -461,16 +464,23 @@ END
 --     header information from jp2h and is unconstrained here.
 --   DataReferences.references has exactly ndr elements and every one is url.
 --   jp2c, jpch, ftbl and dtbl only at the top level; flst only in an ftbl,
---     url only in a dtbl (M.11.2, M.11.3, M.11.6; ReadJPX).
---   FragmentList.fragments has exactly nf elements.
+--     url only in a dtbl (M.11.2, M.11.3, M.11.6; ReadJPX). The harness
+--     checks the children of the top-level jpch, ftbl and dtbl only
+--     (hv_rule_child); a jpch, ftbl, dtbl or asoc below the top level fails
+--     to decode, and a jp2c, flst or url inside jp2h, jplh, uinf or asoc
+--     passes layer 1.
+--   FragmentList.fragments has exactly nf elements. Checked at layer 2 only
+--     (FragmentList-Profile and flst.one-fragment); layer 1 does not check it.
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of loc).
 --   Every Fragment.dr is 0 or <= the file's ndr.
 --   T.801 Annex M, Fragment Table box: it contains exactly one flst box.
 --   Every CONTAINING region is exactly filled. Where the type ends in a
---     deduced size this is automatic; the url box's harness check requires
---     it to end right after the terminator; Ihdr, Cdef, Resolution and Rreq
---     end in `extra`, which must be empty (<box>.extent: the decoder skips
---     to the end of a region whatever its contents left unread).
+--     deduced size this is automatic; Ihdr, Cdef, Resolution and Rreq end
+--     in `extra`, which must be empty (<box>.extent: the decoder skips to
+--     the end of a region whatever its contents left unread). The url box
+--     must end right after LOC's terminator: the reader checks this
+--     (url.terminator), the harness cannot, as the decoder skips the bytes
+--     after the NUL; its url check (hv_rule_url) runs at layer 2 only.
 --
 -- Header boxes, standard layer only (hv_rules.c; the reader's
 -- hv_check_jp2h and hv_check_jpx_headers). The server reads none of them:
@@ -528,9 +538,11 @@ END
 --   These JPX rules apply to .jpx files only; ReadJP2 looks at nothing but
 --     jp2c boxes.
 --   Every url loc begins with "file://" and ends with ".jp2" (ReadJPX: links
---     resolve to .jp2 files only, never to another JPX); the harness does not
---     resolve it.
+--     resolve to .jp2 files only, never to another JPX); the harness
+--     resolves it against the corpus companion files (url.missing-companion,
+--     harness/vectors.c).
 --   Fragment (off, len) equal to the referenced file's codestream extent is
---     checked by the server against the linked file and is outside the
---     corpus (it needs the second file).
+--     checked by the server against the linked file, and by the harness
+--     against the companion's measured extent (flst.source-extent,
+--     harness/vectors.c).
 --   The whole file is <= INT_MAX bytes.

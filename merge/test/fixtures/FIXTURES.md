@@ -24,9 +24,9 @@ origin-129 file):
 The set covers the JPX boxes the merge writes: the second file has the
 first file's JP2 Header box (empty `jpch` and `jplh`); the others differ
 in size and components, have no palette where the first has one (a
-generated `cmap`), and a different colour specification (`cgrp`); every
-file carries XML (`asoc`, `nlst`). The
-first file's `colr` has APPROX 0, which the JPX file writes as 1.
+generated `cmap`), and a different color specification (`cgrp`); every
+file carries XML (`asoc`, `nlst`). The first file's `colr` has APPROX 0,
+which the JPX file writes as 1.
 
 A linked merge names the inputs by absolute path, so it is not a fixture:
 the tests compare it with this one box by box.

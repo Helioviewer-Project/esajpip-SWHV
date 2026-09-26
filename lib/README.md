@@ -1,11 +1,10 @@
 # lib
 
 The JPEG 2000 reader/writer, built by the repository's CMake as the static
-library `jpeg2000_io`. `hv_transcode` (in `../transcode/`) and
-`hv_merge` (in `../merge/`) use it; the
-server may later. The header types come from the ASN.1/ACN model in
-`../spec/`; the code here steps from header to header and records where each
-payload starts and ends.
+library `jpeg2000_io`. `hv_transcode` (in `../transcode/`) and `hv_merge`
+(in `../merge/`) use it; the server may later. The header types come from
+the ASN.1/ACN model in `../spec/`; the code here steps from header to
+header and records where each payload starts and ends.
 
 ## Layout
 
@@ -17,25 +16,36 @@ payload starts and ends.
 | `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC. |
 | `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), and the Reader Requirements box (`Rreq-Std`), with the generated encoders into a growing buffer. Fills in Psot and LBox/XLBox when a tile-part or box ends (switching a box to XLBox if it outgrows LBox), and splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65 535). |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself). |
-| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (not with `-P`), `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. |
-| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's profile mode (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid; the header box checks must accept every standard-valid vector and reject, by name, each one a header rule makes standard-invalid. `run.sh` builds and runs it with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
-| `generated/` | Code generated from `../spec/` by `generate.sh`: the types in `../spec/jpeg2000-io.asn1`, the profile types the reader checks against, and what they use. |
-| `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it. |
+| `hv_walk.c` | `hv_walk [-v] [-p] [-P] [-H] [-w] file...`: checks files with the reader and prints one line per file; `-v` lists every box and codestream item, `-p` accepts trailing zero PLT entries (`-p` with `-P` is a usage error), `-P` checks the served profile (a `.jpx` with its linked files), `-H` the header boxes, `-w` rewrites the whole file with the writer from what the reader decoded and compares it with the input. `-P` and `-H` treat a file as JPX when its name ends in `.jpx` (case-sensitive) and as JP2 otherwise; without them a raw codestream is also accepted. |
+| `test/` | `test_profile`: every vector of `../tests/vectors/j2k` must pass the reader's checks of the served profile (`hv_check_jp2` or `hv_check_jpx`, then `HV_PROFILE` for every codestream, embedded or linked) exactly when the manifest labels it profile-valid; the header box checks must accept every standard-valid vector and reject, by name, each one a header rule makes standard-invalid. `run.sh` builds and runs it with the tools' tests (`ESAJPIP_TOOL_TESTS`, label `tools`). |
+| `generated/` | Code generated from `../spec/` by `generate.sh`: the types its `pdus` list names (those of `../spec/jpeg2000-io.asn1`, the served-profile types the reader checks against, `Fragment`, and the JP2 header box types) and what they use. A type the code here needs that none of them uses must be added to `pdus`. |
+| `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it (`../spec/check-model.sh` runs it so). |
 | `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TOOL_TESTS`. |
 
 ## Build
 
-With the rest of the repository:
+With the rest of the repository, so configuring needs the server's
+dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
+llhttp and libuv before it adds `lib/`, `transcode/` and `merge/`.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
 cmake --build build --target hv_walk
 ```
 
+Tests, with the tools' and separate from the server's:
+`lib/test/run.sh [normal|sanitize] [CTest options]`. CTest options go
+after the mode, which must then be given. The build goes to
+`build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
+`../tests/run.sh` also reads: set it for one runner at a time.
+
 After a model change in `../spec/`, run `lib/generate.sh`. It needs the
-compiler that `../spec/build-asn1scc.sh` builds: the pinned revision with the
-local patches in `../spec/asn1scc-patches/`. The unpatched compiler generates
-a PLT decoder that reads an uninitialized flag on truncated input.
+compiler that `../spec/build-asn1scc.sh` builds: the pinned revision with
+every local patch that `../spec/asn1scc-patches/series` lists, in order
+(`../spec/asn1scc-patches/README.md` describes each). Without
+`0004-icdpdus-reference-init`, for one, what `generate.sh` makes with
+`-icdPdus` does not link, and without `0001-deferred-determinant-uninit`
+the PLT decoder reads an uninitialized flag on truncated input.
 
 ## What the reader checks
 
@@ -93,12 +103,13 @@ a PLT decoder that reads an uninitialized flag on truncated input.
   file its `jpch` over the `jp2h` defaults) against its SIZ, where the
   codestream is embedded. For a JPX file also the Reader Requirements box:
   one, the third box, its contents decoded with `Rreq-Std` (the model's
-  `Rreq` at the standard's bounds, about 3.4 MB, allocated per check). `hv_transcode` and `hv_merge` require
-  `hv_check_jp2h` of their inputs.
+  `Rreq` at the standard's bounds, about 3.4 MB, allocated per check).
+  `hv_transcode` and `hv_merge` require `hv_check_jp2h` of their inputs.
 
-Not yet: box bodies other than the box header, `ftyp`, `flst`, `url` and
-the header boxes, and,
-outside the profile, PLT against the packet count. The model's standard
-layer counts packets where the layout allows (one tile, no COC or POC),
-which the reader does only with `HV_PROFILE`. Unknown marker codes are
-reported as items and skipped by length; the caller decides.
+Not yet: box bodies other than the box header, `ftyp`, `flst`, `url`, a
+`dtbl`'s NDR, `rreq` and the header boxes, and, outside the profile, PLT
+against the packet count. The model's standard layer counts packets where
+the layout allows (one tile, no COC or POC), which the reader does only
+with `HV_PROFILE`. Unknown marker codes are reported as items and skipped,
+by their length, or, from 0xFF30 to 0xFF3F, which have no marker segment,
+by the marker alone; the caller decides.

@@ -39,9 +39,9 @@
 -- whole-file model uses; the -Std instance carries the standard's bound and
 -- is what the reader/writer (jpeg2000-io.asn1) decodes one segment at a
 -- time. QCD is small enough for the standard's bound in both (Qcd and
--- Qcd-Std are the same instance). A WITH COMPONENTS subtype would not do: asn1scc keeps the base
--- type's allocation, while each instance of a parameterized type gets its
--- own.
+-- Qcd-Std are two instances with the same arguments). A WITH COMPONENTS
+-- subtype would not do: asn1scc keeps the base type's allocation, while
+-- each instance of a parameterized type gets its own.
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -255,5 +255,9 @@ END
 --         the packet count, sum over resolutions of the precinct count
 --         (B.6) times csiz times sgcod.layers, is <= 2^31 - 1
 --                                                     (CodingParameters::FillPrecinctCounts)
---         (component sampling xrsiz == yrsiz == 1 is a Siz-Profile constraint,
---         not a rule)
+--         zero origins and component sampling xrsiz == yrsiz == 1 are
+--         Siz-Profile constraints, which the corpus decoder applies (reason
+--         `decode`); the reader names them siz.zero-origin and
+--         siz.component-sampling (hv_rules.c)
+--   Cod:  no SOP markers: scod.sopMarkers is clear (cod.sop-markers; SOP
+--         markers are outside the served packet representation)

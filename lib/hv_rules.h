@@ -149,7 +149,8 @@ const char *hv_rule_jp2h_place(int jp2h, int late, int jp2c, int jpx);
  * hv_rule_header_child and its contents to the rule for its type; for a
  * Resolution box, pass its children to hv_rule_res_child and end it with
  * hv_rule_res_end. The first box of each type is recorded (the rules
- * require at most one of each but colr). About 16 KiB. */
+ * require at most one of each but colr, and of ihdr only in jpch). About
+ * 16 KiB. */
 typedef struct {
     uint32_t parent;            /* HV_BOX_JP2H, HV_BOX_JPCH or HV_BOX_JPLH */
     int jpx;                    /* in a JPX file */
@@ -173,7 +174,8 @@ void hv_header_init(hv_header *h, uint32_t parent, int jpx);
 
 /* The next child box: the box order and counts. jp2h starts with ihdr and
  * holds its colr boxes contiguously (T.800 I.5.3); a header box holds at
- * most one ihdr, bpcc, pclr, cmap, cdef and res. */
+ * most one bpcc, pclr, cmap, cdef and res, and a jpch at most one ihdr (in
+ * jp2h and jplh a later ihdr is accepted and ignored). */
 const char *hv_rule_header_child(hv_header *h, uint32_t type);
 
 /* The contents of each child type. Each checks what the box alone

@@ -13,14 +13,15 @@
 --     computed by deferred patching; on decode it bounds the region.
 --     Invalid-length vectors are produced by byte mutation.
 --   * Each segment kind is its own SEQUENCE wrapper so that its inserted
---     length has a home; the CHOICE over kinds is selected by the preceding
---     marker code through an ACN parameter.
+--     length has a home. A segment list element is a SEQUENCE of the
+--     marker `code` and one OPTIONAL wrapper per kind, and ACN present-when
+--     on `code` makes the matching wrapper present.
 --   * Lists terminated by a marker rather than counted use ACN
 --     `size null-terminated` with the marker as termination pattern. The
 --     pattern is inspected only at element boundaries, where the next bytes
 --     are always a marker code, so this is sound.
 --   * The type graph is not recursive (asn1scc requirement): main-header
---     segments and tile-part-header segments are different CHOICEs, which
+--     segments and tile-part-header segments are different SEQUENCEs, which
 --     also encodes T.800 Table A.1's placement rules.
 --   * The profile layer repeats the framing with *-Profile bodies, because a
 --     WITH COMPONENTS subtype cannot swap the type inside a CONTAINING.
@@ -217,7 +218,11 @@ END
 --     every tile-part of that tile, and the tile's tile-part count == tnsot.
 --   COD and QCD appear in a tile-part header at most once each, and only in
 --     the first tile-part of the tile (A.6.1, A.6.4).
---   The chosen CHOICE alternative matches `code` (automatic: present-when).
+--   The OPTIONAL that is present is the one `code` selects (automatic:
+--     present-when). A code with no field of its own decodes with none
+--     present; the decoder's constraint check on the MainMarkerCode or
+--     TileMarkerCode value set rejects it, so main.marker-code
+--     (harness/crossfield_impl.h) cannot fire at layer 1.
 --   Lengths and region fills: automatic (CONTAINING + size deduced).
 --   Where a single unsubsampled tile with zero image and tile origins uses
 --     COD without packet-layout overrides and every tile-part has PLT, the

@@ -14,26 +14,31 @@ while letting HTTP connections be pooled or replaced independently of channels.
 ### Added
 
 - A formal description of the accepted files in ASN.1/ACN (`spec/`), with a
-  generated, labelled test corpus that the server tests check against.
+  generated, labeled test corpus that the server tests check against.
 - A JPEG 2000 reader/writer library (`lib/`), built on code generated from
   that description and sharing its rules, and the `hv_walk` tool.
 - `hv_transcode` (`transcode/`), a C port of hvJP2K's transcoder that
   rejects files it cannot make servable.
-- `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`), writing the
-  same bytes, from inputs the server serves only.
+- `hv_merge` (`merge/`), a C port of hvJP2K's JPX merger (`hv_jpx_merge`),
+  writing the same bytes, from inputs within the served profile only. It
+  also rejects a later input that lacks a `cdef` or `res` box the first
+  input has, which hvJP2K accepts: that input would inherit the first
+  input's box.
 - The JP2 header boxes (T.800 I.5.3, T.801 M.11.5 to M.11.7) in the model,
   with their rules shared by the corpus and the reader (`hv_check_jp2h`,
   `hv_check_jpx_headers`, `hv_walk -H`). `hv_transcode` and `hv_merge` reject
   inputs whose header boxes are invalid or disagree with the codestream; the
   server, which does not read them, is unchanged. The JPX Reader
-  Requirements box too, which `hv_merge` now writes with the model's encoder
-  (using the pinned compiler and local patches in `spec/asn1scc-patches/`).
+  Requirements box too, which `hv_merge` writes with the model's encoder.
+  `lib/generated` is made with the pinned ASN1SCC and the local patches in
+  `spec/asn1scc-patches/`.
 
 ### Changed
 
-- Fix ASN1SCC validation of constrained subtypes inside `CONTAINING` fields.
-  Regenerated corpus labels now report those profile failures at decode time.
-  Keep the reader's named C errors for the same constraints.
+- Patch the pinned ASN1SCC (`spec/asn1scc-patches/`) to validate constrained
+  subtypes inside `CONTAINING` fields. Regenerated corpus labels now report
+  those profile failures at decode time. Keep the reader's named C errors for
+  the same constraints.
 - Keep channels alive across replacement connections, and allow one persistent
   connection to carry requests for different channels. This permits ordinary
   browser and reverse-proxy connection pooling. Random, opaque channel IDs

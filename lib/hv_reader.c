@@ -869,7 +869,10 @@ void hv_codestream_close(hv_codestream *cs) {
 const Siz *hv_codestream_siz(const hv_codestream *cs) { return cs->siz_end ? &cs->siz->body : NULL; }
 const Cod *hv_codestream_cod(const hv_codestream *cs) { return cs->cods ? &cs->cod.body : NULL; }
 
-/* Reads the marker segment at cs->pos: *code, and *end just past it. */
+/* Reads the marker segment at cs->pos: *code, and *end just past it. The
+ * codes without a segment (SOC, SOD, EOC, EPH, 0xFF30 to 0xFF3F) end after
+ * the marker; so do SOT, whose segment start_tile_part reads, and SOP,
+ * which is out of place in a header and rejected. */
 static int read_segment(hv_codestream *cs, size_t limit, uint16_t *code, size_t *end) {
     MarkerCode m;
     SegmentLength l;
@@ -880,7 +883,7 @@ static int read_segment(hv_codestream *cs, size_t limit, uint16_t *code, size_t 
     *code = (uint16_t)m;
     if (m == HV_SOC || m == HV_SOT || m == HV_SOD || m == HV_EOC || m == HV_SOP || m == HV_EPH ||
         (m >= HV_NO_SEGMENT_FIRST && m <= HV_NO_SEGMENT_LAST)) {
-        *end = pos + MARKER;          /* no marker segment */
+        *end = pos + MARKER;          /* no segment to read here */
         return 0;
     }
     if (DECODE(SegmentLength, &l, cs->buf, pos + MARKER,
@@ -982,7 +985,7 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_PLT: case HV_PPT:           /* T.800 places them elsewhere (Table A.1) */
         return fail(cs, "main.marker-code", pos);
     default:
-        break;                        /* unknown: reported, skipped by length */
+        break;                        /* unknown: reported and skipped */
     }
     item->kind = HV_SEGMENT;
     item->code = code;

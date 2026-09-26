@@ -1,8 +1,8 @@
 -- j2k-headers.acn
 --
 -- Bit-level encoding for j2k-headers.asn1: marker segment bodies, starting
--- at the byte after Lxxx. One encoding serves both layers; *-Profile
--- subtypes inherit it.
+-- at the byte after Lxxx. One encoding serves both layers; asn1scc does
+-- not inherit it through the *-Profile types, so they restate it (below).
 --
 -- Conventions (T.800 A.1.3): unsigned big-endian integers; BOOLEAN is one
 -- bit, '1'B = TRUE; where the standard packs sub-fields into one byte the
@@ -15,13 +15,13 @@
 -- satisfied: elements are byte-granular and >= 8 bits, the deduced list is
 -- the last component of its region, one deduced list per region.
 --
--- Cross-type determinants (Scod.customPrecincts -> Spcod) are ACN
--- parameters, the standard mechanism (Docs/ACN-Deferred-Patching.md).
+-- Scod.customPrecincts does not size Spcod.precincts: the list is `size
+-- deduced`, and the cross-field rule cod.precincts-count ties its length to
+-- the flag (end of j2k-headers.asn1).
 --
 -- Boolean presence uses the bare-field form of present-when
--- (`[present-when customPrecincts]`, `[present-when b0.more]`), which the
--- 4.9.0.0 grammar lists as the first presentWhenCond alternative; dotted
--- paths are `longFld` and grammatical.
+-- (`[present-when b0.more]`), which the 4.9.3.0 grammar lists as the first
+-- presentWhenCond alternative; dotted paths are `longFld` and grammatical.
 
 J2K-Headers DEFINITIONS ::= BEGIN
 

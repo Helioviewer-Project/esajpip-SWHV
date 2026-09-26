@@ -16,9 +16,12 @@
  * little or no data behind it. Each component-resolution takes 360 bytes
  * of layout (checked before it is allocated), each code-block under 100
  * bytes of state and tag-tree nodes, each output packet 20 bytes (its
- * place in the order and its PLT length) and at least a byte of output.
- * The input's packets need no bound of their own: each takes at least a
- * byte of its tile's data (B.10.3). */
+ * place in the order and its PLT length) and at least a byte of output,
+ * and each output precinct 64 bytes more (40 to put the packets in order,
+ * 24 to index its tag trees). The input's packets need no bound of their
+ * own: each takes at least a byte of its tile's data (B.10.3). Each
+ * contribution of a code-block to a layer that they signal takes 32
+ * bytes. */
 #define MAX_RESOLUTIONS 65536
 #define MAX_CODE_BLOCKS 250000
 #define MAX_OUTPUT_PACKETS 2000000

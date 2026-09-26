@@ -8,6 +8,8 @@
 --   boxtype : keep listed TBox values; decode all others as 'abcd' so
 --             the opaque `other` branch handles every unknown type
 --   resboxtype : the same inside a Resolution box, keeping resc and resd
+--   jp2boxtype : the same for a .jp2 at the profile layer, keeping only jP,
+--             ftyp and jp2c
 -- The payload of every box is a CONTAINING region sized by LBox; superbox
 -- children and opaque data use `size deduced` inside it. The whole file is
 -- the top-level region for Jp2Family.boxes.

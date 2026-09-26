@@ -16,11 +16,12 @@
 -- Termination patterns are marker codes and are inspected only at element
 -- boundaries.
 --
--- ACN 4.9.0.0 grammar (Antlr/acn.g): present-when accepts full boolean
+-- ACN 4.9.3.0 grammar (Antlr/acn.g): present-when accepts full boolean
 -- expressions (`not`, `and`, `or`, `!=`, `<`, `>=`), which is what the
 -- profile-layer `other` catch-alls use; parameters and size determinants
--- accept dotted field paths. Still to confirm by compiling: the C prototype
--- `mapping-function` expects, and `termination-pattern` on a SEQUENCE OF.
+-- accept dotted field paths. The generated C declares each
+-- `mapping-function` as `asn1SccUint f(asn1SccUint)`, and
+-- `termination-pattern` on a SEQUENCE OF (segments, headers) compiles.
 
 J2K-Codestream DEFINITIONS ::= BEGIN
 

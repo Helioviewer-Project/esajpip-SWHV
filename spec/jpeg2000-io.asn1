@@ -1,6 +1,7 @@
 -- jpeg2000-io.asn1
 --
--- Header types for the JPEG 2000 reader/writer (lib/, used by hv_transcode).
+-- Header types for the JPEG 2000 reader/writer (lib/, used by hv_transcode
+-- and hv_merge).
 -- Unlike the whole-file model (j2k-codestream.asn1, jp2-boxes.asn1), these
 -- types are decoded and encoded one at a time by a hand-written walker that
 -- steps from header to header. A payload (box contents, tile-part data) is
@@ -46,7 +47,7 @@ BoxHeader ::= SEQUENCE {
     xlbox       INTEGER (16..18446744073709551615) OPTIONAL   -- present iff lbox = 1
 }
 
--- File Type box, T.800 I.5.2 / T.801 M.11.1.2: BR and MinV, then the
+-- File Type box, T.800 I.5.2 / T.801 Annex M: BR and MinV, then the
 -- compatibility list, entries of the same kind as BR, filling the box.
 Brand ::= INTEGER (0..4294967295)                 -- four-character code, big-endian
 

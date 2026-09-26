@@ -26,8 +26,10 @@
 /* Transcodes the codestream in buf[start, end) and appends the result to
  * out. Precinct width and height exponents: 1 to 15 (2 to 32 768 samples).
  * flags: hv_codestream_open flags the input must also pass, 0 or
- * HV_PROFILE_HEADERS. 0, or -1 with a message in error; on failure out
- * is as it was (hv_out_rewind), and fails at once if out->error is set. */
+ * HV_PROFILE_HEADERS (the input is read with HV_ACCEPT_PLT_PADDING, which
+ * hv_codestream_open refuses with HV_PROFILE). 0, or -1 with a message in
+ * error; on failure out is as it was (hv_out_rewind), and fails at once if
+ * out->error is set. */
 int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int ppx, int ppy,
                             unsigned flags, hv_out *out, char *error, size_t error_size);
 

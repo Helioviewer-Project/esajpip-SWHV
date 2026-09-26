@@ -42,3 +42,9 @@ made with Kakadu 7.7.
 The files, and the script that made them from the FITS source, come from
 the hvJP2K repository (`hvJP2K/jp2/test/transcode`). Regenerating them
 needs that script and Kakadu; the tests only read them.
+
+The Kakadu references are also inputs of the merge test: all but the
+origin-129 file went into `../../../merge/test/fixtures/expected/merged.jpx`
+(see `../../../merge/test/fixtures/FIXTURES.md`). Changing one breaks that
+test unless `merged.jpx` is made again from the new set with hvJP2K's
+`hv_jpx_merge`.

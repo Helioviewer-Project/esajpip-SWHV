@@ -157,9 +157,15 @@ typedef struct {
 } hv_item;
 
 /* hv_codestream_open flags. Without HV_PROFILE_HEADERS or HV_PROFILE, the
- * reader checks T.800. Error messages that name a rule (siz.single-tile)
- * use the names of the corpus manifest, whether hv_rules.c or the reader
- * applies the rule. */
+ * reader checks T.800 as far as it reads it: it reports unknown marker
+ * codes as items and skips them, by their length (0xFF30 to 0xFF3F, which
+ * have no marker segment, by the marker alone), and it counts no packets,
+ * so it checks PLT against the tile-part data only. Error messages that
+ * name a rule (siz.single-tile) use the names of the corpus manifest,
+ * whether hv_rules.c or the reader applies the rule.
+ *
+ * HV_PROFILE is HV_PROFILE_HEADERS | 4. The bit 4 alone does nothing: the
+ * whole profile applies only when both bits, 2 and 4, are set. */
 enum {
     /* Accept zero-valued PLT entries after the last packet of a tile-part.
      * T.800 forbids them (a packet has at least one byte); deployed files
@@ -208,7 +214,8 @@ typedef struct {
 } hv_codestream;
 
 /* Opens the codestream in buf[start, end): checks SOC and decodes SIZ.
- * flags: 0 for T.800 as written, or any of the flags above.
+ * flags: 0 for T.800 as written, or a combination of the flags above other
+ * than HV_ACCEPT_PLT_PADDING with HV_PROFILE, which it refuses.
  * 0 on success, -1 on error (cs->error, cs->error_at). Call
  * hv_codestream_close in both cases. */
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,

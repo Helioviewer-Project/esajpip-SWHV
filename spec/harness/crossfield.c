@@ -16,7 +16,7 @@ static int cf_signature(const OpaqueBox *box) {
     return box->data.nCount == 4 && memcmp(box->data.arr, "\x0D\x0A\x87\x0A", 4) == 0;
 }
 
-/* T.800 I.5.2 / T.801 M.8: the brand for the file's kind, and in the
+/* T.800 I.5.2 / T.801 Annex M: the brand for the file's kind, and in the
  * compatibility list. */
 static const char *cf_ftyp(const Ftyp *ftyp, cf_kind kind) {
     const char *expected = kind == CF_JP2 ? "jp2 " : "jpx ";

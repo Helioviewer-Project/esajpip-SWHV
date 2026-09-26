@@ -1,9 +1,11 @@
 /* crossfield_impl.h — template body for crossfield.c. Included twice with:
  *
  *   CF_S          type-name suffix:  (empty) for layer-1 types, _Profile for layer-2
- *   CF_FILE       the file type:     Jp2Family, Jp2File_Profile or JpxFile_Profile
+ *   CF_FILE       the file type:     Jp2Family or JpxFile_Profile
  *   CF_FN         function name to define
+ *   CF_COD        the COD body type (optional; default CF_T(Cod))
  *   CF_MAIN_OTHER defined when MainSegment has the `other` marker alternative
+ *   CF_TILE_PLT_ONLY defined when TileSegment has the plt alternative only
  * Generated-name assumptions (asn1scc C back end):
  *   SEQUENCE OF / OCTET STRING:  .nCount, .arr[]
  *   CHOICE:                      .kind, .u.<alt>, enum <Type>_<alt>_PRESENT
@@ -22,7 +24,7 @@
 #endif
 
 
-/* The body rules are shared with the reader: ../../lib/hv_rules.c. */
+/* The rules on values are shared with the reader: ../../lib/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
                                           const CF_COD *cod) {
     return hv_rule_siz(s, cod != NULL ? &cod->sgcod : NULL, layer >= CF_PROFILE);

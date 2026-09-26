@@ -10,7 +10,7 @@
  *           (see hv_transcode_file)
  *
  * The input must be a JP2 file that the output can serve: within the JPIP
- * server's profile (JPIP_PROFILE.md) except for its tile-parts, which are
+ * served profile (JPIP_PROFILE.md) except for its tile-parts, which are
  * rewritten. JPX files and raw codestreams are rejected. The boxes are
  * kept: the codestream box is transcoded and every other box is copied as
  * read. The output is written to a temporary file next to it and renamed
