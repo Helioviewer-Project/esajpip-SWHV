@@ -16,13 +16,20 @@
 -- Termination patterns are marker codes and are inspected only at element
 -- boundaries.
 --
--- ACN 4.9.0.0 grammar (Antlr/acn.g): present-when accepts full boolean
+-- ACN 4.9.3.0 grammar (Antlr/acn.g): present-when accepts full boolean
 -- expressions (`not`, `and`, `or`, `!=`, `<`, `>=`), which is what the
 -- profile-layer `other` catch-alls use; parameters and size determinants
--- accept dotted field paths. Still to confirm by compiling: the C prototype
--- `mapping-function` expects, and `termination-pattern` on a SEQUENCE OF.
+-- accept dotted field paths. The generated C declares each
+-- `mapping-function` as `asn1SccUint f(asn1SccUint)`, and
+-- `termination-pattern` on a SEQUENCE OF (segments, headers) compiles.
 
 J2K-Codestream DEFINITIONS ::= BEGIN
+
+-- Marker codes: the `code` of every segment list element.
+MainMarkerCode [encoding pos-int, size 16, endianness big]
+TileMarkerCode [encoding pos-int, size 16, endianness big]
+MainMarkerCode-Profile [encoding pos-int, size 16, endianness big]
+TileMarkerCode-Profile [encoding pos-int, size 16, endianness big]
 
 -- ---------------------------------------------------------------------------
 -- Layer 1
@@ -70,7 +77,7 @@ Opaque [] {
 }
 
 MainSegment [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],   -- FF52
     coc         [present-when (code == 65363)],   -- FF53
     qcd         [present-when (code == 65372)],   -- FF5C
@@ -82,7 +89,9 @@ MainSegment [] {
     ppm         [present-when (code == 65376)],   -- FF60
     crg         [present-when (code == 65379)],   -- FF63
     com         [present-when (code == 65380)],   -- FF64
-    tilePart    [present-when (code == 65424)]    -- FF90
+    tilePart    [present-when (code == 65424)],   -- FF90
+    noSegment   [present-when code >= 65328 and code <= 65343],
+    other       [present-when code >= 65281 and code <= 65534 and !(code == 65359 or code == 65361 or code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65365 or code == 65367 or code == 65376 or code == 65379 or code == 65380 or code == 65424 or code == 65328 or code == 65329 or code == 65330 or code == 65331 or code == 65332 or code == 65333 or code == 65334 or code == 65335 or code == 65336 or code == 65337 or code == 65338 or code == 65339 or code == 65340 or code == 65341 or code == 65342 or code == 65343)]
 }
 
 TilePart [] {
@@ -100,7 +109,7 @@ TilePartRest [] {
 }
 
 TileSegment [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],
     coc         [present-when (code == 65363)],
     qcd         [present-when (code == 65372)],
@@ -109,11 +118,13 @@ TileSegment [] {
     poc         [present-when (code == 65375)],
     plt         [present-when (code == 65368)],   -- FF58
     ppt         [present-when (code == 65377)],   -- FF61
-    com         [present-when (code == 65380)]
+    com         [present-when (code == 65380)],
+    noSegment   [present-when code >= 65328 and code <= 65343],
+    other       [present-when code >= 65281 and code <= 65534 and !(code == 65362 or code == 65363 or code == 65372 or code == 65373 or code == 65374 or code == 65375 or code == 65368 or code == 65377 or code == 65380 or code == 65328 or code == 65329 or code == 65330 or code == 65331 or code == 65332 or code == 65333 or code == 65334 or code == 65335 or code == 65336 or code == 65337 or code == 65338 or code == 65339 or code == 65340 or code == 65341 or code == 65342 or code == 65343)]
 }
 
 -- ---------------------------------------------------------------------------
--- Layer 2: identical layout, profile bodies
+-- Layer 2: identical layout, profile SIZ and COD bodies
 -- ---------------------------------------------------------------------------
 
 Codestream-Profile [] {
@@ -133,30 +144,14 @@ CodSegment-Profile [] {
     body        [size length]
 }
 
-QcdSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-PltSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
-ComSegment-Profile [] {
-    length      INTEGER [encoding pos-int, size 16, endianness big, mapping-function lxxx],
-    body        [size length]
-}
-
 MainSegment-Profile [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     cod         [present-when (code == 65362)],
     qcd         [present-when (code == 65372)],
     qcc         [present-when (code == 65373)],
     rgn         [present-when (code == 65374)],
     tlm         [present-when (code == 65365)],
     plm         [present-when (code == 65367)],
-    ppm         [present-when (code == 65376)],
     crg         [present-when (code == 65379)],
     com         [present-when (code == 65380)],
     tilePart    [present-when (code == 65424)],
@@ -178,7 +173,7 @@ TilePartRest-Profile [] {
 }
 
 TileSegment-Profile [] {
-    code        [encoding pos-int, size 16, endianness big],
+    code        [],
     plt         [present-when (code == 65368)]
 }
 

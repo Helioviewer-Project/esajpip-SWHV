@@ -1,0 +1,63 @@
+-- jpeg2000-io.acn
+--
+-- Bit-level encoding for jpeg2000-io.asn1. Unsigned big-endian throughout
+-- (T.800 A.1.3, I.4). The lengths the walker needs (LBox, XLBox, Lxxx of a
+-- skipped segment, Psot) are ASN.1 fields. The types the reader and writer
+-- share with the whole-file model (CodSegment and QcdSegment, which insert
+-- Lxxx, and the elements) keep their encodings in j2k-codestream.acn,
+-- j2k-headers.acn and jp2-boxes.acn.
+
+JPEG2000-IO DEFINITIONS ::= BEGIN
+
+BoxHeader [] {
+    lbox        [encoding pos-int, size 32, endianness big],
+    tbox        [encoding pos-int, size 32, endianness big],
+    xlbox       [encoding pos-int, size 64, endianness big, present-when (lbox == 1)]
+}
+
+MarkerCode [encoding pos-int, size 16, endianness big]
+
+SegmentLength [encoding pos-int, size 16, endianness big]
+
+-- PclrHeader of jp2-boxes.acn without its depths: NE, NPC.
+PclrCounts [] {
+    ne          [encoding pos-int, size 16, endianness big],
+    npc         [encoding pos-int, size 8]
+}
+
+-- Rreq of jp2-boxes.acn in parts: ML, FUAM, DCM, NSF; then each feature
+-- on its own, its mask filling what the walker hands it (code and ML
+-- bytes); NVF is FeatureCount.
+RreqHeader [] {
+    ml          INTEGER [encoding pos-int, size 8],
+    fuam        [size ml],
+    dcm         [size ml],
+    nsf         []
+}
+
+RreqStandardFeature [] {
+    sf          [],
+    sm          [size deduced]
+}
+
+RreqVendorFeature [] {
+    vf          [],
+    vm          [size deduced]
+}
+
+FeatureCount [encoding pos-int, size 16, endianness big]
+
+NlstEntry [] {
+    entity      [encoding pos-int, size 8],
+    number      [encoding pos-int, size 24, endianness big]
+}
+
+SotSegment [] {
+    lsot        [encoding pos-int, size 16, endianness big],
+    isot        [encoding pos-int, size 16, endianness big],
+    psot        [encoding pos-int, size 32, endianness big],
+    tpsot       [encoding pos-int, size 8],
+    tnsot       [encoding pos-int, size 8]
+}
+
+END

@@ -1,3 +1,8 @@
-0001-deferred-acn-producer-determinants.patch
-0002-deferred-containing-names.patch
-0003-deferred-containing-regions.patch
+0001-deferred-determinant-uninit.patch
+0002-deferred-sequence-of-arguments.patch
+0003-deferred-sibling-consumers.patch
+0004-icdpdus-reference-init.patch
+0005-deferred-fixed-size-determinant.patch
+0006-containing-subtype-constraints.patch
+0007-deferred-patch-epilogue.patch
+0008-containing-length-overrun.patch

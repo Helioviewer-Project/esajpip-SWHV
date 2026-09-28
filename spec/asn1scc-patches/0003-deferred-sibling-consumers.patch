@@ -1,0 +1,373 @@
+diff --git a/BackendAst/DAstACNDeferred.fs b/BackendAst/DAstACNDeferred.fs
+index db195b9..3d180d4 100644
+--- a/BackendAst/DAstACNDeferred.fs
++++ b/BackendAst/DAstACNDeferred.fs
+@@ -283,6 +283,17 @@ let private createDeferredSequenceFunction
+             |> List.choose (fun c -> match c with DAst.AcnChild ac -> Some ac.Name.Value | _ -> None)
+             |> Set.ofList
+ 
++        // Consumers of a determinant other than the reference arguments that
++        // make it deferred: siblings in this SEQUENCE sized, selected or made
++        // present by it.
++        let siblingConsumers (detId: ReferenceToType) =
++            deps.acnDependencies |> List.filter (fun dep ->
++                match dep.determinant, dep.dependencyKind with
++                | AcnChildDeterminant d, kind when d.id = detId ->
++                    (match kind with AcnDepRefTypeArgument _ -> false | _ -> true)
++                | _ -> false)
++        let hasSiblingConsumers detId = not (List.isEmpty (siblingConsumers detId))
++
+         // Modify direct ACN children that are deferred determinants
+         let modifiedChildren =
+             children |> List.map (fun child ->
+@@ -409,8 +420,15 @@ let private createDeferredSequenceFunction
+                                     // derived from the target path.  A path containing
+                                     // "->" or "." corrupts those variable names, so we
+                                     // decode to a clean temp variable and copy afterward.
++                                    // A determinant that siblings of this SEQUENCE
++                                    // also consume (e.g. the size of a direct
++                                    // OCTET STRING child) must stay readable under
++                                    // the name those siblings' decoders use,
++                                    // ac.c_name: decode into that variable and copy
++                                    // it to det.value (temp_copy).
+                                     let redirectKind =
+                                         match ac.Type with
++                                        | _ when not isOwnParam && hasSiblingConsumers ac.id -> "temp_copy"
+                                         | Asn1AcnAst.AcnInsertedType.AcnInteger ai ->
+                                             let intClass = Asn1AcnAstUtilFunctions.getAcnIntegerClass r.args ai
+                                             match intClass with
+@@ -451,7 +469,9 @@ let private createDeferredSequenceFunction
+                                         | None -> None
+                                     | _ ->
+                                         // Decode to a clean temp variable, then copy to det.value
+-                                        let tmpName = ac.c_name + "_tmp"
++                                        let tmpName =
++                                            if not isOwnParam && hasSiblingConsumers ac.id then ac.c_name
++                                            else ac.c_name + "_tmp"
+                                         let tmpVarDecl =
+                                             match ac.Type with
+                                             | Asn1AcnAst.AcnInsertedType.AcnBoolean _ ->
+@@ -576,6 +596,48 @@ let private createDeferredSequenceFunction
+                                         | Some pre -> lm.acn.acn_deferred_det_preblock_wrap pre patchCall)))
+                         |> String.concat "\n")
+ 
++        // Patch local deferred determinants from their sibling consumers
++        // (encode only). The reference arguments' consumers patch them inside
++        // the referenced types; a sibling consumer, e.g. `data [size len]`
++        // beside `item <len> []`, is encoded here and must set the value too,
++        // or be checked against it (ERR_ACN_DET_CONSISTENCY_MISMATCH).
++        let localSiblingEpilogue =
++            match codec with
++            | CommonTypes.Codec.Decode -> None
++            | CommonTypes.Codec.Encode ->
++                let parentPath = t.id.ToScopeNodeList
++                let patches =
++                    children |> List.collect (fun child ->
++                        match child with
++                        | DAst.AcnChild ac when Set.contains ac.Name.Value deferredDetNames
++                                             && not (Set.contains ac.Name.Value deferredDetNamesFromOwnParams) ->
++                            match lm.lg.getDeferredDetFunctions ac.Type with
++                            | None -> []
++                            | Some (_initFn, patchFn, nBitsOpt, uperMinOffset) ->
++                                siblingConsumers ac.id |> List.map (fun dep root ->
++                                    let preBlock, rawValueExpr = computePatchDetValueExpr lm dep parentPath root
++                                    let valueExpr =
++                                        if uperMinOffset = 0I then rawValueExpr
++                                        else lm.acn.acn_deferred_det_uper_offset_sub rawValueExpr (uperMinOffset.ToString())
++                                    let detName = ToC ac.Name.Value
++                                    let errCode = "ERR_ACN_DET_CONSISTENCY_MISMATCH"
++                                    let patchCall =
++                                        if patchFn.Contains("IA5String") then
++                                            match nBitsOpt with
++                                            | Some nBits -> lm.acn.acn_deferred_det_patch_value_str patchFn nBits valueExpr detName errCode codec
++                                            | None -> failwithf "BUG: IA5String PatchDet requires nChars (nBits) parameter"
++                                        else
++                                            match nBitsOpt with
++                                            | Some nBits -> lm.acn.acn_deferred_det_patch_value_with_size patchFn nBits valueExpr detName errCode codec
++                                            | None -> lm.acn.acn_deferred_det_patch_value patchFn valueExpr detName errCode codec
++                                    match preBlock with
++                                    | None -> patchCall
++                                    | Some pre -> lm.acn.acn_deferred_det_preblock_wrap pre patchCall)
++                        | _ -> [])
++                match patches with
++                | [] -> None
++                | _ -> Some (fun root -> patches |> List.map (fun patch -> patch root) |> String.concat "\n")
++
+         // Compute fallback PatchDet code for local deferred dets (encode only).
+         // When all consumers of a shared determinant are absent at runtime
+         // (e.g., present-when booleans are false, or a CHOICE branch was not
+@@ -629,7 +691,7 @@ let private createDeferredSequenceFunction
+             | CommonTypes.Codec.Decode -> None
+ 
+         let epilogue =
+-            [producerPatchEpilogue; localFallbackEpilogue]
++            [producerPatchEpilogue; localSiblingEpilogue; localFallbackEpilogue]
+             |> List.choose id
+             |> function
+                | [] -> None
+diff --git a/v4Tests/scripts/runWireTests.sh b/v4Tests/scripts/runWireTests.sh
+index 5999277..665e2ed 100755
+--- a/v4Tests/scripts/runWireTests.sh
++++ b/v4Tests/scripts/runWireTests.sh
+@@ -2,7 +2,7 @@
+ # acn-v2 checks that the -atc round trip cannot make (C only):
+ #  - byte-exact wire checks: a wrong but self-consistent encoding (e.g. an
+ #    unmapped length) survives encode+decode, so <n>_wire_test.c asserts the
+-#    encoded bytes; for 016, whose automatic test cases cannot run
++#    encoded bytes; for 016 to 018, whose automatic test cases cannot run
+ #    (NO_AUTOMATIC_TEST_CASES), also the round trip and the rejected values;
+ #  - the warning printed for types that export a determinant to their parent.
+ # Test inputs: v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES.
+@@ -23,7 +23,7 @@ run_compiler() {
+     esac
+ }
+ 
+-for n in 004 010 011 016; do
++for n in 004 010 011 016 017 018; do
+     out=$work/$n
+     mkdir "$out"
+     run_compiler -c -ACN --acn-v2 -fp AUTO -equal -o "$out" "$cases/$n.asn1" "$cases/$n.acn"
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.acn b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.acn
+new file mode 100644
+index 0000000..5e8eee0
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.acn
+@@ -0,0 +1,13 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Item <INTEGER:len> [] {
++    data [size len]
++}
++
++Msg [] {
++    len INTEGER [encoding pos-int, size 8],
++    head [size len],
++    payload <len> []
++}
++
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.asn1 b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.asn1
+new file mode 100644
+index 0000000..090651a
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017.asn1
+@@ -0,0 +1,21 @@
++-- ACNV2_ONLY C_ONLY NO_AUTOMATIC_TEST_CASES
++-- A determinant of the SEQUENCE sizes both a direct child and, through an
++-- ACN parameter, a field of a reference child. It is deferred; the decoder
++-- of the direct child must still find its value, and the encoder must patch
++-- it from the direct child too, or reject a size that disagrees. Values
++-- whose sizes differ cannot be encoded, so the automatic test cases are not
++-- run; scripts/runWireTests.sh checks the encoding (017_wire_test.c).
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Item ::= SEQUENCE {
++    data OCTET STRING (SIZE (1..4))
++}
++
++Msg ::= SEQUENCE {
++    head OCTET STRING (SIZE (1..4)),
++    payload Item
++}
++
++END
++
++--TCFS   017.acn
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017_wire_test.c b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017_wire_test.c
+new file mode 100644
+index 0000000..c962c24
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/017_wire_test.c
+@@ -0,0 +1,47 @@
++/* Byte-exact check of 017 (run by v4Tests/scripts/runWireTests.sh): len
++   sizes head and the payload's data; the decoder reads head with it, and
++   the encoder rejects a head whose size disagrees with the data's. */
++#include <assert.h>
++#include <string.h>
++
++#include "017.h"
++
++static int encode(const Msg *input, byte *encoded, size_t size, long *length)
++{
++    BitStream stream;
++    int error = 0;
++    flag ok;
++    BitStream_Init(&stream, encoded, (long)size);
++    ok = Msg_ACN_Encode(input, &stream, &error, TRUE);
++    *length = BitStream_GetLength(&stream);
++    return ok ? 0 : error;
++}
++
++int main(void)
++{
++    static const byte expected[] = {2, 0xAA, 0xAA, 0xBB, 0xBB};
++    byte encoded[Msg_REQUIRED_BYTES_FOR_ACN_ENCODING] = {0};
++    BitStream stream;
++    Msg input;
++    Msg output;
++    long length;
++    int error = 0;
++
++    Msg_Initialize(&input);
++    input.head.nCount = 2;
++    memset(input.head.arr, 0xAA, 2);
++    input.payload.data.nCount = 2;
++    memset(input.payload.data.arr, 0xBB, 2);
++    assert(encode(&input, encoded, sizeof encoded, &length) == 0);
++    assert(length == sizeof expected && memcmp(encoded, expected, sizeof expected) == 0);
++    Msg_Initialize(&output);
++    BitStream_AttachBuffer(&stream, encoded, length);
++    assert(Msg_ACN_Decode(&output, &stream, &error));
++    assert(Msg_Equal(&input, &output));
++
++    /* head of 3 bytes and data of 2: no single len. */
++    input.head.nCount = 3;
++    assert(encode(&input, encoded, sizeof encoded, &length) == ERR_ACN_DET_CONSISTENCY_MISMATCH);
++
++    return 0;
++}
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.acn b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.acn
+new file mode 100644
+index 0000000..061c985
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.acn
+@@ -0,0 +1,23 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++
++Requirements [] {
++    ml          INTEGER [encoding pos-int, size 8],
++    fuam        [size ml],
++    dcm         [size ml],
++    nsf         INTEGER [encoding pos-int, size 16, endianness big],
++    standard    [size nsf] { <ml> [] },
++    nvf         INTEGER [encoding pos-int, size 16, endianness big],
++    vendor      [size nvf] { <ml> [] }
++}
++
++StandardFlag <INTEGER:ml> [] {
++    sf          [encoding pos-int, size 16, endianness big],
++    sm          [size ml]
++}
++
++VendorFeature <INTEGER:ml> [] {
++    vf          [],
++    vm          [size ml]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.asn1 b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.asn1
+new file mode 100644
+index 0000000..b2e0d0b
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018.asn1
+@@ -0,0 +1,29 @@
++-- ACNV2_ONLY C_ONLY NO_AUTOMATIC_TEST_CASES
++-- 016 and 017 together, in the shape of a JPEG 2000 Reader Requirements
++-- box (ITU-T T.801 M.11.1): ML, the mask length, sizes two direct masks and
++-- the mask of every element of two lists, each with its own count. With
++-- both lists empty, only the direct masks give ML. Values whose sizes
++-- differ cannot be encoded, so the automatic test cases are not run;
++-- scripts/runWireTests.sh checks the encoding (018_wire_test.c).
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++Requirements ::= SEQUENCE {
++    fuam        OCTET STRING (SIZE (1..8)),
++    dcm         OCTET STRING (SIZE (1..8)),
++    standard    SEQUENCE (SIZE (0..8)) OF StandardFlag,
++    vendor      SEQUENCE (SIZE (0..4)) OF VendorFeature
++}
++
++StandardFlag ::= SEQUENCE {
++    sf          INTEGER (0..65535),
++    sm          OCTET STRING (SIZE (1..8))
++}
++
++VendorFeature ::= SEQUENCE {
++    vf          OCTET STRING (SIZE (16)),
++    vm          OCTET STRING (SIZE (1..8))
++}
++
++END
++
++--TCFS   018.acn
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018_wire_test.c b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018_wire_test.c
+new file mode 100644
+index 0000000..5fd7805
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/018_wire_test.c
+@@ -0,0 +1,75 @@
++/* Byte-exact check of 018 (run by v4Tests/scripts/runWireTests.sh), with
++   the Reader Requirements box contents of ITU-T T.801 M.11.1: ML, FUAM,
++   DCM, NSF, NSF pairs (SF, SM), NVF. ML comes from the masks, with or
++   without flags, and must be the same for all of them. */
++#include <assert.h>
++#include <string.h>
++
++#include "018.h"
++
++static int encode(const Requirements *input, byte *encoded, size_t size, long *length)
++{
++    BitStream stream;
++    int error = 0;
++    flag ok;
++    BitStream_Init(&stream, encoded, (long)size);
++    ok = Requirements_ACN_Encode(input, &stream, &error, TRUE);
++    *length = BitStream_GetLength(&stream);
++    return ok ? 0 : error;
++}
++
++static void round_trip(const Requirements *input, const byte *expected, long size)
++{
++    byte encoded[Requirements_REQUIRED_BYTES_FOR_ACN_ENCODING] = {0};
++    BitStream stream;
++    Requirements output;
++    long length;
++    int error = 0;
++    assert(encode(input, encoded, sizeof encoded, &length) == 0);
++    assert(length == size && memcmp(encoded, expected, (size_t)size) == 0);
++    Requirements_Initialize(&output);
++    BitStream_AttachBuffer(&stream, encoded, length);
++    assert(Requirements_ACN_Decode(&output, &stream, &error));
++    assert(Requirements_Equal(input, &output));
++}
++
++int main(void)
++{
++    /* ML 1; features 1 and 2, needed to understand and to display. */
++    static const byte two_flags[] = {1, 0xC0, 0xC0, 0, 2, 0, 1, 0x80, 0, 2, 0x40, 0, 0};
++    static const byte no_flags[] = {2, 0x80, 0x00, 0x80, 0x00, 0, 0, 0, 0};
++    byte encoded[Requirements_REQUIRED_BYTES_FOR_ACN_ENCODING] = {0};
++    Requirements input;
++    long length;
++
++    Requirements_Initialize(&input);
++    input.fuam.nCount = 1;
++    input.fuam.arr[0] = 0xC0;
++    input.dcm.nCount = 1;
++    input.dcm.arr[0] = 0xC0;
++    input.standard.nCount = 2;
++    input.standard.arr[0].sf = 1;
++    input.standard.arr[0].sm.nCount = 1;
++    input.standard.arr[0].sm.arr[0] = 0x80;
++    input.standard.arr[1].sf = 2;
++    input.standard.arr[1].sm.nCount = 1;
++    input.standard.arr[1].sm.arr[0] = 0x40;
++    round_trip(&input, two_flags, sizeof two_flags);
++
++    /* No flags at all: ML 2 from FUAM and DCM alone. */
++    input.fuam.nCount = input.dcm.nCount = 2;
++    input.fuam.arr[0] = input.dcm.arr[0] = 0x80;
++    input.fuam.arr[1] = input.dcm.arr[1] = 0x00;
++    input.standard.nCount = 0;
++    round_trip(&input, no_flags, sizeof no_flags);
++
++    /* A DCM longer than the FUAM, with and without flags. */
++    input.dcm.nCount = 3;
++    assert(encode(&input, encoded, sizeof encoded, &length) == ERR_ACN_DET_CONSISTENCY_MISMATCH);
++    input.fuam.nCount = input.dcm.nCount = 1;
++    input.standard.nCount = 1;
++    input.standard.arr[0].sm.nCount = 2;
++    assert(encode(&input, encoded, sizeof encoded, &length) == ERR_ACN_DET_CONSISTENCY_MISMATCH);
++
++    return 0;
++}

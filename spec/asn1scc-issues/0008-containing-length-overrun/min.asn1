@@ -1,0 +1,12 @@
+Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+-- A length-prefixed region holding a type that fills it.
+Outer ::= SEQUENCE {
+    body    OCTET STRING (CONTAINING Inner)
+}
+
+Inner ::= SEQUENCE {
+    data    OCTET STRING (SIZE (0..64))
+}
+
+END

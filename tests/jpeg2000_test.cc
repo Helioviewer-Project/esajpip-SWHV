@@ -309,9 +309,11 @@ static vector<unsigned char> MakeCodestream(uint8_t progression = 0, uint8_t sam
     codestream.push_back(1);      // reversible transform
     codestream.insert(codestream.end(), precinct_sizes.begin(), precinct_sizes.end());
 
-    Append16(codestream, 0xFF5C); // QCD
-    Append16(codestream, 3);
-    codestream.push_back(0);
+    Append16(codestream, 0xFF5C); // QCD, no quantization
+    Append16(codestream, 4 + 3 * transform_levels); // Lqcd, T.800 Table A.27
+    codestream.push_back(0);      // Sqcd
+    for (int band = 0; band < 3 * transform_levels + 1; ++band)
+        codestream.push_back(0);  // SPqcd: one byte per sub-band
 
     for (int tile_part = 0; tile_part < tile_parts; ++tile_part) {
         Append16(codestream, 0xFF90); // SOT
@@ -872,9 +874,9 @@ static void CheckAssociationMetadata(const string &directory, const string &name
     jpeg2000::ImageIndex *image = manager.GetImage();
     data::File *file = manager.GetFile(image->GetPathName(0));
     const jpeg2000::Metadata &metadata = image->GetMetadata();
-    // One label box (13 bytes), optionally followed by an XML box (15).
+    // One label box (12 bytes), optionally followed by an XML box (15).
     // Even the malformed child header remains part of the opaque payload.
-    uint64_t length = name == "jpx-asoc-one-child.jpx" ? 13 : 28;
+    uint64_t length = name == "jpx-asoc-one-child.jpx" ? 12 : 27;
     Check(file != NULL && metadata.bins.size() == 1 &&
                   metadata.bins[0].length == length &&
                   metadata.bins[0].offset == file->GetSize() - length,
@@ -1005,6 +1007,19 @@ static void CheckSourceForms(const string &directory) {
           MakeJP2(MakeOpenEndedTilePart(MakeCodestream(0, 1, 1, 1, 0, 2, 2))), false);
     check("psot-short-plt.jp2",
           MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream), 0)), false);
+    // The tile-part runs up to the codestream's final EOC; its packet data
+    // is not scanned for markers, as with any Psot, so bytes FF D9 inside
+    // a packet do not end it (as in lib/hv_reader.c).
+    {
+        vector<unsigned char> embedded = codestream;  // one one-byte packet
+        embedded.insert(embedded.end() - 2, {0xFF, 0xD9});
+        for (size_t i = 0; i + 5 < embedded.size(); ++i)
+            if (embedded[i] == 0xFF && embedded[i + 1] == 0x58) {
+                embedded[i + 5] = 3;                   // the packet is now 3 bytes
+                break;
+            }
+        check("psot-zero-ff-d9-in-data.jp2", MakeJP2(MakeOpenEndedTilePart(embedded)), true);
+    }
 
     // T.801 M.11.11 allows recursive associations. The server preserves
     // the complete outer payload; no recursion is needed to serve it.
@@ -1049,14 +1064,15 @@ static void CheckGeneratedCorpus() {
 
     string line;
     Check(static_cast<bool>(getline(manifest, line)) &&
-                  line == "file\tkind\tstandard\tprofile\treason\tfield\tnote\tcompanions",
+                  line == "file\tkind\tstandard\tprofile\treason\tfield\tnote\tcompanions"
+                          "\tprofile_reason",
           "Invalid generated JPEG 2000 manifest header");
 
     int vectors = 0;
     vector<string> failures;
     while (getline(manifest, line)) {
         vector<string> fields = SplitTabs(line);
-        Check(fields.size() == 8,
+        Check(fields.size() == 9,
               ("Invalid manifest row: " + line).c_str());
         bool expected = fields[3] == "valid";
         Check(expected || fields[3] == "invalid",
@@ -1129,13 +1145,32 @@ int main() {
               MakeLinkedJPX("", codestream.size()));
     vector<unsigned char> marker_after_tile_part = codestream;
     marker_after_tile_part.insert(marker_after_tile_part.end() - 2,
-                                  {0xFF, 0x5C, 0x00, 0x03, 0x00});
+                                  {0xFF, 0x5C, 0x00, 0x04, 0x00, 0x00});
     WriteFile(directory + "marker-after-tile-part.jp2",
               MakeJP2(marker_after_tile_part));
     WriteFile(directory + "duplicate-cod.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF52)));
     WriteFile(directory + "duplicate-qcd.jp2",
               MakeJP2(DuplicateMarker(codestream, 0xFF5C)));
+    // T.800 Table A.27: Lqcd 4 to 197.
+    for (uint16_t lqcd : {3, 198}) {
+        vector<unsigned char> bad = codestream;
+        size_t qcd = 0;
+        while (bad[qcd] != 0xFF || bad[qcd + 1] != 0x5C) ++qcd;
+        size_t body = qcd + 4, old_length = (bad[qcd + 2] << 8) | bad[qcd + 3];
+        bad.erase(bad.begin() + body, bad.begin() + qcd + 2 + old_length);
+        bad.insert(bad.begin() + body, lqcd - 2, 0);
+        bad[qcd + 2] = lqcd >> 8;
+        bad[qcd + 3] = lqcd & 0xFF;
+        WriteFile(directory + "qcd-length-" + to_string(lqcd) + ".jp2", MakeJP2(bad));
+    }
+    // T.800 Tables A.43 and A.44: Lcom 5 to 65 535, Rcom 0 or 1.
+    WriteFile(directory + "main-com.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 5, 0, 1, 'x'})));
+    WriteFile(directory + "com-length-4.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 4, 0, 1})));
+    WriteFile(directory + "com-rcom-2.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x64, 0, 5, 0, 2, 'x'})));
     WriteFile(directory + "main-coc.jp2",
               MakeJP2(InsertBeforeFirstSOT(
                   codestream,
@@ -1144,6 +1179,13 @@ int main() {
               MakeJP2(InsertBeforeFirstSOT(
                   codestream,
                   {0xFF, 0x5F, 0, 9, 0, 0, 0, 1, 1, 0, 0})));
+    // T.800 A.7.4: PPM with Zppm 0 and Nppm 0.
+    WriteFile(directory + "main-ppm.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x60, 0, 7, 0, 0, 0, 0, 0})));
+    // T.800 A.1.3: 0xFF30 to 0xFF3F are markers without a segment. The
+    // corpus has them only with a length, which the model can express.
+    WriteFile(directory + "main-ff30.jp2",
+              MakeJP2(InsertBeforeFirstSOT(codestream, {0xFF, 0x30})));
     WriteFile(directory + "wrong-tile-part-count.jp2",
               MakeJP2(SetTilePartNumbers(codestream, 0, 0, 2)));
     WriteFile(directory + "wrong-first-tile-part.jp2",
@@ -1163,7 +1205,7 @@ int main() {
     WriteFile(directory + "tile-com.jp2",
               MakeJP2(InsertMarkerInTilePart(
                   InsertBeforeFirstSOT(codestream,
-                                       {0xFF, 0x64, 0, 4, 0, 1}),
+                                       {0xFF, 0x64, 0, 5, 0, 1, 'x'}),
                   0xFF64, 0)));
     WriteFile(directory + "short-plt.jp2",
               MakeJP2(ShortenFirstPLT(
@@ -1311,11 +1353,29 @@ int main() {
               "Accepted a repeated main-header COD or QCD marker");
     }
 
+    jpeg2000::FileManager main_com_manager;
+    Check(OpenImage(directory, "main-com.jp2", &main_com_manager),
+          "Rejected a main-header COM marker");
+    for (const char *name : {"qcd-length-3.jp2", "qcd-length-198.jp2",
+                             "com-length-4.jp2", "com-rcom-2.jp2"}) {
+        jpeg2000::FileManager marker_length_manager;
+        Check(!OpenImage(directory, name, &marker_length_manager),
+              "Accepted a QCD or COM marker outside T.800's ranges");
+    }
+
     for (const char *name : {"main-coc.jp2", "main-poc.jp2"}) {
         jpeg2000::FileManager main_override_manager;
         Check(!OpenImage(directory, name, &main_override_manager),
               "Accepted unsupported main-header coding instructions");
     }
+
+    jpeg2000::FileManager main_ppm_manager;
+    Check(!OpenImage(directory, "main-ppm.jp2", &main_ppm_manager),
+          "Accepted packet headers moved into the main header (PPM)");
+
+    jpeg2000::FileManager main_ff30_manager;
+    Check(!OpenImage(directory, "main-ff30.jp2", &main_ff30_manager),
+          "Accepted a segment-less 0xFF30 marker in the main header");
 
     jpeg2000::FileManager valid_mct_manager;
     Check(OpenImage(directory, "valid-mct.jp2", &valid_mct_manager),

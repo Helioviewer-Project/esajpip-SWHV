@@ -127,23 +127,6 @@ namespace data {
         }
 
         /**
-         * Advances to one byte after the next matching byte before limit.
-         * If no match exists, advances to limit and returns false.
-         */
-        bool Find(unsigned char value, uint64_t limit) {
-            assert(address != MAP_FAILED);
-            if (limit > size || offset > limit)
-                return false;
-            const void *found = memchr(address + offset, value, limit - offset);
-            if (found == NULL) {
-                offset = limit;
-                return false;
-            }
-            offset = static_cast<const char *>(found) - address + 1;
-            return true;
-        }
-
-        /**
          * Reads a value from the file.
          * @param value Pointer to the value where to store.
          * @param num_bytes Number of bytes to read (by default,

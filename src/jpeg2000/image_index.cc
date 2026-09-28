@@ -36,12 +36,15 @@ namespace jpeg2000 {
 
         file->Seek(codestream.plt_cursor.offset);
 
-        // Get packet length
+        // Get packet length: 7-bit groups, at most ten bytes (70 bits hold
+        // any 64-bit value; a longer chain only adds leading zero groups or
+        // overflows).
         uint8_t buf_packet = 0;
+        int bytes = 0;
 
         *length_packet = 0;
         do {
-            if (file->GetOffset() >= marker.offset + marker.length ||
+            if (file->GetOffset() >= marker.offset + marker.length || ++bytes > 10 ||
                 !file->Read(&buf_packet) || *length_packet > (UINT64_MAX >> 7))
                 return false;
             *length_packet = (*length_packet << 7) | (buf_packet & (uint8_t) 127);

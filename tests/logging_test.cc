@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <cerrno>
 #include <cstdlib>
 #include <dirent.h>
 #include <fcntl.h>
@@ -84,29 +85,6 @@ int main() {
     Check(new_messages.find("message after rollover") != string::npos,
           "Message missing after rollover");
 
-    {
-        vector<thread> producers;
-        for (int producer = 0; producer < 8; ++producer) {
-            producers.emplace_back([producer] {
-                for (int i = 0; i < 2000; ++i)
-                    LOG("concurrent message " << producer << ':' << i);
-            });
-        }
-        for (thread &producer : producers)
-            producer.join();
-    }
-    trace::Flush();
-    LOG("message after queue saturation");
-    trace::Flush();
-    new_messages = ReadFile(active);
-    old_messages = ReadFile(backup);
-    Check(new_messages.find("log messages dropped") != string::npos ||
-                  old_messages.find("log messages dropped") != string::npos,
-          "Dropped log messages were not reported");
-    Check(new_messages.find("message after queue saturation") != string::npos ||
-                  old_messages.find("message after queue saturation") != string::npos,
-          "Logging did not recover after queue saturation");
-
     unlink(backup.c_str());
     Check(mkdir(backup.c_str(), 0700) == 0, "Could not obstruct log rollover");
     LOG(string(1100, 'x'));
@@ -138,6 +116,66 @@ int main() {
                   ReadFile(shutdown_log).find("message queued before shutdown") !=
                       string::npos,
           "Logger shutdown did not drain queued records");
+
+    // Queue saturation: the child logs to a pipe that is not read until its
+    // producers are done, so the logger blocks on the full pipe, the queue
+    // fills, and messages are dropped; then the pipe is read to the end.
+    int saturated_output[2], burst_done[2];
+    Check(pipe(saturated_output) == 0 && pipe(burst_done) == 0,
+          "Could not create the queue saturation test pipes");
+    pid_t producer = fork();
+    Check(producer >= 0, "Could not fork the queue saturation test");
+    if (producer == 0) {
+        close(saturated_output[0]);
+        close(burst_done[0]);
+        if (dup2(saturated_output[1], STDOUT_FILENO) < 0)
+            _exit(2);
+        close(saturated_output[1]);
+        if (!trace::Initialize(""))
+            _exit(3);
+        vector<thread> producers;
+        for (int thread_index = 0; thread_index < 8; ++thread_index) {
+            producers.emplace_back([thread_index] {
+                for (int i = 0; i < 2000; ++i)
+                    LOG("concurrent message " << thread_index << ':' << i);
+            });
+        }
+        for (thread &producer_thread : producers)
+            producer_thread.join();
+        char done = 0;
+        if (write(burst_done[1], &done, 1) != 1)
+            _exit(4);
+        close(burst_done[1]);
+        trace::Flush();
+        LOG("message after queue saturation");
+        trace::Drain();
+        _exit(0);
+    }
+    close(saturated_output[1]);
+    close(burst_done[1]);
+    char done;
+    Check(read(burst_done[0], &done, 1) == 1,
+          "The queue saturation test did not finish its producers");
+    close(burst_done[0]);
+    string saturated;
+    char buffer[4096];
+    for (;;) {
+        ssize_t n = read(saturated_output[0], buffer, sizeof buffer);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        saturated.append(buffer, n);
+    }
+    close(saturated_output[0]);
+    int producer_status;
+    Check(waitpid(producer, &producer_status, 0) == producer &&
+                  WIFEXITED(producer_status) && WEXITSTATUS(producer_status) == 0,
+          "The queue saturation test failed");
+    size_t summary = saturated.find(" dropped\n");
+    Check(summary != string::npos, "Dropped log messages were not reported");
+    Check(saturated.find("message after queue saturation", summary) != string::npos,
+          "Logging did not recover after queue saturation");
 
     int broken_output[2];
     Check(pipe(broken_output) == 0,

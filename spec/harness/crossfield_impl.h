@@ -1,9 +1,12 @@
 /* crossfield_impl.h — template body for crossfield.c. Included twice with:
  *
  *   CF_S          type-name suffix:  (empty) for layer-1 types, _Profile for layer-2
- *   CF_FILE       the file type:     Jp2Family, Jp2File_Profile or JpxFile_Profile
+ *   CF_FILE       the file type:     Jp2Family or JpxFile_Profile
  *   CF_FN         function name to define
- *   CF_MAIN_OTHER defined when MainBody has the `other` marker alternative
+ *   CF_COD        the COD body type (optional; default CF_T(Cod))
+ *   CF_MAIN_OTHER defined when MainSegment has the `other` marker alternative
+ *                 (and so no COC or POC)
+ *   CF_TILE_PLT_ONLY defined when TileSegment has the plt alternative only
  * Generated-name assumptions (asn1scc C back end):
  *   SEQUENCE OF / OCTET STRING:  .nCount, .arr[]
  *   CHOICE:                      .kind, .u.<alt>, enum <Type>_<alt>_PRESENT
@@ -21,318 +24,288 @@
 #define CF_DEFAULT_COD
 #endif
 
-/* Marker codes and box types (decimal, as in the .asn1). */
-#define MC_SOC 65359
-#define MC_SIZ 65361
-#define MC_COD 65362
-#define MC_COC 65363
-#define MC_QCD 65372
-#define MC_TLM 65365
-#define MC_PLM 65367
-#define MC_PPM 65376
-#define MC_POC 65375
-#define MC_CRG 65379
-#define MC_PLT 65368
-#define MC_SOT 65424
-#define MC_EOC 65497
-#define BT_JP   1783636000UL
-#define BT_FTYP 1718909296UL
-#define BT_RREQ 1920099697UL
-#define BT_JPCH 1785750376UL
-#define BT_FTBL 1718903404UL
-#define BT_DTBL 1685348972UL
-#define BT_JP2C 1785737827UL
-#define BT_FLST 1718383476UL
-#define BT_URL  1970433056UL
 
+/* The rules on values are shared with the reader: ../../lib/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
                                           const CF_COD *cod) {
-    if ((int) s->csiz != s->components.nCount) return "siz.csiz-count";
-    if (!(s->xosiz < s->xsiz && s->yosiz < s->ysiz)) return "siz.origin-inside";
-    if (!(s->xtosiz <= s->xosiz && s->ytosiz <= s->yosiz)) return "siz.tile-origin";
-    if (!(s->xtosiz + s->xtsiz > s->xosiz && s->ytosiz + s->ytsiz > s->yosiz))
-        return "siz.tile-covers-origin";
-    if (cod != NULL && cod->sgcod.mct != 0) {
-        int i;
-        if (s->components.nCount < 3) return "siz.mct-components";
-        for (i = 1; i < 3; ++i)
-            if (s->components.arr[i].depthMinus1 !=
-                        s->components.arr[0].depthMinus1 ||
-                s->components.arr[i].xrsiz != s->components.arr[0].xrsiz ||
-                s->components.arr[i].yrsiz != s->components.arr[0].yrsiz)
-                return "siz.mct-geometry";
-    }
-    if (layer >= CF_PROFILE) {
-        if (s->xosiz != 0 || s->yosiz != 0 ||
-            s->xtosiz != 0 || s->ytosiz != 0)
-            return "siz.zero-origin";
-        for (int i = 0; i < s->components.nCount; ++i)
-            if (s->components.arr[i].xrsiz != 1 ||
-                s->components.arr[i].yrsiz != 1)
-                return "siz.component-sampling";
-        if (!(s->xtsiz >= s->xsiz && s->ytsiz >= s->ysiz)) return "siz.single-tile";
-    }
-    return NULL;
+    hv_siz v = cf_siz_view(s);
+    return hv_rule_siz(&v, cod != NULL ? &cod->sgcod : NULL, layer >= CF_PROFILE);
 }
 
 static const char *CF_CAT3(cf_cod, CF_S, )(const CF_COD *c, cf_layer layer) {
-    int i;
-    int expected = c->scod.customPrecincts ? (int) c->spcod.levels + 1 : 0;
-    if (c->spcod.precincts.nCount != expected)
-        return "cod.precincts-count";
-    for (i = 1; i < c->spcod.precincts.nCount; ++i)
-        if (c->spcod.precincts.arr[i].ppx == 0 ||
-            c->spcod.precincts.arr[i].ppy == 0)
-            return "cod.precincts-higher-zero";
-    if (c->spcod.cbWidthExp + c->spcod.cbHeightExp > 8) return "cod.codeblock-area";
-    if (layer >= CF_PROFILE && c->scod.sopMarkers) return "cod.sop-markers";
-    return NULL;
+    return hv_rule_cod(&c->scod, &c->spcod, layer >= CF_PROFILE);
 }
 
-/* Decode one Iplt entry (7-bit groups, MSB first). */
-static int CF_CAT3(cf_iplt_value, CF_S, )(const Iplt *e, uint64_t *value) {
-    uint64_t v = e->b0.bits;
-#define CF_IPLT_STEP(n) if (e->exist.b##n) { \
-        if (v > (UINT64_MAX >> 7)) return 0; \
-        v = (v << 7) | (uint64_t) e->b##n.bits; \
-    }
-    CF_IPLT_STEP(1); CF_IPLT_STEP(2); CF_IPLT_STEP(3); CF_IPLT_STEP(4);
-    CF_IPLT_STEP(5); CF_IPLT_STEP(6); CF_IPLT_STEP(7); CF_IPLT_STEP(8); CF_IPLT_STEP(9);
-#undef CF_IPLT_STEP
-    *value = v;
-    return 1;
+/* The bytes an Iplt takes: b0 and the bytes after it. */
+static size_t CF_CAT3(cf_iplt_size, CF_S, )(const Iplt *e) {
+    return 1u + e->exist.b1 + e->exist.b2 + e->exist.b3 + e->exist.b4 + e->exist.b5 +
+           e->exist.b6 + e->exist.b7 + e->exist.b8 + e->exist.b9;
 }
 
-/* Total packets = sum over resolutions of precinct counts, times csiz and
- * layers (T.800 B.6, B.7). Returns 0 when the total exceeds INT32_MAX
- * (CodingParameters::FillPrecinctCounts rejects such a codestream). */
-static uint64_t CF_CAT3(cf_packet_count, CF_S, )(const CF_T(Siz) *s, const CF_COD *c) {
-    uint64_t total = 0;
-    int levels = (int) c->spcod.levels, r;
-    for (r = 0; r <= levels; ++r) {
-        uint64_t scale = (uint64_t) 1 << (levels - r);
-        uint64_t w = ((uint64_t) s->xsiz + scale - 1) / scale;       /* size at r */
-        uint64_t h = ((uint64_t) s->ysiz + scale - 1) / scale;
-        int ppx = 15, ppy = 15;
-        if (c->spcod.precincts.nCount != 0) {
-            const PrecinctSize *ps = &c->spcod.precincts.arr[r];
-            ppx = (int) ps->ppx; ppy = (int) ps->ppy;
+/* Psot: the tile-part's bytes from SOT to the end of its data (A.4.2), as
+ * the encoding lays them out: SOT, each header segment's code, Lxxx and
+ * body, SOD, the data. */
+static uint64_t CF_CAT3(cf_psot, CF_S, )(const CF_T(TilePart) *tp) {
+    uint64_t n = 12 + 2 + (uint64_t) tp->rest.data.nCount;
+    int j, e;
+    for (j = 0; j < tp->rest.headers.nCount; ++j) {
+        const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
+        n += 4;
+        if (ts->exist.plt) {
+            n += 1;
+            for (e = 0; e < ts->plt.body.entries.nCount; ++e)
+                n += CF_CAT3(cf_iplt_size, CF_S, )(&ts->plt.body.entries.arr[e]);
         }
-        w = (w + ((uint64_t) 1 << ppx) - 1) >> ppx;
-        h = (h + ((uint64_t) 1 << ppy) - 1) >> ppy;
-        total += w * h;
-        if (total > 2147483647u) return 0;
+#ifndef CF_TILE_PLT_ONLY
+        if (ts->exist.cod)
+            n += 10 + (uint64_t) ts->cod.body.spcod.precincts.nCount;
+        if (ts->exist.qcd) n += 1 + (uint64_t) ts->qcd.body.spqcd.nCount;
+        if (ts->exist.com) n += 2 + (uint64_t) ts->com.body.ccom.nCount;
+        if (ts->exist.coc) n += (uint64_t) ts->coc.body.data.nCount;
+        if (ts->exist.qcc) n += (uint64_t) ts->qcc.body.data.nCount;
+        if (ts->exist.rgn) n += (uint64_t) ts->rgn.body.data.nCount;
+        if (ts->exist.poc) n += (uint64_t) ts->poc.body.data.nCount;
+        if (ts->exist.ppt) n += (uint64_t) ts->ppt.body.data.nCount;
+        if (ts->exist.other) n += (uint64_t) ts->other.body.data.nCount;
+        if (ts->exist.noSegment) n -= 2;    /* a code without Lxxx */
+#endif
     }
-    total *= (uint64_t) s->csiz;
-    if (total > 2147483647u) return 0;
-    total *= (uint64_t) c->sgcod.layers;
-    return total > 2147483647u ? 0 : total;
+    return n;
 }
 
 static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf_layer layer) {
     int i, j;
     int cod_before = 0, qcd_before = 0, tile_parts = 0, plts = 0;
-    int seen_tile = 0, expect_tpsot = 0, tnsot = 0;
-    int all_parts_have_plt = 1, packet_layout_override = 0, plt_padding = 0;
-    uint64_t plt_packets = 0;
+    int seen_tile = 0;
+    int all_parts_have_plt = 1, packet_layout_override = 0;
+    int profile = layer >= CF_PROFILE;
+    hv_plt_count count = { 0, 0 };
+    hv_segments segments;
+    uint32_t tiles, unfinished = 0;
     const CF_COD *main_cod = NULL;
+    const hv_siz siz = cf_siz_view(&cs->siz.body);
     const char *r;
+
+    /* In the reader's order (../../lib/hv_reader.c): SIZ, then each
+     * segment as it comes, a COD's rules where the COD is. */
+    if ((r = CF_CAT3(cf_siz, CF_S, )(&cs->siz.body, layer, NULL)) != NULL) return r;
+    tiles = hv_rule_tiles(&siz);
+    memset(cf_tile_counts, 0, tiles * sizeof *cf_tile_counts);
+    memset(cf_components, 0, siz.ncomponents * sizeof *cf_components);
+    hv_segments_init(&segments, &siz, profile ? NULL : cf_components, profile);
 
     for (i = 0; i < cs->segments.nCount; ++i) {
         const CF_T(MainSegment) *seg = &cs->segments.arr[i];
         int code = (int) seg->code;
         if (seg->exist.tilePart) {
             const CF_T(TilePart) *tp = &seg->tilePart;
+            hv_zplt zplt;
             if (!seen_tile) {
                 if (cod_before != 1) return "codestream.one-cod-before-sot";
                 if (qcd_before != 1) return "codestream.one-qcd-before-sot";
                 seen_tile = 1;
             }
             tile_parts++;
-            if ((int) tp->tpsot != expect_tpsot) return "sot.tpsot-sequence";
-            expect_tpsot++;
-            if (tp->tnsot != 0) {
-                if (tnsot == 0) tnsot = (int) tp->tnsot;
-                if (tp->tpsot >= tp->tnsot) return "sot.tpsot-below-tnsot";
-                /* A.4.2: TNsot, where given, is the one tile-part count. */
-                if ((int) tp->tnsot != tnsot) return "sot.tnsot-inconsistent";
-            }
+            /* A.4.2, per tile: Isot in the grid, TPsot in order, TNsot. */
+            if ((r = hv_rule_isot(tiles, tp->isot)) != NULL ||
+                (r = hv_rule_tile_part(&cf_tile_counts[tp->isot], &unfinished, tp->tpsot,
+                                       tp->tnsot)) != NULL ||
+                (r = hv_segments_tile_part(&segments, &cf_tile_counts[tp->isot], tp->isot,
+                                           tp->tpsot, CF_CAT3(cf_psot, CF_S, )(tp))) != NULL)
+                return r;
+            memset(&zplt, 0, sizeof zplt);
             {
                 /* T.800 A.7.3: the PLT segments of a tile-part list the
-                 * length of every packet in it, so where any is present
-                 * their sum is exactly the tile-part data length.
+                 * length of every packet in it (hv_segments_data).
                  * A.6.1 / A.6.4: COD and QCD appear in a tile-part header at
                  * most once, and only in the first tile-part of the tile. */
-                uint64_t plt_sum = 0;
-                int expected_zplt = 0;
+                uint64_t plt_sum = 0, zeros = 0;
                 int tp_plts = 0;
 #ifndef CF_TILE_PLT_ONLY
                 int tp_cod = 0, tp_qcd = 0;
 #endif
                 for (j = 0; j < tp->rest.headers.nCount; ++j) {
                     const CF_T(TileSegment) *ts = &tp->rest.headers.arr[j];
+#ifndef CF_TILE_PLT_ONLY
+                    const Opaque *body = ts->exist.coc ? &ts->coc.body
+                                       : ts->exist.qcc ? &ts->qcc.body
+                                       : ts->exist.rgn ? &ts->rgn.body
+                                       : ts->exist.poc ? &ts->poc.body
+                                       : ts->exist.ppt ? &ts->ppt.body : NULL;
+                    if (ts->exist.cod || ts->exist.coc || ts->exist.poc || ts->exist.ppt)
+                        packet_layout_override = 1;
+                    if (ts->exist.cod) {
+                        if (++tp_cod > 1 || tp->tpsot != 0) return "tile.cod-once";
+                        if ((r = CF_CAT3(cf_cod, CF_S, )(&ts->cod.body, layer)) != NULL)
+                            return r;
+                        /* A tile-part COD's MCT needs the same components. */
+                        if ((r = hv_rule_siz(&siz, &ts->cod.body.sgcod, profile)) != NULL)
+                            return r;
+                    }
+                    if (ts->exist.qcd && (++tp_qcd > 1 || tp->tpsot != 0))
+                        return "tile.qcd-once";
+                    if ((ts->exist.cod || ts->exist.qcd || body != NULL) &&
+                        (r = hv_segments_tile(&segments, (uint16_t) ts->code,
+                                              ts->exist.cod ? &ts->cod.body : NULL,
+                                              ts->exist.qcd ? &ts->qcd.body : NULL,
+                                              body ? body->data.arr : NULL,
+                                              body ? (size_t) body->data.nCount : 0)) != NULL)
+                        return r;
+#endif
                     if (ts->exist.plt) {
-                        const CF_T(Plt) *plt = &ts->plt.body;
+                        const Plt *plt = &ts->plt.body;
                         int e;
-                        if ((int) plt->zplt != expected_zplt++)
-                            return "plt.zplt-sequence";
+                        if ((r = hv_rule_zplt(&zplt, plt->zplt, profile)) != NULL) return r;
                         tp_plts++;
                         for (e = 0; e < plt->entries.nCount; ++e) {
                             uint64_t length;
-                            if (!CF_CAT3(cf_iplt_value, CF_S, )(
-                                    &plt->entries.arr[e], &length))
-                                return "plt.value-overflow";
+                            if ((r = hv_rule_iplt(&plt->entries.arr[e], &length)) != NULL)
+                                return r;
                             if (length > (uint64_t) tp->rest.data.nCount - plt_sum)
                                 return "plt.coverage";
-                            if (length == 0) {
-                                if (layer == CF_STANDARD) return "plt.zero-length";
-                                plt_padding = 1;
-                            } else {
-                                if (plt_padding) return "plt.padding-position";
-                                plt_packets++;
-                            }
+                            if ((r = hv_rule_plt_entry(&count, length, profile)) != NULL)
+                                return r;
                             plt_sum += length;
+                            zeros += length == 0;
                         }
                     }
-#ifndef CF_TILE_PLT_ONLY
-                    if (ts->exist.cod || ts->exist.coc || ts->exist.poc)
-                        packet_layout_override = 1;
-                    if (ts->exist.cod) tp_cod++;
-                    if (ts->exist.qcd) tp_qcd++;
-#endif
                 }
                 plts += tp_plts;
                 if (tp_plts == 0) all_parts_have_plt = 0;
-                if (tp_plts > 0 && plt_sum != (uint64_t) tp->rest.data.nCount)
-                    return "plt.coverage";
-#ifndef CF_TILE_PLT_ONLY
-                if (tp_cod > 1 || (tp_cod && tp->tpsot != 0)) return "tile.cod-once";
-                if (tp_qcd > 1 || (tp_qcd && tp->tpsot != 0)) return "tile.qcd-once";
-#endif
-                /* Layer 2: TileBody-Profile admits only PLT, so any other
+                /* Layer 2: TileSegment-Profile admits only PLT, so any other
                  * tile-header segment already failed to decode. */
-                if (layer >= CF_PROFILE && tp_plts == 0) return "codestream.no-plt";
+                if (profile && tp_plts == 0) return "codestream.no-plt";
+                if ((r = hv_segments_data(&segments, tp->rest.data.arr,
+                                          (size_t) tp->rest.data.nCount, (unsigned) tp_plts,
+                                          plt_sum, zeros, profile ? NULL : &zplt)) != NULL)
+                    return r;
             }
             continue;
         }
+        /* Every segment has its field: a code with none is outside the
+         * MainMarkerCode value set and failed to decode (the reader's
+         * main.marker-code; ../check-model.sh checks the value sets). */
 #ifndef CF_MAIN_OTHER
-        if (!(seg->exist.cod || seg->exist.coc || seg->exist.qcd ||
-              seg->exist.qcc || seg->exist.rgn || seg->exist.poc ||
-              seg->exist.tlm || seg->exist.plm || seg->exist.ppm ||
-              seg->exist.crg || seg->exist.com))
-            return "main.marker-code";
-        if (seg->exist.coc || seg->exist.poc) packet_layout_override = 1;
+        if (seg->exist.coc || seg->exist.poc || seg->exist.ppm) packet_layout_override = 1;
 #endif
         if (!seen_tile) {
-            if (code == MC_COD) { cod_before++; main_cod = &seg->cod.body; }
-            if (code == MC_QCD) qcd_before++;
+#ifndef CF_MAIN_OTHER
+            const Opaque *body = seg->exist.coc ? &seg->coc.body
+                               : seg->exist.qcc ? &seg->qcc.body
+                               : seg->exist.rgn ? &seg->rgn.body
+                               : seg->exist.poc ? &seg->poc.body
+                               : seg->exist.tlm ? &seg->tlm.body
+                               : seg->exist.plm ? &seg->plm.body
+                               : seg->exist.ppm ? &seg->ppm.body
+                               : seg->exist.crg ? &seg->crg.body : NULL;
+#endif
+            if (code == HV_COD) {
+                if (++cod_before > 1) return "codestream.one-cod-before-sot";
+                main_cod = &seg->cod.body;
+                if ((r = CF_CAT3(cf_cod, CF_S, )(main_cod, layer)) != NULL) return r;
+                if ((r = CF_CAT3(cf_siz, CF_S, )(&cs->siz.body, layer, main_cod)) != NULL)
+                    return r;
+            }
+            if (code == HV_QCD && ++qcd_before > 1) return "codestream.one-qcd-before-sot";
+#ifndef CF_MAIN_OTHER
+            if ((code == HV_COD || code == HV_QCD || body != NULL) &&
+                (r = hv_segments_main(&segments, (uint16_t) code,
+                                      code == HV_COD ? &seg->cod.body : NULL,
+                                      code == HV_QCD ? &seg->qcd.body : NULL,
+                                      body ? body->data.arr : NULL,
+                                      body ? (size_t) body->data.nCount : 0)) != NULL)
+                return r;
+#endif
         } else {
             /* T.800 A.3: after the first SOT only tile-parts and EOC follow. */
             return "codestream.segment-after-sot";
         }
-#ifdef CF_MAIN_OTHER
-        if (seg->exist.other &&
-            (code == MC_SOC || code == MC_SIZ))
-            return "main.other-code";
-#endif
     }
     if (tile_parts == 0) return "codestream.no-tile-part";
-    if (tnsot != 0 && tile_parts != tnsot) return "sot.tnsot-count";
+    if ((r = hv_rule_tile_parts_end(unfinished)) != NULL) return r;
+    if ((r = hv_segments_end(&segments)) != NULL) return r;
 
-    if ((r = CF_CAT3(cf_siz, CF_S, )(&cs->siz.body, layer, main_cod)) != NULL) return r;
-    for (i = 0; i < cs->segments.nCount; ++i) {
-        const CF_T(MainSegment) *seg = &cs->segments.arr[i];
-        if (seg->exist.cod &&
-            (r = CF_CAT3(cf_cod, CF_S, )(&seg->cod.body, layer)) != NULL)
-            return r;
-#ifndef CF_TILE_PLT_ONLY
-        if (seg->exist.tilePart) {
-            const CF_T(TilePart) *tp = &seg->tilePart;
-            for (j = 0; j < tp->rest.headers.nCount; ++j)
-                if (tp->rest.headers.arr[j].exist.cod &&
-                    (r = CF_CAT3(cf_cod, CF_S, )(&tp->rest.headers.arr[j].cod.body, layer)) != NULL)
-                    return r;
-        }
-#endif
-    }
-    if (layer >= CF_PROFILE) {
-        if (tile_parts > 64) return "codestream.tile-part-limit";
-        if (plts == 0) return "codestream.no-plt";
+    if (profile) {
+        /* TilePart-Profile's TPsot and TNsot reject a 65th tile-part
+         * first; this is the reader's name for the same limit. */
+        if ((r = hv_rule_tile_part_count((uint64_t) tile_parts)) != NULL) return r;
     }
     if (layer == CF_STANDARD) {
         const CF_T(Siz) *s = &cs->siz.body;
+        const SizFixed *f = &s->fixed;
         if (!all_parts_have_plt || packet_layout_override ||
-            s->xosiz != 0 || s->yosiz != 0 ||
-            s->xtosiz != 0 || s->ytosiz != 0 ||
-            s->xtsiz < s->xsiz || s->ytsiz < s->ysiz)
+            f->xosiz != 0 || f->yosiz != 0 ||
+            f->xtosiz != 0 || f->ytosiz != 0 ||
+            f->xtsiz < f->xsiz || f->ytsiz < f->ysiz)
             return NULL;
         for (i = 0; i < s->components.nCount; ++i)
             if (s->components.arr[i].xrsiz != 1 ||
                 s->components.arr[i].yrsiz != 1)
                 return NULL;
     }
-    if (main_cod != NULL && plts > 0) {
-        uint64_t packets = CF_CAT3(cf_packet_count, CF_S, )(&cs->siz.body, main_cod);
-        /* A zero result is the profile's signed JPIP packet-count overflow. */
-        if (packets == 0 && layer >= CF_PROFILE)
-            return "codestream.packet-count";
-        if (packets != 0) {
-            if (layer >= CF_PROFILE && plt_padding && plt_packets < packets)
-                return "plt.zero-length";
-            if (plt_packets != packets) return "plt.packet-count";
-        }
-    }
+    if (main_cod != NULL && plts > 0)
+        return hv_rule_plt_packets(&count, &siz, &main_cod->sgcod,
+                                   &main_cod->spcod, profile);
     return NULL;
+}
+
+/* The box type of an inner box, as far as the rules of hv_rule_child
+ * distinguish them (0: any other). */
+static uint32_t CF_CAT3(cf_inner_type, CF_S, _)(const CF_T(InnerBox) *b) {
+    switch (b->payload.kind) {
+        case CF_K(InnerPayload, flst): return HV_BOX_FLST;
+        case CF_K(InnerPayload, url):  return HV_BOX_URL;
+        case CF_K(InnerPayload, jp2c): return HV_BOX_JP2C;
+        case CF_K(InnerPayload, jpch): return HV_BOX_JPCH;
+        case CF_K(InnerPayload, ftbl): return HV_BOX_FTBL;
+        case CF_K(InnerPayload, dtbl): return HV_BOX_DTBL;
+        default:                       return 0;
+    }
+}
+
+/* A Data Entry URL box of a dtbl: nothing after LOC's NUL. Layer 1 names
+ * that box.extent (hv_rule_extent); layer 2 passes LOC, its NUL and the
+ * bytes after it to hv_rule_url (ReadUrlBox; ReadJPX: links resolve to
+ * .jp2 only), which names it url.terminator, as the reader does. */
+static const char *CF_CAT3(cf_url, CF_S, )(const CF_T(DataEntryUrl) *url, cf_layer layer) {
+    uint8_t raw[sizeof url->loc + sizeof url->extra.arr];
+    size_t n = strlen((const char *) url->loc) + 1, extra = (size_t) url->extra.nCount;
+    if (layer < CF_PROFILE) return hv_rule_extent(HV_BOX_URL, (uint64_t) extra);
+    memcpy(raw, url->loc, n);
+    memcpy(raw + n, url->extra.arr, extra);
+    return hv_rule_url(url->header.vers, url->header.flag, raw, n + extra);
 }
 
 const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
     int i, j, k;
-    int jp2c = 0, jpch = 0, ftbl = 0, dtbl = 0, rreq = 0, ndr = 0;
+    int ndr = 0;
+    hv_jpx_boxes count = { 0, 0, 0, 0, 0, 0, 0 };
     const char *r;
 
     /* T.800 I.4: signature box then file type box. */
-    if (file->boxes.nCount < 2) return "file.two-boxes";
+    /* The reader's order: the signature, then a second box. */
     if (file->boxes.arr[0].payload.kind != CF_K(TopPayload, jP) ||
-        file->boxes.arr[0].payload.u.jP.data.nCount != 4 ||
-        memcmp(file->boxes.arr[0].payload.u.jP.data.arr, "\x0D\x0A\x87\x0A", 4) != 0)
+        !cf_signature(&file->boxes.arr[0].payload.u.jP))
         return "file.signature";
+    if (file->boxes.nCount < 2) return "file.two-boxes";
     if (file->boxes.arr[1].payload.kind != CF_K(TopPayload, ftyp))
         return "file.ftyp-second";
-    {
-        const Ftyp *ftyp = &file->boxes.arr[1].payload.u.ftyp;
-        const char *expected = kind == CF_JP2 ? "jp2 " : "jpx ";
-        int compatible = 0;
-        if (file->boxes.arr[1].payload.kind != CF_K(TopPayload, ftyp) ||
-            memcmp(ftyp->brand.arr, expected, 4) != 0)
-            return "file.ftyp-brand";
-        for (i = 0; i < ftyp->compat.nCount; ++i)
-            compatible |= memcmp(ftyp->compat.arr[i].arr, expected, 4) == 0;
-        if (!compatible) return "file.ftyp-compatibility";
-    }
+    if ((r = cf_ftyp(&file->boxes.arr[1].payload.u.ftyp, kind, layer)) != NULL) return r;
 
     /* First pass: dtbl (ndr is needed to validate fragment references). */
     for (i = 0; i < file->boxes.nCount; ++i) {
         const CF_T(TopBox) *b = &file->boxes.arr[i];
         if (b->payload.kind == CF_K(TopPayload, dtbl)) {
             const CF_T(DataReferences) *d = &b->payload.u.dtbl;
-            dtbl++;
+            count.dtbl++;
             ndr = (int) d->ndr;
             if (d->references.nCount != (int) d->ndr) return "dtbl.ndr-count";
             for (j = 0; j < d->references.nCount; ++j) {
                 const CF_T(InnerBox) *u = &d->references.arr[j];
-                if (u->payload.kind != CF_K(InnerPayload, url)) return "dtbl.non-url";
-                if (layer >= CF_PROFILE && kind == CF_JPX) {
-                    const CF_T(DataEntryUrl) *url = &u->payload.u.url;
-                    const char *loc = (const char *) url->loc;
-                    size_t n = strlen(loc);
-                    if (url->vers != 0 || url->flag != 0)
-                        return "url.version-flags";
-                    if (n < 8) return "url.length";
-                    if (strncmp(loc, "file://", 7) != 0)
-                        return "url.file-scheme";   /* ReadUrlBox; ReadJP2 never reads dtbl */
-                    if (n < 4 || strcmp(loc + n - 4, ".jp2") != 0)
-                        return "url.jp2-target";    /* ReadJPX: links resolve to .jp2 only */
-                }
+                if ((r = hv_rule_child(HV_BOX_DTBL, CF_CAT3(cf_inner_type, CF_S, _)(u))) != NULL)
+                    return r;
+                if ((r = CF_CAT3(cf_url, CF_S, )(&u->payload.u.url, layer)) != NULL)
+                    return r;
             }
         }
     }
@@ -341,34 +314,32 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         const CF_T(TopBox) *b = &file->boxes.arr[i];
         switch (b->payload.kind) {
             case CF_K(TopPayload, jp2c):
-                jp2c++;
-                if ((r = CF_CAT3(cf_codestream, CF_S, )(&b->payload.u.jp2c, layer)) != NULL)
-                    return r;
+                count.jp2c++;
                 break;
             case CF_K(TopPayload, jpch):
                 for (j = 0; j < b->payload.u.jpch.children.nCount; ++j)
-                    if (b->payload.u.jpch.children.arr[j].payload.kind ==
-                        InnerPayload_jp2c_PRESENT)
-                        return "jpch.nested-jp2c";
-                jpch++;
+                    if ((r = hv_rule_child(HV_BOX_JPCH, CF_CAT3(cf_inner_type, CF_S, _)(
+                                               &b->payload.u.jpch.children.arr[j]))) != NULL)
+                        return r;
+                count.jpch++;
                 break;
             case CF_K(TopPayload, ftbl): {
                 const CF_T(Superbox) *sb = &b->payload.u.ftbl;
                 int flst = 0;
-                ftbl++;
+                count.ftbl++;
                 for (j = 0; j < sb->children.nCount; ++j) {
                     const CF_T(InnerBox) *c = &sb->children.arr[j];
+                    if ((r = hv_rule_child(HV_BOX_FTBL, CF_CAT3(cf_inner_type, CF_S, _)(c))) != NULL)
+                        return r;
                     if (c->payload.kind != CF_K(InnerPayload, flst)) continue;
                     flst++;
-                    if (layer >= CF_PROFILE && kind == CF_JPX &&
-                        (c->payload.u.flst.nf != 1 ||
-                         c->payload.u.flst.fragments.nCount != 1))
-                        return "flst.one-fragment";
-                    for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k) {
-                        int dr = (int) c->payload.u.flst.fragments.arr[k].dr;
-                        if (dr > ndr) return "flst.dr-range";
-                        if (layer >= CF_PROFILE && kind == CF_JPX && dr == 0) return "flst.dr-external";
-                    }
+                    /* T.801 M.11.3.1: NF fragments. */
+                    if ((int) c->payload.u.flst.nf != c->payload.u.flst.fragments.nCount)
+                        return "flst.nf-count";
+                    if (layer >= CF_PROFILE &&
+                        (r = hv_rule_flst(c->payload.u.flst.nf,
+                                          c->payload.u.flst.fragments.nCount)) != NULL)
+                        return r;
                 }
                 if (flst != 1) return "ftbl.one-flst";     /* T.801 Annex M, Fragment Table box */
                 break;
@@ -378,38 +349,42 @@ const char *CF_FN(const CF_FILE *file, cf_layer layer, cf_kind kind) {
         }
     }
 
+    /* The count rules (hv_rule_jpx). The model has no jclx or Multiple
+     * Codestream box (they are `other`): cf_extensions says whether the
+     * file has one, whose codestreams and headers the count leaves out.
+     * Layer 2 for a .jp2 is cf_check_jp2_profile, in crossfield.c. */
     if (kind == CF_JPX) {
         for (i = 0; i < file->boxes.nCount; ++i)
-            if (file->boxes.arr[i].payload.kind == CF_K(TopPayload, rreq)) rreq++;
-        if (layer == CF_STANDARD &&
-            (rreq != 1 || file->boxes.nCount < 3 ||
-             file->boxes.arr[2].payload.kind != CF_K(TopPayload, rreq)))
-            return "jpx.reader-requirements";
-        /* T.801 M.11.2: "A JPX file shall contain zero or one Data Reference
-         * boxes, and that Data Reference box shall be at the top level of the
-         * file." */
-        if (dtbl > 1) return "jpx.one-dtbl";
-        /* T.801 M.11.6: "If Codestream Header boxes appear anywhere in the
-         * file, the number of codestreams found in the file shall be the same
-         * as the number of available codestream headers." Every jp2c or ftbl
-         * is one codestream, numbered by source-box order. A file with no
-         * jpch box takes its header information from jp2h and is unconstrained
-         * here. The model has no jclx or Multiple Codestream box, so every
-         * codestream and every header is top level. */
-        if (jpch > 0 && jp2c + ftbl != jpch) return "jpx.codestream-count";
+            if (file->boxes.arr[i].payload.kind == CF_K(TopPayload, rreq)) count.rreq++;
+        count.rreq_third = file->boxes.nCount >= 3 &&
+                           file->boxes.arr[2].payload.kind == CF_K(TopPayload, rreq);
+        count.extensions = layer < CF_PROFILE && cf_extensions;
+        if ((r = hv_rule_jpx(&count, layer >= CF_PROFILE)) != NULL) return r;
     }
 
-    if (layer >= CF_PROFILE) {
-        if (kind == CF_JP2) {
-            /* ReadJP2 looks at jp2c boxes only. */
-            if (jp2c != 1) return "jp2.one-codestream";
-        } else {
-            /* ReadJPX requires the header the standard makes optional. */
-            if (jpch < 1) return "jpx.no-jpch";
-            /* Embedded and linked codestreams do not mix. */
-            if (jp2c > 0 && ftbl > 0) return "jpx.mixed-sources";
-            if (ftbl > 0 && dtbl != 1) return "jpx.linked-shape";
+    /* The data references, after the count rules, as the reader checks
+     * them: a linked file without a dtbl is jpx.linked-shape, not a DR out
+     * of range. */
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const CF_T(TopBox) *b = &file->boxes.arr[i];
+        if (b->payload.kind != CF_K(TopPayload, ftbl)) continue;
+        for (j = 0; j < b->payload.u.ftbl.children.nCount; ++j) {
+            const CF_T(InnerBox) *c = &b->payload.u.ftbl.children.arr[j];
+            if (c->payload.kind != CF_K(InnerPayload, flst)) continue;
+            for (k = 0; k < c->payload.u.flst.fragments.nCount; ++k)
+                if ((r = hv_rule_fragment_dr(c->payload.u.flst.fragments.arr[k].dr,
+                                             (uint64_t) ndr, layer >= CF_PROFILE)) != NULL)
+                    return r;
         }
+    }
+
+    /* The codestreams, after the file's boxes, as the reader reads them
+     * (hv_check_served: the file rules, then each codestream). */
+    for (i = 0; i < file->boxes.nCount; ++i) {
+        const CF_T(TopBox) *b = &file->boxes.arr[i];
+        if (b->payload.kind == CF_K(TopPayload, jp2c) &&
+            (r = CF_CAT3(cf_codestream, CF_S, )(&b->payload.u.jp2c, layer)) != NULL)
+            return r;
     }
     return NULL;
 }

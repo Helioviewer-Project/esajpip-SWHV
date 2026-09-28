@@ -60,9 +60,25 @@ namespace jpeg2000 {
 #define COC_MARKER 0xFF53
 #define QCD_MARKER 0xFF5C
 #define POC_MARKER 0xFF5F
+#define PPM_MARKER 0xFF60
 #define SOT_MARKER 0xFF90
 #define PLT_MARKER 0xFF58
+#define COM_MARKER 0xFF64
 #define SOD_MARKER 0xFF93
+#define PPT_MARKER 0xFF61
+#define SOP_MARKER 0xFF91
+#define EPH_MARKER 0xFF92
+
+// Marker segment lengths (Lxxx counts itself) and COM registration values,
+// T.800 Tables A.9, A.12, A.27, A.37, A.43 and A.44.
+#define LSIZ_MIN 41
+#define LCOD_MIN 12
+#define LQCD_MIN 4
+#define LQCD_MAX 197
+#define LPLT_MIN 4
+#define LCOM_MIN 5
+#define RCOM_BINARY 0
+#define RCOM_LATIN 1
 
 #define JP2C_BOX_ID 0x6A703263
 #define FILE_TYPE_BOX_ID 0x66747970
@@ -126,6 +142,31 @@ namespace jpeg2000 {
             static_cast<uint64_t>(length) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(length - 2, SEEK_CUR);
+        return true;
+    }
+
+    // QCD, T.800 A.6.4. The quantization values themselves are skipped;
+    // packet indexing does not depend on them.
+    static bool ReadQCDMarker(File *file, uint64_t limit) {
+        uint16_t length = 0;
+        if (file->GetOffset() > limit || !file->ReadReverse(&length) ||
+            length < LQCD_MIN || length > LQCD_MAX ||
+            static_cast<uint64_t>(length) - 2 > limit - file->GetOffset())
+            return false;
+        file->Seek(length - 2, SEEK_CUR);
+        return true;
+    }
+
+    // COM, T.800 A.9.2. Other Rcom values are reserved (Table A.44). The
+    // comment itself is skipped.
+    static bool ReadCOMMarker(File *file, uint64_t limit) {
+        uint16_t length = 0;
+        uint16_t rcom = 0;
+        if (file->GetOffset() > limit || !file->ReadReverse(&length) || length < LCOM_MIN ||
+            static_cast<uint64_t>(length) - 2 > limit - file->GetOffset() ||
+            !file->ReadReverse(&rcom) || (rcom != RCOM_BINARY && rcom != RCOM_LATIN))
+            return false;
+        file->Seek(length - 4, SEEK_CUR);
         return true;
     }
 
@@ -272,6 +313,12 @@ namespace jpeg2000 {
                     // their own indexing model and cannot be skipped safely.
                     return false;
 
+                case PPM_MARKER:
+                    // PPM moves the packet headers into the main header, so
+                    // the precinct data-bins, built from the tile-part data,
+                    // would hold packet bodies without their headers.
+                    return false;
+
                 case SOT_MARKER: {
                     TRACE("SOT marker...");
                     FileSegment data;
@@ -287,9 +334,14 @@ namespace jpeg2000 {
 
                 case QCD_MARKER:
                     if (phase != MAIN_HEADER || qcd ||
-                        !SkipMarker(file, marker_limit))
+                        !ReadQCDMarker(file, marker_limit))
                         return false;
                     qcd = true;
+                    break;
+
+                case COM_MARKER:
+                    if (phase == TILE_HEADER || !ReadCOMMarker(file, marker_limit))
+                        return false;
                     break;
 
                 case PLT_MARKER: TRACE("PLT marker...");
@@ -324,11 +376,24 @@ namespace jpeg2000 {
                 case SOC_MARKER:
                     return false;
 
+                case PPT_MARKER:
+                case SOP_MARKER:
+                case EPH_MARKER:
+                    // T.800 Table A.1 places these in tile-part headers and
+                    // packets, never in the main header.
+                    return false;
+
                 default:
                     // Tile-header contents are not sent: the JPIP tile-header
                     // data-bin is empty. PLT is the only supported tile-header
                     // segment because it is used only to locate packets.
-                    if (phase == TILE_HEADER || !SkipMarker(file, marker_limit))
+                    // 0xFF00 is not a marker. 0xFF30 to 0xFF3F have no
+                    // segment (T.800 A.1.3), so they cannot be skipped by
+                    // length, and T.800 leaves open whether skipping them
+                    // is harmless.
+                    if (phase == TILE_HEADER || value == 0xFF00 ||
+                        (value >= 0xFF30 && value <= 0xFF3F) ||
+                        !SkipMarker(file, marker_limit))
                         return false;
             }
         }
@@ -340,7 +405,7 @@ namespace jpeg2000 {
     static bool ReadSIZMarker(File *file, uint64_t limit,
                               CodingParameters *params, bool *mct_compatible) {
         uint16_t lsiz = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < 41 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lsiz) || lsiz < LSIZ_MIN ||
             static_cast<uint64_t>(lsiz) - 2 > limit - file->GetOffset())
             return false;
         file->Seek(2, SEEK_CUR); // Rsiz
@@ -399,7 +464,7 @@ namespace jpeg2000 {
         uint8_t cb_height = 0;
         uint8_t cb_style = 0;
         uint8_t transform = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < 12 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lcod) || lcod < LCOD_MIN ||
             static_cast<uint64_t>(lcod) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&cs_buf) || !file->ReadReverse(&progression) ||
             !file->ReadReverse(&quality_layers) || !file->ReadReverse(&mct) ||
@@ -408,7 +473,7 @@ namespace jpeg2000 {
             !file->ReadReverse(&transform))
             return false;
 
-        uint16_t expected_length = 12 + ((cs_buf & 1) ? transform_levels + 1 : 0);
+        uint16_t expected_length = LCOD_MIN + ((cs_buf & 1) ? transform_levels + 1 : 0);
         if (lcod != expected_length || (cs_buf & 0xFA) != 0 || progression > 4 || quality_layers == 0 ||
             mct > 1 || (mct != 0 && !mct_compatible) ||
             transform_levels > 32 || cb_width > 8 || cb_height > 8 ||
@@ -474,7 +539,7 @@ namespace jpeg2000 {
 
         uint16_t lplt = 0;
         uint8_t zplt = 0;
-        if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < 4 ||
+        if (file->GetOffset() > limit || !file->ReadReverse(&lplt) || lplt < LPLT_MIN ||
             static_cast<uint64_t>(lplt) - 2 > limit - file->GetOffset() ||
             !file->ReadReverse(&zplt) || zplt != plt.size())
             return false;
@@ -491,27 +556,16 @@ namespace jpeg2000 {
             return false;
 
         if (data.length == 0) {
+            // Psot = 0 (T.800 A.4.2): the tile-part runs up to the EOC that
+            // ends the codestream, so it is the last one; ReadCodestream
+            // then reads that EOC. The packet data is not scanned, as for
+            // any other tile-part.
             data.offset = file->GetOffset();
-            // JPEG 2000 bit stuffing prevents an EOC marker from appearing in
-            // packet data, so the first FF D9 terminates the final tile-part.
-            while (file->Find(0xFF, limit)) {
-                uint64_t marker_offset = file->GetOffset() - 1;
-                if (file->GetOffset() >= limit)
-                    return false;
-                uint8_t value;
-                if (!file->Read(&value))
-                    return false;
-                if (value == (EOC_MARKER & 0xFF)) {
-                    data.length = file->GetOffset() - 2 - data.offset;
-                    file->Seek(file->GetOffset() - 2);
-                    return true;
-                }
-                if (value == (SOT_MARKER & 0xFF))
-                    return false;
-                if (value == 0xFF)
-                    file->Seek(marker_offset + 1);
-            }
-            return false;
+            if (data.offset > limit || limit - data.offset < 2)
+                return false;
+            data.length = limit - 2 - data.offset;
+            file->Seek(limit - 2);
+            return true;
         }
 
         uint64_t header_length = file->GetOffset() - data.offset;

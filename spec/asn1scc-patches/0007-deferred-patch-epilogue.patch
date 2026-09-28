@@ -1,0 +1,655 @@
+diff --git a/BackendAst/DAstACNDeferred.fs b/BackendAst/DAstACNDeferred.fs
+index 2716f05..d80d442 100644
+--- a/BackendAst/DAstACNDeferred.fs
++++ b/BackendAst/DAstACNDeferred.fs
+@@ -567,14 +567,18 @@ let private createDeferredSequenceFunction
+                 | [] -> None
+                 | _ ->
+                     Some (fun root ->
+-                        producerLinks |> List.collect (fun (boundaryPath, determinant, parameter) ->
++                        producerLinks |> List.choose (fun (boundaryPath, determinant, parameter) ->
++                            let producer =
++                                children |> List.pick (function
++                                    | DAst.Asn1Child child when child.Type.id.ToScopeNodeList = boundaryPath -> Some child
++                                    | _ -> None)
+                             let consumers =
+                                 deps.acnDependencies |> List.filter (fun dep ->
+                                     dep.determinant.id = parameter.id
+                                     && isPrefix parentPath dep.asn1Type.ToScopeNodeList
+                                     && not (isPrefix boundaryPath dep.asn1Type.ToScopeNodeList)
+                                     && (match dep.dependencyKind with AcnDepRefTypeArgument _ -> false | _ -> true))
+-                            consumers |> List.choose (fun dep ->
++                            let patches = consumers |> List.choose (fun dep ->
+                                 match lm.lg.getDeferredDetFunctions determinant.Type with
+                                 | None -> None
+                                 | Some (_initFn, patchFn, nBitsOpt, uperMinOffset) ->
+@@ -596,7 +600,34 @@ let private createDeferredSequenceFunction
+                                     Some (
+                                         match preBlock with
+                                         | None -> patchCall
+-                                        | Some pre -> lm.acn.acn_deferred_det_preblock_wrap pre patchCall)))
++                                        | Some pre -> lm.acn.acn_deferred_det_preblock_wrap pre patchCall))
++                            match patches with
++                            | [] -> None
++                            | _ ->
++                                let patchBody = String.concat "\n" patches
++                                match producer.Optionality with
++                                | Some (Optional _) ->
++                                    let parent = root.accessPath.joined lm.lg
++                                    let access = lm.lg.getAccess root.accessPath
++                                    let name = lm.lg.getAsn1ChildBackendName producer
++                                    let checks =
++                                        consumers
++                                        |> List.choose (fun dep ->
++                                            children |> List.tryPick (function
++                                                | DAst.Asn1Child child when child.Type.id = dep.asn1Type ->
++                                                    match child.Optionality with
++                                                    | Some AlwaysAbsent -> None
++                                                    | Some (Optional _) -> Some (lm.lg.getAsn1ChildBackendName child)
++                                                    | _ -> Some ""
++                                                | _ -> None))
++                                        |> List.distinct
++                                        |> List.map (fun consumer ->
++                                            lm.acn.acn_deferred_det_optional_producer_check parent access name consumer "ERR_ACN_DET_CONSISTENCY_MISMATCH")
++                                    let guarded =
++                                        lm.acn.acn_deferred_det_optional_producer_wrap parent access name patchBody
++                                    Some (String.concat "\n" (checks @ [guarded]))
++                                | Some AlwaysAbsent -> None
++                                | _ -> Some patchBody)
+                         |> String.concat "\n")
+ 
+         // Patch local deferred determinants from their sibling consumers
+diff --git a/StgAda/acn_a.stg b/StgAda/acn_a.stg
+index d8e4ba3..5ce5850 100644
+--- a/StgAda/acn_a.stg
++++ b/StgAda/acn_a.stg
+@@ -2100,12 +2100,25 @@ acn_deferred_det_uper_offset_sub(sValue, sOffset) ::= "(<sValue> - <sOffset>)"
+    The preBlock is emitted in the declarative part; the patchCall in the body. */
+ acn_deferred_det_preblock_wrap(sPreBlock, sPatchCall) ::= <<
+ declare
+-    <sPreBlock>
++<sPreBlock>
+ begin
+-    <sPatchCall>
++<sPatchCall>
+ end;
+ >>
+ 
++acn_deferred_det_optional_producer_check(sParent, sAcc, sProducer, sConsumer, sErrCode) ::= <<
++if <sParent>.Exist.<sProducer> = 0<if(sConsumer)> and then <sParent>.Exist.<sConsumer> = 1<endif> then
++    result := (Success => False, ErrorCode => <sErrCode>);
++    return;
++end if;
++>>
++
++acn_deferred_det_optional_producer_wrap(sParent, sAcc, sProducer, sBody) ::= <<
++if <sParent>.Exist.<sProducer> = 1 then
++    <sBody>
++end if;
++>>
++
+ /* AcnInsertedFieldRef type name (used by GenericLocalVariable). */
+ acn_deferred_det_type_name() ::= "adaasn1rtl.encoding.acn.AcnInsertedFieldRef"
+ 
+diff --git a/StgC/acn_c.stg b/StgC/acn_c.stg
+index 370c94d..453af15 100644
+--- a/StgC/acn_c.stg
++++ b/StgC/acn_c.stg
+@@ -1269,8 +1269,6 @@ MultiAcnUpdate(v, sV0, sErrCode, arrsLocalDeclarations, arrsLocalUpdateStatement
+     <arrsLocalUpdateStatements; separator="\n">
+ 
+     if (ret) {
+-
+-        *pErrCode = <sErrCode>;
+         <arrsGetFirstIntValue; separator=" "> else {
+             ret = FALSE; /*COVERAGE_IGNORE*/
+         }
+@@ -1278,6 +1276,9 @@ MultiAcnUpdate(v, sV0, sErrCode, arrsLocalDeclarations, arrsLocalUpdateStatement
+             ret = (<arrsLocalCheckEquality; separator=" && ">);
+             <v>_is_initialized = TRUE;
+         }
++        if (!ret) {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1354,8 +1355,10 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if (!ret) return FALSE;
++        if (!ret) {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++            return FALSE; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1435,8 +1438,10 @@ octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFunc
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBytes(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if (!ret) return FALSE;
++        if (!ret) {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++            return FALSE; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1462,8 +1467,10 @@ bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFu
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if (!ret) return FALSE;
++        if (!ret) {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++            return FALSE; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1534,8 +1541,10 @@ bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncNa
+         AcnBitStreamPos acn_data_end = Acn_BitStream_GetPos(pBitStrm);
+         asn1SccUint acn_nCount = Acn_BitStream_DistanceInBits(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>((asn1SccUint)<if(soMF)><soMF>_encode(acn_nCount)<else>acn_nCount<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if (!ret) return FALSE;
++        if (!ret) {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++            return FALSE; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1717,16 +1726,20 @@ acn_deferred_det_init_ptr_decode(sInitFuncName, sDetName) ::= <<
+    "ptr" variant: det is an AcnInsertedFieldRef* formal parameter — pass as-is. */
+ acn_deferred_det_patch_value_encode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>((asn1SccUint)<sValue>, pBitStrm, &<sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_value_decode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+ >>
+ acn_deferred_det_patch_ptr_encode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>((asn1SccUint)<sValue>, pBitStrm, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_ptr_decode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1749,8 +1762,10 @@ acn_deferred_det_init_ptr_with_size_decode(sInitFuncName, nBits, sDetName) ::= <
+ 
+ acn_deferred_det_patch_value_with_size_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>((asn1SccUint)<sValue>, pBitStrm, <nBits>, &<sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_value_with_size_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1758,8 +1773,10 @@ acn_deferred_det_patch_value_with_size_decode(sPatchFuncName, nBits, sValue, sDe
+ 
+ acn_deferred_det_patch_ptr_with_size_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>((asn1SccUint)<sValue>, pBitStrm, <nBits>, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_ptr_with_size_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1768,16 +1785,20 @@ acn_deferred_det_patch_ptr_with_size_decode(sPatchFuncName, nBits, sValue, sDetN
+ /* IA5String PatchDet variants: pass string value directly (no asn1SccUint cast) */
+ acn_deferred_det_patch_value_str_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue>, pBitStrm, <nBits>, &<sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_value_str_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+ >>
+ acn_deferred_det_patch_ptr_str_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue>, pBitStrm, <nBits>, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if (!ret) return FALSE;
++if (!ret) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
+ >>
+ acn_deferred_det_patch_ptr_str_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1929,6 +1950,19 @@ acn_deferred_det_preblock_wrap(sPreBlock, sPatchCall) ::= <<
+ }
+ >>
+ 
++acn_deferred_det_optional_producer_check(sParent, sAcc, sProducer, sConsumer, sErrCode) ::= <<
++if (!<sParent><sAcc>exist.<sProducer><if(sConsumer)> && <sParent><sAcc>exist.<sConsumer><endif>) {
++    *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++    return FALSE; /*COVERAGE_IGNORE*/
++}
++>>
++
++acn_deferred_det_optional_producer_wrap(sParent, sAcc, sProducer, sBody) ::= <<
++if (<sParent><sAcc>exist.<sProducer>) {
++    <sBody>
++}
++>>
++
+ /* AcnInsertedFieldRef type name */
+ acn_deferred_det_type_name() ::= "AcnInsertedFieldRef"
+ 
+diff --git a/StgC/test_cases_c.stg b/StgC/test_cases_c.stg
+index 9678d89..3f3e712 100644
+--- a/StgC/test_cases_c.stg
++++ b/StgC/test_cases_c.stg
+@@ -73,6 +73,7 @@ Codec_Encode(sModName, sFuncName, sVal) ::= <<
+ // Encode value
+ ret = <sFuncName>(<sVal>, &bitStrm, pErrCode, TRUE);
+ *pErrCode = (ret && *pErrCode ==0) ? 0 : 1;
++ret = *pErrCode == 0; /* a function that succeeds must not report an error */
+ >>
+ 
+ Codec_Encode_XER(sModName, sFuncName, sVal, sTasName) ::= <<
+@@ -84,6 +85,7 @@ BitStream_AttachBuffer(&bitStrm, encBuff, <sTasName>_REQUIRED_BYTES_FOR_<sEnc>EN
+ // Decode value
+ ret = <sFuncName>(<sAmber>decodedPDU, &bitStrm, pErrCode);
+ *pErrCode = (ret && *pErrCode ==0) ? 0 : 2;
++ret = *pErrCode == 0; /* a function that succeeds must not report an error */
+ >>
+ 
+ /* 'size deduced' PDU: the decoder derives element counts from the end of the
+@@ -96,6 +98,7 @@ Codec_Decode_exact_length(sModName, sFuncName, sTasName, sEnc, sAmber) ::= <<
+ // Decode value
+ ret = <sFuncName>(<sAmber>decodedPDU, &bitStrm, pErrCode);
+ *pErrCode = (ret && *pErrCode ==0) ? 0 : 2;
++ret = *pErrCode == 0; /* a function that succeeds must not report an error */
+ >>
+ 
+ Codec_Decode_XER(sModName, sFuncName, sTasName, sEnc, sAmber) ::= <<
+@@ -103,12 +106,14 @@ ByteStream_AttachBuffer(&bitStrm, encBuff, <sTasName>_REQUIRED_BYTES_FOR_<sEnc>E
+ // Decode value
+ ret = <sFuncName>(<sAmber>decodedPDU, &bitStrm, pErrCode);
+ *pErrCode = (ret && *pErrCode ==0) ? 0 : 2;
++ret = *pErrCode == 0; /* a function that succeeds must not report an error */
+ >>
+ 
+ Codec_validate_output(sModName, sFuncName, sAmber) ::= <<
+ // validate decoded data
+ ret = <sFuncName>(<sAmber>decodedPDU, pErrCode);
+ *pErrCode = (ret && *pErrCode ==0) ? 0 : 3;
++ret = *pErrCode == 0; /* a function that succeeds must not report an error */
+ >>
+ 
+ Codec_compare_input_with_output(sModName, sFuncName, sVal, sAmber) ::= <<
+diff --git a/StgPython/acn_python.stg b/StgPython/acn_python.stg
+index ca3e80e..453b797 100644
+--- a/StgPython/acn_python.stg
++++ b/StgPython/acn_python.stg
+@@ -1665,5 +1665,7 @@ acn_deferred_det_relative_access(sRootId, sFieldPath) ::= "# TODO"
+ 
+ acn_deferred_det_uper_offset_sub(sValue, sOffset) ::= "# TODO"
+ acn_deferred_det_preblock_wrap(sPreBlock, sPatchCall) ::= "# TODO"
++acn_deferred_det_optional_producer_check(sParent, sAcc, sProducer, sConsumer, sErrCode) ::= "# TODO"
++acn_deferred_det_optional_producer_wrap(sParent, sAcc, sProducer, sBody) ::= "# TODO"
+ acn_deferred_det_type_name() ::= "# TODO"
+ acn_deferred_det_init_expr() ::= "# TODO"
+diff --git a/StgRust/acn_rust.stg b/StgRust/acn_rust.stg
+index 4c5dfa7..f82bc17 100644
+--- a/StgRust/acn_rust.stg
++++ b/StgRust/acn_rust.stg
+@@ -1415,8 +1415,6 @@ MultiAcnUpdate(v, sV0, sErrCode, arrsLocalDeclarations, arrsLocalUpdateStatement
+     <arrsLocalUpdateStatements; separator="\n">
+ 
+     if ret {
+-
+-        *pErrCode = <sErrCode>;
+         <arrsGetFirstIntValue; separator=" "> else {
+             ret = false; /*COVERAGE_IGNORE*/
+         }
+@@ -1424,6 +1422,9 @@ MultiAcnUpdate(v, sV0, sErrCode, arrsLocalDeclarations, arrsLocalUpdateStatement
+             ret = (<arrsLocalCheckEquality; separator=" && ">);
+             <v>_is_initialized = true;
+         }
++        if !ret {
++            *pErrCode = <sErrCode>; /*COVERAGE_IGNORE*/
++        }
+     }
+ }
+ >>
+@@ -1496,8 +1497,10 @@ octet_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatch
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bytes(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if !ret { return false; }
++        if !ret {
++            *pErrCode = <sErrCode>;
++            return false;
++        }
+     }
+ }
+ >>
+@@ -1577,8 +1580,10 @@ octet_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFunc
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bytes(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if !ret { return false; }
++        if !ret {
++            *pErrCode = <sErrCode>;
++            return false;
++        }
+     }
+ }
+ >>
+@@ -1604,8 +1609,10 @@ bit_string_containing_deferred_func_encode(p, sFuncName, sDetParamName, sPatchFu
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bits(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if !ret { return false; }
++        if !ret {
++            *pErrCode = <sErrCode>;
++            return false;
++        }
+     }
+ }
+ >>
+@@ -1676,8 +1683,10 @@ bit_string_containing_deferred_wrapper_encode(sBody, sDetParamName, sPatchFuncNa
+         let acn_data_end = acn::acn_bit_stream_get_pos(pBitStrm);
+         let acn_n_count = acn::acn_bit_stream_distance_in_bits(acn_data_start, acn_data_end);
+         ret = <sPatchFuncName>(<if(soMF)><soMF>_encode(acn_n_count)<else>acn_n_count<endif>, pBitStrm, <sDetParamName>, pErrCode);
+-        *pErrCode = <sErrCode>;
+-        if !ret { return false; }
++        if !ret {
++            *pErrCode = <sErrCode>;
++            return false;
++        }
+     }
+ }
+ >>
+@@ -1862,16 +1871,20 @@ acn_deferred_det_init_ptr_decode(sInitFuncName, sDetName) ::= <<
+    "ptr" variant: det is an AcnInsertedFieldRef* formal parameter — pass as-is. */
+ acn_deferred_det_patch_value_encode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue> as u64, pBitStrm, &mut <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_value_decode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+ >>
+ acn_deferred_det_patch_ptr_encode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue> as u64, pBitStrm, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_ptr_decode(sPatchFuncName, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1894,8 +1907,10 @@ acn_deferred_det_init_ptr_with_size_decode(sInitFuncName, nBits, sDetName) ::= <
+ 
+ acn_deferred_det_patch_value_with_size_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue> as u64, pBitStrm, <nBits>, &mut <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_value_with_size_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1903,8 +1918,10 @@ acn_deferred_det_patch_value_with_size_decode(sPatchFuncName, nBits, sValue, sDe
+ 
+ acn_deferred_det_patch_ptr_with_size_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue> as u64, pBitStrm, <nBits>, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_ptr_with_size_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -1913,16 +1930,20 @@ acn_deferred_det_patch_ptr_with_size_decode(sPatchFuncName, nBits, sValue, sDetN
+ /* IA5String PatchDet variants: pass string value directly (no asn1SccUint cast) */
+ acn_deferred_det_patch_value_str_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue>, pBitStrm, <nBits>, &mut <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_value_str_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+ >>
+ acn_deferred_det_patch_ptr_str_encode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ ret = <sPatchFuncName>(<sValue>, pBitStrm, <nBits>, <sDetName>, pErrCode);
+-*pErrCode = <sErrCode>;
+-if !ret { return false; }
++if !ret {
++    *pErrCode = <sErrCode>;
++    return false;
++}
+ >>
+ acn_deferred_det_patch_ptr_str_decode(sPatchFuncName, nBits, sValue, sDetName, sErrCode) ::= <<
+ /* decode: no patch needed */
+@@ -2059,6 +2080,19 @@ acn_deferred_det_preblock_wrap(sPreBlock, sPatchCall) ::= <<
+ }
+ >>
+ 
++acn_deferred_det_optional_producer_check(sParent, sAcc, sProducer, sConsumer, sErrCode) ::= <<
++if !<sParent><sAcc>exist.<sProducer><if(sConsumer)> && <sParent><sAcc>exist.<sConsumer><endif> {
++    *pErrCode = <sErrCode>;
++    return false;
++}
++>>
++
++acn_deferred_det_optional_producer_wrap(sParent, sAcc, sProducer, sBody) ::= <<
++if <sParent><sAcc>exist.<sProducer> {
++    <sBody>
++}
++>>
++
+ /* AcnInsertedFieldRef type name */
+ acn_deferred_det_type_name() ::= "acn::AcnInsertedFieldRef"
+ 
+diff --git a/StgScala/acn_scala.stg b/StgScala/acn_scala.stg
+index 22a6db4..38dadf0 100644
+--- a/StgScala/acn_scala.stg
++++ b/StgScala/acn_scala.stg
+@@ -1460,6 +1460,8 @@ acn_deferred_det_relative_access(sRootId, sFieldPath) ::= "// TODO"
+ /* Group E: Miscellaneous */
+ acn_deferred_det_uper_offset_sub(sValue, sOffset) ::= "// TODO"
+ acn_deferred_det_preblock_wrap(sPreBlock, sPatchCall) ::= "// TODO"
++acn_deferred_det_optional_producer_check(sParent, sAcc, sProducer, sConsumer, sErrCode) ::= "// TODO"
++acn_deferred_det_optional_producer_wrap(sParent, sAcc, sProducer, sBody) ::= "// TODO"
+ acn_deferred_det_type_name() ::= "// TODO"
+ acn_deferred_det_init_expr() ::= "// TODO"
+ 
+diff --git a/v4Tests/scripts/runWireTests.sh b/v4Tests/scripts/runWireTests.sh
+index d5daa91..c41cf96 100755
+--- a/v4Tests/scripts/runWireTests.sh
++++ b/v4Tests/scripts/runWireTests.sh
+@@ -23,7 +23,7 @@ run_compiler() {
+     esac
+ }
+ 
+-for n in 004 010 011 016 017 018 019 020; do
++for n in 004 010 011 016 017 018 019 020 021; do
+     out=$work/$n
+     mkdir "$out"
+     run_compiler -c -ACN --acn-v2 -fp AUTO -equal -o "$out" "$cases/$n.asn1" "$cases/$n.acn"
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.acn b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.acn
+new file mode 100644
+index 0000000..248f648
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.acn
+@@ -0,0 +1,20 @@
++Min DEFINITIONS ::= BEGIN
++
++Chain [] {
++    b0  [],
++    b1  [present-when b0.more],
++    b2  [present-when b1.more],
++    b3  [present-when b2.more]
++}
++
++Link [] {
++    more    BOOLEAN [true-value '1'B],
++    bits    [encoding pos-int, size 7]
++}
++
++Last [] {
++    end     NULL [pattern '0'B],
++    bits    [encoding pos-int, size 7]
++}
++
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.asn1 b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.asn1
+new file mode 100644
+index 0000000..c95d312
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021.asn1
+@@ -0,0 +1,20 @@
++Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++
++-- A continuation chain, like the JPEG 2000 PLT entry (Iplt): each byte's
++-- top bit says whether the next byte is present.
++Chain ::= SEQUENCE {
++    b0  Link,
++    b1  Link OPTIONAL,       -- present iff b0.more
++    b2  Link OPTIONAL,       -- present iff b1.more
++    b3  Last OPTIONAL        -- present iff b2.more
++}
++
++Link ::= SEQUENCE {
++    bits    INTEGER (0..127)
++}
++
++Last ::= SEQUENCE {
++    bits    INTEGER (0..127)
++}
++
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021_wire_test.c b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021_wire_test.c
+new file mode 100644
+index 0000000..048291d
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/021_wire_test.c
+@@ -0,0 +1,81 @@
++/* Encodes Chain values after one byte FF already in the stream and
++ * compares the bytes and the error code with the expected ones. Exit
++ * status 0 means every case is right. */
++#include <stdio.h>
++#include <string.h>
++#include "021.h"
++
++static int run(const char *name, const Chain *v, const unsigned char *want, long nwant) {
++    unsigned char buf[16];
++    BitStream s;
++    int err = 0, ok, right;
++    long i, n;
++
++    memset(buf, 0, sizeof buf);
++    BitStream_AttachBuffer(&s, buf, sizeof buf);
++    BitStream_EncodeConstraintWholeNumber(&s, 0xFF, 0, 255);
++    ok = Chain_ACN_Encode(v, &s, &err, TRUE);
++    n = BitStream_GetLength(&s);
++    right = ok && err == 0 && n == nwant && memcmp(buf, want, (size_t)n) == 0;
++    printf("%s: %s ret=%d err=%d bytes:", right ? "ok  " : "BAD ", name, ok, err);
++    for (i = 0; i < n; i++) printf(" %02X", buf[i]);
++    printf("   expected ret=1 err=0 bytes:");
++    for (i = 0; i < nwant; i++) printf(" %02X", want[i]);
++    printf("\n");
++    return right;
++}
++
++static int reject_missing_producer(void) {
++    unsigned char buf[16] = {0};
++    BitStream stream;
++    Chain value;
++    int error = 0;
++    int encoded;
++
++    memset(&value, 0, sizeof value);
++    value.exist.b2 = 1;
++    BitStream_AttachBuffer(&stream, buf, sizeof buf);
++    encoded = Chain_ACN_Encode(&value, &stream, &error, TRUE);
++    if (encoded || error != ERR_ACN_DET_CONSISTENCY_MISMATCH) {
++        fprintf(stderr, "missing producer: ret=%d err=%d\n", encoded, error);
++        return 0;
++    }
++    return 1;
++}
++
++int main(void) {
++    static const unsigned char one[] = {0xFF, 0x05};
++    static const unsigned char two[] = {0xFF, 0x81, 0x48};
++    static const unsigned char three[] = {0xFF, 0x81, 0x80, 0x05};
++    static const unsigned char four[] = {0xFF, 0x81, 0x80, 0x80, 0x05};
++    Chain v;
++    int all = 1;
++
++    memset(&v, 0, sizeof v);                 /* 1 byte: b0 */
++    v.b0.bits = 5;
++    all &= run("b0", &v, one, sizeof one);
++
++    memset(&v, 0, sizeof v);                 /* 2 bytes: b0 b1 */
++    v.b0.bits = 1;
++    v.exist.b1 = 1;
++    v.b1.bits = 0x48;
++    all &= run("b0 b1", &v, two, sizeof two);
++
++    memset(&v, 0, sizeof v);                 /* 3 bytes: b0 b1 b2 */
++    v.b0.bits = 1;
++    v.exist.b1 = 1;
++    v.exist.b2 = 1;
++    v.b2.bits = 5;
++    all &= run("b0 b1 b2", &v, three, sizeof three);
++
++    memset(&v, 0, sizeof v);                 /* 4 bytes: b0 b1 b2 b3 */
++    v.b0.bits = 1;
++    v.exist.b1 = 1;
++    v.exist.b2 = 1;
++    v.exist.b3 = 1;
++    v.b3.bits = 5;
++    all &= run("b0 b1 b2 b3", &v, four, sizeof four);
++
++    all &= reject_missing_producer();
++    return all ? 0 : 1;
++}

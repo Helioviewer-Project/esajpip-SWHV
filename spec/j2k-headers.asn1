@@ -6,7 +6,7 @@
 -- in an OCTET STRING (CONTAINING ...) sized by Lxxx. The framing is what
 -- makes lengths consistent on encode and checked on decode; nothing here
 -- needs to know its own length. SOT is framing (its Psot sizes what follows
--- it) and is modelled as TilePart in j2k-codestream.asn1.
+-- it) and is modeled as TilePart in j2k-codestream.asn1.
 --
 -- Two layers:
 --   Layer 1 (standard):  field ranges of T.800 (2002) Annex A, table cited
@@ -20,14 +20,33 @@
 -- (see the .acn), so a body that does not exactly fill its segment is a
 -- decode error rather than a hand-written rule.
 --
--- Cross-field rules that ASN.1 cannot state are listed at the end and are
--- implemented once in harness/crossfield.c (and, for the server, in C++).
+-- Cross-field rules that ASN.1 cannot state are listed at the end. They are
+-- implemented once, in ../lib/hv_rules.c, which the harness
+-- (harness/crossfield_impl.h) and the reader in ../lib share: those on one
+-- segment body (SIZ, COD), on PLT entries and Zplt, and those across the
+-- segments of a codestream (hv_segments), to which the harness and the
+-- reader pass the segments and tile-parts in codestream order. The server
+-- implements the profile's in C++ (FileManager).
 --
 -- CORPUS BOUNDS: some SIZE upper bounds are smaller than the standard's
 -- (marked "corpus bound"). asn1scc allocates every SEQUENCE OF / OCTET
 -- STRING at its maximum inline, so standard-sized bounds would make the
 -- generated file structs gigabytes large. A vector exceeding a corpus bound
 -- is not a standard-invalid file; the harness never generates one.
+--
+-- Only Plt and Com have a corpus bound among the bodies (Table A.37: Lplt
+-- 4 to 65,535; Table A.43: Lcom 5 to 65,535). The reader/writer
+-- (jpeg2000-io.asn1) reads those one element at a time (Zplt, Iplt, Rcom),
+-- and decodes COD and QCD whole as j2k-codestream.asn1's CodSegment and
+-- QcdSegment, whose bodies (Cod, Qcd) are at the standard's bounds.
+--
+-- The framing keeps the bodies of COC, QCC, RGN, POC, TLM, PLM, PPM, PPT
+-- and CRG opaque (j2k-codestream.asn1's OpaqueSegment): their layout
+-- depends on Csiz or on a field before it, or runs on into the next
+-- segment of the same kind, which a CONTAINING region cannot state. Their
+-- element types are below ("Bodies read one element at a time");
+-- ../lib/hv_rules.c decodes them with those types for the reader and the
+-- harness alike.
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
 
@@ -42,8 +61,16 @@ EXPORTS ALL;
 -- ---------------------------------------------------------------------------
 
 Siz ::= SEQUENCE {
-    rsiz        INTEGER (0..65535),           -- capability flags are preserved for the client;
-                                              -- packet-layout features are checked separately
+    fixed       SizFixed,
+    components  SEQUENCE (SIZE (1..16384)) OF Component  -- fills the segment; count == csiz
+}
+
+-- The fixed part of SIZ, which the reader decodes on its own before the
+-- components, one at a time (jpeg2000-io.asn1).
+SizFixed ::= SEQUENCE {
+    rsiz        INTEGER (0..65535),           -- Table A.10: 0, 1 or 2; T.801 Table A.2 in
+                                              -- a JPX file (siz.rsiz, jp2.rsiz); the server
+                                              -- preserves any value for the client
     xsiz        INTEGER (1..4294967295),      -- reference grid width
     ysiz        INTEGER (1..4294967295),      -- reference grid height
     xosiz       INTEGER (0..4294967294),      -- image horizontal offset
@@ -52,8 +79,7 @@ Siz ::= SEQUENCE {
     ytsiz       INTEGER (1..4294967295),      -- reference tile height
     xtosiz      INTEGER (0..4294967294),      -- tile grid horizontal offset
     ytosiz      INTEGER (0..4294967294),      -- tile grid vertical offset
-    csiz        INTEGER (1..16384),           -- number of components
-    components  SEQUENCE (SIZE (1..16384)) OF Component  -- fills the segment; count == csiz
+    csiz        INTEGER (1..16384)            -- number of components
 }
 
 Component ::= SEQUENCE {                      -- Ssiz, XRsiz, YRsiz (Table A.11)
@@ -108,13 +134,15 @@ PrecinctSize ::= SEQUENCE {
 }
 
 -- ---------------------------------------------------------------------------
--- QCD body, A.6.4: quantization default. The server only skips it, so
--- the model keeps the guard byte and treats the rest as opaque.
+-- QCD body, A.6.4: quantization default. The server only skips it (Lqcd),
+-- so Sqcd is one byte here and SPqcd bytes; what Table A.28 makes of them,
+-- the style and the step sizes it selects, is a set of rules at layer 1
+-- (qcd.style, qcd.length, qcd.reserved-bits).
 -- ---------------------------------------------------------------------------
 
 Qcd ::= SEQUENCE {
-    sqcd        INTEGER (0..255),             -- Sqcd: guard bits and quantization style
-    spqcd       OCTET STRING (SIZE (0..1024))  -- fills the segment (corpus bound; standard 65530)
+    sqcd        INTEGER (0..255),             -- Sqcd: guard bits 7..5, style 4..0
+    spqcd       OCTET STRING (SIZE (1..194))  -- fills the segment; Table A.27: Lqcd 4 to 197
 }
 
 -- ---------------------------------------------------------------------------
@@ -122,12 +150,18 @@ Qcd ::= SEQUENCE {
 -- ---------------------------------------------------------------------------
 
 Plt ::= SEQUENCE {
-    zplt        INTEGER (0..255),             -- index of this PLT segment
-    entries     SEQUENCE (SIZE (1..128)) OF Iplt   -- fills the segment (corpus bound; standard 65532)
+    zplt        Zplt,
+    entries     SEQUENCE (SIZE (1..128)) OF Iplt   -- fills the segment (corpus bound)
 }
 
+Zplt ::= INTEGER (0..255)                     -- index of this PLT segment
+
 -- One packet length: big-endian groups of 7 bits, bit 7 set when another
--- byte follows. T.800 does not bound the byte count; ten bytes cover 64 bits.
+-- byte follows. T.800 does not bound the byte count; the model stops at ten
+-- bytes (70 bits), enough for any 64-bit value, a corpus bound: longer
+-- chains can only add leading zero groups or overflow. At layer 1 the
+-- rules take any number of leading zero groups (below); the profile and
+-- the server reject a chain over ten bytes.
 Iplt ::= SEQUENCE {
     b0  IpltByte,
     b1  IpltByte OPTIONAL,                    -- present iff b0.more
@@ -155,8 +189,107 @@ IpltByteLast ::= SEQUENCE {
 -- ---------------------------------------------------------------------------
 
 Com ::= SEQUENCE {
-    rcom        INTEGER (0..1),               -- 0 binary, 1 Latin-1
-    ccom        OCTET STRING (SIZE (0..4096))  -- fills the segment (corpus bound; standard 65531)
+    rcom        Rcom,
+    ccom        OCTET STRING (SIZE (1..4096)) -- fills the segment (corpus bound); Lcom >= 5
+}
+
+Rcom ::= INTEGER (0..1)                       -- 0 binary, 1 Latin-1
+
+-- ---------------------------------------------------------------------------
+-- Bodies read one element at a time: COC, QCC, RGN, POC, TLM, PLM, PPM,
+-- PPT and CRG (see the top). ../lib/hv_rules.c decodes each with these
+-- types, one element after another up to the end Lxxx gives; a body that
+-- is not a whole number of its elements does not decode (reason
+-- `decode`). Their rules are at the end of this file. Layer 1 only: the
+-- server skips QCC, RGN, TLM, PLM and CRG by length, and the profile
+-- excludes COC, POC, PPM and PPT (MainMarkerCode-Profile,
+-- TileMarkerCode-Profile in j2k-codestream.asn1).
+-- ---------------------------------------------------------------------------
+
+-- Ccoc, Cqcc, Crgn, CSpoc and CEpoc: 8 bits when Csiz < 257, 16 bits
+-- otherwise (Tables A.22, A.24, A.31, A.32).
+ComponentIndex ::= INTEGER (0..255)
+ComponentIndex-Wide ::= INTEGER (0..16383)
+
+-- COC after Ccoc (A.6.2, Table A.22): Scoc, then SPcoc, laid out as COD's
+-- SPcod (Table A.15).
+CocStyle ::= SEQUENCE {
+    scoc        Scoc,
+    spcoc       Spcod
+}
+
+Scoc ::= SEQUENCE {                           -- Table A.23, one byte, MSB first
+    reserved        INTEGER (0..0),           -- bits 7..1
+    customPrecincts BOOLEAN                   -- bit 0: precinct sizes in SPcoc
+}
+
+-- QCC after Cqcc (A.6.5, Table A.31): Sqcc and SPqcc, laid out as QCD's
+-- body (Qcd).
+
+-- RGN after Crgn (A.6.3, Tables A.24 to A.26).
+RgnStyle ::= SEQUENCE {
+    srgn        INTEGER (0..0),               -- implicit ROI; other values reserved
+    sprgn       INTEGER (0..255)              -- the implicit ROI shift
+}
+
+-- POC (A.6.6, Table A.32): progression changes to the end of the segment,
+-- CSpoc and CEpoc 8 bits when Csiz < 257, 16 bits otherwise.
+PocChange ::= SEQUENCE {
+    rspoc       INTEGER (0..32),
+    cspoc       INTEGER (0..255),
+    lyepoc      INTEGER (1..65535),
+    repoc       INTEGER (1..33),              -- above rspoc (poc.resolution)
+    cepoc       INTEGER (0..255),             -- above cspoc, or 0 for 256 (poc.component)
+    ppoc        INTEGER (0..4)                -- Table A.16
+}
+
+PocChange-Wide ::= SEQUENCE {
+    rspoc       INTEGER (0..32),
+    cspoc       INTEGER (0..16383),
+    lyepoc      INTEGER (1..65535),
+    repoc       INTEGER (1..33),
+    cepoc       INTEGER (0..16384),
+    ppoc        INTEGER (0..4)
+}
+
+-- TLM (A.7.1, Tables A.33 and A.34): Ztlm and Stlm, then one entry per
+-- tile-part to the end of the segment: Ttlm (none, 8 or 16 bits by ST),
+-- then Ptlm (16 or 32 bits by SP).
+TlmHeader ::= SEQUENCE {
+    ztlm        INTEGER (0..255),
+    stlm        Stlm
+}
+
+Stlm ::= SEQUENCE {                           -- Table A.34, one byte, MSB first
+    reserved    INTEGER (0..0),               -- bit 7
+    sp          INTEGER (0..1),               -- bit 6: Ptlm 16 or 32 bits
+    st          INTEGER (0..2),               -- bits 5..4: Ttlm none, 8 or 16 bits
+    reserved2   INTEGER (0..0)                -- bits 3..0
+}
+
+Ttlm ::= INTEGER (0..254)
+Ttlm-Wide ::= INTEGER (0..65534)
+Ptlm ::= INTEGER (14..65535)
+Ptlm-Wide ::= INTEGER (14..4294967295)
+
+-- PLM (A.7.2, Tables A.35 and A.36): Zplm, then per tile-part Nplm and
+-- Nplm bytes of packet lengths (Iplt), a series that may run on into the
+-- next PLM segment.
+Zplm ::= INTEGER (0..255)
+Nplm ::= INTEGER (0..255)
+
+-- PPM (A.7.4, Table A.38): Zppm, then per tile-part Nppm and Nppm bytes of
+-- packet headers, likewise. PPT (A.7.5, Table A.39): Zppt, then packet
+-- headers. The packet headers are coded data (B.10), which the model does
+-- not read.
+Zppm ::= INTEGER (0..255)
+Nppm ::= INTEGER (0..4294967295)
+Zppt ::= INTEGER (0..255)
+
+-- CRG (A.9.1, Table A.42): Xcrg and Ycrg of each component.
+CrgEntry ::= SEQUENCE {
+    xcrg        INTEGER (0..65535),
+    ycrg        INTEGER (0..65535)
 }
 
 -- ===========================================================================
@@ -165,41 +298,53 @@ Com ::= SEQUENCE {
 
 Siz-Profile ::= Siz (WITH COMPONENTS {
     ...,
+    fixed       (SizFixed-Profile),
+    components  (WITH COMPONENT (Component-Profile))
+})
+
+-- The profile's SIZ in the two parts the reader checks separately; Siz-Profile
+-- is stated through them, so the constraints are written once.
+SizFixed-Profile ::= SizFixed (WITH COMPONENTS {
+    ...,
     xsiz    (1..2147483647),
     ysiz    (1..2147483647),
     xosiz   (0..0),
     yosiz   (0..0),
     xtosiz  (0..0),
-    ytosiz  (0..0),
-    components (WITH COMPONENT (WITH COMPONENTS {
-        ...,
-        xrsiz (1..1),                         -- one shared precinct geometry
-        yrsiz (1..1)                          -- (ReadSIZMarker)
-    }))
+    ytosiz  (0..0)
 })
 
--- A distinct SEQUENCE keeps the profile's ACN encoding explicit. ASN1SCC
--- does not inherit ACN properties through a WITH COMPONENTS subtype.
-Cod-Profile ::= SEQUENCE {
-    scod        Scod,
-    sgcod       Sgcod,
-    spcod       Spcod
-}
-Qcd-Profile ::= Qcd
-Com-Profile ::= Com
+Component-Profile ::= Component (WITH COMPONENTS {
+    ...,
+    xrsiz (1..1),                             -- one shared precinct geometry
+    yrsiz (1..1)                              -- (ReadSIZMarker)
+})
 
--- The server bounds a packet length by its *value* (it must lie within the
--- tile-part data, ImageIndex::GetOffsetPacket), not by its byte count, so
--- the profile does not restrict the Iplt chain length: a value written in
--- more groups than needed is accepted. The value rule is cross-field.
-Plt-Profile ::= Plt
+-- No SOP markers: they are outside the served packet representation. The
+-- reader names this cod.sop-markers (hv_rules.c).
+Cod-Profile ::= Cod (WITH COMPONENTS {
+    ...,
+    scod        (Scod-Profile)
+})
+
+Scod-Profile ::= Scod (WITH COMPONENTS {
+    ...,
+    sopMarkers  (FALSE)
+})
+
+-- QCD, PLT and COM are served as layer 1 has them: the framing of the
+-- profile (j2k-codestream.asn1) uses Qcd, Plt and Com. The server bounds a
+-- packet length by its *value* (it must lie within the tile-part data,
+-- ImageIndex::GetOffsetPacket); within Iplt's ten bytes, a value written
+-- in more groups than needed is accepted. The value rule is cross-field.
 
 END
 
 -- ===========================================================================
--- Cross-field constraints for the bodies (harness/crossfield.c; C++ in
--- FileManager). Segment-length consistency is NOT listed: it is enforced by
--- the CONTAINING framing plus `size deduced` in the .acn.
+-- Cross-field constraints for the bodies (../lib/hv_rules.c, shared by the
+-- harness and the reader; C++ in FileManager). Segment-length consistency
+-- is NOT listed: it is enforced by the CONTAINING framing plus `size
+-- deduced` in the .acn.
 -- ===========================================================================
 --
 -- Standard (both layers):
@@ -213,19 +358,93 @@ END
 --         has exactly spcod.levels + 1 entries
 --         PPx and PPy are non-zero in entries above resolution 0 (A.6.1)
 --         spcod.cbWidthExp + spcod.cbHeightExp <= 8
---   Plt:  within a tile-part, Zplt runs 0, 1, 2, ... in segment order
---         (A.7.3; ReadPLTMarker)
---         where a tile-part has PLT segments, the sum of their Iplt values
+--   Siz:  rsiz is 0, 1 or 2 (Table A.10), or a value T.801 Table A.2 gives
+--         a Part 2 codestream, 1x00 xxxx xxxx xxxx (siz.rsiz; a JP2 file
+--         holds none, jp2.rsiz in jp2-boxes.asn1). The profile preserves
+--         any Rsiz.
+--   Plt:  the Zplt of a tile-part header's PLT segments are 0 to n - 1 for
+--         n segments, each once, in any order (A.7.3: the entries are
+--         "concatenated, in order of increasing Zplt"; A.1.3: marker
+--         segments "can appear in any order in a given header";
+--         plt.zplt-index). The profile takes them in segment order, 0, 1,
+--         2, ... (ReadPLTMarker; plt.zplt-sequence).
+--         Where a tile-part has PLT segments, the sum of their Iplt values
 --         equals that tile-part's data length (A.7.3: every packet is listed;
---         ImageIndex::GetOffsetPacket rejects both excess and shortfall).
---         Layer 1 rejects a zero-valued Iplt entry. Layer 2 tolerates trailing
---         zero-valued entries found in deployed files (JPIP_PROFILE.md). The
---         sum rule still rejects any non-zero excess entry at both layers.
+--         ImageIndex::GetOffsetPacket rejects both excess and shortfall),
+--         less six bytes for each SOP marker segment in the data, where the
+--         sum leaves them out (plt.coverage).
+--         An Iplt has any number of leading zero groups at layer 1 (Table
+--         A.36 sets no limit), at most ten bytes at layer 2 (Iplt).
+--         Layer 1 rejects a zero-valued Iplt entry (plt.zero-length) but
+--         where the packet headers are packed (PPM, PPT: "this length does
+--         not include the packet header lengths", A.7.3), where an empty
+--         packet has no bytes in the data.
+--         Layer 2 tolerates trailing zero-valued entries found in deployed
+--         files (JPIP_PROFILE.md): a nonzero entry after a zero one in the
+--         codestream is plt.padding-position, and zero entries where the
+--         nonzero ones do not list every packet plt.zero-length. The reader
+--         has the same rule for one tile-part at a time
+--         (HV_ACCEPT_PLT_PADDING, for hv_transcode's input), under the same
+--         name. The sum rule (plt.coverage) still rejects any non-zero excess
+--         entry at both layers.
 --
+-- Standard only, across the segments of a codestream (hv_segments in
+-- ../lib/hv_rules.c, which returns the names below): the bodies the framing
+-- keeps opaque, read one element at a time with the types above, and what
+-- the headers come to together. A body that is not its types' is reason
+-- `decode` (the reader: "invalid XXX").
+--   QCD, QCC (A.6.4, A.6.5): the style (Sqcd bits 0 to 4: 0, 1 or 2;
+--         qcd.style, qcc.style), the reserved low three bits of each
+--         exponent without quantization (Table A.29; qcd.reserved-bits,
+--         qcc.reserved-bits), and SPqcd's length for the style (Equation
+--         A-4: 3 n + 1 one-byte exponents, one two-byte value, or 3 n + 1
+--         two-byte values, for any n up to 32, as its NOTE lets the
+--         sub-bands be fewer than the levels give; qcd.length, qcc.length).
+--   COC, QCC, RGN (A.6.2, A.6.5, A.6.3): a component below Csiz (coc.,
+--         qcc., rgn.component), at most one for a component in a header
+--         and in a tile only in its first tile-part (coc., qcc., rgn.once);
+--         COC's precincts as COD's (coc.precincts-count,
+--         coc.precincts-higher-zero, coc.codeblock-area).
+--   POC (A.6.6): at most one in a header (poc.once), RSpoc below REpoc and
+--         CSpoc below CEpoc (poc.resolution, poc.component), and in a
+--         later tile-part of a tile only if its first has one
+--         (poc.first-tile-part).
+--   TLM (A.7.1): Ztlm 0 to n - 1, each once (tlm.index), one entry per
+--         tile-part in codestream order, Ttlm its Isot (or ST 0: in tile
+--         order) and Ptlm its length (tlm.tile-parts).
+--   PLM (A.7.2): Zplm 0 to n - 1, each once (plm.index), Nplm and the
+--         Iplm entries of each tile-part in codestream order (plm.length,
+--         plm.tile-parts), their sum the tile-part's data (plm.coverage), no
+--         zero entry but with packed headers (plm.zero-length).
+--   PPM, PPT (A.7.4, A.7.5): Zppm and Zppt 0 to n - 1, each once
+--         (ppm.index, ppt.index), Nppm the packet headers of each tile-part
+--         in order (ppm.length, ppm.tile-parts), a tile-part with Nppm 0
+--         holding no data (ppm.packet-headers), and no PPT with a PPM
+--         (ppm.ppt).
+--   CRG (A.9.1): at most one (crg.once), one offset per component.
+--   The coding of each tile-component, from COD and COC, main and tile:
+--         the 5-3 transform with quantization style 0 and the 9-7 with 1 or
+--         2 (Table A.28; codestream.quantization-transform), and the
+--         multiple component transform on components 0 to 2 of one
+--         transform (G.2; codestream.mct-transform).
+--   Profile 0 and Profile 1 (Rsiz 1 and 2): the restrictions of Table A.45
+--         (codestream.profile-0, codestream.profile-1).
+--   SOP and EPH (A.8.1, A.8.2): SOP in the data only where COD signals it
+--         (codestream.sop-unsignalled), with Lsop 4 (sop.length); EPH only
+--         where signalled (codestream.eph-unsignalled), and not in the data
+--         where the packet headers are packed (codestream.eph-in-data).
+
 -- Profile only:
 --   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)
 --         the packet count, sum over resolutions of the precinct count
 --         (B.6) times csiz times sgcod.layers, is <= 2^31 - 1
---                                                     (CodingParameters::FillPrecinctCounts)
---         (component sampling xrsiz == yrsiz == 1 is a Siz-Profile constraint,
---         not a rule)
+--         (codestream.packet-count; CodingParameters::FillPrecinctCounts:
+--         the server's signed JPIP state). Siz-Profile's bound on xsiz and
+--         ysiz has the same value but is another quantity, a coordinate;
+--         spec/check-model.sh checks the harness's copy of it.
+--         zero origins and component sampling xrsiz == yrsiz == 1 are
+--         Siz-Profile constraints, which the corpus decoder applies (reason
+--         `decode`); the reader names them siz.zero-origin and
+--         siz.component-sampling (hv_rules.c)
+--   Cod:  no SOP markers is a Cod-Profile constraint (reason `decode`); the
+--         reader names it cod.sop-markers (hv_rules.c)

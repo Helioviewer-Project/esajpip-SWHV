@@ -10,7 +10,7 @@ ignores unknown request fields for compatibility, so an accepted request does
 not by itself prove that every field was honored.
 
 The [README](README.md#concepts) defines the terms used throughout: codestream,
-target, window, JPIP channel, and JPP stream.
+target, window, JPIP channel, data-bin, and JPP stream.
 
 ## Relationship to T.808 Annex J
 
@@ -71,7 +71,7 @@ recovery rules are documented in
 | `stream` | Supported with a selection limit | Accepts the standard comma-separated list of single codestreams, inclusive `first-last` ranges, open `first-` ranges, and positive `:sampling-factor` qualifiers. Non-existent codestreams are ignored, overlapping ranges are combined, and omission selects codestream 0 unless `context` determines the selection. At most 100,001 existing codestreams may be selected across all `stream` and `context` fields in one request. Each selected codestream maps the requested window through its own dimensions and packet geometry, and their packets are delivered in interleaved order. |
 | `context` | Reduced | Recognizes `jpxl` with one layer number or one ascending inclusive range, capped at 100,000, and treats the selected compositing-layer numbers as codestream numbers. The combined selection limit described for `stream` applies. Standard sampling factors, geometry suffixes, and other context syntax are rejected rather than ignored. JPX composition instructions and remapping are not implemented. This is sufficient for the one-codestream-per-frame JPX movies served to JHelioviewer. |
 | `len` | Supported | Limits the JPP message headers and data-bin payload generated for the response; the EOR message does not count toward the limit. The value is a ceiling, not a target: the writer reserves 60 bytes for framing and may leave up to 160 bytes unused rather than start a very small final fragment. When omitted, the server sends all data relevant to the request. Values below the three-byte EOR size are raised so that a valid EOR can still be sent. Negative and overflowing values are rejected. |
-| `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional single, closed, or open-ended codestream range. An unqualified descriptor applies to the first codestream in `stream`, or to codestream 0 when `stream` is absent, regardless of `context`. Each descriptor is validated against the selected image before it is applied. An invalid descriptor terminates the channel, so no partially applied model is reused. Since the source profile has one tile, only tile-header bin zero is valid. Implicit descriptors, subtractive descriptors, wildcards, tile descriptors, and layer-count descriptors are not supported. Because `mset` is ignored, it neither discards cache state for other codestreams nor restricts the codestreams affected by `model`. |
+| `model` | Reduced | Accepts additive byte-prefix or complete-bin descriptors for metadata (`M`), main headers (`Hm`), tile headers (`H`), and precincts (`P`), with an optional single, closed, or open-ended codestream range. An unqualified descriptor applies to the first codestream in `stream`, or to codestream 0 when `stream` is absent, regardless of `context`. Each descriptor is validated against the selected image before it is applied. An invalid descriptor terminates the channel, so no partially applied model is reused. Since the served profile has one tile, only tile-header bin zero is valid. Implicit descriptors, subtractive descriptors, wildcards, tile descriptors, and layer-count descriptors are not supported. Because `mset` is ignored, it neither discards cache state for other codestreams nor restricts the codestreams affected by `model`. |
 | `metareq` | Compatibility subset | Its presence is recognized, including JHelioviewer's `[*]!!` form, but the expression is not parsed. Metadata is sent according to the server's fixed JPX metadata-bin representation. The field also enables gzip when the HTTP client accepts it. |
 | `tid` | Reduced | Does not affect target selection. A request carrying this field receives `JPIP-tid: 0` after the field has been recognized, including on early channel-routing errors. This indicates that the server does not assign a stable target identifier. If the supplied value is not `0`, the server disregards `model` because it belongs to a different target identity. |
 | `handled` | Supported conservatively | Returns `JPIP-handled: tid,cid,cnew=http,stream,len,handled`. This deliberately advertises less than the complete accepted profile rather than overstating reduced or compatibility behavior. The header is also returned with errors after the field has been recognized, including early channel-routing errors. |
@@ -144,11 +144,18 @@ expectations, not that it conforms completely to JP2 or JPX.
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
   marker and must contain all information needed to decode every tile-part.
-  `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers
-  are rejected because tile-part headers are not delivered to the client.
-  Main-header `COC` and `POC` markers are rejected because packet indexing is
-  derived from the main `COD` marker. Main-header component quantization and
-  region markers are preserved but do not affect packet indexing.
+  `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers,
+  `PPT` included, are rejected because tile-part headers are not delivered to
+  the client. Main-header `COC` and `POC` markers are rejected because packet
+  indexing is derived from the main `COD` marker. A main-header `PPM` marker is
+  rejected because it moves the packet headers into the main header: precinct
+  data-bins, built from the tile-part data, would hold packet bodies without
+  their headers. `PPT`, `SOP` and `EPH`, which T.800 places in tile-part
+  headers and packets, `0xFF00`, which is not a marker, and `0xFF30` to
+  `0xFF3F`, which have no marker segment to skip, are rejected in the main
+  header. Main-header component quantization and region markers are
+  preserved but do not affect packet indexing; other length-delimited
+  markers are skipped.
 - Code-block style bits defined by Part 1 are accepted. Reserved bits, including
   the HTJ2K flag, are not supported.
 - SOP marker segments are outside the served profile because they precede the
@@ -160,20 +167,23 @@ expectations, not that it conforms completely to JP2 or JPX.
   validated marker, packet, and tile-part bounds. `TPsot` must start at zero
   and increase by one. If `TNsot` is nonzero, it must equal the final
   tile-part count. After tile-part data, only the next `SOT` or the final `EOC`
-  marker may follow. A tile-part with `Psot = 0` must be the last tile-part in
-  the codestream. Each tile-part's `PLT` lengths must exactly cover its packet
+  marker may follow. A tile-part with `Psot = 0` runs up to the `EOC` that
+  ends the codestream, so it is the last tile-part; its packet data is not
+  scanned for markers. Each tile-part's `PLT` lengths must exactly cover its packet
   data, and no packet data may follow the packet set derived from `COD`. Marker
   structure is checked while opening the source; coverage and packet bounds are
   checked lazily as packets are indexed. As a compatibility exception for
   deployed JPEG 2000 files, zero `Iplt` entries after the logical packet list
-  are ignored; a nonzero trailing entry is rejected.
+  are ignored; a nonzero trailing entry is rejected. An `Iplt` entry has at
+  most ten bytes, enough for any 64-bit length.
 - Packet counts, packet locations, and each data-bin's cumulative byte length
   must fit the signed 32-bit JPIP state. Source files larger than `INT_MAX`
   bytes are outside the supported profile.
 
 Files without `PLT` packet-length information are rejected. esajpip does not
 decode packets to rediscover their boundaries and does not replace the separate
-transcoding step required for such inputs.
+transcoding step required for such inputs (`hv_transcode`,
+[`transcode/`](transcode/README.md)).
 
 ### JPX
 
@@ -203,7 +213,8 @@ transcoding step required for such inputs.
   JPX composition model.
 
 This linked profile matches the movies produced for JHelioviewer by
-`hv_jpx_merge` and the compatible `kdu_merge` form used in deployment. It
+`hv_merge` ([`merge/`](merge/README.md)) and hvJP2K's `hv_jpx_merge`, and
+the compatible `kdu_merge` form used in deployment. It
 preserves codestream order and validates link counts, reference indices,
 fragment ranges, and source codestream structure before serving.
 

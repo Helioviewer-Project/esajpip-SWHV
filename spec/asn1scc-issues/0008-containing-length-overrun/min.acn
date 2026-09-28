@@ -1,0 +1,12 @@
+Min DEFINITIONS ::= BEGIN
+
+Outer [] {
+    len     INTEGER [encoding pos-int, size 8],
+    body    [size len]
+}
+
+Inner [] {
+    data    [size deduced]
+}
+
+END

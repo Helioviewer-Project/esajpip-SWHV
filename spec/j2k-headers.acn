@@ -1,8 +1,9 @@
 -- j2k-headers.acn
 --
 -- Bit-level encoding for j2k-headers.asn1: marker segment bodies, starting
--- at the byte after Lxxx. One encoding serves both layers; *-Profile
--- subtypes inherit it.
+-- at the byte after Lxxx. One encoding serves both layers; asn1scc does
+-- not inherit it through the *-Profile subtypes, so they restate it
+-- (below).
 --
 -- Conventions (T.800 A.1.3): unsigned big-endian integers; BOOLEAN is one
 -- bit, '1'B = TRUE; where the standard packs sub-fields into one byte the
@@ -15,17 +16,22 @@
 -- satisfied: elements are byte-granular and >= 8 bits, the deduced list is
 -- the last component of its region, one deduced list per region.
 --
--- Cross-type determinants (Scod.customPrecincts -> Spcod) are ACN
--- parameters, the standard mechanism (Docs/ACN-Deferred-Patching.md).
+-- Scod.customPrecincts does not size Spcod.precincts: the list is `size
+-- deduced`, and the cross-field rule cod.precincts-count ties its length to
+-- the flag (end of j2k-headers.asn1).
 --
 -- Boolean presence uses the bare-field form of present-when
--- (`[present-when customPrecincts]`, `[present-when b0.more]`), which the
--- 4.9.0.0 grammar lists as the first presentWhenCond alternative; dotted
--- paths are `longFld` and grammatical.
+-- (`[present-when b0.more]`), which the 4.9.3.0 grammar lists as the first
+-- presentWhenCond alternative; dotted paths are `longFld` and grammatical.
 
 J2K-Headers DEFINITIONS ::= BEGIN
 
 Siz [] {
+    fixed       [],
+    components  [size deduced]
+}
+
+SizFixed [] {
     rsiz        [encoding pos-int, size 16, endianness big],
     xsiz        [encoding pos-int, size 32, endianness big],
     ysiz        [encoding pos-int, size 32, endianness big],
@@ -35,8 +41,7 @@ Siz [] {
     ytsiz       [encoding pos-int, size 32, endianness big],
     xtosiz      [encoding pos-int, size 32, endianness big],
     ytosiz      [encoding pos-int, size 32, endianness big],
-    csiz        [encoding pos-int, size 16, endianness big],
-    components  [size deduced]
+    csiz        [encoding pos-int, size 16, endianness big]
 }
 
 Component [] {
@@ -85,9 +90,13 @@ Qcd [] {
 }
 
 Plt [] {
-    zplt        [encoding pos-int, size 8],
+    zplt        [],
     entries     [size deduced]
 }
+
+Zplt [encoding pos-int, size 8]
+
+Rcom [encoding pos-int, size 16, endianness big]
 
 Iplt [] {
     b0  [],
@@ -113,14 +122,84 @@ IpltByteLast [] {
 }
 
 Com [] {
-    rcom        [encoding pos-int, size 16, endianness big],
+    rcom        [],
     ccom        [size deduced]
+}
+
+-- The bodies read one element at a time (j2k-headers.asn1).
+ComponentIndex [encoding pos-int, size 8]
+ComponentIndex-Wide [encoding pos-int, size 16, endianness big]
+
+CocStyle [] {
+    scoc        [],
+    spcoc       []
+}
+
+Scoc [] {
+    reserved        [encoding pos-int, size 7],   -- bits 7..1
+    customPrecincts [true-value '1'B]             -- bit 0
+}
+
+RgnStyle [] {
+    srgn        [encoding pos-int, size 8],
+    sprgn       [encoding pos-int, size 8]
+}
+
+PocChange [] {
+    rspoc       [encoding pos-int, size 8],
+    cspoc       [encoding pos-int, size 8],
+    lyepoc      [encoding pos-int, size 16, endianness big],
+    repoc       [encoding pos-int, size 8],
+    cepoc       [encoding pos-int, size 8],
+    ppoc        [encoding pos-int, size 8]
+}
+
+PocChange-Wide [] {
+    rspoc       [encoding pos-int, size 8],
+    cspoc       [encoding pos-int, size 16, endianness big],
+    lyepoc      [encoding pos-int, size 16, endianness big],
+    repoc       [encoding pos-int, size 8],
+    cepoc       [encoding pos-int, size 16, endianness big],
+    ppoc        [encoding pos-int, size 8]
+}
+
+TlmHeader [] {
+    ztlm        [encoding pos-int, size 8],
+    stlm        []
+}
+
+Stlm [] {
+    reserved    [encoding pos-int, size 1],       -- bit 7
+    sp          [encoding pos-int, size 1],       -- bit 6
+    st          [encoding pos-int, size 2],       -- bits 5..4
+    reserved2   [encoding pos-int, size 4]        -- bits 3..0
+}
+
+Ttlm [encoding pos-int, size 8]
+Ttlm-Wide [encoding pos-int, size 16, endianness big]
+Ptlm [encoding pos-int, size 16, endianness big]
+Ptlm-Wide [encoding pos-int, size 32, endianness big]
+
+Zplm [encoding pos-int, size 8]
+Nplm [encoding pos-int, size 8]
+Zppm [encoding pos-int, size 8]
+Nppm [encoding pos-int, size 32, endianness big]
+Zppt [encoding pos-int, size 8]
+
+CrgEntry [] {
+    xcrg        [encoding pos-int, size 16, endianness big],
+    ycrg        [encoding pos-int, size 16, endianness big]
 }
 
 -- ASN.1 WITH COMPONENTS subtypes have distinct generated ACN functions.
 -- State their wire encodings explicitly; they are byte-for-byte identical to
 -- the base marker-body types above and differ only in ASN.1 constraints.
 Siz-Profile [] {
+    fixed       [],
+    components  [size deduced]
+}
+
+SizFixed-Profile [] {
     rsiz        [encoding pos-int, size 16, endianness big],
     xsiz        [encoding pos-int, size 32, endianness big],
     ysiz        [encoding pos-int, size 32, endianness big],
@@ -130,8 +209,14 @@ Siz-Profile [] {
     ytsiz       [encoding pos-int, size 32, endianness big],
     xtosiz      [encoding pos-int, size 32, endianness big],
     ytosiz      [encoding pos-int, size 32, endianness big],
-    csiz        [encoding pos-int, size 16, endianness big],
-    components  [size deduced]
+    csiz        [encoding pos-int, size 16, endianness big]
+}
+
+Component-Profile [] {
+    isSigned    [true-value '1'B],
+    depthMinus1 [encoding pos-int, size 7],
+    xrsiz       [encoding pos-int, size 8],
+    yrsiz       [encoding pos-int, size 8]
 }
 
 Cod-Profile [] {
@@ -140,19 +225,11 @@ Cod-Profile [] {
     spcod       []
 }
 
-Qcd-Profile [] {
-    sqcd        [encoding pos-int, size 8],
-    spqcd       [size deduced]
-}
-
-Plt-Profile [] {
-    zplt        [encoding pos-int, size 8],
-    entries     [size deduced]
-}
-
-Com-Profile [] {
-    rcom        [encoding pos-int, size 16, endianness big],
-    ccom        [size deduced]
+Scod-Profile [] {
+    reserved        [encoding pos-int, size 5],
+    ephMarkers      [true-value '1'B],
+    sopMarkers      [true-value '1'B],
+    customPrecincts [true-value '1'B]
 }
 
 END

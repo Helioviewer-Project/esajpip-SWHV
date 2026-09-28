@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(esajpip LANGUAGES CXX)
+project(esajpip LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
@@ -18,6 +18,9 @@ endif()
 
 function(esajpip_configure_target target)
     set_target_properties(${target} PROPERTIES
+        C_EXTENSIONS OFF
+        C_STANDARD 11
+        C_STANDARD_REQUIRED YES
         CXX_EXTENSIONS OFF
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED YES)
@@ -25,6 +28,9 @@ function(esajpip_configure_target target)
         -Wall
         -Wextra
         -Wno-unused-parameter
+        # An undeclared function is an int in C89: a pointer it returns
+        # (realpath without _XOPEN_SOURCE) would be truncated.
+        "$<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>"
         "$<$<CONFIG:RelWithDebInfo>:-fno-omit-frame-pointer>")
     if(ESAJPIP_SANITIZE)
         target_compile_options(${target} PRIVATE
@@ -52,6 +58,25 @@ else()
     set(ESAJPIP_FILE_LOGGING false)
 endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
+
+# Tests of the reader/writer and the tools on it (lib/test, transcode/test,
+# merge/test), separate from the server's. Run them with lib/test/run.sh.
+option(ESAJPIP_TOOL_TESTS "Build and register the tests of jpeg2000_io, hv_transcode and hv_merge" OFF)
+
+option(ESAJPIP_FUZZ "Build the libFuzzer targets fuzz_transcode and fuzz_merge" OFF)
+if(ESAJPIP_FUZZ AND NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "ESAJPIP_FUZZ requires Clang")
+endif()
+
+# The JPEG 2000 reader/writer (lib/), built as a static library.
+add_subdirectory(lib)
+if(ESAJPIP_FUZZ)
+    # Coverage for the library too, for the fuzz targets of the tools.
+    target_compile_options(jpeg2000_io PRIVATE -fsanitize=fuzzer-no-link)
+endif()
+# hv_transcode (transcode/) and hv_merge (merge/), on that library.
+add_subdirectory(transcode)
+add_subdirectory(merge)
 
 set(ESAJPIP_TOP src)
 set(ESAJPIP_SRCS

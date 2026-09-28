@@ -1,0 +1,5 @@
+Min DEFINITIONS ::= BEGIN
+    First [] { more BOOLEAN [true-value '1'B], bits [encoding pos-int, size 7] }
+    Last [] { bits [encoding pos-int, size 8] }
+    Msg [] { a [], b [present-when a.more] }
+END

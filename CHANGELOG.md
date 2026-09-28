@@ -11,6 +11,56 @@ does the JPEG 2000 work. Each channel keeps private image, cache, and traversal
 state and is handled by one worker at a time, which isolates JPEG 2000 state
 while letting HTTP connections be pooled or replaced independently of channels.
 
+### Added
+
+- `spec/`: the accepted JP2 and JPX files described in ASN.1/ACN, at two
+  layers (T.800/T.801 and the served profile), with a generated, labeled
+  test corpus that the server's tests and the tools' tests check against.
+  `spec/check-model.sh` checks the model, the corpus and the C code that
+  restates the model, and that OpenJPEG decodes every standard-valid vector
+  but those on the OpenJPEG limits it lists. The pinned asn1scc is built
+  with the local fixes in `spec/asn1scc-patches/`.
+- `lib/`: a JPEG 2000 reader/writer (`jpeg2000_io`) on code generated from
+  that model, applying the same cross-field rules as the corpus
+  (`hv_rules`). It reads boxes and codestream items in place, one header or
+  list element at a time, checks the served profile, the JP2/JPX header
+  boxes, the box tree and its fragment tables, JP2 compatibility, baseline
+  JPX, the marker segments across the codestream headers, and the files a
+  JPX file links to, lays out a tile's precincts and packets
+  (`hv_geometry`), and writes boxes and marker segments with measured
+  lengths. Its work is in proportion to
+  the input, whatever a header declares. `hv_walk` checks files with it.
+- `hv_transcode` (`transcode/`): a C port of hvJP2K's transcoder. It
+  rewrites a JP2 file in RPCL order with the given precincts and PLT,
+  without recompressing, and writes only files within the served profile:
+  its input must be within it but for the tile-parts. It reads packet
+  headers as T.800 requires (SOP, EPH, bit stuffing), rejects code-block
+  data that ends in 0xFF or holds 0xFF followed by a byte above 0x8F (T.800
+  B.10.7, C.3.4), bounds its memory by the input, and ends each top-level
+  XML box before its first NUL: old Kakadu, in IDL, ended XML boxes with
+  one, which is not XML.
+- `hv_merge` (`merge/`): a C port of hvJP2K's JPX merger, writing the same
+  bytes but for the differences `merge/README.md` lists, embedded or linked
+  (`-links`), with hvJP2K's command line. Its inputs must be within the
+  served profile and have valid header boxes and main header; it rejects
+  what the JPX file cannot hold (a box T.801 places elsewhere, such as a
+  `cgrp` or `cref` in `jp2h`, `colr.one-method`, `colr.approx`, a later
+  input without the `cdef` or `res` box of the first) and an input
+  codestream with T.801 extensions, which a JP2 file cannot hold
+  (`jp2.rsiz`). An input's IPR boxes, at the top level and in its `jp2h`, go
+  into its `jpch`, where hvJP2K drops them but keeps the IPR 1 announcing
+  them. Every box it copies from an input goes straight to the output file,
+  so its memory does not grow with them.
+- Both tools replace their output through a synced temporary file, removed
+  if a signal ends the tool (SIGBUS from a truncated input included), keep
+  a replaced file's owner and group, write through an output that is a
+  symbolic link, and refuse inputs over `INT_MAX` bytes. The output takes
+  the permissions, less the setuid, setgid and sticky bits, of the file it
+  replaces (`hv_merge`) or of the input (`hv_transcode`). `hv_merge -links`
+  refuses to replace one of its inputs.
+- The tools' tests, separate from the server's: `lib/test/run.sh`
+  (`ESAJPIP_TOOL_TESTS`).
+
 ### Changed
 
 - Keep channels alive across replacement connections, and allow one persistent
@@ -55,11 +105,16 @@ while letting HTTP connections be pooled or replaced independently of channels.
   `EOR WINDOW_DONE` instead of failing the channel.
 - Parse standard JPIP codestream lists, closed and open ranges, sampling
   factors, cache-model qualifiers, and absolute request URIs consistently.
-- Validate JPEG 2000 boxes, markers, tile parts, PLT coverage, packet locations,
+- Validate JPEG 2000 boxes, markers, tile-parts, PLT coverage, packet locations,
   codestream bounds, and linked-JPX references. Invalid or unsupported sources
   are rejected instead of failing later or producing inconsistent JPP data.
   Deployed trailing zero PLT entries remain accepted as padding; nonzero extras
-  are rejected.
+  are rejected. QCD and COM lengths and the COM registration value are checked
+  against T.800 (Lqcd 4 to 197, Lcom at least 5, Rcom 0 or 1). COC, POC,
+  PPM, markers T.800 places elsewhere, 0xFF00 and the segment-less 0xFF30 to
+  0xFF3F are rejected in the main header, and PLT entries longer than ten
+  bytes are rejected. A tile-part with Psot = 0 runs up to the final EOC,
+  without its packet data being scanned for markers.
 - Preserve separate coding parameters for embedded JPX codestreams, use the
   standard default precinct size, and number codestreams by physical box order.
 - Bound client-controlled request values before allocation, including cache

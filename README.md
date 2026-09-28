@@ -28,9 +28,9 @@ These terms recur here and in the other documents.
 
 ## Build and install
 
-The build requires a C++11 compiler, CMake, pkg-config, GLib, libuv, llhttp,
-zlib, and POSIX threads. Debian 13 is the minimum supported Debian release;
-install the packages there with:
+The build requires C11 and C++11 compilers, CMake, pkg-config, GLib, libuv,
+llhttp, zlib, and POSIX threads. Debian 13 is the minimum supported Debian
+release; install the packages there with:
 
 ```sh
 sudo apt-get install \
@@ -57,8 +57,18 @@ The executable and `server.ini` land in `$HOME/esajpip/bin`; any other prefix
 works.
 
 For a separate test build, run `./tests/run.sh`, or `./tests/run.sh sanitize`
-to build with AddressSanitizer and UndefinedBehaviorSanitizer. The [test guide](tests/README.md) describes the coverage,
-focused runs, and failure diagnosis.
+to build with AddressSanitizer and UndefinedBehaviorSanitizer. The
+[test guide](tests/README.md) describes the coverage, focused runs, and
+failure diagnosis.
+
+The same build also produces three tools from the JPEG 2000 reader/writer
+library in [`lib/`](lib/README.md): `hv_transcode`
+([`transcode/`](transcode/README.md)) and `hv_merge`
+([`merge/`](merge/README.md)), which prepare image data for the server
+(see below), and `hv_walk`, which checks files with the reader.
+Their tests run separately, with `lib/test/run.sh`. The formal
+description of the accepted files, and the test corpus generated from it,
+are in [`spec/`](spec/README.md).
 
 ## Configure the server
 
@@ -86,11 +96,15 @@ disabled.
 
 ## Prepare image data
 
-File names must end in lowercase `.jp2` or `.jpx`. Every codestream must carry
-the `PLT` markers that record each packet length; the server relies on them to
-locate the packets a window needs without decoding the image. The server accepts linked JPX movies produced
-by `hv_jpx_merge` and the compatible `kdu_merge` form. It preserves the order
-stored in the JPX, so pass source frames to the merge tool in timestamp order.
+File names must end in lowercase `.jp2` or `.jpx`. Every codestream must
+carry the `PLT` markers that record each packet length; the server relies on
+them to locate the packets a window needs without decoding the image.
+`hv_transcode` rewrites a JP2 file into that form (RPCL order, the given
+precincts, PLT) without recompressing it, and rejects files it cannot make
+servable. The server accepts JPX movies produced by `hv_merge` (and hvJP2K's
+`hv_jpx_merge`), embedded or linked, and the compatible `kdu_merge` form. It
+preserves the order stored in the JPX, so pass source frames to the merge
+tool in timestamp order.
 
 Never modify a JP2, JPX, or linked source while a channel may be using it. The
 server indexes a target once and memory-maps its sources as responses need
@@ -229,10 +243,10 @@ or ports use distinct names.
 
 No thread in the server waits for log-file I/O: records go onto a bounded queue
 that a dedicated thread drains. When that queue is full, records are dropped,
-and the next record accepted reports how many were lost. If the active log can no longer be
-written or rotated, file logging stops rather than silently falling back to
-standard output. The server does not start when it cannot open the configured
-log file.
+and the next record accepted reports how many were lost. If the active log
+can no longer be written or rotated, file logging stops rather than
+silently falling back to standard output. The server does not start when
+it cannot open the configured log file.
 
 ## Troubleshooting
 
