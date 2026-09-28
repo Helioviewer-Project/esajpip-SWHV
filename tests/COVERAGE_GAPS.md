@@ -1,25 +1,24 @@
 # Coverage Snapshot
 
-This file records one local baseline run and the follow-up diagnostic checks.
+This file records one local baseline run, the follow-up diagnostic checks,
+and the gaps that remain.
 Re-run the commands before using the numbers as current coverage data.
 
 ## Baseline Command
 
 ```sh
-sh tests/run_baseline.sh
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ESAJPIP_BASELINE_SPLIT=ON sh tests/run_baseline.sh
 ```
 
-The first sandboxed run could not write the checkout build tree. A rerun of the
-same command with build-directory write access passed all CTest tests.
+Run result:
 
-Clean rerun result:
-
-- Tests: 22/22 passed.
-- Duration: 14.57 s real, 1.35 s user, 1.36 s sys.
-- Peak RSS: 89,849,856 bytes.
+- Tests: 23/23 passed.
+- Duration: 9.67 s real, 1.52 s user, 2.19 s sys.
+- Peak RSS: 85,590,016 bytes.
 - Report directory: `build/coverage-report`.
+- Split reports: `build/coverage-report/by-test`.
 
-`llvm-cov` warned about 27 functions with mismatched data because some sources
+`llvm-cov` warned about 26 functions with mismatched data because some sources
 are compiled into more than one executable. Treat the group totals as triage
 data, not exact per-function accounting.
 
@@ -27,30 +26,31 @@ data, not exact per-function accounting.
 
 | Code group | Function coverage | Line coverage | Branch coverage |
 | --- | ---: | ---: | ---: |
-| Handwritten code | 89.16% | 83.51% | 73.12% |
-| Generated JPEG 2000 model code | 68.97% | 74.00% | 55.34% |
-| ASN.1 runtime | 63.16% | 42.30% | 28.75% |
+| Handwritten code | 90.25% | 85.82% | 76.13% |
+| Generated JPEG 2000 model code | 100.00% | 98.33% | 80.19% |
+| ASN.1 runtime | 71.93% | 55.21% | 39.95% |
 
-## Triage From This Snapshot
+## Gaps
 
-- Existing tests plus corpus replay cover most handwritten reader/profile,
-  rewrite, geometry, transcode, merge, packet selection, writer stability, and
-  focused allocation-failure paths.
-- `src/server/server.cc` still reports no coverage even though server tests run.
+This snapshot includes `walk_command`, broad direct ASN.1 replay, linked and
+embedded merge replay, and the new rule/mutation diagnostics. What remains:
+
+- `src/server/server.cc` reports no coverage even though server tests run.
   Investigate coverage object mapping before assuming the live server loop is
   untested.
-- `lib/hv_walk.c` reports no coverage; add a deterministic command-line test if
-  `hv_walk` is intended to be part of regression coverage.
-- Generated decoder/encoder coverage improved through replay, but
-  `j2k-headers.c` and `jp2-boxes.c` still have many unexecuted functions and
-  weak branch coverage.
-- ASN.1 runtime branch coverage remains low. The `asn1` replay/fuzz path reaches
-  more generated code, but does not yet systematically exercise determinant,
-  optional-field, array-count, and error-cleanup paths.
-- Merge fuzzing now has valid paired seeds, but still needs one-valid-one-mutated
-  source coverage and linked-output replay if that behavior matters.
-- Transcode replay checks structural/profile validity and codestream idempotence.
-  It does not prove pixel equivalence or independent decoder agreement.
+- `lib/hv_file.c`: the read and map error paths, and the signal handler,
+  whose process is killed before it writes its profile.
+- `src/transcode`: the command's option and I/O error paths.
+- ASN.1 runtime: the generated code calls only part of `asn1crt*.c`, so its
+  totals stay low; the functions it does call are reached through
+  `fuzz_asn1`.
+- Mutation testing (`tests/run_mutation.sh`, `rule` operator) leaves
+  mutants of `lib/hv_rules.c` that the tests pass: rules no vector or test
+  case fails. `tests/lib/test_profile` requires a vector's rule only where it
+  fails the header layer, which is part of why.
+- Transcode replay checks structural/profile validity and codestream
+  idempotence. It does not prove pixel equivalence or independent decoder
+  agreement.
 
 ## Diagnostic Checks Run
 

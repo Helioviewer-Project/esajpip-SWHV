@@ -110,6 +110,54 @@ printf -- '-i %s\0%s\n' "$fixtures/input/swap_000.jp2" "$fixtures/input/swap_001
 [ ! -e "$work/partial.jpx" ] || fail "a partly read -s file gave a merge"
 rmdir "$work/argdir"
 
+# shlex's quoting in the argument file: a backslash outside quotes, a
+# quote escaped inside double quotes, runs of blanks and blanks at the ends.
+cp "$fixtures/input/swap_000.jp2" "$work/sw ap.jp2"
+cp "$fixtures/input/swap_001.jp2" "$work/q\"x.jp2"
+{
+    printf ' \t -i %s,"%s"' "$(printf '%s' "$work/sw ap.jp2" | sed 's/ /\\ /g')" \
+        "$(printf '%s' "$work/q\"x.jp2" | sed 's/"/\\"/')"
+    for f in $rest; do printf '  %s' "$f"; done
+    printf '\n\n  -o %s \t\n\n' "$work/quoted.jpx"
+} >"$work/quoted-args"
+[ "$(status "$exe" -s "$work/quoted-args")" = 0 ] ||
+    fail "escapes in the argument file: $(cat "$work/stderr")"
+cmp -s "$work/quoted.jpx" "$expected" || fail "escapes in the argument file: other bytes"
+# An unterminated quote, either kind, or a final backslash: nothing read.
+for bad in "-i 'a.jp2" '-i "a.jp2' '-i a.jp2\'; do
+    printf '%s' "$bad" >"$work/bad-args"
+    [ "$(status "$exe" -o "$work/bad.jpx" -s "$work/bad-args")" = 1 ] &&
+        grep -q "cannot read the arguments in" "$work/stderr" ||
+        fail "argument file $bad: expected 1"
+done
+[ ! -e "$work/bad.jpx" ] || fail "an unreadable argument file gave a merge"
+rm -f "$work/sw ap.jp2" "$work/q\"x.jp2" "$work/quoted.jpx" "$work/quoted-args" "$work/bad-args"
+
+# -h with letters attached: help once the option it carries is taken;
+# with "=" or a "-", argparse's ignored explicit argument.
+[ "$(status "$exe" -hi "$fixtures/input/swap_000.jp2")" = 0 ] &&
+    grep -q "^usage: hv_merge" "$work/stdout" || fail "-hi NAME: expected help"
+[ "$(status "$exe" -hx)" = 0 ] && grep -q "^usage: hv_merge" "$work/stdout" ||
+    fail "-hx: expected help"
+[ "$(status "$exe" -h=x)" = 2 ] || fail "-h=x: expected 2"
+[ "$(status "$exe" -h-x)" = 2 ] || fail "-h-x: expected 2"
+[ "$(status "$exe" -hi)" = 2 ] || fail "-hi without a name: expected 2"
+# A negative number with a fraction is a value, as -1 is.
+ln -s "$fixtures/input/swap_000.jp2" "$work/-1.5"
+(cd "$work" && "$exe" -i -1.5 -o frac.jpx 2>/dev/null) || fail "-i -1.5: a file named -1.5 not merged"
+rm -f "$work/-1.5" "$work/frac.jpx"
+
+# Inputs that are no regular file, or empty.
+mkdir "$work/dir.jp2"
+[ "$(status "$exe" -i "$work/dir.jp2" -o "$work/dir.jpx")" = 1 ] &&
+    grep -q "not a regular file" "$work/stderr" || fail "a directory as input: expected 1"
+rmdir "$work/dir.jp2"
+: >"$work/empty.jp2"
+[ "$(status "$exe" -i "$work/empty.jp2" -o "$work/empty.jpx")" = 1 ] ||
+    fail "an empty input: expected 1"
+[ ! -e "$work/empty.jpx" ] || fail "an empty input gave a merge"
+rm -f "$work/empty.jp2"
+
 [ "$(status "$exe" -i "$fixtures/input/swap_000.jp2" -o "$work/links.jpx" -links)" = 0 ] ||
     fail "-links failed: $(cat "$work/stderr")"
 [ -s "$work/links.jpx" ] || fail "-links wrote nothing"

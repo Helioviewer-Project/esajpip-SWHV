@@ -64,11 +64,17 @@ while letting HTTP connections be pooled or replaced independently of channels.
   `server`, `cli`, `model` and `fuzz`.
 - `tests/fuzz/`: the libFuzzer targets of the library and the tools
   (`ESAJPIP_FUZZ=ON`), whose assertions are also available one input at a time
-  through `tests/fuzz/replay`, which needs no libFuzzer runtime.
-- `tests/run_profile.sh`, `tests/run_baseline.sh` and
-  `tests/run_linux_docker.sh`: the sanitizer, coverage, Valgrind and
-  Debian-container profiles of the same suite, described in
-  `tests/DIAGNOSTICS.md`, with the coverage gaps in `tests/COVERAGE_GAPS.md`.
+  through `tests/fuzz/replay`, which needs no libFuzzer runtime. `fuzz_asn1`
+  decodes and encodes every PDU type of the generated code, read from its
+  headers at configure time, and checks that decoded values round-trip to the
+  same bytes and that no prefix of an encoding is read past; `fuzz_merge`
+  merges embedded and linked; `fuzz_deferred_plt` reads the PLT cursor from
+  two copies of the input in turn.
+- `tests/run_profile.sh`, `tests/run_baseline.sh`,
+  `tests/run_linux_docker.sh` and `tests/run_mutation.sh`: the sanitizer,
+  coverage, Valgrind, Debian-container and mutation profiles of the same
+  suite, described in `tests/DIAGNOSTICS.md`, with the coverage gaps in
+  `tests/COVERAGE_GAPS.md`.
 
 ### Changed
 

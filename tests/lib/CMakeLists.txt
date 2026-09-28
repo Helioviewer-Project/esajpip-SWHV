@@ -1,5 +1,5 @@
 # jpeg2000_io's tests: the reader, the rules, the writer, the rewrite path,
-# hv_file and hv_served. The corpus they share is tests/vectors/j2k.
+# hv_file, hv_served and hv_walk. The corpus they share is tests/vectors/j2k.
 
 # The reader against the corpus: every vector the manifest calls
 # standard-valid is accepted, and the profile label is the served profile's.
@@ -57,3 +57,11 @@ add_executable(test_geometry test_geometry.c)
 esajpip_configure_target(test_geometry)
 target_link_libraries(test_geometry PRIVATE jpeg2000_io)
 esajpip_add_test(geometry COMMAND test_geometry LABELS tools)
+
+# hv_walk's command line: options, exit status and the line of each outcome.
+esajpip_add_test(walk_command
+    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/walk_test.sh
+        $<TARGET_FILE:hv_walk>
+        ${PROJECT_SOURCE_DIR}/tests/vectors/j2k
+        ${CMAKE_CURRENT_BINARY_DIR}/walk
+    LABELS tools cli)

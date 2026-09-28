@@ -5,12 +5,20 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import shutil
+import re
 import struct
 from pathlib import Path
 
 
 JP2C = b"jp2c"
+# Boxes whose payload is boxes, as far as the seeds need to look into them.
+SUPERBOXES = {b"jp2h", b"res ", b"jpch", b"jplh", b"ftbl", b"asoc", b"uinf", b"cgrp", b"comp", b"drep"}
+# The asn1 seeds: the encodings start where a box, a box's payload, a marker,
+# a segment's length or a segment's body starts in these files, cut to
+# WINDOW bytes (more than any type's T_REQUIRED_BYTES_FOR_ACN_ENCODING).
+ASN1_SOURCES = ("jp2.jp2", "jp2-precincts.jp2", "jpx-embedded.jpx", "jpx-linked.jpx")
+WINDOW = 256
+ACN_DECODE = re.compile(rb"^flag [A-Za-z0-9_]+_ACN_Decode\(", re.M)
 
 
 def write_unique(directory: Path, prefix: str, data: bytes) -> None:
@@ -61,6 +69,72 @@ def jp2c_payloads(data: bytes) -> list[bytes]:
     return [payload for payload in payloads if payload]
 
 
+def asn1_types(repo: Path) -> int:
+    """The number of PDU types, counted as tests/fuzz/CMakeLists.txt lists
+    them in asn1_pdus.h."""
+    return sum(len(ACN_DECODE.findall(header.read_bytes()))
+               for header in sorted((repo / "lib" / "generated").glob("*.h")))
+
+
+def codestream_windows(data: bytes, start: int, end: int, out: set[bytes]) -> None:
+    """The main header's and the first tile-part header's structures."""
+    pos = start
+    if data[pos : pos + 2] != b"\xff\x4f":
+        return
+    out.add(data[pos : pos + WINDOW])
+    pos += 2
+    while pos + 4 <= end:
+        code = int.from_bytes(data[pos : pos + 2], "big")
+        out.add(data[pos : pos + WINDOW])
+        if code in (0xFF93, 0xFFD9):  # SOD, EOC
+            return
+        length = int.from_bytes(data[pos + 2 : pos + 4], "big")
+        out.add(data[pos + 2 : pos + 2 + WINDOW])
+        out.add(data[pos + 4 : pos + 4 + WINDOW])
+        if code == 0xFF58:  # PLT: its entries, after Zplt
+            out.add(data[pos + 5 : pos + 5 + WINDOW])
+        if length < 2:
+            return
+        pos += 2 + length
+
+
+def box_windows(data: bytes, start: int, end: int, out: set[bytes], depth: int = 0) -> None:
+    pos = start
+    while pos + 8 <= end:
+        box_start = pos
+        length = int.from_bytes(data[pos : pos + 4], "big")
+        box_type = data[pos + 4 : pos + 8]
+        pos += 8
+        if length == 1:
+            if pos + 8 > end:
+                break
+            length = int.from_bytes(data[pos : pos + 8], "big")
+            pos += 8
+        elif length == 0:
+            length = end - box_start
+        out.add(data[box_start : box_start + WINDOW])
+        if length < pos - box_start or box_start + length > end:
+            break
+        out.add(data[pos : pos + WINDOW])
+        if box_type == JP2C:
+            codestream_windows(data, pos, box_start + length, out)
+        elif box_type == b"dtbl":  # NDR, then url boxes
+            out.add(data[pos + 2 : pos + 2 + WINDOW])
+            box_windows(data, pos + 2, box_start + length, out, depth + 1)
+        elif box_type in SUPERBOXES and depth < 4:
+            box_windows(data, pos, box_start + length, out, depth + 1)
+        pos = box_start + length
+
+
+def asn1_windows(data: bytes) -> set[bytes]:
+    out: set[bytes] = set()
+    if data.startswith(b"\xff\x4f"):
+        codestream_windows(data, 0, len(data), out)
+    else:
+        box_windows(data, 0, len(data), out)
+    return {window for window in out if window}
+
+
 def corpus_paths(repo: Path) -> dict[str, list[Path]]:
     return {
         "vectors": sorted((repo / "tests" / "vectors" / "j2k").glob("*.jp*")),
@@ -71,11 +145,7 @@ def corpus_paths(repo: Path) -> dict[str, list[Path]]:
 
 def build_corpora(repo: Path, out: Path) -> None:
     paths = corpus_paths(repo)
-    for child in (out.iterdir() if out.exists() else ()):
-        if child.is_dir():
-            shutil.rmtree(child)
-        else:
-            child.unlink()
+    # Campaigns add inputs here too. Refresh seeds without deleting discoveries.
     out.mkdir(parents=True, exist_ok=True)
 
     reader = out / "reader-rewrite"
@@ -87,7 +157,6 @@ def build_corpora(repo: Path, out: Path) -> None:
     for path in paths["vectors"]:
         prefix = path.stem.replace(".", "-")
         copy_seed(path, reader, prefix)
-        copy_seed(path, asn1, prefix)
         data = path.read_bytes()
         if data.startswith(b"\xff\x4f"):
             write_unique(deferred, prefix, data)
@@ -99,16 +168,34 @@ def build_corpora(repo: Path, out: Path) -> None:
     for path in paths["transcode"]:
         prefix = path.stem.replace(".", "-")
         copy_seed(path, reader, prefix)
-        copy_seed(path, asn1, prefix)
         for index, payload in enumerate(jp2c_payloads(path.read_bytes())):
             write_unique(deferred, f"{prefix}-jp2c-{index}", payload)
             write_unique(transcode, f"{prefix}-jp2c-{index}", payload)
+
+    # fuzz_asn1's first byte selects the type: every window with every type.
+    types = asn1_types(repo)
+    windows: set[bytes] = set()
+    for name in ASN1_SOURCES:
+        windows |= asn1_windows((repo / "tests" / "vectors" / "j2k" / name).read_bytes())
+    for selector in range(min(types, 256)):
+        for window in windows:
+            write_unique(asn1, f"type-{selector}", bytes([selector]) + window)
 
     merge_inputs = [path.read_bytes() for path in paths["merge"] if path.stat().st_size > 0]
     for left_index, left in enumerate(merge_inputs):
         for right_index, right in enumerate(merge_inputs):
             payload = struct.pack(">I", len(left)) + left + right
             write_unique(merge, f"merge-{left_index}-{right_index}", payload)
+    # One valid input and one of the JP2 vectors, each of which breaks one
+    # rule of that same file, in both orders.
+    valid = (repo / "tests" / "vectors" / "j2k" / "jp2.jp2").read_bytes()
+    for path in paths["vectors"]:
+        if path.suffix != ".jp2" or path.name == "jp2.jp2":
+            continue
+        other = path.read_bytes()
+        prefix = path.stem.replace(".", "-")
+        write_unique(merge, f"valid-{prefix}", struct.pack(">I", len(valid)) + valid + other)
+        write_unique(merge, f"{prefix}-valid", struct.pack(">I", len(other)) + other + valid)
 
     for seed in (b"", b"\x00", b"\xff", b"\xff\x4f", b"\x00\x00\x00\x0cjP  "):
         write_unique(reader, "tiny", seed)

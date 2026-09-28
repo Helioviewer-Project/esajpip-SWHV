@@ -33,7 +33,7 @@ case "$mode" in
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
-shift
+if [ "$#" -gt 0 ]; then shift; fi
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 . "$repo/tests/run_common.sh"

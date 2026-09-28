@@ -2070,6 +2070,404 @@ static void check_plt_cursor(void) {
     }
 }
 
+/* ------------------------------------------------------------------------
+ * Rules no vector reaches
+ * ------------------------------------------------------------------------ */
+
+/* A segment of a case: its code and body. */
+typedef struct {
+    unsigned code;
+    const char *body;
+    size_t n;
+} gap_segment;
+
+#define GAP_END {0, NULL, 0}
+#define GAP(code, body) {code, body, sizeof body - 1}
+
+/* A codestream of one case, and its expected error and offset. */
+typedef struct {
+    const char *what;
+    unsigned rsiz;
+    int ncomps;
+    uint32_t w, h;
+    uint8_t xrsiz;              /* every component's; 0 for 1 */
+    int packets;                /* 0 for 1 */
+    gap_segment main[2], tile[2];
+    const char *error;
+    size_t at;
+} gap_case;
+
+/* SOC, SIZ of w x h in one tile, with ncomps components and Rsiz rsiz,
+ * COD, QCD, the main-header segments; one tile-part (SOT, its header
+ * segments, a PLT of `packets` packets of one byte, SOD, the packets); EOC.
+ * The main header of one component ends at 65, where the main-header
+ * segments start. */
+static bytes gap_stream(const gap_case *c) {
+    bytes b = {NULL, 0, 0};
+    uint32_t f[8];
+    uint8_t xr[257];
+    uint64_t v[257];
+    int packets = c->packets ? c->packets : 1, i;
+    const gap_segment *g;
+    size_t at;
+    f[0] = f[4] = c->w;
+    f[1] = f[5] = c->h;
+    f[2] = f[3] = f[6] = f[7] = 0;
+    memset(xr, c->xrsiz ? c->xrsiz : 1, sizeof xr);
+    u16(&b, HV_SOC);
+    siz(&b, f, c->ncomps, xr, NULL);
+    b.d[6] = (uint8_t)(c->rsiz >> 8);
+    b.d[7] = (uint8_t)c->rsiz;
+    cod(&b);
+    qcd(&b);
+    for (g = c->main; g->code != 0; g++)
+        seg(&b, g->code, g->body, g->n);
+    at = sot(&b, 0, 0, 1);
+    for (g = c->tile; g->code != 0; g++)
+        seg(&b, g->code, g->body, g->n);
+    for (i = 0; i < packets; i++)
+        v[i] = 1;
+    plt(&b, 0, v, packets);
+    u16(&b, HV_SOD);
+    for (i = 0; i < packets; i++)
+        u8(&b, 0x5A);
+    sot_end(&b, at);
+    u16(&b, HV_EOC);
+    return b;
+}
+
+/* The rules of hv_segments, and of the main header's profiles, on
+ * segments the corpus does not carry: component indices and progression
+ * changes of two bytes (Csiz 257, whose main header ends at 833), tile-part
+ * QCC and COC, SPrgn above 37, TLM of each Ttlm and Ptlm size, PLM entries
+ * that do not end or overflow, a short PPM, and Profile 0 and 1 limits. */
+static void check_segment_gaps(void) {
+    static const gap_case cases[] = {
+        {"a wide COC", 0, 257, 4, 4, 0, 0,
+         {GAP(HV_COC, "\x01\x00\x00\x00\x04\x04\x00\x01"), GAP_END}, {GAP_END}, NULL, 0},
+        {"a wide COC of one byte", 0, 257, 4, 4, 0, 0,
+         {GAP(HV_COC, "\x01"), GAP_END}, {GAP_END}, "invalid COC", 833},
+        {"a wide QCC", 0, 257, 4, 4, 0, 257,
+         {GAP(HV_QCC, "\x01\x00\x40\x40"), GAP_END}, {GAP_END}, NULL, 0},
+        {"a wide RGN", 0, 257, 4, 4, 0, 257,
+         {GAP(HV_RGN, "\x01\x00\x00\x05"), GAP_END}, {GAP_END}, NULL, 0},
+        {"a wide POC", 0, 257, 4, 4, 0, 0,
+         {GAP(HV_POC, "\x00\x00\x00\x00\x01\x01\x01\x01\x00"), GAP_END}, {GAP_END}, NULL, 0},
+        {"a wide POC short of Ppoc", 0, 257, 4, 4, 0, 0,
+         {GAP(HV_POC, "\x00\x00\x00\x00\x01\x01\x01\x01"), GAP_END}, {GAP_END}, "invalid POC", 833},
+        {"a tile-part QCC", 0, 1, 4, 4, 0, 0,
+         {GAP_END}, {GAP(HV_QCC, "\x00\x40\x40"), GAP_END}, NULL, 0},
+        {"a tile-part QCC in Profile 0", 1, 1, 4, 4, 0, 0,
+         {GAP_END}, {GAP(HV_QCC, "\x00\x40\x40"), GAP_END}, "codestream.profile-0", 77},
+        {"a tile-part COC of the 9-7 filter, no quantization", 0, 1, 4, 4, 0, 0,
+         {GAP_END}, {GAP(HV_COC, "\x00\x00\x00\x04\x04\x00\x00"), GAP_END},
+         "codestream.quantization-transform", 65},
+        {"SPrgn 38", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_RGN, "\x00\x00\x26"), GAP_END}, {GAP_END}, NULL, 0},
+        {"SPrgn 38 in Profile 0", 1, 1, 4, 4, 0, 0,
+         {GAP(HV_RGN, "\x00\x00\x26"), GAP_END}, {GAP_END}, "codestream.profile-0", 65},
+        {"SPrgn 38 in Profile 1", 2, 1, 4, 4, 0, 0,
+         {GAP(HV_RGN, "\x00\x00\x26"), GAP_END}, {GAP_END}, "codestream.profile-1", 65},
+        {"RSpoc 1 in Profile 0", 1, 1, 4, 4, 0, 0,
+         {GAP(HV_POC, "\x01\x00\x00\x01\x02\x01\x00"), GAP_END}, {GAP_END},
+         "codestream.profile-0", 65},
+        {"TLM of 8-bit Ttlm, 16-bit Ptlm", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_TLM, "\x00\x10\x00\x00\x15"), GAP_END}, {GAP_END}, NULL, 0},
+        {"TLM of 16-bit Ttlm and Ptlm", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_TLM, "\x00\x20\x00\x00\x00\x15"), GAP_END}, {GAP_END}, NULL, 0},
+        {"TLM with Ptlm 13", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_TLM, "\x00\x10\x00\x00\x0d"), GAP_END}, {GAP_END}, "invalid TLM", 65},
+        {"TLM with Ttlm 255", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_TLM, "\x00\x10\xff\x00\x15"), GAP_END}, {GAP_END}, "invalid TLM", 65},
+        {"TLM of two tile-parts, one there", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_TLM, "\x00\x00\x00\x15\x00\x15"), GAP_END}, {GAP_END}, "tlm.tile-parts", 96},
+        {"a PLM entry that does not end", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_PLM, "\x00\x02\x83\x83"), GAP_END}, {GAP_END}, "plm.length", 73},
+        {"a PLM entry above 64 bits", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_PLM, "\x00\x0a\x82\xff\xff\xff\xff\xff\xff\xff\xff\x7f"), GAP_END}, {GAP_END},
+         "plt.value-overflow", 81},
+        {"PPM with three bytes after Zppm", 0, 1, 4, 4, 0, 0,
+         {GAP(HV_PPM, "\x00\x01\x02\x03"), GAP_END}, {GAP_END}, "invalid PPM", 65},
+        {"Profile 0 with XRsiz 3", 1, 1, 4, 4, 3, 0,
+         {GAP_END}, {GAP_END}, "codestream.profile-0", 65},
+        {"Profile 0, one tile, 129 wide at NL 0", 1, 1, 129, 4, 0, 0,
+         {GAP_END}, {GAP_END}, "codestream.profile-0", 65},
+        {"Profile 0 with a precinct of 1 x 1", 1, 1, 4, 4, 0, 0,
+         {GAP(HV_COC, "\x00\x01\x00\x04\x04\x00\x01\x00"), GAP_END}, {GAP_END},
+         "codestream.profile-0", 77},
+        {"Profile 1 with Xsiz 2^31", 2, 1, 0x80000000u, 4, 0, 0,
+         {GAP_END}, {GAP_END}, "codestream.profile-1", 65},
+    };
+    uint32_t f[8] = {256, 128, 0, 0, 128, 128, 0, 0};
+    bytes b;
+    size_t k, at;
+    const char *error;
+    for (k = 0; k < sizeof cases / sizeof *cases; k++) {
+        b = gap_stream(&cases[k]);
+        error = cs_check(&b, 0, &at);
+        expect(cases[k].what, error, at, cases[k].error, cases[k].at);
+        release(&b);
+    }
+
+    /* Profile 0: the first tile-parts in Isot order (Table A.45), tile 1's
+     * first. */
+    memset(&b, 0, sizeof b);
+    u16(&b, HV_SOC);
+    siz(&b, f, 1, NULL, NULL);
+    b.d[7] = 1;
+    cod(&b);
+    qcd(&b);
+    tile_part(&b, 1, 0, 1, 3);
+    tile_part(&b, 0, 0, 1, 3);
+    u16(&b, HV_EOC);
+    error = cs_check(&b, 0, &at);
+    expect("Profile 0, tile 1 first", error, at, "codestream.profile-0", 65);
+    release(&b);
+}
+
+/* The rules of the box tree and the header boxes on JPX files the corpus
+ * does not carry: labels of UTF-8 sequences, j2ci and jlxi out of place, a
+ * j2cx in a j2cx, a cref to an IPR box, superboxes nested below
+ * HV_BOX_DEPTH_MAX, the boxes of a cgrp and of a res, and running out of
+ * memory for the mdat boxes. Each box in `r` follows the base's jp2h at
+ * 227. */
+static void check_box_gaps(void) {
+    static const struct {
+        const char *what, *text;
+        size_t n;
+        int valid;
+    } labels[] = {
+        {"a label of two bytes", "\xc3\xa9", 2, 1},
+        {"a label of three bytes", "\xe2\x82\xac", 3, 1},
+        {"a label of four bytes", "\xf0\x9f\x98\x80", 4, 1},
+        {"a label with a bad continuation", "\xc3\x41", 2, 0},
+        {"an overlong label", "\xc0\x80", 2, 0},
+        {"a label cut short", "\xe2\x82", 2, 0},
+        {"a label of a surrogate", "\xed\xa0\x80", 3, 0},
+        {"a label with 0xF8", "\xf8\x80\x80\x80\x80", 5, 0},
+        {"a label above U+10FFFF", "\xf4\x90\x80\x80", 4, 0},
+        {"a label of a C1 control", "\xc2\x85", 2, 0},
+    };
+    static const struct {
+        const char *what, *jplh;
+        size_t n;
+        const char *error;
+        size_t at;
+    } cgrps[] = {
+        {"a cgrp of a free box", "\0\0\0\x10" "cgrp" "\0\0\0\x08" "free", 16, "cgrp.empty", 235},
+        {"a cgrp's colr short of its fields", "\0\0\0\x12" "cgrp" "\0\0\0\x0A" "colr\x01\x00", 18,
+         "cgrp: colr shorter than its fields", 243},
+        {"a cgrp's child past its end", "\0\0\0\x10" "cgrp" "\0\0\0\x40" "colr", 16, "box.framing",
+         243},
+    };
+    bytes r = {NULL, 0, 0}, b;
+    const char *error;
+    size_t k, at, j, j2;
+    int i;
+
+    for (k = 0; k < sizeof labels / sizeof *labels; k++) {
+        clear(&r);
+        add(&r, &JPCH);
+        add(&r, &JP2C);
+        box(&r, "lbl ", labels[k].text, labels[k].n);
+        b = jpx_with(&r);
+        error = jpx_headers(&b, &at);
+        expect(labels[k].what, error, at, labels[k].valid ? NULL : "lbl.characters", 227);
+        release(&b);
+    }
+
+    clear(&r);
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    box(&r, "j2ci", "\0\0\0\x01\0\0\0\0", 8);
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("a j2ci at the top level", error, at, "j2ci.placement", 227);
+    release(&b);
+
+    clear(&r);                          /* Ncs 2: its codestream and the inner j2cx's */
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    j = begin(&r, "j2cx");
+    box(&r, "j2ci", "\0\0\0\x02\0\0\0\0", 8);
+    j2 = begin(&r, "j2cx");
+    box(&r, "j2ci", "\0\0\0\x01\0\0\0\0", 8);
+    add(&r, &JP2C);
+    end(&r, j2);
+    add(&r, &JP2C);
+    end(&r, j);
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("a j2cx in a j2cx", error, at, NULL, 0);
+    release(&b);
+
+    clear(&r);
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    j = begin(&r, "jclx");
+    box(&r, "free", NULL, 0);
+    box(&r, "jlxi", "\0\0\0\x01\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 20);
+    end(&r, j);
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("a jlxi second in its jclx", error, at, "jlxi.placement", 235);
+    release(&b);
+
+    clear(&r);                          /* the base's jpch, with a cref to an IPR box */
+    j = begin(&r, "jpch");
+    put(&r, JPCH.d + 8, JPCH.n - 8);
+    box(&r, "cref", "jp2i" "\0\0\0\x18" "flst\0\x01\0\0\0\0\0\0\0\x0c\0\0\0\x01\0\0", 28);
+    end(&r, j);
+    add(&r, &JP2C);
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("a cref to an IPR box", error, at, NULL, 0);
+    release(&b);
+
+    clear(&r);                          /* 33 asoc boxes, each a label and the next */
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    for (i = 33; i > 0; i--) {
+        u32(&r, (uint32_t)(17 * i));
+        put(&r, "asoc", 4);
+        box(&r, "lbl ", "a", 1);
+    }
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("33 nested asoc boxes, the last not read", error, at, NULL, 0);
+    release(&b);
+
+    for (k = 0; k < sizeof cgrps / sizeof *cgrps; k++) {
+        clear(&r);
+        add(&r, &JPCH);
+        add(&r, &JP2C);
+        box(&r, "jplh", cgrps[k].jplh, cgrps[k].n);
+        b = jpx_with(&r);
+        error = jpx_headers(&b, &at);
+        expect(cgrps[k].what, error, at, cgrps[k].error, cgrps[k].at);
+        release(&b);
+    }
+
+    /* A res in jp2h (after ihdr and colr, at 77): its child past its end,
+     * and a free box only. */
+    b = jp2_plus("\0\0\0\x10" "res " "\0\0\0\x40" "resc", 16);
+    error = jp2h(&b, &at);
+    expect("a res's child past its end", error, at, "box.framing", 85);
+    release(&b);
+    b = jp2_plus("\0\0\0\x10" "res " "\0\0\0\x08" "free", 16);
+    error = jp2h(&b, &at);
+    expect("a res of a free box", error, at, "res.resc-resd", 77);
+    release(&b);
+
+    clear(&r);                          /* the first allocation: the mdat list */
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    box(&r, "mdat", "abc", 3);
+    b = jpx_with(&r);
+    fail_at = 0;
+    error = jpx_headers(&b, &at);
+    fail_at = -1;
+    check(error != NULL && strcmp(error, "out of memory") == 0, "an mdat box, out of memory",
+          error);
+    release(&b);
+    release(&r);
+}
+
+/* The rules' functions on what the reader does not pass them: other
+ * segment codes, a grid without tiles, box extents, jpxb colours from a
+ * cgrp, and fragments in order. */
+static void check_rule_functions(void) {
+    SizFixed fixed;
+    hv_siz siz;
+    hv_segments s;
+    hv_component component;
+    hv_header jplh;
+    uint64_t end = 0;
+
+    memset(&fixed, 0, sizeof fixed);
+    fixed.xsiz = fixed.ysiz = fixed.xtsiz = fixed.ytsiz = 4;
+    fixed.csiz = 1;
+    memset(&siz, 0, sizeof siz);
+    siz.fixed = &fixed;
+    siz.ncomponents = 1;
+    hv_segments_init(&s, &siz, &component, 0);
+    check(hv_segments_main(&s, HV_COM, NULL, NULL, (const uint8_t *)"", 0) == NULL,
+          "hv_segments_main on COM", NULL);
+    check(hv_segments_tile(&s, HV_COM, NULL, NULL, (const uint8_t *)"", 0) == NULL,
+          "hv_segments_tile on COM", NULL);
+    fixed.xtsiz = 0;
+    check(hv_rule_tiles(&siz) == 0, "hv_rule_tiles, XTsiz 0", NULL);
+    fixed.xtsiz = 4;
+    fixed.xtosiz = 4;
+    check(hv_rule_tiles(&siz) == 0, "hv_rule_tiles, XTOsiz = Xsiz", NULL);
+
+    check(hv_rule_extent(HV_BOX_COLR, 1) != NULL &&
+          strcmp(hv_rule_extent(HV_BOX_COLR, 1), "box.extent") == 0,
+          "hv_rule_extent of another box", NULL);
+
+    memset(&jplh, 0, sizeof jplh);
+    jplh.cgrp = 1;
+    jplh.cgrp_baseline = jplh.cgrp_approx = 1;
+    check(hv_rule_jpxb_layer(NULL, NULL, &jplh) == NULL, "jpxb colours from a cgrp", NULL);
+    jplh.cgrp_approx = 0;
+    check(hv_rule_jpxb_layer(NULL, NULL, &jplh) != NULL &&
+          strcmp(hv_rule_jpxb_layer(NULL, NULL, &jplh), "jpxb.colour") == 0,
+          "jpxb colours from a cgrp without APPROX 1", NULL);
+
+    check(hv_rule_jpxb_fragment(&end, 0, 10, 5) == NULL && end == 15 &&
+          hv_rule_jpxb_fragment(&end, 0, 15, 1) == NULL && end == 16 &&
+          strcmp(hv_rule_jpxb_fragment(&end, 0, 15, 1), "jpxb.fragments") == 0,
+          "jpxb fragments in order, then one before the end", NULL);
+}
+
+/* hv_plt_reader used out of order: a segment begun before the last is
+ * read, an empty range, and the completions without HV_PROFILE or before
+ * the tile-part is read. Each error is terminal. */
+static void check_plt_misuse(void) {
+    static const uint8_t entries[] = {3, 5};
+    hv_plt range = {0, 0, 2};
+    hv_plt_reader a;
+    hv_siz siz;
+    Cod cod;
+    uint64_t value;
+
+    memset(&siz, 0, sizeof siz);
+    memset(&cod, 0, sizeof cod);
+    hv_plt_init(&a, HV_PROFILE);
+    check(hv_plt_begin(&a, &range) == NULL && hv_plt_read(&a, entries, &value) == 1 &&
+          hv_plt_begin(&a, &range) != NULL && strcmp(a.error, "PLT segment not consumed") == 0,
+          "begun twice", a.error);
+    check(hv_plt_read(&a, entries, &value) == -1, "begun twice, terminal", NULL);
+
+    hv_plt_init(&a, HV_PROFILE);
+    range.start = range.end = 1;
+    check(hv_plt_begin(&a, &range) != NULL && strcmp(a.error, "invalid PLT") == 0,
+          "an empty range", a.error);
+    range.start = 0;
+    range.end = 2;
+
+    hv_plt_init(&a, HV_PROFILE_HEADERS);
+    check(hv_plt_end_tile(&a, 8) != NULL &&
+          strcmp(a.error, "PLT completion requires HV_PROFILE") == 0,
+          "end_tile without HV_PROFILE", a.error);
+    hv_plt_init(&a, HV_PROFILE_HEADERS);
+    check(hv_plt_end(&a, &siz, &cod) != NULL &&
+          strcmp(a.error, "PLT completion requires HV_PROFILE") == 0,
+          "end without HV_PROFILE", a.error);
+
+    hv_plt_init(&a, HV_PROFILE);
+    check(hv_plt_begin(&a, &range) == NULL && hv_plt_read(&a, entries, &value) == 1 &&
+          hv_plt_end(&a, &siz, &cod) != NULL &&
+          strcmp(a.error, "PLT tile-part not completed") == 0,
+          "end in the middle of a segment", a.error);
+    hv_plt_init(&a, HV_PROFILE);
+    check(hv_plt_begin(&a, &range) == NULL && hv_plt_read(&a, entries, &value) == 1 &&
+          hv_plt_read(&a, entries, &value) == 1 && hv_plt_read(&a, entries, &value) == 0 &&
+          hv_plt_end(&a, &siz, &cod) != NULL &&
+          strcmp(a.error, "PLT tile-part not completed") == 0,
+          "end before end_tile", a.error);
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: test_reader <vector directory>\n");
@@ -2088,6 +2486,10 @@ int main(int argc, char **argv) {
     check_rreqs();
     check_codestreams();
     check_plt_cursor();
+    check_plt_misuse();
+    check_segment_gaps();
+    check_box_gaps();
+    check_rule_functions();
     check_corpus_items();
     {
         bytes *all[] = {&JP2, &JPX, &LINKED, &FRAME1, &SIG, &FTYP_JP2, &FTYP_JPX, &RREQ,

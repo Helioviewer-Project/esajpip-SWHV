@@ -25,9 +25,8 @@ static void check_rewrite_stability(const uint8_t *data, size_t size) {
             abort();
         if (hv_rewrite(once.data, once.size, 0, 0, &twice, &second) != 0)
             abort();
-        if (second.uncomparable == NULL &&
-            (twice.size != once.size ||
-             (once.size != 0 && memcmp(twice.data, once.data, once.size) != 0)))
+        if (twice.size != once.size ||
+            (once.size != 0 && memcmp(twice.data, once.data, once.size) != 0))
             abort();
     }
 

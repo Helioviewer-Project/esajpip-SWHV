@@ -179,25 +179,25 @@ cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
 cmake --build build --target hv_merge
 ```
 
-Tests, with the other tools' and separate from the server's:
+Tests, through the shared runner:
 
 ```sh
 tests/run.sh             # or: tests/run.sh sanitize
 ```
 
-CTest options go after the mode, or first for normal mode
-(`tests/run.sh [normal|sanitize] [CTest options]`, or
-`tests/run.sh -R merge`). The build goes to
-`build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
-`../tests/run.sh` also reads: set it for one runner at a time. The
-fixtures are described in `test/fixtures/FIXTURES.md`.
+CTest options follow an explicit mode, for example
+`tests/run.sh normal -R merge`. With no arguments the runner executes the
+whole suite normally. Builds go to `build/tests-<mode>`, or to
+`ESAJPIP_TEST_BUILD_DIR`.
+
+Fixtures are described in `../tests/merge/fixtures/FIXTURES.md`.
 
 Fuzzing (Clang):
 
 ```sh
 cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON
 cmake --build fuzz --target fuzz_merge
-fuzz/merge/fuzz_merge -max_len=262144 corpus/
+fuzz/tests/fuzz/fuzz_merge -max_len=262144 corpus/
 ```
 
 ## Performance check

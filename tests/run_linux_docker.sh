@@ -2,7 +2,8 @@
 # Linux-only diagnostics in a Debian 13 container: deterministic replay under
 # Valgrind and MemorySanitizer, plus optional libFuzzer mutation campaigns
 # under Linux sanitizer runtimes. The repository is mounted read-only; build
-# trees, generated corpora, logs and artifacts stay in the disposable container.
+# trees stay in the disposable container. Fuzz corpora, logs and artifacts
+# remain in a separate host directory for each run (ESAJPIP_LINUX_OUT).
 #
 #   tests/run_linux_docker.sh valgrind|msan|all
 #   tests/run_linux_docker.sh fuzz-asan|fuzz-extended|fuzz-msan|fuzz-all
@@ -19,6 +20,7 @@ usage() {
     echo "Usage: $0 [valgrind|msan|all|fuzz-asan|fuzz-extended|fuzz-msan|fuzz-all]" >&2
     echo "Set ESAJPIP_DOCKER_PLATFORM=linux/arm64 or linux/amd64 to pin architecture." >&2
     echo "Set ESAJPIP_JOBS for Docker build jobs." >&2
+    echo "Set ESAJPIP_LINUX_OUT for the parent of persistent result directories." >&2
     echo "Set ESAJPIP_FUZZ_SECONDS, ESAJPIP_FUZZ_WORKERS and ESAJPIP_FUZZ_TARGETS for Docker fuzz runs." >&2
 }
 
@@ -38,7 +40,13 @@ fi
 
 docker build $docker_platform -f "$repo/tests/Dockerfile.linux" -t "$image" "$repo"
 
-docker run --rm -i $docker_platform -v "$repo:/src:ro" -w /src \
+out=${ESAJPIP_LINUX_OUT:-$repo/build/linux-diagnostics}
+mkdir -p "$out"
+out=$(CDPATH= cd -- "$out" && pwd)
+results=$(mktemp -d "$out/$profile.XXXXXX")
+echo "Linux diagnostic results: $results"
+
+docker run --rm -i $docker_platform -v "$repo:/src:ro" -v "$results:/results" -w /src \
     -e ESAJPIP_LINUX_PROFILE="$profile" \
     -e ESAJPIP_JOBS="${ESAJPIP_JOBS:-${CMAKE_BUILD_PARALLEL_LEVEL:-}}" \
     -e ESAJPIP_FUZZ_SECONDS="${ESAJPIP_FUZZ_SECONDS:-60}" \
@@ -107,6 +115,8 @@ PY
 # Every replay mode once, on the corpus and on the two seeds. The modes are
 # the fuzz targets: see tests/fuzz/CMakeLists.txt.
 run_matrix() {
+    asn1_corpus=$1
+    shift
     runner=$1
     shift
 
@@ -117,7 +127,7 @@ run_matrix() {
     "$runner" "$@" deferred-plt /src/tests/vectors/j2k/jp2-precincts.jp2
     "$runner" "$@" transcode-fuzz /tmp/esajpip-seeds/codestream.j2k
     "$runner" "$@" merge-fuzz /tmp/esajpip-seeds/merge-fuzz.seed
-    "$runner" "$@" asn1 /src/tests/vectors/j2k/jp2.jp2
+    "$runner" "$@" asn1 "$asn1_corpus"
 }
 
 fuzz_corpus() {
@@ -159,13 +169,15 @@ run_fuzz_profile() {
 
     for target in $fuzz_targets; do
         corpus=$(fuzz_corpus "$target")
-        corpus_dir="$build/tests/fuzz/corpus/$corpus"
-        artifact_dir="/tmp/esajpip-linux-fuzz-artifacts/$name/$target"
-        log="/tmp/esajpip-linux-fuzz-$name-$target.log"
+        run_dir="/results/$name/$target"
+        corpus_dir="$run_dir/corpus"
+        artifact_dir="$run_dir/artifacts"
+        log="$run_dir/run.log"
 
-        mkdir -p "$artifact_dir"
+        mkdir -p "$artifact_dir" "$corpus_dir"
+        cp -R "$build/tests/fuzz/corpus/$corpus/." "$corpus_dir/"
         echo "Running $target under $name for ${fuzz_seconds}s with ${fuzz_workers} workers"
-        if ! (cd /tmp && "$build/tests/fuzz/$target" \
+        if ! (cd "$run_dir" && "$build/tests/fuzz/$target" \
             -max_total_time="$fuzz_seconds" \
             -jobs="$fuzz_workers" \
             -workers="$fuzz_workers" \
@@ -187,7 +199,7 @@ if [ "$profile" = valgrind ] || [ "$profile" = all ]; then
         -DCMAKE_BUILD_TYPE=Debug
     build_parallel /tmp/esajpip-linux-valgrind --target replay protocol_test
     /tmp/esajpip-linux-valgrind/tests/server/protocol_test
-    run_matrix valgrind \
+    run_matrix /tmp/esajpip-linux-valgrind/tests/fuzz/corpus/asn1 valgrind \
         --tool=memcheck \
         --leak-check=full \
         --show-leak-kinds=all \
@@ -211,7 +223,8 @@ if [ "$profile" = msan ] || [ "$profile" = all ]; then
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
     build_parallel /tmp/esajpip-linux-msan --target replay
     export MSAN_OPTIONS=halt_on_error=1:exit_code=126
-    run_matrix /tmp/esajpip-linux-msan/tests/fuzz/replay
+    run_matrix /tmp/esajpip-linux-msan/tests/fuzz/corpus/asn1 \
+        /tmp/esajpip-linux-msan/tests/fuzz/replay
 fi
 
 if [ "$profile" = fuzz-asan ] || [ "$profile" = fuzz-all ]; then

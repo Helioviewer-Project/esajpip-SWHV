@@ -1,7 +1,10 @@
 /* fuzz_deferred_plt: compare eager served-profile codestream validation
  * with structural traversal plus explicit deferred PLT consumption. This
  * exercises malformed PLT boundaries, pause/resume cursor state, and the
- * requirement that callers finish tile and codestream validation.
+ * requirement that callers finish tile and codestream validation. The cursor
+ * reads alternately from the input and from a copy of it at another address,
+ * as a server that unmaps and maps a file again between reads, so that it
+ * cannot depend on the buffer it began a segment with.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -18,7 +21,13 @@ static void check_stream(const uint8_t *data, size_t start, size_t end) {
     size_t eager_at = 0;
     size_t deferred_at = 0;
     size_t tile_at = 0;
+    unsigned reads = 0;
+    uint8_t *copy = malloc(end ? end : 1);
     int status;
+
+    if (copy == NULL)
+        abort();
+    memcpy(copy, data, end);
 
     eager = hv_codestream_check(data, start, end, HV_PROFILE, &eager_at);
     hv_plt_init(&plt, HV_PROFILE);
@@ -32,11 +41,9 @@ static void check_stream(const uint8_t *data, size_t start, size_t end) {
 
             deferred = hv_plt_begin(&plt, item.plt);
             if (deferred == NULL) {
-                read = hv_plt_read(&plt, data, &value);
-                if (read == 1)
-                    read = hv_plt_read(&plt, data, &value);
-                while (read == 1)
-                    read = hv_plt_read(&plt, data, &value);
+                do
+                    read = hv_plt_read(&plt, reads++ & 1 ? copy : data, &value);
+                while (read == 1);
                 deferred = plt.error;
             }
             deferred_at = item.start;
@@ -60,6 +67,7 @@ static void check_stream(const uint8_t *data, size_t start, size_t end) {
            eager_at == deferred_at)))
         abort();
     hv_codestream_close(&cs);
+    free(copy);
 }
 
 static void check_container_streams(const uint8_t *data, size_t size) {

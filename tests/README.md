@@ -7,8 +7,9 @@ Every test of the project is under `tests/`, with its CMake; the component
 tests/
   CMakeLists.txt   the gate (BUILD_TESTING) and the one registration helper
   run.sh           builds and runs the suite
+  run_mutation.sh  mutation testing, with mutate.py making the mutants
   lib/             jpeg2000_io: reader, rules, writer, hv_rewrite, geometry,
-                   hv_file, hv_served
+                   hv_file, hv_served, hv_walk
   transcode/       hv_transcode: the library and its command line (fixtures/)
   merge/           hv_merge: the library and its command line (fixtures/)
   server/          the server's own tests
@@ -71,6 +72,7 @@ toolchain, and are described in [DIAGNOSTICS.md](DIAGNOSTICS.md):
 | `tests/run_linux_docker.sh valgrind\|msan\|all` | The replay modes under Valgrind and MSan, in Debian 13. |
 | `tests/run_linux_docker.sh fuzz-asan\|fuzz-extended\|fuzz-msan\|fuzz-all` | Linux libFuzzer mutation runs under sanitizer profiles. |
 | `build/tests-*/tests/fuzz/replay MODE FILE_OR_DIR...` | One fuzz target's assertions, with no libFuzzer runtime. |
+| `tests/run_mutation.sh [file...]` | One-operator mutants of the files named, each built and run against the tests; reports the mutants no test notices. |
 
 Parallel examples:
 
@@ -90,6 +92,10 @@ ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh optimized
 # Linux fuzz campaigns in Docker.
 ESAJPIP_JOBS=8 ESAJPIP_FUZZ_SECONDS=300 ESAJPIP_FUZZ_WORKERS=8 \
   sh tests/run_linux_docker.sh fuzz-all
+
+# The rules of hv_rules.c that no test sees fail.
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ESAJPIP_MUTATION_OPERATORS=rule \
+  sh tests/run_mutation.sh lib/hv_rules.c
 ```
 
 `tests/fuzz/` holds the fuzz targets of the library and the tools
@@ -101,7 +107,10 @@ are gated by `ESAJPIP_FUZZ=ON` and fail to configure, once, with instructions
 when the runtime is missing. CMake generates per-target seed corpora under
 `build/.../tests/fuzz/corpus` from the checked-in vectors and fixtures; replay
 tests use those corpora in every test build, and the libFuzzer smoke tests use
-them when `ESAJPIP_FUZZ=ON`.
+them when `ESAJPIP_FUZZ=ON`. Seed generation preserves existing files, including
+inputs added by fuzz campaigns. Docker campaigns retain their corpora, worker
+logs and crash artifacts under `build/linux-diagnostics` (override the parent
+directory with `ESAJPIP_LINUX_OUT`), in a new directory for each run.
 
 ```sh
 build/profile-fuzz/tests/fuzz/fuzz_reader_rewrite \
@@ -121,11 +130,12 @@ build/profile-fuzz/tests/fuzz/fuzz_transcode -jobs=8 -workers=8 \
 | `output_file` | `hv_file`: atomic replacement of the tools' output files. |
 | `writer` | The writer with a lowered LBox limit, to reach the switch to XLBox. |
 | `served` | `hv_served` with `open`, `fstat`, `read` and `malloc` that misbehave on demand. |
-| `reader` | The reader's framing, offsets and errors, byte by byte (`hv_reader.c` included, with allocations that fail on demand). |
+| `reader` | The reader's framing, offsets and errors, byte by byte (`hv_reader.c` included, with allocations that fail on demand), the rules no vector reaches, and the PLT cursor used out of order. |
+| `walk_command` | `hv_walk`'s command line: options, exit status and the line it prints for each outcome. |
 | `geometry` | `hv_geometry` against T.800 computed a second way. |
 | `transcode` | The transcoder's library: packet layout, precincts, PLT, and the profile of its output. |
 | `transcode_command` | `hv_transcode`'s command line and its files on disk. |
-| `merge` | The merger's library: box construction, JPX graph, colour handling. |
+| `merge` | The merger's library: box construction, JPX graph, color handling. |
 | `merge_command` | `hv_merge`'s command line and its files on disk. |
 | `logging` | Rotation, truncation, concurrent producers, dropped-record reporting, output failure and shutdown draining. Uses small test-only log limits. |
 | `protocol` | Configuration boundaries and missing keys, request semantics, cache state, window geometry, packet indexing primitives and exact JPP writer bytes/capacity boundaries. |

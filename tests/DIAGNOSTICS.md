@@ -11,6 +11,7 @@ tests/run_profile.sh       the suite under asan, extended, msan, optimized,
 tests/run_baseline.sh      the suite with Clang source coverage
 tests/run_linux_docker.sh  replay under Valgrind/MSan and Linux sanitizer
                            fuzz campaigns, on Debian 13
+tests/run_mutation.sh      mutants of the sources, each run against the tests
 tests/fuzz/replay          the deterministic counterpart of the fuzz targets
 ```
 
@@ -100,13 +101,21 @@ build/tests/fuzz/replay reader-rewrite build/tests/fuzz/corpus/reader-rewrite
 build/tests/fuzz/replay deferred-plt tests/vectors/j2k/jp2-precincts.jp2
 build/tests/fuzz/replay transcode-fuzz seed.j2k
 build/tests/fuzz/replay merge-fuzz seed.merge
-build/tests/fuzz/replay asn1 tests/vectors/j2k/jp2.jp2
+build/tests/fuzz/replay asn1 build/tests/fuzz/corpus/asn1
 ```
 
 Modes: `reader-rewrite`, `deferred-plt`, `asn1`, `transcode-fuzz`,
 `merge-fuzz`. A `codestream` input is a raw codestream (the `jp2c` payload of
 a JP2 file); a `merge` input is a 4-byte big-endian split offset followed by
-two JP2 files, which is the layout `tests/fuzz/fuzz_merge.c` documents.
+two JP2 files, which is the layout `tests/fuzz/fuzz_merge.c` documents; an
+`asn1` input is a byte that selects the PDU type, modulo the number of types,
+followed by its encoding. The types are those with a `T_ACN_Decode` in
+`lib/generated`, in the order of the headers' names, which CMake writes to
+`build/.../tests/fuzz/asn1_pdus.h`; `make_corpus.py` gives every type the
+structures at the starts of boxes, marker segments and their bodies in four
+vectors.
+Seed regeneration adds or refreshes seeds without deleting existing corpus
+files, so inputs discovered by a campaign survive rebuilds.
 Each input may be a file or a directory. Directory entries run in sorted order.
 `ESAJPIP_REPLAY_VERBOSE=1`, or `-v` after the mode, names each input before
 running it, so a crash under a corpus names its file. CMake generates the
@@ -164,14 +173,18 @@ sh tests/run_linux_docker.sh fuzz-all
 
 The runner builds `tests/Dockerfile.linux` as
 `esajpip-linux-diagnostics:debian13`, mounts the checkout read-only at `/src`,
-and writes build output, seeds, fuzzer logs and crash artifacts under `/tmp` in
-the container. The image tracks Debian's default toolchain, including
+and keeps builds under `/tmp` in the container. Each run creates a host
+directory under `build/linux-diagnostics`, or `ESAJPIP_LINUX_OUT`, and prints
+its path. That directory is mounted at `/results`: each fuzz target keeps its
+corpus, `run.log`, worker logs and `artifacts/` there, including when the
+campaign fails and the container is removed. The image tracks Debian's default toolchain, including
 `build-essential`, `clang`, `llvm` and `libclang-rt-dev`.
 
 `valgrind`, `msan` and `all` execute a fixed replay set: `reader-rewrite` on
 two corpus vectors and on a real transcode fixture, `deferred-plt` on a vector,
 `transcode-fuzz` on a raw codestream extracted from that fixture, `merge-fuzz`
-on a two-file seed, and `asn1` on a vector.
+on a two-file seed, and `asn1` on the generated corpus of selector-prefixed
+PDU inputs.
 
 The `fuzz-*` profiles build the libFuzzer targets and run actual mutation
 campaigns, not just replay:
@@ -206,3 +219,34 @@ Pin Docker architecture if needed:
 ESAJPIP_DOCKER_PLATFORM=linux/arm64 sh tests/run_linux_docker.sh all
 ESAJPIP_DOCKER_PLATFORM=linux/amd64 sh tests/run_linux_docker.sh fuzz-msan
 ```
+
+## Mutation
+
+```sh
+sh tests/run_mutation.sh                         # lib/hv_rules.c lib/hv_reader.c
+ESAJPIP_MUTATION_OPERATORS=rule sh tests/run_mutation.sh lib/hv_rules.c
+ESAJPIP_MUTATION_LINES=600-900 sh tests/run_mutation.sh lib/hv_rules.c
+ESAJPIP_MUTATION_TESTS="-L tools -E _command" sh tests/run_mutation.sh merge/merge.c
+```
+
+`tests/mutate.py` lists the one-operator mutants of a C file and applies
+one: a rule's `return "..."` made `return NULL`, a relational operator
+changed (`==` and `!=` swapped, `<` and `<=`, `>` and `>=`), `&&` and `||`
+swapped, a `!` dropped, and, when asked for, an integer literal made one
+larger (`constant`). Comments, strings and preprocessor lines are left
+alone, and a mutant's number is its place in the file, so the same file
+gives the same numbers.
+
+`tests/run_mutation.sh` copies the checkout, but for `build/` and `.git`,
+to `build/mutation/src` (`ESAJPIP_TEST_BUILD_DIR` to move it), builds it
+without LTO, and checks that the copy passes the tests. Then, for each
+mutant, it writes the mutant into the copy, builds incrementally, runs the
+tests (`ESAJPIP_MUTATION_TESTS`, by default `-L tools`, each within
+`ESAJPIP_MUTATION_TIMEOUT` seconds, by default 120) and puts the file back.
+The checkout is never changed. A mutant is killed when a test fails,
+survives when every test passes, and is counted apart when a test times
+out or it does not compile. `ESAJPIP_MUTATION_EVERY=N` takes every Nth
+mutant and `ESAJPIP_MUTATION_LINES=FIRST-LAST` those on some lines, to split
+a long run. `build/mutation/report.tsv` has a line per mutant and
+`build/mutation/survivors.txt` the survivors, each a check that no test
+makes fail, or code whose change nothing observes.

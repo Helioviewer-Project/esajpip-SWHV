@@ -15,6 +15,13 @@
  * With ESAJPIP_REPLAY_VERBOSE=1 (or -v as the second word) each input is
  * named before it runs, so a crash under a corpus names its file. */
 
+/* Before any header, for the targets included below (fuzz_merge's mkdtemp
+ * and realpath). */
+#define _XOPEN_SOURCE 700
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE 1
+#endif
+
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>

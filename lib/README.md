@@ -46,12 +46,11 @@ cmake --build build --target hv_walk
 
 ## Tests
 
-With the tools' and separate from the server's:
-`tests/run.sh [normal|sanitize] [CTest options]`; without a mode, the
-tests run in normal mode and CTest options may come first
-(`tests/run.sh -R merge`). The build goes to
-`build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
-`../tests/run.sh` also reads: set it for one runner at a time.
+The shared runner builds and runs the library, tool and server tests:
+`tests/run.sh [normal|sanitize] [CTest options]`. With no arguments it runs
+normally. Put CTest options after an explicit mode, for example
+`tests/run.sh normal -L tools`. Builds go to `build/tests-<mode>`, or to
+`ESAJPIP_TEST_BUILD_DIR`.
 
 - `test_profile`: every vector of `../tests/vectors/j2k` against its
   manifest labels: the served profile (`hv_check_served`) and the header

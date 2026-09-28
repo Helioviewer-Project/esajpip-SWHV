@@ -163,24 +163,23 @@ Fuzzing (Clang):
 ```sh
 cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON
 cmake --build fuzz --target fuzz_transcode
-fuzz/transcode/fuzz_transcode -max_len=131072 corpus/
+fuzz/tests/fuzz/fuzz_transcode -max_len=131072 corpus/
 ```
 
-Tests, separate from the server's (`test/`):
+Tests, through the shared runner:
 
 ```sh
 tests/run.sh             # or: tests/run.sh sanitize
 TRANSCODE_ARCHIVE=~/AIA:~/EUI tests/run.sh
 ```
 
-CTest options go after the mode, or first for normal mode
-(`tests/run.sh [normal|sanitize] [CTest options]`, or
-`tests/run.sh -R transcode`). The build goes to
-`build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
-`../tests/run.sh` also reads: set it for one runner at a time.
+CTest options follow an explicit mode, for example
+`tests/run.sh normal -R transcode`. With no arguments the runner executes the
+whole suite normally. Builds go to `build/tests-<mode>`, or to
+`ESAJPIP_TEST_BUILD_DIR`.
 
-`test_transcode` checks that every file in `test/fixtures/input/` transcodes
-to its Kakadu reference in `test/fixtures/kakadu/` (COM and the XML box
+`test_transcode` checks that every file in `../tests/transcode/fixtures/input/` transcodes
+to its Kakadu reference in `../tests/transcode/fixtures/kakadu/` (COM and the XML box
 aside: it is the input's, before its NUL), that each output is within the
 served profile and transcodes to itself (the origin-129 file is rejected,
 and only its codestream is compared); what the profile accepts and rejects;
@@ -200,5 +199,5 @@ command: options, exit status, in-place replacement keeping the mode, output
 through a symbolic link, and nothing written or left behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
-in `test/fixtures/FIXTURES.md`. The same run includes the reader's tests
+in `../tests/transcode/fixtures/FIXTURES.md`. The same run includes the reader's tests
 (`../tests/lib/`).
