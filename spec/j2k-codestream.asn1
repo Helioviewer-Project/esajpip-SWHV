@@ -79,11 +79,16 @@ TileMarkerCode ::= INTEGER (65281..65358 | 65360 | 65362..65364 | 65366 |
                             65368..65375 | 65377..65378 | 65380..65423 |
                             65428..65496 | 65498..65534)
 
+-- T.800 A.4.4 / I.5.4: EOC ends the jp2c payload. CONTAINING bounds
+-- decoding but skips unread bytes, so extra captures the tail for the
+-- codestream.extent rule in both layers. Its 64-byte bound is a corpus
+-- bound; larger tails fail to decode. Valid codestreams encode no extra bytes.
 Codestream ::= SEQUENCE {
     soc         INTEGER (65359..65359),       -- FF4F
     sizCode     INTEGER (65361..65361),       -- FF51: SIZ is always first (A.3)
     siz         SizSegment,
-    segments    SEQUENCE (SIZE (1..80)) OF MainSegment     -- terminated by EOC (corpus bound)
+    segments    SEQUENCE (SIZE (1..80)) OF MainSegment,    -- terminated by EOC (corpus bound)
+    extra       OCTET STRING (SIZE (0..64))               -- after EOC; must be empty
 }
 
 -- One wrapper per segment kind: the ACN-inserted Lxxx lives in the wrapper.
@@ -177,7 +182,8 @@ Codestream-Profile ::= SEQUENCE {
     soc         INTEGER (65359..65359),
     sizCode     INTEGER (65361..65361),
     siz         SizSegment-Profile,
-    segments    SEQUENCE (SIZE (3..80)) OF MainSegment-Profile     -- >= COD, QCD, one tile-part (corpus bound)
+    segments    SEQUENCE (SIZE (3..80)) OF MainSegment-Profile,    -- >= COD, QCD, one tile-part (corpus bound)
+    extra       OCTET STRING (SIZE (0..64))                      -- after EOC; must be empty
 }
 
 SizSegment-Profile ::= SEQUENCE { body OCTET STRING (CONTAINING Siz-Profile) }

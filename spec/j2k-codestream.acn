@@ -39,7 +39,8 @@ Codestream [] {
     soc         [encoding pos-int, size 16, endianness big],
     sizCode     [encoding pos-int, size 16, endianness big],
     siz         [],
-    segments    [size null-terminated, termination-pattern 'FFD9'H]   -- EOC
+    segments    [size null-terminated, termination-pattern 'FFD9'H],  -- EOC
+    extra       [size deduced]                                      -- to the jp2c boundary
 }
 
 SizSegment [] {
@@ -131,7 +132,8 @@ Codestream-Profile [] {
     soc         [encoding pos-int, size 16, endianness big],
     sizCode     [encoding pos-int, size 16, endianness big],
     siz         [],
-    segments    [size null-terminated, termination-pattern 'FFD9'H]
+    segments    [size null-terminated, termination-pattern 'FFD9'H],
+    extra       [size deduced]
 }
 
 SizSegment-Profile [] {

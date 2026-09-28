@@ -1533,7 +1533,7 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             if (cs->tile_parts == 0)
                 return fail(cs, "codestream.no-tile-part", cs->pos);
             if (end != cs->end)
-                return fail(cs, "bytes after EOC", end);
+                return fail(cs, "codestream.extent", end);
             if ((error = hv_rule_tile_parts_end(cs->unfinished)) != NULL ||
                 (error = hv_segments_end(&cs->segments)) != NULL)
                 return fail(cs, error, cs->pos);

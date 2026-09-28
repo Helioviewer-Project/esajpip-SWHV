@@ -222,6 +222,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
         }
     }
     if (tile_parts == 0) return "codestream.no-tile-part";
+    if (cs->extra.nCount != 0) return "codestream.extent";
     if ((r = hv_rule_tile_parts_end(unfinished)) != NULL) return r;
     if ((r = hv_segments_end(&segments)) != NULL) return r;
 

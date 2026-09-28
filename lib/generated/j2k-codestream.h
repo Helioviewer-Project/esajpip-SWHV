@@ -245,10 +245,16 @@ typedef struct {
     MainSegment arr[80];
 } Codestream_segments;
 typedef struct {
+    int nCount;
+    byte arr[64];
+} Codestream_extra;
+
+typedef struct {
     Codestream_soc soc;
     Codestream_sizCode sizCode;
     SizSegment siz;
     Codestream_segments segments;
+    Codestream_extra extra;
 
 } Codestream;
 
@@ -256,7 +262,7 @@ typedef struct {
 typedef asn1SccUint MainMarkerCode_Profile;
 
 
-#define ERR_MAINMARKERCODE_PROFILE		2293  /*(65281..65327 | 65344..65358 | 65360 | 65362 |
+#define ERR_MAINMARKERCODE_PROFILE		2298  /*(65281..65327 | 65344..65358 | 65360 | 65362 |
                                     65364..65367 | 65369..65374 | 65378..65424 |
                                     65428..65496 | 65498..65534)*/
 flag MainMarkerCode_Profile_IsConstraintValid(const MainMarkerCode_Profile* pVal, int* pErrCode);
@@ -266,16 +272,16 @@ void MainMarkerCode_Profile_Initialize(MainMarkerCode_Profile* pVal);
 #define MainMarkerCode_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define MainMarkerCode_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_MAINMARKERCODE_PROFILE		2296  /**/
+#define ERR_ACN_ENCODE_MAINMARKERCODE_PROFILE		2301  /**/
 
 flag MainMarkerCode_Profile_ACN_Encode(const MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_MAINMARKERCODE_PROFILE		2297  /**/
+#define ERR_ACN_DECODE_MAINMARKERCODE_PROFILE		2302  /**/
 flag MainMarkerCode_Profile_ACN_Decode(MainMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 typedef asn1SccUint TileMarkerCode_Profile;
 
 
-#define ERR_TILEMARKERCODE_PROFILE		2298  /*(65368..65368)*/
+#define ERR_TILEMARKERCODE_PROFILE		2303  /*(65368..65368)*/
 flag TileMarkerCode_Profile_IsConstraintValid(const TileMarkerCode_Profile* pVal, int* pErrCode);
 
 void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal);
@@ -283,11 +289,11 @@ void TileMarkerCode_Profile_Initialize(TileMarkerCode_Profile* pVal);
 #define TileMarkerCode_Profile_REQUIRED_BYTES_FOR_ACN_ENCODING       2
 #define TileMarkerCode_Profile_REQUIRED_BITS_FOR_ACN_ENCODING        16
 
-#define ERR_ACN_ENCODE_TILEMARKERCODE_PROFILE		2301  /**/
+#define ERR_ACN_ENCODE_TILEMARKERCODE_PROFILE		2306  /**/
 
 flag TileMarkerCode_Profile_ACN_Encode(const TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode, flag bCheckConstraints);
 
-#define ERR_ACN_DECODE_TILEMARKERCODE_PROFILE		2302  /**/
+#define ERR_ACN_DECODE_TILEMARKERCODE_PROFILE		2307  /**/
 flag TileMarkerCode_Profile_ACN_Decode(TileMarkerCode_Profile* pVal, BitStream* pBitStrm, int* pErrCode);
 /*-- TileSegment_Profile --------------------------------------------*/
 typedef struct {
@@ -383,10 +389,16 @@ typedef struct {
     MainSegment_Profile arr[80];
 } Codestream_Profile_segments;
 typedef struct {
+    int nCount;
+    byte arr[64];
+} Codestream_Profile_extra;
+
+typedef struct {
     Codestream_Profile_soc soc;
     Codestream_Profile_sizCode sizCode;
     SizSegment_Profile siz;
     Codestream_Profile_segments segments;
+    Codestream_Profile_extra extra;
 
 } Codestream_Profile;
 

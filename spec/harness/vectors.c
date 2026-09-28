@@ -3948,6 +3948,31 @@ static Bytes flst_trailing_byte(Bytes valid) {
     return m;
 }
 
+/* T.800 A.4.4 / I.5.4: bytes after EOC inside jp2c. Grow only LBox,
+ * not Psot, and preserve any following boxes. Exercise the captured tail
+ * and both sides of its corpus bound. */
+static void emit_eoc_mutants(Bytes valid, cf_kind kind, const char *base_name,
+                              const char *companions) {
+    static const unsigned char tail[65] = { 1, 2 };
+    static const size_t lengths[] = { 1, 2, 64, 65 };
+    Regions rs = walk(&valid);
+    const Region *box = find_top_box(&rs, &valid, HV_BOX_JP2C);
+    size_t start = box->start, end = box->end, k;
+    if (end != rs.eoc_end) die("EOC mutants: base jp2c does not end at EOC");
+    free(rs.r);
+    for (k = 0; k < sizeof lengths / sizeof *lengths; k++) {
+        size_t n = lengths[k];
+        Bytes m = insert_bytes(valid, end, tail, n);
+        char name[256];
+        put32(m.data + start, be32(valid.data + start) + (uint32_t)n);
+        snprintf(name, sizeof name, "%s-after-eoc-%zu", base_name, n);
+        emit(m, kind, name, "codestream.extent",
+             "bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)", companions,
+             X_STD, n > 64 ? "decode" : "codestream.extent", NULL);
+        free(m.data);
+    }
+}
+
 /* Insertions the structured mutants cannot make: codes placed before the
  * first SOT or in the tile-part header. PPT and SOP out of place, FF30
  * read with a length and FF00 fail to decode. A code T.800 does not define
@@ -4072,8 +4097,10 @@ static void run_base(Base base, const char *companions) {
     emit_signature_mutant(valid, base.kind, base.name, companions);
     emit_length_mutants(valid, base.kind, base.name, companions);
     emit_code_mutants(valid, base.kind, base.name, companions);
-    if (base.jp2c_box >= 0)
+    if (base.jp2c_box >= 0) {
         emit_insertion_mutants(valid, base.kind, base.name, companions);
+        emit_eoc_mutants(valid, base.kind, base.name, companions);
+    }
     if (base.kind == CF_JPX && base.jp2c_box >= 0)
         emit_rreq_mutants(valid, base.name, companions);
 

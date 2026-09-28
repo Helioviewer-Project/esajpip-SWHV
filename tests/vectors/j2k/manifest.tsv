@@ -54,6 +54,10 @@ jp2-main-ff30.jp2	jp2	valid	invalid	decode	main.marker-code	FF30, a marker witho
 jp2-tile-tlm.jp2	jp2	invalid	invalid	decode	tile.marker-code	TLM, a main-header marker, in the tile-part header	-	decode
 jp2-tile-unknown.jp2	jp2	valid	invalid	decode	tile.marker-code	FF70, a code T.800 does not define, in the tile-part header: skipped (A.1)	-	decode
 jp2-tile-ff30.jp2	jp2	valid	invalid	decode	tile.marker-code	FF30, a marker without a segment, in the tile-part header: skipped (A.1.3)	-	decode
+jp2-after-eoc-1.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-after-eoc-2.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-after-eoc-64.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-after-eoc-65.jp2	jp2	invalid	invalid	decode	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	decode
 jp2-siz.rsiz-2.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-	-
 jp2-siz.rsiz-32768.jp2	jp2	invalid	valid	jp2.rsiz	siz.rsiz	T.801 extensions (Table A.2): not in a JP2 file (T.800 I.5.4, Table A.10)	-	-
 jp2-siz.rsiz-1.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 1 (profile 0)	-	-
@@ -349,6 +353,10 @@ jp2-precincts-main-ff30.jp2	jp2	valid	invalid	decode	main.marker-code	FF30, a ma
 jp2-precincts-tile-tlm.jp2	jp2	invalid	invalid	decode	tile.marker-code	TLM, a main-header marker, in the tile-part header	-	decode
 jp2-precincts-tile-unknown.jp2	jp2	valid	invalid	decode	tile.marker-code	FF70, a code T.800 does not define, in the tile-part header: skipped (A.1)	-	decode
 jp2-precincts-tile-ff30.jp2	jp2	valid	invalid	decode	tile.marker-code	FF30, a marker without a segment, in the tile-part header: skipped (A.1.3)	-	decode
+jp2-precincts-after-eoc-1.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-precincts-after-eoc-2.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-precincts-after-eoc-64.jp2	jp2	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jp2-precincts-after-eoc-65.jp2	jp2	invalid	invalid	decode	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	decode
 jp2-precincts-cod.spcod.precincts.lowest.ppx-0.jp2	jp2	valid	valid	-	cod.spcod.precincts.lowest.ppx	zero at r=0: valid	-	-
 jp2-precincts-cod.spcod.precincts.higher[0].ppx-0.jp2	jp2	invalid	invalid	cod.precincts-higher-zero	cod.spcod.precincts.higher[0].ppx	zero above r=0 (Table A.21)	-	cod.precincts-higher-zero
 jp2-precincts-cod.spcod.precincts.higher[0].ppy-0.jp2	jp2	invalid	invalid	cod.precincts-higher-zero	cod.spcod.precincts.higher[0].ppy	zero above r=0 (Table A.21)	-	cod.precincts-higher-zero
@@ -459,6 +467,10 @@ jpx-embedded-main-ff30.jpx	jpx	valid	invalid	decode	main.marker-code	FF30, a mar
 jpx-embedded-tile-tlm.jpx	jpx	invalid	invalid	decode	tile.marker-code	TLM, a main-header marker, in the tile-part header	-	decode
 jpx-embedded-tile-unknown.jpx	jpx	valid	invalid	decode	tile.marker-code	FF70, a code T.800 does not define, in the tile-part header: skipped (A.1)	-	decode
 jpx-embedded-tile-ff30.jpx	jpx	valid	invalid	decode	tile.marker-code	FF30, a marker without a segment, in the tile-part header: skipped (A.1.3)	-	decode
+jpx-embedded-after-eoc-1.jpx	jpx	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jpx-embedded-after-eoc-2.jpx	jpx	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jpx-embedded-after-eoc-64.jpx	jpx	invalid	invalid	codestream.extent	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	codestream.extent
+jpx-embedded-after-eoc-65.jpx	jpx	invalid	invalid	decode	codestream.extent	bytes after EOC inside jp2c (T.800 A.4.4, I.5.4)	-	decode
 jpx-embedded-header-rreq.nsf.jpx	jpx	invalid	valid	decode	rreq.nsf	NSF one more than the standard features	-	-
 jpx-embedded-header-rreq.nvf.jpx	jpx	invalid	valid	decode	rreq.nvf	NVF 1 with no vendor feature	-	-
 jpx-embedded-header-rreq.extent.jpx	jpx	invalid	valid	rreq.extent	rreq.extent	a byte after the vendor features, inside the box	-	-
