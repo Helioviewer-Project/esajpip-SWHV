@@ -412,6 +412,7 @@ typedef struct {
  *   cref.placement: cref only in jpch, jplh or asoc (M.11.4).
  *   comp.once, comp.copt-first, copt.placement: at most one comp, whose
  *     first box is copt, and copt nowhere else (M.11.10, M.11.10.1).
+ *   inst.placement: inst only in comp or jclx (M.11.10.2).
  *   drep.once, gtso.placement, gtso.once: at most one drep in the file,
  *     gtso only in drep and at most one (M.11.15, M.11.15.1).
  *   asoc.children: an asoc holds two or more boxes (M.11.11).

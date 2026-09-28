@@ -3327,6 +3327,41 @@ static void hdr_jpx_jclx_inst_first(Jp2Family *f, int box) {
     (void) box;
     hdr_jpx_jclx_boxes(f, 1, 0, 1, 1, 1, boxes, sizeof boxes);
 }
+/* M.11.10.2: Ityp 0 (no instructions), REPT 0, TICK 0. Reuse the
+ * same payload in each placement so that only its parent changes. */
+static const unsigned char inst_payload[8] = {0};
+static void hdr_inst_top(Jp2Family *f, int box) {
+    (void) box;
+    other_top(f, "inst", inst_payload, sizeof inst_payload);
+}
+static void hdr_inst_jpch(Jp2Family *f, int box) {
+    (void) box;
+    other_child(jpch_of(f), "inst", inst_payload, sizeof inst_payload);
+}
+static void hdr_inst_asoc(Jp2Family *f, int box) {
+    unsigned char payload[25];
+    size_t n = put_box(payload, "lbl ", "a", 1);
+    (void) box;
+    n += put_box(payload + n, "inst", inst_payload, sizeof inst_payload);
+    other_top(f, "asoc", payload, n);
+}
+static void hdr_inst_comp(Jp2Family *f, int box) {
+    unsigned char payload[33];
+    static const unsigned char copt[] = {0, 0, 0, 4, 0, 0, 0, 4, 0};
+    size_t n = put_box(payload, "copt", copt, sizeof copt);
+    (void) box;
+    n += put_box(payload + n, "inst", inst_payload, sizeof inst_payload);
+    other_top(f, "comp", payload, n);
+}
+static void hdr_inst_jclx(Jp2Family *f, int box) {
+    unsigned char boxes[24];
+    size_t n = put_box(boxes, "jplh", "", 0);
+    (void) box;
+    n += put_box(boxes + n, "inst", inst_payload, sizeof inst_payload);
+    add_jplh(f);
+    hdr_inst_comp(f, box);
+    add_jclx_with(f, 1, 0, 1, 1, 1, boxes, n);
+}
 /* A jclx whose thread has F 0, then another jclx: F 0 only in the last. */
 static void hdr_jpx_jclx_frames(Jp2Family *f, int box) {
     static const unsigned char boxes[] = { 0, 0, 0, 8, 'j', 'p', 'l', 'h',
@@ -3782,6 +3817,18 @@ static const RuleMutant header_mutants[] = {
       CF_JPX, 0, X_LENIENT, "jlxi.frames", NULL },
     { "grp.placement", hdr_jpx_asoc_grp_first, "an asoc whose first box is a grp (M.11.25)",
       CF_JPX, 0, X_LENIENT, "grp.placement", NULL },
+    { "inst.placement", hdr_inst_top, "inst at file level (T.801 M.11.10.2)",
+      CF_JPX, 0, X_LENIENT, "inst.placement", NULL },
+    { "inst.placement", hdr_inst_jpch, "inst in jpch (T.801 M.11.10.2)",
+      CF_JPX, 0, X_LENIENT, "inst.placement", NULL },
+    { "inst.placement", hdr_inst_asoc, "inst in asoc (T.801 M.11.10.2)",
+      CF_JPX, 0, X_LENIENT, "inst.placement", NULL },
+    { "jpx.inst-comp", hdr_inst_comp, "inst in comp (T.801 M.11.10.2): valid",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "jpx.inst-jclx", hdr_inst_jclx, "inst after jplh in jclx (T.801 M.11.10.2): valid",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "jp2.inst-opaque", hdr_inst_top, "inst is unknown to JP2 (T.800 I.8): valid",
+      CF_JP2, 0, X_VALID, NULL, NULL },
 };
 
 /* ------------------------------------------------------------------------ */

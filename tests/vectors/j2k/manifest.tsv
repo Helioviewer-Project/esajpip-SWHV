@@ -298,6 +298,7 @@ jp2-header-jp2.mct-colourspace-124.jp2	jp2	invalid	valid	jp2.mct-colourspace	jp2
 jp2-header-jp2.ipr-nested-125.jp2	jp2	valid	valid	-	jp2.ipr-nested	IPR 1 and an IPR box in jp2h (T.800 I.6): valid	-	-
 jp2-header-file.ftyp-brand-126.jp2	jp2	valid	invalid	file.ftyp-brand	file.ftyp-brand	a JPX file listing 'jp2 ', named .jp2: valid, profile invalid (ReadFileType)	-	file.ftyp-brand
 jp2-header-box.containment-165.jp2	jp2	invalid	valid	box.containment	box.containment	colr in res (T.800 Figure I.1: in jp2h)	-	-
+jp2-header-jp2.inst-opaque-187.jp2	jp2	valid	valid	-	jp2.inst-opaque	inst is unknown to JP2 (T.800 I.8): valid	-	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-	file.signature
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-	decode
@@ -716,6 +717,11 @@ jpx-embedded-header-jlxi.repetition-178.jpx	jpx	invalid	valid	jlxi.repetition	jl
 jpx-embedded-header-jclx.contents-179.jpx	jpx	invalid	valid	jclx.contents	jclx.contents	an inst before the jplh of its group (M.11.21)	-	-
 jpx-embedded-header-jlxi.frames-180.jpx	jpx	invalid	valid	jlxi.frames	jlxi.frames	jlxi T 1, F 0, not in the last jclx (M.11.22)	-	-
 jpx-embedded-header-grp.placement-181.jpx	jpx	invalid	valid	grp.placement	grp.placement	an asoc whose first box is a grp (M.11.25)	-	-
+jpx-embedded-header-inst.placement-182.jpx	jpx	invalid	valid	inst.placement	inst.placement	inst at file level (T.801 M.11.10.2)	-	-
+jpx-embedded-header-inst.placement-183.jpx	jpx	invalid	valid	inst.placement	inst.placement	inst in jpch (T.801 M.11.10.2)	-	-
+jpx-embedded-header-inst.placement-184.jpx	jpx	invalid	valid	inst.placement	inst.placement	inst in asoc (T.801 M.11.10.2)	-	-
+jpx-embedded-header-jpx.inst-comp-185.jpx	jpx	valid	valid	-	jpx.inst-comp	inst in comp (T.801 M.11.10.2): valid	-	-
+jpx-embedded-header-jpx.inst-jclx-186.jpx	jpx	valid	valid	-	jpx.inst-jclx	inst after jplh in jclx (T.801 M.11.10.2): valid	-	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-	-

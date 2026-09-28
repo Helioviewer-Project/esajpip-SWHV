@@ -1337,6 +1337,8 @@ static const char *tree_box(tree_walk *w, const hv_box *box, int depth, size_t *
         return "cref.placement";
     if (t == HV_BOX_COMP && w->comps++ > 0) return "comp.once";
     if (t == HV_BOX_COPT && (parent != HV_BOX_COMP || up->children != 0)) return "copt.placement";
+    if (t == HV_BOX_INST && parent != HV_BOX_COMP && parent != HV_BOX_JCLX)
+        return "inst.placement";
     if (t == HV_BOX_DREP && w->dreps++ > 0) return "drep.once";
     if (t == HV_BOX_GTSO && parent != HV_BOX_DREP) return "gtso.placement";
     if (t == HV_BOX_GTSO && w->gtsos++ > 0) return "gtso.once";

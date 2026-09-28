@@ -747,7 +747,8 @@ END
 --     opct.once, opct.cdef, creg.placement, creg.once), at most one pxfm
 --     in each jp2h or jplh (pxfm.once), cref only in a jpch, jplh or asoc
 --     (cref.placement), at most one comp, copt its first box and nowhere
---     else (comp.once, comp.copt-first, copt.placement), at most one drep,
+--     else (comp.once, comp.copt-first, copt.placement), inst only in comp
+--     or jclx (inst.placement, M.11.10.2), at most one drep,
 --     gtso only in it and once (drep.once, gtso.placement, gtso.once), two
 --     or more boxes in an asoc (asoc.children), a lbl of UTF-8 without the
 --     characters M.11.13 excludes (lbl.characters), one flst in an ftbl
