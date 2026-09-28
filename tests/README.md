@@ -98,6 +98,25 @@ ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ESAJPIP_MUTATION_OPERATORS=rule \
   sh tests/run_mutation.sh lib/hv_rules.c
 ```
 
+The mutation runner preserves each selected source under `WORK/original`.
+Listing IDs, applying mutations and restoring the build copy use that snapshot,
+so edits to the checkout during a campaign cannot renumber or change mutants.
+An ID identifies a mutation only for the same source bytes and operator set.
+Keep the snapshot with the report when investigating survivors. The
+`mutation_runner` CTest regression simulates a checkout edit during a run and
+checks every built mutant, including the last one. It has the `infrastructure`
+label so the default library mutation campaign does not repeat it per mutant.
+
+`tests/lib/test_rules.c` checks exact rule names, accepted boundary controls,
+and observable counts, decoded bytes and state. It covers image/tile origins,
+PLT index sets and packet counts, fragment containment and SOC prefixes, URL
+percent decoding, palette padding, JPX color parameters, quantization step-list
+syntax and restricted ICC tag-directory extents. These complement
+the whole-file corpus: executing a rule is insufficient unless tests distinguish
+both sides of its boundary. A survivor still needs inspection; for example,
+changing a tile-count saturation test from `> 65535` to `>= 65535` leaves the
+returned value unchanged at equality and is not a missing validation case.
+
 `tests/fuzz/` holds the fuzz targets of the library and the tools
 (`fuzz_reader_rewrite`, `fuzz_deferred_plt`, `fuzz_asn1`, `fuzz_transcode`,
 `fuzz_merge`) and `replay`, which includes every target under another name so a

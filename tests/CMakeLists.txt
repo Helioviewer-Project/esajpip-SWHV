@@ -52,3 +52,11 @@ add_subdirectory(server)
 # in every configuration; the targets themselves are gated by ESAJPIP_FUZZ
 # inside.
 add_subdirectory(fuzz)
+
+# Python is needed by the mutation runner, not by the library or server.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    esajpip_add_test(mutation_runner
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mutation.py
+        LABELS infrastructure)
+endif()

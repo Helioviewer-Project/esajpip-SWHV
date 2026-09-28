@@ -65,3 +65,9 @@ esajpip_add_test(walk_command
         ${PROJECT_SOURCE_DIR}/tests/vectors/j2k
         ${CMAKE_CURRENT_BINARY_DIR}/walk
     LABELS tools cli)
+
+# Exact outcomes at validation boundaries, including state and decoded values.
+add_executable(test_rules test_rules.c)
+esajpip_configure_target(test_rules)
+target_link_libraries(test_rules PRIVATE jpeg2000_io)
+esajpip_add_test(rules COMMAND test_rules LABELS tools)

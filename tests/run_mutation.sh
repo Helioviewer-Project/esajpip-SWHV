@@ -8,7 +8,9 @@
 # FILE is relative to the repository. The sources are copied to WORK/src,
 # which is built in WORK/build, so the checkout is never modified. Each
 # mutant is written into the copy, built (incrementally), run, and the file
-# put back. Before the first mutant the unmutated copy must pass.
+# put back. Listing, applying and restoring all use WORK/original, saved
+# from that same copy; editing the checkout cannot change the mutant IDs.
+# Before the first mutant the unmutated copy must pass.
 #
 # Environment:
 #   ESAJPIP_TEST_BUILD_DIR      WORK (default build/mutation)
@@ -44,6 +46,7 @@ if [ -n "$lines" ]; then
 fi
 
 src=$work/src
+original=$work/original
 build=$work/build
 report=$work/report.tsv
 survivors=$work/survivors.txt
@@ -60,6 +63,8 @@ for entry in "$repo"/* "$repo"/.[!.]*; do
 done
 for file in "$@"; do
     [ -f "$src/$file" ] || { echo "run_mutation.sh: no $file" >&2; exit 2; }
+    mkdir -p "$original/$(dirname "$file")"
+    cp "$src/$file" "$original/$file"
 done
 
 cmake -S "$src" -B "$build" -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -89,14 +94,14 @@ survived=0
 timeouts=0
 broken=0
 for file in "$@"; do
-    "$python" "$repo/tests/mutate.py" list "$repo/$file" "$operators" >"$work/mutants.tsv"
+    "$python" "$src/tests/mutate.py" list "$original/$file" "$operators" >"$work/mutants.tsv"
     total=$(wc -l <"$work/mutants.tsv" | tr -d ' ')
     while IFS='	' read -r id line operator change; do
         [ $((id % every)) -eq 0 ] || continue
         if [ -n "$first" ] && { [ "$line" -lt "$first" ] || [ "$line" -gt "$last" ]; }; then
             continue
         fi
-        "$python" "$repo/tests/mutate.py" apply "$repo/$file" "$id" "$src/$file" "$operators"
+        "$python" "$src/tests/mutate.py" apply "$original/$file" "$id" "$src/$file" "$operators"
         if ! esajpip_build "$build" >"$work/build.log" 2>&1; then
             outcome=build
             broken=$((broken + 1))
@@ -110,7 +115,7 @@ for file in "$@"; do
             outcome=killed
             killed=$((killed + 1))
         fi
-        cp "$repo/$file" "$src/$file"
+        cp "$original/$file" "$src/$file"
         printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$file" "$id" "$line" "$operator" "$change" "$outcome" \
             >>"$report"
         echo "$file mutant $id/$total, line $line, $operator $change: $outcome"

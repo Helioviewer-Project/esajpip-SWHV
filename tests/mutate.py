@@ -2,7 +2,7 @@
 """One-operator mutants of a C file, for tests/run_mutation.sh.
 
     mutate.py list FILE [OPERATORS]     one line per mutant: ID, line, operator, change
-    mutate.py apply FILE ID OUT         FILE with mutant ID applied, written to OUT
+    mutate.py apply FILE ID OUT [OPERATORS]   apply an ID from the same file and operators
 
 OPERATORS is a comma-separated subset of:
 
