@@ -812,9 +812,14 @@ neighbors:
 
 | Name | Where | Encode (model → wire) | Decode (wire → model) |
 | --- | --- | --- | --- |
-| `lxxx` | every marker segment | `n + 2` | `n − 2` |
+| `lxxx` | every marker segment | `n + 2` | `n − 2` for `n >= 2`; otherwise an invalid size |
 | `psot` | SOT | `n + 12` | `n − 12` |
 | `lbox` | every box | `n + 8` | `n − 8` |
+
+For `Lxxx < 2`, `lxxx_decode` returns the largest `asn1SccUint`. The
+generated `CONTAINING` decoder rejects that size at its bounds check,
+before reading the body. This is the failure convention for the existing
+mapping API, which returns only a value and cannot report an error.
 
 The box-type mappings are decode-only, and declared, as all mapping
 functions, with `asn1SccUint`, as the generated code calls them. `boxtype`

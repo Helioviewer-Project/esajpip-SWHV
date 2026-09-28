@@ -1,7 +1,7 @@
-/* mapping.c — see mapping.h. The length decode mappings are not clamped:
- * a wire value below the offset (Lcod = 1, say) wraps to a huge payload
- * length, which the generated decoder then rejects. That is the behavior
- * the corpus wants for invalid-length vectors. */
+/* mapping.c — see mapping.h. The psot and lbox decode mappings below
+ * wrap wire values below their offsets to huge payload lengths, which
+ * the generated decoder rejects. The shared lxxx mapping in
+ * ../../lib/hv_mapping.c explicitly returns an invalid size for Lxxx < 2. */
 #include "mapping.h"
 
 asn1SccUint MAPPING_ENCODE_NAME(psot)(asn1SccUint n) { return n + 12; }
