@@ -12,8 +12,9 @@ Each active patch has a matching numbered directory in
 [`../asn1scc-issues/`](../asn1scc-issues/) with its report and reproducer.
 
 The build also runs the standalone C reproducers for 0008 (ASan) and 0009
-(UBSan, both uPER and ACN) against the installed compiler. The 0009 Rust
-reproducer is separate: run `run_rust.sh` with Cargo and the patched compiler.
+(UBSan, both uPER and ACN) against the installed compiler. It also runs
+0010 (fixed-size error codes, uPER and both ACN generators). The 0009 and 0010 Rust reproducers are separate: run their
+`run_rust.sh` with Cargo and the patched compiler.
 
 Applied now, in `series` order:
 
@@ -95,6 +96,14 @@ Applied now, in `series` order:
   BIT STRING decode sets the error code. Test case `25-ACNV2-BOUNDARIES/023`
   and its wire test, built with UBSan. Report and reproducer:
   [`../asn1scc-issues/0009-varsize-length-failure/`](../asn1scc-issues/0009-varsize-length-failure/).
+- `0010-fixedsize-error-code.patch`: fixed-size OCTET STRING decoders
+  rejected truncated input without setting an error code. Pass the allocated
+  error code through the uPER and ACN generators and assign it on failure in
+  C, Rust, and Ada. Other backend signatures follow the shared interface.
+  Case `25-ACNV2-BOUNDARIES/024` checks all truncated byte lengths and complete
+  values, standalone and nested.
+  Report and reproducers:
+  [`../asn1scc-issues/0010-fixedsize-error-code/`](../asn1scc-issues/0010-fixedsize-error-code/).
 
 ## Reference: the former fixes for deferred ACN
 

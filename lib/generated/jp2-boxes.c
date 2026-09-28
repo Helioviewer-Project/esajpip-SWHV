@@ -283,6 +283,7 @@ flag UuidId_ACN_Decode(UuidId* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 	ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, 16);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_UUIDID;
 
     return ret && UuidId_IsConstraintValid(pVal, pErrCode);
 }
@@ -1524,6 +1525,7 @@ flag VendorId_ACN_Decode(VendorId* pVal, BitStream* pBitStrm, int* pErrCode)
 
 
 	ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, 16);
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_VENDORID;
 
     return ret && VendorId_IsConstraintValid(pVal, pErrCode);
 }
