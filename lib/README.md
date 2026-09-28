@@ -31,7 +31,7 @@ and its test, outside `jpeg2000_io`.
 | `test/` | The tests (see "Tests" below). |
 | `generated/` | Code generated from `../spec/` by `generate.sh`: the types its `pdus` list names (those of `../spec/jpeg2000-io.asn1`, the bodies `hv_rules.c` reads one element at a time, the served-profile types the reader checks against, and the JPX, box tree, File Type and JP2 header box types) and what they use. A type the code here needs that none of them uses must be added to `pdus`. |
 | `generate.sh` | Regenerates `generated/` with the pinned asn1scc (Docker image, or `ASN1SCC=...`); `--check` compares without replacing it (`../spec/check-model.sh` runs it so). |
-| `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests with `ESAJPIP_TOOL_TESTS`. |
+| `CMakeLists.txt` | The `jpeg2000_io` library and the `hv_walk` tool, added by the top-level `CMakeLists.txt`; the tests under `tests/`. |
 
 ## Build
 
@@ -47,9 +47,9 @@ cmake --build build --target hv_walk
 ## Tests
 
 With the tools' and separate from the server's:
-`lib/test/run.sh [normal|sanitize] [CTest options]`; without a mode, the
+`tests/run.sh [normal|sanitize] [CTest options]`; without a mode, the
 tests run in normal mode and CTest options may come first
-(`lib/test/run.sh -R merge`). The build goes to
+(`tests/run.sh -R merge`). The build goes to
 `build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
 `../tests/run.sh` also reads: set it for one runner at a time.
 

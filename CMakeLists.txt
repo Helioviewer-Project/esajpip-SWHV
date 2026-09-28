@@ -7,7 +7,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-include(CTest)
 find_package(Threads REQUIRED)
 
 option(ESAJPIP_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
@@ -75,21 +74,8 @@ else()
 endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
-# Tests of the reader/writer and the tools on it (lib/test, transcode/test,
-# merge/test), separate from the server's. Run them with lib/test/run.sh.
-option(ESAJPIP_TOOL_TESTS "Build and register the tests of jpeg2000_io, hv_transcode and hv_merge" OFF)
-
-option(ESAJPIP_FUZZ "Build the libFuzzer targets fuzz_transcode and fuzz_merge" OFF)
-if(ESAJPIP_FUZZ AND NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-    message(FATAL_ERROR "ESAJPIP_FUZZ requires Clang")
-endif()
-
 # The JPEG 2000 reader/writer (lib/), built as a static library.
 add_subdirectory(lib)
-if(ESAJPIP_FUZZ)
-    # Coverage for the library too, for the fuzz targets of the tools.
-    target_compile_options(jpeg2000_io PRIVATE -fsanitize=fuzzer-no-link)
-endif()
 # hv_transcode (transcode/) and hv_merge (merge/), on that library.
 add_subdirectory(transcode)
 add_subdirectory(merge)
@@ -139,35 +125,8 @@ target_link_libraries(esajpip PRIVATE esajpip_core)
 install(TARGETS esajpip RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION bin)
 
-if(BUILD_TESTING)
-    add_executable(logging_test tests/logging_test.cc ${ESAJPIP_TOP}/trace.cc)
-    esajpip_configure_target(logging_test)
-    target_compile_definitions(logging_test PRIVATE
-        ESAJPIP_LOG_LIMIT=1024
-        ESAJPIP_LOG_QUEUE_LIMIT=4096)
-    target_include_directories(logging_test PRIVATE ${ESAJPIP_TOP})
-    target_link_libraries(logging_test PRIVATE Threads::Threads)
-    add_test(NAME logging COMMAND logging_test)
-
-    add_executable(protocol_test tests/protocol_test.cc)
-    esajpip_configure_target(protocol_test)
-    target_link_libraries(protocol_test PRIVATE esajpip_core)
-    add_test(NAME protocol COMMAND protocol_test)
-
-    add_executable(server_test tests/server_test.cc)
-    esajpip_configure_target(server_test)
-    target_link_libraries(server_test PRIVATE esajpip_core)
-    add_test(NAME server COMMAND server_test)
-
-    add_executable(server_connection_test tests/server_connection_test.cc)
-    esajpip_configure_target(server_connection_test)
-    target_link_libraries(server_connection_test PRIVATE esajpip_core)
-    add_test(NAME server_connection COMMAND server_connection_test)
-
-    add_executable(jpeg2000_test tests/jpeg2000_test.cc)
-    esajpip_configure_target(jpeg2000_test)
-    target_compile_definitions(jpeg2000_test PRIVATE
-        JPEG2000_VECTOR_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/tests/vectors/j2k")
-    target_link_libraries(jpeg2000_test PRIVATE esajpip_core)
-    add_test(NAME jpeg2000 COMMAND jpeg2000_test)
-endif()
+# Tests: tests/ owns the gate, the options, the helpers and every target,
+# including the fuzz ones. enable_testing() is here because CTest reads the
+# top-level CTestTestfile.cmake.
+enable_testing()
+add_subdirectory(tests)

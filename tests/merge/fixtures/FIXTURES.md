@@ -9,16 +9,16 @@ entries.
 `expected/merged.jpx` is what hvJP2K's `hv_jpx_merge` (commit 473de1a)
 made of these two files followed by the six Kakadu references of the
 transcoder's tests that are within the served profile
-(`../../transcode/test/fixtures/kakadu/`, in name order, without the
+(`../../transcode/fixtures/kakadu/`, in name order, without the
 origin-129 file):
 
     hv_jpx_merge -i fixtures/input/swap_000.jp2 fixtures/input/swap_001.jp2 \
-        ../../transcode/test/fixtures/kakadu/2015_12_21__00_10_34_34__SDO_AIA_AIA_171.jp2 \
-        ../../transcode/test/fixtures/kakadu/solo_fsi174_127x129_RLCP_PLT.jp2 \
-        ../../transcode/test/fixtures/kakadu/solo_fsi174_509x513_PCRL.jp2 \
-        ../../transcode/test/fixtures/kakadu/solo_fsi174_510x514_LRCP.jp2 \
-        ../../transcode/test/fixtures/kakadu/solo_fsi174_511x513_LRCP_PLT.jp2 \
-        ../../transcode/test/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2 \
+        ../../transcode/fixtures/kakadu/2015_12_21__00_10_34_34__SDO_AIA_AIA_171.jp2 \
+        ../../transcode/fixtures/kakadu/solo_fsi174_127x129_RLCP_PLT.jp2 \
+        ../../transcode/fixtures/kakadu/solo_fsi174_509x513_PCRL.jp2 \
+        ../../transcode/fixtures/kakadu/solo_fsi174_510x514_LRCP.jp2 \
+        ../../transcode/fixtures/kakadu/solo_fsi174_511x513_LRCP_PLT.jp2 \
+        ../../transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2 \
         -o fixtures/expected/merged.jpx
 
 The set covers the JPX boxes the merge writes: the second file has the

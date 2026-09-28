@@ -64,15 +64,17 @@ use LTO by default.
 
 For a separate test build, run `./tests/run.sh`, or `./tests/run.sh sanitize`
 to build with AddressSanitizer and UndefinedBehaviorSanitizer. The
-[test guide](tests/README.md) describes the coverage, focused runs, and
-failure diagnosis.
+[test guide](tests/README.md) describes the suite, the focused runs, and
+failure diagnosis; [diagnostics](tests/DIAGNOSTICS.md) covers the coverage,
+profile, Valgrind and Debian-container runners, and the fuzz targets under
+`tests/fuzz` (with `ESAJPIP_FUZZ=ON`).
 
 The same build also produces three tools from the JPEG 2000 reader/writer
 library in [`lib/`](lib/README.md): `hv_transcode`
 ([`transcode/`](transcode/README.md)) and `hv_merge`
 ([`merge/`](merge/README.md)), which prepare image data for the server
 (see below), and `hv_walk`, which checks files with the reader.
-Their tests run separately, with `lib/test/run.sh`. The formal
+Their tests run separately, with `tests/run.sh`. The formal
 description of the accepted files, and the test corpus generated from it,
 are in [`spec/`](spec/README.md).
 

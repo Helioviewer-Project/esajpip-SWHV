@@ -58,8 +58,17 @@ while letting HTTP connections be pooled or replaced independently of channels.
   the permissions, less the setuid, setgid and sticky bits, of the file it
   replaces (`hv_merge`) or of the input (`hv_transcode`). `hv_merge -links`
   refuses to replace one of its inputs.
-- The tools' tests, separate from the server's: `lib/test/run.sh`
-  (`ESAJPIP_TOOL_TESTS`).
+- Every test in one place, `tests/` with its own CMake: the library and the
+  tools, their command lines, the server, and the shared corpus. One gate,
+  `BUILD_TESTING`, and one runner, `tests/run.sh`, with labels for `tools`,
+  `server`, `cli`, `model` and `fuzz`.
+- `tests/fuzz/`: the libFuzzer targets of the library and the tools
+  (`ESAJPIP_FUZZ=ON`), whose assertions are also available one input at a time
+  through `tests/fuzz/replay`, which needs no libFuzzer runtime.
+- `tests/run_profile.sh`, `tests/run_baseline.sh` and
+  `tests/run_linux_docker.sh`: the sanitizer, coverage, Valgrind and
+  Debian-container profiles of the same suite, described in
+  `tests/DIAGNOSTICS.md`, with the coverage gaps in `tests/COVERAGE_GAPS.md`.
 
 ### Changed
 

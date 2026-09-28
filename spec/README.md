@@ -15,7 +15,7 @@ a small program that turns that description into a **corpus of test files**:
 hundreds of tiny `.jp2`/`.jpx` files, each labeled "the server must
 accept this" or "the server must reject this". `tests/jpeg2000_test.cc` then
 opens every one and checks that the server agrees, and
-`lib/test/test_profile.c` does the same for the reader in `../lib/`,
+`tests/lib/test_profile.c` does the same for the reader,
 which shares most of the cross-field rules with the harness
 (`../lib/hv_rules.c`).
 
@@ -247,8 +247,8 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
                                         tests/vectors/j2k/*.jp2, *.jpx, manifest.tsv
                                                           │
    tests/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
-   lib/test/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
-   lib/test/test_rewrite.c ─ hv_rewrite of each ────────────▶ must give the vector back
+   tests/lib/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
+   tests/lib/test_rewrite.c ─ hv_rewrite of each ────────────▶ must give the vector back
    harness/writers.c ─ hv_rewrite, hv_transcode, hv_merge ──▶ label.c: expected labels
 ```
 
@@ -341,7 +341,7 @@ root.
 
    ```sh
    ./tests/run.sh
-   lib/test/run.sh
+   tests/run.sh
    ```
 
    Both runners read `ESAJPIP_TEST_BUILD_DIR` for their build directory.
@@ -504,7 +504,7 @@ For the server, `jpeg2000_test` prints `Generated vector <name> was
 accepted, expected rejection` or `Generated vector <name> was rejected
 during <stage>, expected acceptance`, each followed by the manifest's
 `(<reason>: <note>)`. For the reader, `test_profile` (run by
-`lib/test/run.sh`) prints
+`tests/run.sh`) prints
 `FAIL profile label: <name>: reader <result>, manifest <label> (<profile_reason>)`
 when its profile checks disagree with the `profile` column, where
 `<result>` is `valid` or the reader's error and offset (and the linked
@@ -512,7 +512,7 @@ file it was reading); when its header-box checks break their contract with
 the `standard` and `reason` columns, it prints `FAIL (a)` to `FAIL (d)`
 lines, and `FAIL (e)` or `FAIL (f)` when the reader names another rule than
 `profile_reason`, or than `reason` for a codestream rule at the standard
-layer; which `../lib/test/test_profile.c` explains at its top, with the
+layer; which `../tests/lib/test_profile.c` explains at its top, with the
 same details. Either way, look the name up in `manifest.tsv`; the cases
 below name the server, and apply to the reader in the same way:
 

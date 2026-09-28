@@ -169,13 +169,13 @@ fuzz/transcode/fuzz_transcode -max_len=131072 corpus/
 Tests, separate from the server's (`test/`):
 
 ```sh
-lib/test/run.sh             # or: lib/test/run.sh sanitize
-TRANSCODE_ARCHIVE=~/AIA:~/EUI lib/test/run.sh
+tests/run.sh             # or: tests/run.sh sanitize
+TRANSCODE_ARCHIVE=~/AIA:~/EUI tests/run.sh
 ```
 
 CTest options go after the mode, or first for normal mode
-(`lib/test/run.sh [normal|sanitize] [CTest options]`, or
-`lib/test/run.sh -R transcode`). The build goes to
+(`tests/run.sh [normal|sanitize] [CTest options]`, or
+`tests/run.sh -R transcode`). The build goes to
 `build/tool-tests-<mode>`, or to `ESAJPIP_TEST_BUILD_DIR`, which
 `../tests/run.sh` also reads: set it for one runner at a time.
 
@@ -201,4 +201,4 @@ through a symbolic link, and nothing written or left behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
 in `test/fixtures/FIXTURES.md`. The same run includes the reader's tests
-(`../lib/test/`).
+(`../tests/lib/`).

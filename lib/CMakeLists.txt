@@ -39,7 +39,3 @@ add_executable(hv_walk hv_walk.c)
 esajpip_configure_target(hv_walk)
 target_link_libraries(hv_walk PRIVATE jpeg2000_io)
 
-# Tests (test/), with hv_transcode's.
-if(ESAJPIP_TOOL_TESTS)
-    add_subdirectory(test)
-endif()

@@ -1,51 +1,144 @@
 # Running the tests
 
+Every test of the project is under `tests/`, with its CMake; the component
+`CMakeLists.txt` files build libraries and tools only.
+
+```
+tests/
+  CMakeLists.txt   the gate (BUILD_TESTING) and the one registration helper
+  run.sh           builds and runs the suite
+  lib/             jpeg2000_io: reader, rules, writer, hv_rewrite, geometry,
+                   hv_file, hv_served
+  transcode/       hv_transcode: the library and its command line (fixtures/)
+  merge/           hv_merge: the library and its command line (fixtures/)
+  server/          the server's own tests
+  fuzz/            corpus replay, plus libFuzzer targets with ESAJPIP_FUZZ=ON
+  vectors/j2k/     the corpus and its manifest, shared by reader and server
+```
+
 From the repository root:
 
 ```sh
 ./tests/run.sh
 ./tests/run.sh sanitize
+./tests/run.sh normal -L tools
+./tests/run.sh normal -R '^server$'
+./tests/run.sh normal -N                   # list without running
 ```
 
-The runner configures, builds, and runs the server's CTest suite. Normal and
-ASan/UBSan builds use separate directories under `build/`, so neither changes
-your installation build. It needs the same compiler and libraries as the
-server, but no external image collection, running server, JHV, Docker, or
-ASN.1 compiler. Tests create their own files and use loopback sockets.
-
-CTest options follow the mode. For example:
+For an 8-core local run, limit the build and run CTest in parallel:
 
 ```sh
-./tests/run.sh normal -R '^server$'         # live HTTP and JPP validation
-./tests/run.sh sanitize -R '^jpeg2000$'    # source parsing and indexing
-./tests/run.sh normal --repeat until-fail:10
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ./tests/run.sh normal
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ./tests/run.sh sanitize
 ```
 
-Set `ESAJPIP_TEST_BUILD_DIR` to use another build directory and
-`CMAKE_BUILD_PARALLEL_LEVEL` to limit build parallelism. For an already built
-tree, `ctest --test-dir build --output-on-failure` remains sufficient.
+The runner configures, builds and runs CTest. Normal and ASan/UBSan builds use
+separate directories under `build/`, so neither changes your installation
+build. It needs the same compiler and libraries as the server, but no external
+image collection, running server, JHV, Docker, or ASN.1 compiler. Tests create
+their own files and use loopback sockets.
 
-The tests of the JPEG 2000 reader and the tools on it (`hv_transcode`,
-`hv_merge`) are separate: they are built only with
-`ESAJPIP_TOOL_TESTS=ON` and run with `lib/test/run.sh` (see
-[`../lib/README.md`](../lib/README.md)).
-One of them, `reader_profile`, checks the reader against the JP2 labels of
-the same corpus, so run both runners after a corpus change.
+Options:
+
+- `ESAJPIP_TEST_BUILD_DIR` — another build directory.
+- `ESAJPIP_TEST_TARGETS` — build only some targets, to iterate quickly.
+- `ESAJPIP_JOBS` — build parallelism for all test runners.
+- `ESAJPIP_CTEST_JOBS` — CTest parallelism for runners that invoke CTest.
+- `CMAKE_BUILD_PARALLEL_LEVEL` and `CTEST_PARALLEL_LEVEL` — standard CMake and
+  CTest equivalents, used when the `ESAJPIP_*` variables are not set.
+- `ESAJPIP_FUZZ=ON` — also build the fuzz targets (the compiler then needs the
+  libFuzzer runtime).
+- `BUILD_TESTING` (default ON) gates every test.
+
+CTest labels: `tools` (jpeg2000_io and the two tools), `server`, `cli` (the two
+command-line tests), `model` (`model_static`) and `fuzz` (the fuzz targets).
+For an already built tree, `ctest --test-dir build --output-on-failure` remains
+sufficient.
+
+## The other runners
+
+`run.sh` is the common case; the rest run the same tests under another
+toolchain, and are described in [DIAGNOSTICS.md](DIAGNOSTICS.md):
+
+| Runner | What it does |
+| --- | --- |
+| `tests/run.sh [normal\|sanitize]` | The suite, normally or under ASan and UBSan. |
+| `tests/run_profile.sh asan\|extended\|msan\|optimized` | The suite under that sanitizer or in `Release`. |
+| `tests/run_profile.sh fuzz` | The fuzz targets under `tests/fuzz`, then seeded `ctest -L fuzz`. |
+| `tests/run_profile.sh valgrind [file...]` | `reader-rewrite` under Memcheck. |
+| `tests/run_baseline.sh` | The suite with Clang source coverage; [COVERAGE_GAPS.md](COVERAGE_GAPS.md) reads its reports. |
+| `tests/run_linux_docker.sh valgrind\|msan\|all` | The replay modes under Valgrind and MSan, in Debian 13. |
+| `tests/run_linux_docker.sh fuzz-asan\|fuzz-extended\|fuzz-msan\|fuzz-all` | Linux libFuzzer mutation runs under sanitizer profiles. |
+| `build/tests-*/tests/fuzz/replay MODE FILE_OR_DIR...` | One fuzz target's assertions, with no libFuzzer runtime. |
+
+Parallel examples:
+
+```sh
+# Normal suite, local sanitizer suite and source coverage.
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ./tests/run.sh normal
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ./tests/run.sh sanitize
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_baseline.sh
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 \
+  ESAJPIP_BASELINE_SPLIT=ON sh tests/run_baseline.sh
+
+# Diagnostic profiles. MSan is for Linux, not the macOS host runtime.
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh asan
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh extended
+ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh optimized
+
+# Linux fuzz campaigns in Docker.
+ESAJPIP_JOBS=8 ESAJPIP_FUZZ_SECONDS=300 ESAJPIP_FUZZ_WORKERS=8 \
+  sh tests/run_linux_docker.sh fuzz-all
+```
+
+`tests/fuzz/` holds the fuzz targets of the library and the tools
+(`fuzz_reader_rewrite`, `fuzz_deferred_plt`, `fuzz_asn1`, `fuzz_transcode`,
+`fuzz_merge`) and `replay`, which includes every target under another name so a
+replay mode cannot drift from its target. The targets need Clang's libFuzzer
+runtime — Homebrew's LLVM has it, the Apple Command Line Tools do not — so they
+are gated by `ESAJPIP_FUZZ=ON` and fail to configure, once, with instructions
+when the runtime is missing. CMake generates per-target seed corpora under
+`build/.../tests/fuzz/corpus` from the checked-in vectors and fixtures; replay
+tests use those corpora in every test build, and the libFuzzer smoke tests use
+them when `ESAJPIP_FUZZ=ON`.
+
+```sh
+build/profile-fuzz/tests/fuzz/fuzz_reader_rewrite \
+  build/profile-fuzz/tests/fuzz/corpus/reader-rewrite
+build/profile-fuzz/tests/fuzz/fuzz_transcode -jobs=8 -workers=8 \
+  build/profile-fuzz/tests/fuzz/corpus/transcode-fuzz
+```
+
 
 ## What each test owns
 
 | CTest name | Responsibility |
 | --- | --- |
+| `model_static` | The model's checks that need no compiler (`spec/check-model.sh --static`). |
+| `reader_profile` | The reader against the corpus: every vector the manifest calls standard-valid is accepted, and the profile label is the served profile's. |
+| `writer_corpus` | `hv_rewrite` of every vector the reader accepts; byte-comparable rewrites must not change the input. |
+| `output_file` | `hv_file`: atomic replacement of the tools' output files. |
+| `writer` | The writer with a lowered LBox limit, to reach the switch to XLBox. |
+| `served` | `hv_served` with `open`, `fstat`, `read` and `malloc` that misbehave on demand. |
+| `reader` | The reader's framing, offsets and errors, byte by byte (`hv_reader.c` included, with allocations that fail on demand). |
+| `geometry` | `hv_geometry` against T.800 computed a second way. |
+| `transcode` | The transcoder's library: packet layout, precincts, PLT, and the profile of its output. |
+| `transcode_command` | `hv_transcode`'s command line and its files on disk. |
+| `merge` | The merger's library: box construction, JPX graph, colour handling. |
+| `merge_command` | `hv_merge`'s command line and its files on disk. |
 | `logging` | Rotation, truncation, concurrent producers, dropped-record reporting, output failure and shutdown draining. Uses small test-only log limits. |
 | `protocol` | Configuration boundaries and missing keys, request semantics, cache state, window geometry, packet indexing primitives and exact JPP writer bytes/capacity boundaries. |
 | `jpeg2000` | Every committed source-vector label, all declared packets in accepted vectors, linked graphs, progression order, malformed file boundaries, and worker migration/serialization. |
 | `server_connection` | Incremental HTTP parsing and direct libuv connection callbacks, deadline transitions, ordered writes and graceful closure. |
 | `server` | The real serving loop: HTTP status/headers, admission, limits, channel routing, disconnects and shutdown. Its independent JPP reader reconstructs and verifies source bytes across the full response matrix and stateful scenarios. |
+| `fuzz_replay_*` | Deterministic replay of the generated per-target seed corpora through the same assertions used by the libFuzzer targets. |
 
-The live JPP checks replace the old nonempty-body gzip and partial-model
-smoke tests. Matrix and stateful requests share one response-draining loop.
-Configuration cases alter one setting in one valid INI fixture and identify
-the setting on failure.
+`reader_profile` and `jpeg2000` read the same corpus, so a corpus change
+concerns both the library and the server. The live JPP checks replace the old
+nonempty-body gzip and partial-model smoke tests. Matrix and stateful requests
+share one response-draining loop. Configuration cases alter one setting in one
+valid INI fixture and identify the setting on failure.
 
 Some overlap is intentional. Writer tests force buffers too small for a header
 and check exact encodings. Connection tests inspect callback order directly.
