@@ -211,6 +211,16 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | **harness** | `spec/harness/`: the offline C program that builds and labels the corpus. |
 | **manifest** | `tests/vectors/j2k/manifest.tsv`: one row per vector with its labels. |
 
+The shared box-tree validator descends into at most `HV_BOX_DEPTH_MAX`
+(32) nested superboxes, counting a top-level superbox as level 1. It checks
+all children of the last supported level and returns `box.depth-limit`
+for a deeper superbox. This means validation is incomplete, not that the
+file violates T.800/T.801. The boolean harness label is non-valid with that
+reason; it must not be interpreted as a standards defect. This recursion
+limit is separate from the ASN.1 whole-file model's corpus bounds on list
+and opaque-payload sizes. Depth-boundary regressions are constructed in
+`tests/lib/test_reader.c`, outside the conformance-vector manifest.
+
 ## Files
 
 | File | Role |

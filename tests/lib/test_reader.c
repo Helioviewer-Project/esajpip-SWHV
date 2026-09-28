@@ -2227,10 +2227,9 @@ static void check_segment_gaps(void) {
 
 /* The rules of the box tree and the header boxes on JPX files the corpus
  * does not carry: labels of UTF-8 sequences, j2ci and jlxi out of place, a
- * j2cx in a j2cx, a cref to an IPR box, superboxes nested below
- * HV_BOX_DEPTH_MAX, the boxes of a cgrp and of a res, and running out of
- * memory for the mdat boxes. Each box in `r` follows the base's jp2h at
- * 227. */
+ * j2cx in a j2cx, a cref to an IPR box, the boxes of a cgrp and of a res,
+ * and running out of memory for the mdat boxes. Each box in `r` follows
+ * the base's jp2h at 227. */
 static void check_box_gaps(void) {
     static const struct {
         const char *what, *text;
@@ -2263,7 +2262,6 @@ static void check_box_gaps(void) {
     bytes r = {NULL, 0, 0}, b;
     const char *error;
     size_t k, at, j, j2;
-    int i;
 
     for (k = 0; k < sizeof labels / sizeof *labels; k++) {
         clear(&r);
@@ -2324,19 +2322,6 @@ static void check_box_gaps(void) {
     expect("a cref to an IPR box", error, at, NULL, 0);
     release(&b);
 
-    clear(&r);                          /* 33 asoc boxes, each a label and the next */
-    add(&r, &JPCH);
-    add(&r, &JP2C);
-    for (i = 33; i > 0; i--) {
-        u32(&r, (uint32_t)(17 * i));
-        put(&r, "asoc", 4);
-        box(&r, "lbl ", "a", 1);
-    }
-    b = jpx_with(&r);
-    error = jpx_headers(&b, &at);
-    expect("33 nested asoc boxes, the last not read", error, at, NULL, 0);
-    release(&b);
-
     for (k = 0; k < sizeof cgrps / sizeof *cgrps; k++) {
         clear(&r);
         add(&r, &JPCH);
@@ -2369,6 +2354,79 @@ static void check_box_gaps(void) {
     fail_at = -1;
     check(error != NULL && strcmp(error, "out of memory") == 0, "an mdat box, out of memory",
           error);
+    release(&b);
+    release(&r);
+}
+
+/* The last supported superbox is fully checked, including its leaf
+ * children and closing count rules. The next one reports an implementation
+ * limit even when its contents would be valid. */
+static void check_box_depth(void) {
+    bytes r = {NULL, 0, 0}, b;
+    size_t starts[HV_BOX_DEPTH_MAX + 1], at, offset;
+    const char *error, *want;
+    int kind, depth, fault, i;
+    char what[96];
+
+    for (kind = 0; kind < 2; kind++) {
+        for (depth = HV_BOX_DEPTH_MAX - 1; depth <= HV_BOX_DEPTH_MAX + 1; depth++) {
+            for (fault = 0; fault < 3; fault++) {
+                clear(&r);
+                add(&r, &JPCH);
+                add(&r, &JP2C);
+                for (i = 0; i < depth; i++) {
+                    starts[i] = begin(&r, kind ? "j2cx" : "asoc");
+                    if (kind)
+                        box(&r, "j2ci", fault == 2 && i == depth - 1 ?
+                            "\0\0\0\x02\0\0\0\0" : "\0\0\0\x01\0\0\0\0", 8);
+                    else
+                        box(&r, "lbl ", "a", 1);
+                }
+                offset = r.n;
+                if (fault == 1) u8(&r, 0);   /* a truncated child header */
+                else if (kind) add(&r, &JP2C);
+                else if (fault == 0) box(&r, "free", NULL, 0);
+                for (i = depth; i-- > 0;) end(&r, starts[i]);
+                b = jpx_with(&r);
+                want = NULL;
+                if (depth > HV_BOX_DEPTH_MAX) {
+                    want = "box.depth-limit";
+                    offset = starts[HV_BOX_DEPTH_MAX];
+                } else if (fault == 1) {
+                    want = "box.framing";
+                } else if (fault == 2) {
+                    want = kind ? "j2ci.ncs" : "asoc.children";
+                    offset = starts[depth - 1];
+                }
+                snprintf(what, sizeof what, "%d nested %s boxes, fault %d", depth,
+                         kind ? "j2cx" : "asoc", fault);
+                error = jpx_headers(&b, &at);
+                expect(what, error, at, want, b.n - r.n + offset);
+                release(&b);
+            }
+        }
+    }
+
+    /* An ftbl at the last supported level: its fragment must still be
+     * checked after the tree succeeds. DR 0 with no mdat is invalid. */
+    clear(&r);
+    add(&r, &JPCH);
+    add(&r, &JP2C);
+    for (i = 0; i < HV_BOX_DEPTH_MAX - 1; i++) {
+        starts[i] = begin(&r, "j2cx");
+        box(&r, "j2ci", "\0\0\0\x01\0\0\0\0", 8);
+    }
+    starts[i] = begin(&r, "ftbl");
+    offset = begin(&r, "flst");
+    u16(&r, 1);
+    u64(&r, 12);
+    u32(&r, 1);
+    u16(&r, 0);
+    end(&r, offset);
+    for (i = HV_BOX_DEPTH_MAX; i-- > 0;) end(&r, starts[i]);
+    b = jpx_with(&r);
+    error = jpx_headers(&b, &at);
+    expect("fragment at the depth limit", error, at, "flst.mdat", b.n - r.n + offset);
     release(&b);
     release(&r);
 }
@@ -2489,6 +2547,7 @@ int main(int argc, char **argv) {
     check_plt_misuse();
     check_segment_gaps();
     check_box_gaps();
+    check_box_depth();
     check_rule_functions();
     check_corpus_items();
     {

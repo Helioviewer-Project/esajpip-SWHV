@@ -1124,10 +1124,10 @@ typedef struct {
     /* A j2cx (M.11.23, M.11.24): its j2ci's Ncs and Ltbl, the codestreams
      * of its sub-boxes, whether an mdat or free has come (tail), the last
      * codestream sub-box so far, and the first one Ltbl does not describe
-     * (+ 1). deep: a j2cx below it was not read (HV_BOX_DEPTH_MAX). */
+     * (+ 1). */
     uint64_t ncs, ltbl, codestreams, sub_length, sub_codestreams;
     size_t sub_at, ltbl_bad;
-    int subs, tail, deep;
+    int subs, tail;
     /* A jclx (M.11.21, M.11.22): its jlxi's M, C, L, T and F, its jpch and
      * jplh, its compositing groups, those with inst boxes (its threads),
      * whether the last group has one, and whether another box has come. */
@@ -1433,15 +1433,13 @@ static const char *tree_end(tree_walk *w, const hv_box *box, int depth, size_t *
         tree_level *up = depth > 0 ? &w->level[depth - 1] : NULL;
         if (l->children == 0) return "j2ci.placement";
         /* M.11.23: the codestreams "shall agree with" Ncs, 1 to 2^32 - 1. */
-        if (!l->deep && (l->ncs == 0 || l->ncs != l->codestreams)) return "j2ci.ncs";
-        if (!l->deep && l->ltbl_bad != 0) {
+        if (l->ncs == 0 || l->ncs != l->codestreams) return "j2ci.ncs";
+        if (l->ltbl_bad != 0) {
             *at = l->ltbl_bad - 1;
             return "j2ci.ltbl";
         }
-        if (up != NULL && up->type == HV_BOX_J2CX) {
+        if (up != NULL && up->type == HV_BOX_J2CX)
             j2cx_sub(up, box->end - box->start, l->codestreams, box->start);
-            up->deep |= l->deep;
-        }
     }
     if (box->type == HV_BOX_JCLX) {
         if (l->children == 0) return "jlxi.placement";
@@ -1471,10 +1469,7 @@ static const char *tree_walk_box(tree_walk *w, const hv_box *box, int depth, siz
         if (l->children++ == 0) l->first = box->type;
     }
     if (!tree_superbox(w, box->type)) return NULL;
-    if (depth + 1 >= HV_BOX_DEPTH_MAX) {
-        if (depth > 0) w->level[depth - 1].deep = 1;        /* not read */
-        return NULL;
-    }
+    if (depth >= HV_BOX_DEPTH_MAX) return "box.depth-limit";
     l = &w->level[depth];
     memset(l, 0, sizeof *l);
     l->type = box->type;
@@ -1554,7 +1549,7 @@ const char *hv_rule_box_tree(const uint8_t *buf, size_t size, int jpx, hv_box_tr
 
 /* The flst of each ftbl among the boxes of `it`, and in each j2cx. */
 static const char *fragments_in(const uint8_t *buf, hv_boxes *it, const hv_box_tree *tree,
-                                int jpxb, int depth, int *codestreams, size_t *at) {
+                                int jpxb, int *codestreams, size_t *at) {
     size_t n = tree->mdat_count < tree->mdat_cap ? tree->mdat_count : tree->mdat_cap;
     hv_box box;
     const char *error;
@@ -1569,17 +1564,15 @@ static const char *fragments_in(const uint8_t *buf, hv_boxes *it, const hv_box_t
          * boxes of a j2cx too). */
         int first = (box.type == HV_BOX_JP2C || box.type == HV_BOX_FTBL) &&
                     (*codestreams)++ == 0;
-        if (box.type == HV_BOX_J2CX && depth + 1 < HV_BOX_DEPTH_MAX) {
+        /* The tree check has already rejected deeper superboxes. */
+        if (box.type == HV_BOX_J2CX) {
             hv_boxes_children(&children, buf, &box);
-            if ((error = fragments_in(buf, &children, tree, jpxb, depth + 1, codestreams, at)) !=
+            if ((error = fragments_in(buf, &children, tree, jpxb, codestreams, at)) !=
                 NULL)
                 return error;
             continue;
         }
-        /* Only where hv_rule_box_tree read the ftbl's children (below
-         * HV_BOX_DEPTH_MAX). */
-        if (box.type != HV_BOX_FTBL || depth + 1 >= HV_BOX_DEPTH_MAX)
-            continue;
+        if (box.type != HV_BOX_FTBL) continue;
         hv_boxes_children(&children, buf, &box);
         flst.type = 0;                  /* an ftbl without children */
         while (hv_boxes_next(&children, &flst, &error, at) == 1 && flst.type != HV_BOX_FLST)
@@ -1608,7 +1601,7 @@ const char *hv_rule_fragments(const uint8_t *buf, size_t size, const hv_box_tree
     hv_boxes it;
     int codestreams = 0;
     hv_boxes_file(&it, buf, size);
-    return fragments_in(buf, &it, tree, jpxb, 0, &codestreams, at);
+    return fragments_in(buf, &it, tree, jpxb, &codestreams, at);
 }
 
 const char *hv_rule_fragment_here(const hv_extent *mdat, size_t n, const uint8_t *buf,

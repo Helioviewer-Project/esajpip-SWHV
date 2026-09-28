@@ -360,7 +360,10 @@ typedef struct {
 
 /* The box tree of a JP2 or (jpx) JPX file at the standard layer: every
  * box at every level the file's kind defines superboxes for, to
- * HV_BOX_DEPTH_MAX. A JP2 file (T.800) has three: jp2h, res and uinf, and
+ * HV_BOX_DEPTH_MAX. A deeper superbox returns box.depth-limit at its
+ * header: validation is incomplete, not a standard conformance verdict.
+ * The top-level superbox is level 1; children of the last level are checked.
+ * A JP2 file (T.800) has three: jp2h, res and uinf, and
  * every other box is opaque to it (I.8). A JPX file (T.801) adds ftbl,
  * jpch, jplh, cgrp, comp, asoc, drep, j2cx, jclx and grp, and the url
  * boxes of a dtbl, after NDR. Pass `mdat` room for mdat_cap Media Data
@@ -467,8 +470,8 @@ const char *hv_rule_box_placed(const uint8_t *buf, const hv_box *box, uint32_t p
                                size_t *at);
 
 /* The fragments of the codestreams of a JPX file (the flst of each ftbl,
- * at the top level or in a j2cx), after hv_rule_box_tree has walked the
- * file into `tree`: each in this file (DR 0) as hv_rule_fragment_here
+ * at the top level or in a j2cx), after hv_rule_box_tree has successfully
+ * walked the file into `tree`: each in this file (DR 0) as hv_rule_fragment_here
  * requires, and in a baseline file (jpxb), those of the first codestream
  * as hv_rule_jpxb_fragment. NULL, or the rule and *at the flst box. */
 const char *hv_rule_fragments(const uint8_t *buf, size_t size, const hv_box_tree *tree,

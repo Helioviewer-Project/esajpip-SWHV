@@ -512,7 +512,7 @@ static void test_tile_parts(void) {
 
     b = bytes_copy(s.cs.data, s.cs.size);
     append(&b, "", 1);
-    expect_reader_error("a byte after EOC", &b, "bytes after EOC", s.cs.size);
+    expect_reader_error("a byte after EOC", &b, "codestream.extent", s.cs.size);
     b.size = s.cs.size - 2;
     expect_reader_error("no EOC", &b, "tile-part overruns the codestream", s.main.size);
     bytes_free(&b);

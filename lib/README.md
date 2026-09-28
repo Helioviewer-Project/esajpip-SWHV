@@ -272,7 +272,9 @@ file's `mdat` boxes (16 bytes each).
   `dtbl`; a codestream per `jpch` unless a `j2cx` or `jclx` holds more);
   then the box tree (`hv_rule_box_tree`: the placement and count rules of
   T.800 Annex I, and in a JPX file of T.801 Annex M, in every superbox the
-  file's kind defines, and the contents of `uinf`, `ulst`, `uuid`, a
+  file's kind defines, up to 32 nested superboxes; a deeper superbox
+  returns `box.depth-limit`, meaning incomplete validation rather than a
+  standards violation; and the contents of `uinf`, `ulst`, `uuid`, a
   `uinf`'s or `dtbl`'s `url`, `lbl` and a `cref`'s type); in a JPX file
   the fragments in the file (`hv_rule_fragments`: each in an `mdat`, the
   first at SOC); MinV (`file.ftyp-minor`: 0 for JP2, 1 for JPX); in a JPX
