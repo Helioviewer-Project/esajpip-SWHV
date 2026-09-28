@@ -48,6 +48,7 @@ docker run --rm --entrypoint sh \
     sh /issues/0008-containing-length-overrun/run.sh
     sh /issues/0009-varsize-length-failure/run.sh
     sh /issues/0010-fixedsize-error-code/run.sh
+    sh /issues/0011-external-length-error-code/run.sh
 '
 
 echo "asn1scc: pinned upstream compiler with local patches built; ACN v2, icdPdus and issue regressions passed"

@@ -1,0 +1,147 @@
+diff --git a/StgC/acn_c.stg b/StgC/acn_c.stg
+--- a/StgC/acn_c.stg
++++ b/StgC/acn_c.stg
+@@ -630,16 +630,16 @@
+ if (ret) {
+     <p><sAcc>nCount = (int)<sExtFld>;
+     ret = BitStream_DecodeOctetString_no_length(pBitStrm, <p><sAcc>arr, <p><sAcc>nCount);
+-	<A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ <else>
+ <if(noSizeMax)>
+ ret = (<sExtFld>\<=<noSizeMax>);
+ if (ret) {
+     <p><sAcc>nCount = (int)<sExtFld>;
+     ret = BitStream_DecodeOctetString_no_length(pBitStrm, <p><sAcc>arr, <p><sAcc>nCount);
+-	<A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ <else>
+ <p><sAcc>nCount = (int)<sExtFld>;
+ ret = BitStream_DecodeOctetString_no_length(pBitStrm, <p><sAcc>arr, <p><sAcc>nCount);
+@@ -657,8 +657,8 @@
+ ret = (<if(noSizeMin)>(<noSizeMin>\<=<sExtFld>) && <endif>(<sExtFld>\<=<nSizeMax>));
+ if (ret) {
+     ret = BitStream_DecodeOctetString_no_length(pBitStrm, <p><sAcc>arr, <nSizeMax>);
+-	<A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ >>
+ 
+ 
+diff --git a/StgRust/acn_rust.stg b/StgRust/acn_rust.stg
+--- a/StgRust/acn_rust.stg
++++ b/StgRust/acn_rust.stg
+@@ -743,16 +743,16 @@
+ if ret {
+     <p><sAcc>n_count = <sExtFld> as i32;
+     ret = pBitStrm.octet_string_decode_no_length(&mut <p><sAcc>arr, <p><sAcc>n_count as usize);
+-    <A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ <else>
+ <if(noSizeMax)>
+ ret = (<sExtFld> \<= <noSizeMax>);
+ if ret {
+     <p><sAcc>n_count = <sExtFld> as i32;
+     ret = pBitStrm.octet_string_decode_no_length(&mut <p><sAcc>arr, <p><sAcc>n_count as usize);
+-    <A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ <else>
+ <p><sAcc>n_count = <sExtFld> as i32;
+ ret = pBitStrm.octet_string_decode_no_length(&mut <p><sAcc>arr, <p><sAcc>n_count as usize);
+@@ -770,8 +770,8 @@
+ ret = (<if(noSizeMin)>(<noSizeMin> \<= <sExtFld>) && <endif>(<sExtFld> \<= <nSizeMax>));
+ if ret {
+     ret = pBitStrm.octet_string_decode_no_length(&mut <p><sAcc>arr, <nSizeMax> as usize);
+-    <A(sErrCode)>
+-}
++}
++<A(sErrCode)>
+ >>
+ 
+ 
+diff --git a/v4Tests/scripts/runWireTests.sh b/v4Tests/scripts/runWireTests.sh
+--- a/v4Tests/scripts/runWireTests.sh
++++ b/v4Tests/scripts/runWireTests.sh
+@@ -23,7 +23,7 @@
+     esac
+ }
+ 
+-for n in 004 010 011 016 017 018 019 020 021 022 023 024; do
++for n in 004 010 011 016 017 018 019 020 021 022 023 024 025; do
+     out=$work/$n
+     mkdir "$out"
+     run_compiler -c -ACN --acn-v2 -fp AUTO -equal -o "$out" "$cases/$n.asn1" "$cases/$n.acn"
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.acn b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.acn
+new file mode 100644
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.acn
+@@ -0,0 +1,5 @@
++TEST-CASE DEFINITIONS ::= BEGIN
++    Bounded [] { len INTEGER [encoding pos-int, size 8], data [size len] }
++    ZeroMin [] { len INTEGER [encoding pos-int, size 8], data [size len] }
++    Fixed [] { len INTEGER [encoding pos-int, size 8], data [size len] }
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.asn1 b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.asn1
+new file mode 100644
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025.asn1
+@@ -0,0 +1,6 @@
++-- ACNV2_ONLY C_ONLY NO_AUTOMATIC_TEST_CASES
++TEST-CASE DEFINITIONS AUTOMATIC TAGS ::= BEGIN
++    Bounded ::= SEQUENCE { data OCTET STRING (SIZE (1..8)) }
++    ZeroMin ::= SEQUENCE { data OCTET STRING (SIZE (0..8)) }
++    Fixed ::= SEQUENCE { data OCTET STRING (SIZE (2)) }
++END
+diff --git a/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025_wire_test.c b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025_wire_test.c
+new file mode 100644
+--- /dev/null
++++ b/v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/025_wire_test.c
+@@ -0,0 +1,39 @@
++/* Cover rejected determinants, truncated contents, and valid boundaries. */
++#include <stdio.h>
++#include <string.h>
++#include "025.h"
++
++#define CHECK(T, MIN, MAX, COUNT) do {                                        \
++    T value;                                                                  \
++    BitStream stream;                                                         \
++    int error = 0;                                                            \
++    T##_Initialize(&value);                                                   \
++    BitStream_AttachBuffer(&stream, size ? data : NULL, size);                \
++    flag decoded = T##_ACN_Decode(&value, &stream, &error);                   \
++    int expected = length >= (MIN) && length <= (MAX) && size >= 1 + length;  \
++    int ok = expected ? decoded && error == 0 && (COUNT) == length &&         \
++                        BitStream_GetLength(&stream) == 1 + length &&         \
++                        memcmp(value.data.arr, data + 1, (size_t)length) == 0 \
++                      : !decoded && error != 0;                               \
++    if (!ok) {                                                                \
++        fprintf(stderr, #T ": len=%d size=%ld decoded=%d error=%d\n",         \
++                length, size, decoded, error);                                \
++        passed = 0;                                                           \
++    }                                                                         \
++} while (0)
++
++int main(void) {
++    static const unsigned char lengths[] = {0, 1, 2, 8, 9, 255};
++    unsigned char data[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
++    int passed = 1;
++    for (size_t i = 0; i < sizeof lengths; ++i) {
++        int length = lengths[i];
++        data[0] = lengths[i];
++        for (long size = 0; size <= 9; ++size) {
++            CHECK(Bounded, 1, 8, value.data.nCount);
++            CHECK(ZeroMin, 0, 8, value.data.nCount);
++            CHECK(Fixed, 2, 2, 2);
++        }
++    }
++    return passed ? 0 : 1;
++}

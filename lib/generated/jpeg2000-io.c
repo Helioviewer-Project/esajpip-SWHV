@@ -539,8 +539,8 @@ flag RreqHeader_fuam_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCo
 	if (ret) {
 	    pVal->nCount = (int)RreqHeader_fuam_ml->value;
 	    ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
-		*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQHEADER_FUAM;
 	}
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQHEADER_FUAM;
 
     return ret;
 }
@@ -560,8 +560,8 @@ flag RreqHeader_dcm_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCod
 	if (ret) {
 	    pVal->nCount = (int)RreqHeader_dcm_ml->value;
 	    ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
-		*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQHEADER_DCM;
 	}
+	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQHEADER_DCM;
 
     return ret;
 }

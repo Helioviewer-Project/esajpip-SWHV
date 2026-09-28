@@ -13,8 +13,10 @@ Each active patch has a matching numbered directory in
 
 The build also runs the standalone C reproducers for 0008 (ASan) and 0009
 (UBSan, both uPER and ACN) against the installed compiler. It also runs
-0010 (fixed-size error codes, uPER and both ACN generators). The 0009 and 0010 Rust reproducers are separate: run their
-`run_rust.sh` with Cargo and the patched compiler.
+0010 (fixed-size error codes, uPER and both ACN generators) and 0011
+(external-length error codes, both ACN generators). The 0009 through 0011
+Rust reproducers are separate: run their `run_rust.sh` with Cargo and the
+patched compiler.
 
 Applied now, in `series` order:
 
@@ -104,6 +106,13 @@ Applied now, in `series` order:
   values, standalone and nested.
   Report and reproducers:
   [`../asn1scc-issues/0010-fixedsize-error-code/`](../asn1scc-issues/0010-fixedsize-error-code/).
+- `0011-external-length-error-code.patch`: external OCTET STRING size
+  rejection left error code zero. Move the C and Rust error assignments
+  after the guarded decode, covering bounds and contents failures in both
+  variable-size and fixed-size templates. Case `25-ACNV2-BOUNDARIES/025`
+  covers rejected determinants, truncated contents, and valid boundaries.
+  Report and reproducers:
+  [`../asn1scc-issues/0011-external-length-error-code/`](../asn1scc-issues/0011-external-length-error-code/).
 
 ## Reference: the former fixes for deferred ACN
 

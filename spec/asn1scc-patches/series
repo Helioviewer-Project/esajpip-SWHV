@@ -8,3 +8,4 @@
 0008-containing-length-overrun.patch
 0009-varsize-length-failure.patch
 0010-fixedsize-error-code.patch
+0011-external-length-error-code.patch
