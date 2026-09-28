@@ -9,8 +9,9 @@ header and records where each payload starts and ends.
 Nothing in the reader, rules, writer, geometry, `hv_rewrite` or
 `hv_served` keeps mutable static or global state (the generated code's
 static bit patterns are only read), so server workers can use them at the
-same time on different files. `hv_file` (the tools') sets the umask for a
-moment and is not for threads.
+same time on different files. Command-specific output replacement and signal
+handling live in `../tools/hv_file`, compiled directly into the two commands
+and its test, outside `jpeg2000_io`.
 
 ## Layout
 
@@ -23,7 +24,6 @@ moment and is not for threads.
 | `hv_geometry.h` / `.c` | The resolutions, bands, precincts and code-blocks of one tile, and its packets in progression order (T.800 B.2 to B.7, B.12), from the decoded SIZ and COD. Counts and derives the partition instead of storing it; numbers code-blocks so that two precinct partitions with the same code-block partition agree. No COC or POC; at most 2,147,483,647 packets. Checks the SIZ and COD it is given as the reader does, and lays out no more resolutions and packets than the caller's `hv_geometry_limits` allow, since a header can declare far more than its data holds. |
 | `hv_writer.h` / `.c` | Writes box headers, SIZ, COD, QCD, COM, PLT, SOT and opaque segments, the File Type box and Component Mapping entries, the JPX boxes the server reads (`flst`, `url`, and a `dtbl`'s NDR), the Reader Requirements box and the Number List box (`hv_write_nlst`), with the generated encoders into a growing buffer, one element at a time. Measures every length it fills in: Lxxx when a SIZ, PLT, COM or opaque segment ends, Psot when a tile-part ends, LBox/XLBox when a box ends (switching a box to XLBox if it outgrows LBox); `hv_box_header_size` gives a box header's size for a caller that writes a superbox's length before its contents. Splits PLT the way Kakadu does (as many whole entries as fit in Lplt = 65,535), once per tile-part, or writes one PLT segment as given (`hv_write_plt_segment`). Each encoder runs with room for its type's largest encoding, at most 197 bytes (`QcdSegment`), because the generated encoders do not check the room. The buffer's spare capacity is kept zero, because the generated encoders skip zero bits (`BitStream_AppendNBitZero` only moves on): an append clears nothing, and `hv_out_rewind` zeroes what it drops. |
 | `hv_error.h` / `.c` | `hv_fail`: formats an error message into the caller's buffer and returns -1, for `hv_geometry` and the tools; `hv_grouped`: a number with thousands separators, as messages state limits. |
-| `hv_file.h` / `.c` | Replaces an output file for `hv_transcode` and `hv_merge`: through a temporary file next to it, synced (`fsync`) before it is renamed over the output and the directory synced after, so a crash leaves the old file or the new one; the temporary file removed on an error and on SIGINT, SIGTERM, SIGHUP, SIGQUIT or SIGBUS, which a mapped input truncated meanwhile raises (a signal the process ignores stays ignored); symbolic links followed as opening the output would; a replaced file's owner and group kept where the process may (not its ACLs or extended attributes). |
 | `hv_served.h` / `.c` | The served profile's checks of a whole file on disk (`hv_check_served`), the files a JPX file links to included, optionally confined to a root directory (`hv_path_within`: symbolic links and `..` resolved), and the file reader they use, which reads regular files only, never blocks on a FIFO and refuses a file over a size limit before reading it (a linked file over INT_MAX bytes is `file.size-limit`): shared by `hv_walk -P` and `test_profile`. It reads each file whole; a server maps its files and uses the reader's functions on the mapping. |
 | `hv_mapping.c` | The one ACN mapping function the generated code calls (`lxxx`: Lxxx counts itself), shared with the corpus harness. |
 | `hv_rewrite.h` / `.c` | Writes a file again with the writer from what the reader decoded: every box and codestream item, the JPX boxes the writer has functions for (`flst`, `url`, a `dtbl`'s NDR, `rreq`) with them, PLT split as in the input. A file in the writer's form comes out byte for byte; the result says why another one differs (LBox = 0 or Psot = 0 written as lengths, zero PLT entries dropped, PLT entries in more bytes than needed). PLT segments out of the order of their Zplt, which T.800 allows and the writer does not write, are refused. For checking the writer: `hv_walk -w`, `test/test_rewrite.c` and `../spec/harness/writers.c`. |
@@ -112,8 +112,9 @@ length gives:
   `siz.csiz-count` compares Csiz with the number decoded. In the profile,
   after the named rules, `SizFixed-Profile`, the part of `Siz-Profile` they
   do not cover (`Component-Profile` is `siz.component-sampling`).
-- PLT: `Zplt`, then entries to the end of the segment, all read
-  (`invalid PLT`) before the rules: the Zplt of the header (in the profile
+- PLT: `Zplt`, then entries to the end of the segment, decoded once.
+  Diagnostic precedence is structural decoding (`invalid PLT`), then the
+  Zplt of the header (in the profile
   `plt.zplt-sequence`, 0, 1, 2, ... in segment order; at the standard layer
   each once, in any order, `plt.zplt-index`), then each entry
   (`plt.value-overflow`, the padding rules), then the header's entries
@@ -313,3 +314,33 @@ Not read: box bodies other than the box header, `ftyp`, `flst`, `url`, a
 the contents of the XML and IPR boxes. Unknown marker codes are reported
 as items and skipped, by their length, or, from 0xFF30 to 0xFF3F, which
 have no marker segment, by the marker alone; the caller decides.
+
+## Deferred PLT traversal
+
+`HV_PROFILE | HV_DEFER_PLT` walks the served profile's codestream structure
+without reading PLT entries. Copy each reported `hv_plt` descriptor and
+record its tile-part's data range. The descriptor does not own the bytes.
+No packet-length array is allocated. `HV_END` in this mode establishes only
+structural completion. `hv_codestream_check` rejects this flag so its success
+always means full validation under the requested rules.
+
+For later packet indexing, initialize an independent `hv_plt_reader` with
+`HV_PROFILE`. For each tile-part, call `hv_plt_begin` for each saved segment
+and consume lengths with `hv_plt_read`. Reading may pause and resume; only
+the consumed prefix has been checked. Keep the input alive and unchanged.
+Nonzero lengths describe packets; zero lengths are trailing padding. When
+building offsets, check each length against the remaining tile-part data
+before exposing the packet. After consuming the tile-part, call
+`hv_plt_end_tile` with its data length. After the last tile-part, call
+`hv_plt_end` with the codestream's SIZ and COD (still alive). These completion
+checks enforce coverage and total packet count. Return values must be checked.
+
+The cursor and the eager reader use the same generated decoder and PLT
+rules. An entry is decoded once per validation traversal. On a rule error,
+the cursor finishes decoding the current segment before reporting it, preserving
+structural-error precedence over Zplt and entry rules. Errors are terminal
+until reinitialization. Different cursors share no mutable state.
+
+Deferred traversal is limited to the served profile. General T.800 streams
+with packed headers, coding overrides or SOP retain the existing eager path.
+The server is not yet switched to this API.

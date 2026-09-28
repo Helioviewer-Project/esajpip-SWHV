@@ -2,9 +2,9 @@
  * files: a 4-byte big-endian length L, the first L bytes (modulo what
  * remains), then the second file. They are merged in that order, embedded,
  * so an input with a palette and one without exercise the generated cmap.
- * An accepted merge must be a JPX file within the served profile
- * (hv_check_jpx, every codestream with HV_PROFILE) with valid header boxes
- * (hv_check_jpx_headers).
+ * Both default and validation modes are exercised. Every accepted merge must
+ * have a valid container and header boxes (hv_check_jpx, hv_check_jpx_headers);
+ * validation mode must also pass HV_PROFILE for each codestream.
  *
  *   cmake -S . -B fuzz -DCMAKE_C_COMPILER=clang -DESAJPIP_SANITIZE=ON -DESAJPIP_FUZZ=ON
  *   cmake --build fuzz --target fuzz_merge
@@ -37,6 +37,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     FILE *f;
     uint8_t *jpx;
     size_t n, at, i;
+    int validate;
     hv_jpx j;
 
     if (size < 4)
@@ -47,18 +48,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     in[0].size = n;
     in[1].buf = data + 4 + n;
     in[1].size = size - 4 - n;
-    if ((f = tmpfile()) == NULL)
-        return 0;
-    if (hv_merge_buffers(in, 2, 0, f, error, sizeof error) == 0) {
-        if ((jpx = read_back(f, &n)) == NULL || hv_check_jpx_headers(jpx, n, &at) != NULL ||
-            hv_check_jpx(jpx, n, &j, &at) != NULL)
-            abort();
-        for (i = 0; i < j.count; i++)
-            if (hv_codestream_check(jpx, j.jp2c[i].payload, j.jp2c[i].end, HV_PROFILE, &at) != NULL)
+    for (validate = 0; validate < 2; validate++) {
+        if ((f = tmpfile()) == NULL)
+            return 0;
+        if (hv_merge_buffers(in, 2, 0, validate, f, error, sizeof error) == 0) {
+            if ((jpx = read_back(f, &n)) == NULL || hv_check_jpx_headers(jpx, n, &at) != NULL ||
+                hv_check_jpx(jpx, n, &j, &at) != NULL)
                 abort();
-        hv_jpx_free(&j);
-        free(jpx);
+            for (i = 0; validate && i < j.count; i++)
+                if (hv_codestream_check(jpx, j.jp2c[i].payload, j.jp2c[i].end, HV_PROFILE, &at) != NULL)
+                    abort();
+            hv_jpx_free(&j);
+            free(jpx);
+        }
+        fclose(f);
     }
-    fclose(f);
     return 0;
 }

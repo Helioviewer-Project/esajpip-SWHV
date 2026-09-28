@@ -597,7 +597,7 @@ docker run --rm --entrypoint sh \
             /project/spec/harness/label.c \
             /project/spec/harness/crossfield.c \
             /project/spec/harness/mapping.c \
-            /project/lib/hv_error.c /project/lib/hv_file.c \
+            /project/lib/hv_error.c \
             /project/lib/hv_geometry.c /project/lib/hv_mapping.c \
             /project/lib/hv_reader.c /project/lib/hv_rewrite.c \
             /project/lib/hv_rules.c /project/lib/hv_served.c \

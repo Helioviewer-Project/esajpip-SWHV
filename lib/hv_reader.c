@@ -432,7 +432,12 @@ const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, un
     hv_codestream cs;
     hv_item item;
     const char *error = NULL;
-    int status = hv_codestream_open(&cs, buf, start, end, flags);
+    int status;
+    if (flags & HV_DEFER_PLT) {
+        *at = start;
+        return "hv_codestream_check requires full PLT validation";
+    }
+    status = hv_codestream_open(&cs, buf, start, end, flags);
     if (status == 0)
         while ((status = hv_codestream_next(&cs, &item)) == 1)
             ;                           /* 0 after HV_END */
@@ -1035,6 +1040,91 @@ int hv_plt_next(const uint8_t *buf, size_t *pos, size_t end, uint64_t *value) {
     return plt_entry(buf, pos, end, 0, value) == NULL ? 1 : -1;
 }
 
+void hv_plt_init(hv_plt_reader *r, unsigned flags) {
+    memset(r, 0, sizeof *r);
+    r->flags = flags;
+    if ((flags & HV_ACCEPT_PLT_PADDING) && (flags & HV_PROFILE) == HV_PROFILE)
+        r->error = "HV_ACCEPT_PLT_PADDING with HV_PROFILE";
+}
+
+static void plt_reset_tile(hv_plt_reader *r) {
+    memset(&r->zplt, 0, sizeof r->zplt);
+    r->zeros = 0;
+    r->sum = 0;
+}
+
+const char *hv_plt_begin(hv_plt_reader *r, const uint8_t *buf, const hv_plt *plt) {
+    int profile = (r->flags & HV_PROFILE) == HV_PROFILE;
+    if (r->error != NULL) return r->error;
+    if (r->pos != r->end)
+        return r->error = "PLT segment not consumed";
+    if (plt->start >= plt->end)
+        return r->error = "invalid PLT";
+    r->buf = buf;
+    r->pos = plt->start;
+    r->end = plt->end;
+    r->rule_error = hv_rule_zplt(&r->zplt, plt->zplt,
+                                 profile || (r->flags & HV_ACCEPT_PLT_PADDING));
+    return NULL;
+}
+
+int hv_plt_read(hv_plt_reader *r, uint64_t *value) {
+    int profile = (r->flags & HV_PROFILE) == HV_PROFILE;
+    int per_tile_part = (r->flags & HV_ACCEPT_PLT_PADDING) != 0;
+    if (r->error != NULL) return -1;
+    while (r->pos < r->end) {
+        uint64_t v;
+        const char *error = plt_entry(r->buf, &r->pos, r->end, profile, &v);
+        if (error != NULL) {
+            if (strcmp(error, "invalid PLT") == 0) {
+                r->error = error;
+                return -1;
+            }
+            if (r->rule_error == NULL) r->rule_error = error;
+            /* Overflow leaves pos unchanged; continue decoding the suffix. */
+            while (r->pos < r->end && (r->buf[r->pos++] & 0x80))
+                ;
+            continue;
+        }
+        if (r->rule_error != NULL) continue;
+        r->rule_error = per_tile_part
+            ? (v != 0 && r->zeros != 0 ? "plt.padding-position" : NULL)
+            : hv_rule_plt_entry(&r->count, v, profile);
+        if (r->rule_error != NULL) continue;
+        if (v == 0)
+            r->zeros++;
+        else
+            r->sum = v > UINT64_MAX - r->sum ? UINT64_MAX : r->sum + v;
+        *value = v;
+        return 1;
+    }
+    r->error = r->rule_error;
+    return r->error != NULL ? -1 : 0;
+}
+
+const char *hv_plt_end_tile(hv_plt_reader *r, size_t data_size) {
+    if (r->error != NULL) return r->error;
+    if ((r->flags & HV_PROFILE) != HV_PROFILE)
+        return r->error = "PLT completion requires HV_PROFILE";
+    if (r->pos != r->end)
+        return r->error = "PLT segment not consumed";
+    if (r->rule_error != NULL) return r->error = r->rule_error;
+    if (r->zplt.count == 0) return r->error = "codestream.no-plt";
+    if ((r->error = hv_rule_plt_coverage(r->sum, data_size, 0)) != NULL)
+        return r->error;
+    plt_reset_tile(r);
+    return NULL;
+}
+
+const char *hv_plt_end(hv_plt_reader *r, const hv_siz *siz, const Cod *cod) {
+    if (r->error != NULL) return r->error;
+    if ((r->flags & HV_PROFILE) != HV_PROFILE)
+        return r->error = "PLT completion requires HV_PROFILE";
+    if (r->pos != r->end || r->zplt.count != 0)
+        return r->error = "PLT tile-part not completed";
+    return r->error = hv_rule_plt_packets(&r->count, siz, &cod->sgcod, &cod->spcod, 1);
+}
+
 /* A rule of hv_segments at pos, "decode" as "invalid" and the segment's
  * name. */
 static int segment_fail(hv_codestream *cs, const char *error, uint16_t code, size_t pos) {
@@ -1065,6 +1155,9 @@ int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size
     cs->buf = buf;
     cs->end = end;
     cs->flags = flags;
+    hv_plt_init(&cs->plt_reader, flags);
+    if ((flags & HV_DEFER_PLT) && (flags & HV_PROFILE) != HV_PROFILE)
+        return fail(cs, "HV_DEFER_PLT requires HV_PROFILE", start);
     if (start > end)
         return fail(cs, "codestream ends before it starts", start);
     if ((flags & HV_ACCEPT_PLT_PADDING) && profile_full(cs))
@@ -1222,9 +1315,7 @@ static int start_tile_part(hv_codestream *cs, hv_item *item) {
     cs->tile_parts++;
     cs->tp_start = pos;
     cs->tp_cod = cs->tp_qcd = cs->plts = 0;
-    cs->plt_zeros = 0;
-    cs->plt_sum = 0;
-    memset(&cs->zplt, 0, sizeof cs->zplt);
+    plt_reset_tile(&cs->plt_reader);
     cs->pos = pos + MARKER + HV_FIXED(SotSegment);
     cs->state = ST_TILE_HEADER;
     item->kind = HV_TILE_PART;
@@ -1345,45 +1436,22 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         item->qcd = &cs->tile_qcd;
         break;
     case HV_PLT: {
-        /* Zplt, then Iplt entries, at least one, to the end of the
-         * segment: all of them decode before the rules apply, in the order
-         * of the whole-file model's decoder (the Zplt sequence, then each
-         * entry). HV_ACCEPT_PLT_PADDING takes zero entries after the last
-         * packet of each tile-part; the profile, after the last packet of
-         * the codestream (hv_rule_plt_entry). */
-        int per_tile_part = (cs->flags & HV_ACCEPT_PLT_PADDING) != 0;
-        size_t used, p;
-        uint64_t v;
+        size_t used;
         if (HV_DECODE_USED(Zplt, &cs->plt.zplt, cs->buf, body, end - body, &used) != 0 ||
             body + used == end)
             return fail(cs, "invalid PLT", pos);
         cs->plt.start = body + used;
         cs->plt.end = end;
-        for (p = cs->plt.start; p < end; ) {
-            if ((error = plt_entry(cs->buf, &p, end, profile_full(cs), &v)) != NULL &&
-                strcmp(error, "invalid PLT") == 0)
-                return fail(cs, error, pos);
-            if (error != NULL)          /* an overflow, after every entry decodes */
-                while (p < end && (cs->buf[p++] & 0x80))
-                    ;
-        }
         cs->plts++;
-        if ((error = hv_rule_zplt(&cs->zplt, cs->plt.zplt, profile_full(cs) || per_tile_part)) !=
-            NULL)
-            return fail(cs, error, pos);
-        for (p = cs->plt.start; p < end; ) {
-            if ((error = plt_entry(cs->buf, &p, end, profile_full(cs), &v)) != NULL)
+        if (!(cs->flags & HV_DEFER_PLT)) {
+            uint64_t v;
+            int status;
+            if ((error = hv_plt_begin(&cs->plt_reader, cs->buf, &cs->plt)) != NULL)
                 return fail(cs, error, pos);
-            if (per_tile_part) {
-                if (v != 0 && cs->plt_zeros != 0)
-                    return fail(cs, "plt.padding-position", pos);
-            } else if ((error = hv_rule_plt_entry(&cs->plt_count, v, profile_full(cs))) != NULL) {
-                return fail(cs, error, pos);
-            }
-            if (v == 0)
-                cs->plt_zeros++;
-            else
-                cs->plt_sum = v > UINT64_MAX - cs->plt_sum ? UINT64_MAX : cs->plt_sum + v;
+            while ((status = hv_plt_read(&cs->plt_reader, &v)) == 1)
+                ;
+            if (status < 0)
+                return fail(cs, cs->plt_reader.error, pos);
         }
         item->plt = &cs->plt;
         break;
@@ -1470,8 +1538,8 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             if ((error = hv_rule_tile_parts_end(cs->unfinished)) != NULL ||
                 (error = hv_segments_end(&cs->segments)) != NULL)
                 return fail(cs, error, cs->pos);
-            if ((profile_full(cs) || packets_listed(cs)) &&
-                (error = hv_rule_plt_packets(&cs->plt_count, &cs->siz, &cs->cod.body.sgcod,
+            if (!(cs->flags & HV_DEFER_PLT) && (profile_full(cs) || packets_listed(cs)) &&
+                (error = hv_rule_plt_packets(&cs->plt_reader.count, &cs->siz, &cs->cod.body.sgcod,
                                              &cs->cod.body.spcod, profile_full(cs))) != NULL)
                 return fail(cs, error, cs->pos);
             item->kind = HV_END;
@@ -1496,15 +1564,17 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item) {
             /* The PLT coverage, and at the standard layer the rules at the
              * end of a tile-part header (hv_segments_data); zero entries
              * HV_ACCEPT_PLT_PADDING has accepted are not passed on. */
-            if ((error = hv_segments_data(
+            if (!(cs->flags & HV_DEFER_PLT) && (error = hv_segments_data(
                      &cs->segments, cs->buf + end, cs->tp_end - end, (unsigned)cs->plts,
-                     cs->plt_sum, (cs->flags & HV_ACCEPT_PLT_PADDING) ? 0 : cs->plt_zeros,
-                     profile_full(cs) || (cs->flags & HV_ACCEPT_PLT_PADDING) ? NULL : &cs->zplt)) !=
+                     cs->plt_reader.sum,
+                     (cs->flags & HV_ACCEPT_PLT_PADDING) ? 0 : cs->plt_reader.zeros,
+                     profile_full(cs) || (cs->flags & HV_ACCEPT_PLT_PADDING)
+                         ? NULL : &cs->plt_reader.zplt)) !=
                 NULL)
                 return fail(cs, error, cs->tp_start);
             item->kind = HV_TILE_DATA;
             item->code = 0;
-            item->plt_padding = cs->plt_zeros;
+            item->plt_padding = cs->plt_reader.zeros;
             item->start = end;
             item->end = cs->tp_end;
             item->sot = cs->sot;

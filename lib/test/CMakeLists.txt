@@ -23,6 +23,8 @@ set_tests_properties(writer_corpus PROPERTIES LABELS tools
 # hv_file: replacing the tools' output files.
 add_executable(test_file test_file.c)
 esajpip_configure_target(test_file)
+target_sources(test_file PRIVATE ${PROJECT_SOURCE_DIR}/tools/hv_file.c)
+target_include_directories(test_file PRIVATE ${PROJECT_SOURCE_DIR}/tools)
 target_link_libraries(test_file PRIVATE jpeg2000_io)
 add_test(NAME output_file COMMAND test_file)
 set_tests_properties(output_file PROPERTIES LABELS tools

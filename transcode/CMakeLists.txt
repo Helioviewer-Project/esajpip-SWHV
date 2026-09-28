@@ -3,6 +3,8 @@
 
 add_executable(hv_transcode hv_transcode.c transcode_file.c transcode.c tier2.c)
 esajpip_configure_target(hv_transcode)
+target_sources(hv_transcode PRIVATE ${PROJECT_SOURCE_DIR}/tools/hv_file.c)
+target_include_directories(hv_transcode PRIVATE ${PROJECT_SOURCE_DIR}/tools)
 target_link_libraries(hv_transcode PRIVATE jpeg2000_io)
 
 # Tests (test/), separate from the server's.

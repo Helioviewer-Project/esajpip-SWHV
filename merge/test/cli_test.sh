@@ -171,10 +171,39 @@ grep -q "cut.jp2" "$work/stderr" || fail "the message does not name the input"
 [ "$(status "$exe" -i "$work/missing.jp2" -o "$work/missing.jpx")" = 1 ] ||
     fail "missing file: expected 1"
 [ "$(status "$exe" -i "$3/input/synthetic_rgb_129x129_origin129_CPRL.jp2" \
-    -o "$work/origin.jpx")" = 1 ] ||
+    --validate -o "$work/origin.jpx")" = 1 ] ||
     fail "nonzero origins: expected 1"
 grep -q "siz.zero-origin" "$work/stderr" ||
     fail "nonzero origins: the message does not name the rule"
+[ "$(status "$exe" -i "$3/input/synthetic_rgb_129x129_origin129_CPRL.jp2" \
+    -o "$work/origin.jpx")" = 0 ] || fail "default merge rejected non-profile origins"
+[ "$(status "$exe" --validate=yes -i "$fixtures/input/swap_000.jp2" \
+    -o "$work/bad-option.jpx")" = 2 ] || fail "--validate takes no value"
+[ "$(status "$exe" --h -i "$fixtures/input/swap_000.jp2" \
+    -o "$work/bad-option.jpx")" = 0 ] || fail "--h means help"
+[ "$(status "$exe" --he)" = 0 ] || fail "--he still means help"
+[ "$(status "$exe" --validate -i "$fixtures/input/swap_000.jp2" \
+    "$fixtures/input/swap_001.jp2" $rest -o "$work/validated.jpx")" = 0 ] ||
+    fail "validation merge failed"
+cmp -s "$work/validated.jpx" "$expected" || fail "validation output differs"
+# PLT validation is optional in both linked and embedded output. A validation
+# failure must preserve an existing output and remove its temporary file.
+vectors="$fixtures/../../../tests/vectors/j2k"
+for name in jp2-rule-plt.sum-exceeds-data-23.jp2 jp2-rule-plt.packet-count-45.jp2 \
+    jp2-rule-plt.value-overflow-46.jp2 jp2-rule-plt.zero-length-44.jp2 \
+    jp2-precincts-rule-plt.padding-position-43.jp2; do
+    for links in '' '-links'; do
+        # shellcheck disable=SC2086
+        [ "$(status "$exe" $links -i "$vectors/$name" -o "$work/opaque.jpx")" = 0 ] ||
+            fail "default rejected opaque $name: $(cat "$work/stderr")"
+        printf 'existing output' >"$work/rejected.jpx"
+        cp "$work/rejected.jpx" "$work/sentinel"
+        # shellcheck disable=SC2086
+        [ "$(status "$exe" --validate $links -i "$vectors/$name" \
+            -o "$work/rejected.jpx")" = 1 ] || fail "validation accepted $name"
+        cmp -s "$work/rejected.jpx" "$work/sentinel" || fail "validation failure changed output"
+    done
+done
 leftover=$(ls "$work" | grep -c '\.jpx\.' || true)
 [ "$leftover" = 0 ] || fail "temporary files left behind: $(ls "$work")"
 

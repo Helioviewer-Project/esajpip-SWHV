@@ -104,7 +104,9 @@ precincts, PLT) without recompressing it, and rejects files it cannot make
 servable. The server accepts JPX movies produced by `hv_merge` (and hvJP2K's
 `hv_jpx_merge`), embedded or linked, and the compatible `kdu_merge` form. It
 preserves the order stored in the JPX, so pass source frames to the merge
-tool in timestamp order.
+tool in timestamp order. `hv_merge --validate` additionally validates every
+codestream against the served profile; default merging checks the container
+and required headers without traversing PLT entries.
 
 Never modify a JP2, JPX, or linked source while a channel may be using it. The
 server indexes a target once and memory-maps its sources as responses need

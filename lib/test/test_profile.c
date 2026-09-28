@@ -200,6 +200,56 @@ static int check_header_contract(const row *rows, size_t n) {
     return rejected;
 }
 
+/* Consume deferred PLTs through the public cursor and compare the complete
+ * result, including diagnostic offsets, with eager profile validation. */
+static void check_deferred(const uint8_t *buf, size_t size, const char *name) {
+    hv_boxes boxes;
+    hv_box box;
+    const char *error;
+    size_t at;
+    hv_boxes_file(&boxes, buf, size);
+    while (hv_boxes_next(&boxes, &box, &error, &at) == 1) {
+        hv_codestream cs;
+        hv_item item;
+        hv_plt_reader plt;
+        const char *eager, *deferred = NULL;
+        size_t eager_at = 0, deferred_at = 0, tile_at = 0;
+        int status;
+        if (box.type != HV_BOX_JP2C) continue;
+        eager = hv_codestream_check(buf, box.payload, box.end, HV_PROFILE, &eager_at);
+        hv_plt_init(&plt, HV_PROFILE);
+        status = hv_codestream_open(&cs, buf, box.payload, box.end, HV_PROFILE | HV_DEFER_PLT);
+        while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1) {
+            if (item.kind == HV_TILE_PART) tile_at = item.start;
+            if (item.plt != NULL) {
+                uint64_t value;
+                deferred = hv_plt_begin(&plt, buf, item.plt);
+                if (deferred == NULL) {
+                    while (hv_plt_read(&plt, &value) == 1) ;
+                    deferred = plt.error;
+                }
+                deferred_at = item.start;
+            } else if (item.kind == HV_TILE_DATA) {
+                deferred = hv_plt_end_tile(&plt, item.end - item.start);
+                deferred_at = tile_at;
+            } else if (item.kind == HV_END) {
+                deferred = hv_plt_end(&plt, hv_codestream_siz(&cs), hv_codestream_cod(&cs));
+                deferred_at = item.start;
+            }
+            if (deferred != NULL) break;
+            status = 0;
+        }
+        if (status < 0) {
+            deferred = cs.error;
+            deferred_at = cs.error_at;
+        }
+        check((eager == NULL && deferred == NULL) ||
+              (eager != NULL && deferred != NULL && strcmp(eager, deferred) == 0 &&
+               eager_at == deferred_at), "deferred profile matches eager", name);
+        hv_codestream_close(&cs);
+    }
+}
+
 /* The corpus: every row of the manifest. */
 static void check_corpus(const char *dir) {
     char path[4096], line[8192];
@@ -241,6 +291,7 @@ static void check_corpus(const char *dir) {
         if ((buf = vector(dir, field[0], &size)) == NULL)
             continue;
         snprintf(path, sizeof path, "%s/%s", dir, field[0]);
+        check_deferred(buf, size, field[0]);
         error = hv_check_served(path, buf, size, is_jpx, dir, &served);
         jpx += is_jpx;
         jp2 += !is_jpx;

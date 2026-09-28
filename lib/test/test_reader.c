@@ -1947,6 +1947,101 @@ static void check_corpus_items(void) {
     }
 }
 
+static void check_plt_cursor(void) {
+    static const struct {
+        const char *bytes;
+        size_t size;
+        unsigned z;
+        const char *error;
+    } cases[] = {
+        {"\x03\x00", 2, 0, NULL},
+        {"\x00\x03", 2, 0, "plt.padding-position"},
+        {"\x00\x03\x80", 3, 0, "invalid PLT"},
+        {"\x03", 1, 1, "plt.zplt-sequence"},
+        {"\x00\x03", 2, 1, "plt.zplt-sequence"},
+        {"\x00\x03\x80", 3, 1, "invalid PLT"},
+        {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00", 10, 0, "plt.value-overflow"},
+        {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00\x80", 11, 0, "invalid PLT"},
+        {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00", 10, 1, "plt.zplt-sequence"},
+    };
+    hv_plt_reader a, b;
+    uint64_t value;
+    size_t i, at;
+    for (i = 0; i < sizeof cases / sizeof *cases; i++) {
+        hv_plt range = {cases[i].z, 0, cases[i].size};
+        hv_plt_init(&a, HV_PROFILE);
+        check(hv_plt_begin(&a, (const uint8_t *)cases[i].bytes, &range) == NULL,
+              "cursor begins without reading entries", NULL);
+        while (hv_plt_read(&a, &value) == 1) ;
+        check((a.error == NULL && cases[i].error == NULL) ||
+              (a.error != NULL && cases[i].error != NULL && strcmp(a.error, cases[i].error) == 0),
+              "PLT diagnostic precedence", a.error);
+        if (a.error != NULL)
+            check(hv_plt_read(&a, &value) == -1, "PLT error is terminal", NULL);
+    }
+    {
+        const uint8_t entries[] = {3, 0};
+        hv_plt range = {0, 0, sizeof entries};
+        hv_plt_init(&a, HV_PROFILE);
+        hv_plt_init(&b, HV_PROFILE);
+        hv_plt_begin(&a, entries, &range);
+        hv_plt_begin(&b, entries, &range);
+        check(hv_plt_read(&a, &value) == 1 && value == 3 && a.pos == 1 && b.pos == 0,
+              "pause leaves the suffix unread and another cursor untouched", NULL);
+        check(hv_plt_read(&b, &value) == 1 && value == 3, "independent cursor", NULL);
+        check(hv_plt_end_tile(&b, 3) != NULL, "cannot complete an unread suffix", NULL);
+        check(hv_plt_read(&a, &value) == 1 && value == 0 && hv_plt_read(&a, &value) == 0 &&
+              hv_plt_end_tile(&a, 3) == NULL, "resume and complete tile", a.error);
+        range.end = 1;
+        hv_plt_begin(&a, entries, &range);
+        check(hv_plt_read(&a, &value) == -1 && strcmp(a.error, "plt.padding-position") == 0,
+              "padding state survives tile-part boundaries", a.error);
+        hv_plt_init(&a, HV_PROFILE);
+        hv_plt_begin(&a, entries, &range);
+        hv_plt_read(&a, &value);
+        check(hv_plt_end_tile(&a, 4) != NULL && strcmp(a.error, "plt.coverage") == 0,
+              "deferred coverage", a.error);
+    }
+    {
+        bytes stream = simple();
+        hv_codestream cs;
+        hv_item item;
+        hv_plt saved = {0, 0, 0};
+        size_t data_size = 0;
+        int status = hv_codestream_open(&cs, stream.d, 0, stream.n, HV_PROFILE | HV_DEFER_PLT);
+        while (status == 0 && (status = hv_codestream_next(&cs, &item)) == 1) {
+            if (item.plt) saved = *item.plt;
+            if (item.kind == HV_TILE_DATA) data_size = item.end - item.start;
+            status = 0;
+        }
+        check(status == 0 && saved.end > saved.start && cs.plt_reader.count.packets == 0,
+              "structural walk does not consume PLT", cs.error);
+        hv_plt_init(&a, HV_PROFILE);
+        hv_plt_begin(&a, stream.d, &saved);
+        while (hv_plt_read(&a, &value) == 1) ;
+        check(hv_plt_end_tile(&a, data_size) == NULL &&
+              hv_plt_end(&a, hv_codestream_siz(&cs), hv_codestream_cod(&cs)) == NULL,
+              "consume saved ranges after structural completion", a.error);
+        hv_plt_init(&a, HV_PROFILE);
+        check(hv_plt_end(&a, hv_codestream_siz(&cs), hv_codestream_cod(&cs)) != NULL,
+              "packet count catches an unconsumed codestream", a.error);
+        hv_codestream_close(&cs);
+        stream.d[saved.end - 1] = 0x80;
+        status = hv_codestream_open(&cs, stream.d, 0, stream.n, HV_PROFILE | HV_DEFER_PLT);
+        if (status == 0) while ((status = hv_codestream_next(&cs, &item)) == 1) ;
+        check(status == 0, "malformed PLT is genuinely deferred", cs.error);
+        hv_codestream_close(&cs);
+        check(hv_codestream_check(stream.d, 0, stream.n, HV_PROFILE, &at) != NULL,
+              "eager validation still rejects malformed PLT", NULL);
+        check(hv_codestream_check(stream.d, 0, stream.n, HV_PROFILE | HV_DEFER_PLT, &at) != NULL,
+              "full validator refuses deferred flag", NULL);
+        check(hv_codestream_open(&cs, stream.d, 0, stream.n, HV_DEFER_PLT) != 0,
+              "deferred mode requires served profile", NULL);
+        hv_codestream_close(&cs);
+        release(&stream);
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: test_reader <vector directory>\n");
@@ -1964,6 +2059,7 @@ int main(int argc, char **argv) {
     check_jpx_header_boxes();
     check_rreqs();
     check_codestreams();
+    check_plt_cursor();
     check_corpus_items();
     {
         bytes *all[] = {&JP2, &JPX, &LINKED, &FRAME1, &SIG, &FTYP_JP2, &FTYP_JPX, &RREQ,

@@ -113,7 +113,7 @@ static void load_inputs(void) {
 }
 
 /* Merges into memory. 0, or -1 with the message in error. */
-static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char *error,
+static int merge_mode(const hv_merge_input *in, size_t n, int links, int validate, bytes *out, char *error,
                  size_t error_size) {
     FILE *f = tmpfile();
     long size;
@@ -124,7 +124,7 @@ static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char
         snprintf(error, error_size, "no temporary file");
         return -1;
     }
-    status = hv_merge_buffers(in, n, links, f, error, error_size);
+    status = hv_merge_buffers(in, n, links, validate, f, error, error_size);
     if (status == 0 && (fseek(f, 0, SEEK_END) != 0 || (size = ftell(f)) < 0 ||
                         fseek(f, 0, SEEK_SET) != 0 ||
                         (out->data = malloc(size ? (size_t)size : 1)) == NULL ||
@@ -134,6 +134,13 @@ static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char
         out->size = (size_t)size;
     fclose(f);
     return status;
+}
+
+static int test_validate = 1;
+
+static int merge(const hv_merge_input *in, size_t n, int links, bytes *out, char *error,
+                 size_t error_size) {
+    return merge_mode(in, n, links, test_validate, out, error, error_size);
 }
 
 /* The JPX file is within the served profile: hv_check_jpx, and every
@@ -503,7 +510,7 @@ static void test_xml_to_end(void) {
     bytes_free(&moved);
 }
 
-static void test_headers(void) {
+static void test_headers_mode(void) {
     /* A Resolution box holding a Capture Resolution box of 1/1 per meter. */
     static const uint8_t res[26] = {0, 0, 0, 26, 'r', 'e', 's', ' ',
                                     0, 0, 0, 18, 'r', 'e', 's', 'c',
@@ -841,6 +848,8 @@ static void counting_close(void *context, size_t i, hv_merge_input *in) {
     c->open--;
 }
 
+static int opening_validate;
+
 static int merge_counting(counting *c, int links, char *error, size_t error_size) {
     hv_merge_inputs from = {counting_open, counting_close, NULL};
     FILE *f = tmpfile();
@@ -850,12 +859,12 @@ static int merge_counting(counting *c, int links, char *error, size_t error_size
         snprintf(error, error_size, "no temporary file");
         return -1;
     }
-    status = hv_merge_files(&from, NINPUTS, links, f, error, error_size);
+    status = hv_merge_files(&from, NINPUTS, links, opening_validate, f, error, error_size);
     fclose(f);
     return status;
 }
 
-static void test_opening(void) {
+static void test_opening_mode(void) {
     counting c;
     bytes changed = {NULL, 0};
     hv_box jp2c;
@@ -922,12 +931,82 @@ static void test_opening(void) {
     bytes_free(&changed);
 }
 
+static void test_headers(void) {
+    for (test_validate = 0; test_validate < 2; test_validate++)
+        test_headers_mode();
+    test_validate = 1;
+}
+
+static void test_opening(void) {
+    for (opening_validate = 0; opening_validate < 2; opening_validate++)
+        test_opening_mode();
+}
+
+static void test_modes(void) {
+    bytes normal, validated;
+    char error[512];
+    hv_box jp2c;
+    hv_codestream cs;
+    hv_item item;
+    size_t at, last = 0;
+    int links, mode;
+    for (links = 0; links < 2; links++) {
+        int a = merge_mode(inputs, NINPUTS, links, 0, &normal, error, sizeof error);
+        int b = merge_mode(inputs, NINPUTS, links, 1, &validated, error, sizeof error);
+        check(a == 0 && b == 0 && normal.size == validated.size &&
+              memcmp(normal.data, validated.data, normal.size) == 0,
+              "identical output in both modes, links=%d", links);
+        bytes_free(&normal);
+        bytes_free(&validated);
+    }
+    if (hv_check_jp2(inputs[0].buf, inputs[0].size, &jp2c, &at) != NULL ||
+        hv_codestream_open(&cs, inputs[0].buf, jp2c.payload, jp2c.end, HV_PROFILE) != 0) {
+        check(0, "cannot prepare PLT mode test");
+        return;
+    }
+    while (hv_codestream_next(&cs, &item) == 1)
+        if (item.plt != NULL) { last = item.plt->end - 1; break; }
+    hv_codestream_close(&cs);
+    if (last != 0) {
+        hv_merge_input bad = inputs[0];
+        uint8_t *copy = malloc(bad.size);
+        memcpy(copy, bad.buf, bad.size);
+        bad.buf = copy;
+        copy[last] = 0x80;
+        check(merge_mode(&bad, 1, 0, 0, &normal, error, sizeof error) == 0,
+              "default accepts opaque malformed PLT: %s", error);
+        if (normal.data != NULL) {
+            hv_jpx jpx;
+            check(hv_check_jpx(normal.data, normal.size, &jpx, &at) == NULL,
+                  "default output container remains valid");
+            if (jpx.count == 1)
+                check(jpx.jp2c[0].end - jpx.jp2c[0].payload == jp2c.end - jp2c.payload &&
+                      memcmp(normal.data + jpx.jp2c[0].payload, copy + jp2c.payload,
+                             jp2c.end - jp2c.payload) == 0,
+                      "default copies malformed codestream byte for byte");
+            hv_jpx_free(&jpx);
+        }
+        bytes_free(&normal);
+        check(merge_mode(&bad, 1, 0, 1, &validated, error, sizeof error) != 0 &&
+              strstr(error, "invalid PLT") != NULL, "validation rejects malformed PLT: %s", error);
+        bytes_free(&validated);
+        copy[0] ^= 1;
+        for (mode = 0; mode < 2; mode++) {
+            check(merge_mode(&bad, 1, 0, mode, &normal, error, sizeof error) != 0,
+                  "invalid container rejected in mode %d", mode);
+            bytes_free(&normal);
+        }
+        free(copy);
+    } else check(0, "fixture has no PLT");
+}
+
 int main(void) {
     struct {
         const char *name;
         void (*run)(void);
     } groups[] = {
         {"hvJP2K reference", test_reference},
+        {"default and validation modes", test_modes},
         {"linked merge", test_links},
         {"reader requirements", test_rreq},
         {"header boxes", test_headers},

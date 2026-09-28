@@ -26,7 +26,7 @@ order: the `jp2c` box is transcoded, a top-level XML box ends before its
 first NUL (see below), the others are copied as read. The output is
 written to a temporary file next to it with the input's
 permissions (without the setuid, setgid and sticky bits) and renamed into
-place (`hv_file`, in `../lib/`: synced to disk before the rename, and
+place (`hv_file`, in `../tools/`: synced to disk before the rename, and
 removed if a signal ends the tool first; a replaced file keeps its owner and
 group where the process may give them), so input and output may be the same
 file; an output that is a symbolic link is written where the link points,

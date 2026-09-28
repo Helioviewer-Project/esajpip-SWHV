@@ -219,6 +219,11 @@ uint64_t hv_rule_packets(const hv_siz *siz, const Sgcod *sgcod, const Spcod *spc
     return total > 2147483647u ? 0 : total;
 }
 
+const char *hv_rule_plt_coverage(uint64_t sum, uint64_t data_size, uint64_t sops) {
+    return sum != data_size && (sops == 0 || sum != data_size - 6 * sops)
+        ? "plt.coverage" : NULL;
+}
+
 const char *hv_rule_plt_packets(const hv_plt_count *count, const hv_siz *siz,
                                 const Sgcod *sgcod, const Spcod *spcod, int profile) {
     uint64_t packets = hv_rule_packets(siz, sgcod, spcod);
@@ -938,8 +943,8 @@ const char *hv_segments_data(hv_segments *s, const uint8_t *data, size_t n, unsi
     /* A.7.3: the PLT entries of a tile-part list every packet in it. Where
      * its COD allows SOP markers, T.800 does not say whether a packet's
      * length counts the SOP before it; either sum is taken. */
-    if (plts != 0 && plt_sum != n && (sops == 0 || plt_sum != n - 6 * sops))
-        return "plt.coverage";
+    if (plts != 0 && (error = hv_rule_plt_coverage(plt_sum, n, sops)) != NULL)
+        return error;
     if (s->profile) return NULL;
     if (s->plm.segments > 0) {
         int nplm;

@@ -148,7 +148,8 @@ typedef enum {
 
 /* A PLT segment: Zplt, and its Iplt entries, which stay in the caller's
  * buffer at [start, end) and are read with hv_plt_next. The reader has
- * checked them all by the time it reports the segment. */
+ * checked them all by the time it reports the segment, unless opened with
+ * HV_DEFER_PLT. */
 typedef struct {
     Zplt zplt;
     size_t start, end;      /* Iplt entries in buf[start, end) */
@@ -175,7 +176,8 @@ typedef struct {
     size_t start, end;
     SotSegment sot;         /* HV_TILE_PART, HV_TILE_SEGMENT, HV_TILE_DATA: the
                              * current tile-part's SOT; zero otherwise */
-    uint32_t plt_padding;   /* HV_TILE_DATA: trailing zero PLT entries accepted */
+    uint32_t plt_padding;   /* HV_TILE_DATA: trailing zero PLT entries accepted;
+                              * unknown (zero) with HV_DEFER_PLT */
     /* A decoded SIZ, COD, QCD, PLT or COM segment, NULL otherwise, in the
      * form hv_writer's hv_write_* take (for PLT, the entries through
      * hv_plt_next; the accessors below give the COD and QCD bodies, the
@@ -200,7 +202,8 @@ typedef struct {
  *
  * HV_PROFILE is HV_PROFILE_HEADERS | 4. The bit 4 alone does nothing: the
  * whole profile applies only when both bits, 2 and 4, are set. The flags
- * only add rules, except HV_ACCEPT_PLT_PADDING. A marker out of place is
+ * only add rules, except HV_ACCEPT_PLT_PADDING and HV_DEFER_PLT.
+ * A marker out of place is
  * main.marker-code or tile.marker-code, and a tile-part header without
  * SOD "tile-part header without SOD", whatever the flags; but the
  * profile's marker rules come first, so under HV_PROFILE a second COD in
@@ -226,8 +229,51 @@ enum {
      * tile-part; at most 64 tile-parts; one nonzero PLT entry per packet,
      * with zero entries only after the last packet of the codestream; a
      * packet count that fits INT32_MAX. */
-    HV_PROFILE = 6
+    HV_PROFILE = 6,
+    /* Structural traversal for later packet indexing. Only with HV_PROFILE.
+     * Reports PLT ranges without decoding entries. PLT numbering, lengths,
+     * padding, coverage and packet count remain unchecked until consumed
+     * through hv_plt_reader. HV_END here means structurally complete, not
+     * fully validated. hv_codestream_check refuses this flag. */
+    HV_DEFER_PLT = 8
 };
+
+/* Incremental PLT validation. No allocation or ownership of the input.
+ * Initialize once per codestream. Begin each segment in traversal order,
+ * then read it to completion before beginning another. A value of zero is
+ * padding, not a packet. The input bytes must remain alive and unchanged
+ * while read; copy hv_plt descriptors before advancing the structural reader.
+ *
+ * With HV_PROFILE, end_tile checks coverage and resets the tile-part state;
+ * end checks the total packet count using SIZ and COD. Neither may be omitted
+ * when claiming full validation. Pausing before completion is allowed, but
+ * leaves the unread suffix unvalidated. Errors are terminal until init.
+ *
+ * Eager traversal uses this same decoder with its own standard-layer
+ * tile-part checks. end_tile/end are for HV_PROFILE consumers only. */
+typedef struct {
+    const uint8_t *buf;
+    size_t pos, end;
+    unsigned flags;
+    hv_zplt zplt;
+    hv_plt_count count;
+    uint64_t sum;
+    uint32_t zeros;
+    const char *rule_error; /* deferred until structural decoding completes */
+    const char *error;
+} hv_plt_reader;
+
+/* Same validation flags as hv_codestream_open. Deferred consumers pass
+ * HV_PROFILE; HV_DEFER_PLT affects structural traversal only. */
+void hv_plt_init(hv_plt_reader *reader, unsigned flags);
+/* NULL or reader->error; ranges must come from the structural reader. */
+const char *hv_plt_begin(hv_plt_reader *reader, const uint8_t *buf, const hv_plt *plt);
+/* 1 with a length, 0 at segment end, -1 with reader->error. On a rule
+ * violation, drains the rest of that segment before failing so malformed
+ * encoding still takes precedence over Zplt and entry rules. */
+int hv_plt_read(hv_plt_reader *reader, uint64_t *value);
+const char *hv_plt_end_tile(hv_plt_reader *reader, size_t data_size);
+const char *hv_plt_end(hv_plt_reader *reader, const hv_siz *siz, const Cod *cod);
 
 typedef struct {
     const uint8_t *buf;
@@ -257,13 +303,10 @@ typedef struct {
     SotSegment sot;         /* current tile-part */
     size_t tp_start, tp_end;
     int tp_cod, tp_qcd, plts;
-    uint32_t plt_zeros;     /* zero entries in the current tile-part */
-    uint64_t plt_sum;
-    hv_plt_count plt_count; /* PLT entries of the codestream */
+    hv_plt_reader plt_reader;
     int part_without_plt;   /* a tile-part header held no PLT */
     int layout_override;    /* COC, POC or PPM in the main header, or COD,
                              * COC, POC or PPT in a tile-part header */
-    hv_zplt zplt;           /* the current tile-part header's Zplt */
     hv_segments segments;   /* the rules across segments (hv_rules.h) */
     hv_component *segment_components;   /* theirs, one per component
                                          * (allocated), NULL with HV_PROFILE */
@@ -273,9 +316,10 @@ typedef struct {
 
 /* Opens the codestream in buf[start, end): checks SOC and decodes SIZ.
  * flags: 0 for T.800 as written, or a combination of the flags above other
- * than HV_ACCEPT_PLT_PADDING with HV_PROFILE, which it refuses. start
- * after end is an error too. 0 on success, -1 on error (cs->error,
- * cs->error_at). Call hv_codestream_close in both cases. */
+ * than HV_ACCEPT_PLT_PADDING with HV_PROFILE, which it refuses.
+ * HV_DEFER_PLT requires HV_PROFILE. start after end is an error too.
+ * 0 on success, -1 on error (cs->error, cs->error_at).
+ * Call hv_codestream_close in both cases. */
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,
                        unsigned flags);
 
@@ -286,8 +330,8 @@ int hv_codestream_next(hv_codestream *cs, hv_item *item);
  * accessors below return NULL. */
 void hv_codestream_close(hv_codestream *cs);
 
-/* Reads the codestream in buf[start, end) through with these flags. NULL,
- * or the reader's error and *at its offset. */
+/* Reads the codestream in buf[start, end) through with these flags, rejecting
+ * HV_DEFER_PLT. NULL, or the reader's error and *at its offset. */
 const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, unsigned flags,
                                 size_t *at);
 

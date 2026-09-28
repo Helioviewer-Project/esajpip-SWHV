@@ -51,7 +51,7 @@ static int push(list *l, char *s) {
 
 static void usage(FILE *f) {
     fprintf(f, "usage: hv_merge -i jp2file1,jp2file2,... [jp2file ...] -o jpxfile "
-               "[-links] [-s argfile]\n");
+               "[-links] [--validate] [-s argfile]\n");
 }
 
 static void help(void) {
@@ -62,6 +62,7 @@ static void help(void) {
            "  -i          comma separated input JP2 filenames\n"
            "  -o          output JPX filename\n"
            "  -links      record links rather than actual codestream data\n"
+           "  --validate  validate the complete codestream, including PLT entries\n"
            "  -s          read arguments from file\n");
 }
 
@@ -155,10 +156,10 @@ static char *read_text(const char *path) {
 typedef struct {
     list inputs;            /* the -i words */
     const char *output, *argfile;
-    int links;
+    int links, validate;
 } arguments;
 
-enum { OPT_NONE, OPT_HELP, OPT_I, OPT_O, OPT_S, OPT_LINKS, OPT_UNKNOWN };
+enum { OPT_NONE, OPT_HELP, OPT_I, OPT_O, OPT_S, OPT_LINKS, OPT_VALIDATE, OPT_UNKNOWN };
 
 /* The option strings, as hvJP2K's argparse parser has them. */
 static const struct {
@@ -166,7 +167,7 @@ static const struct {
     int option;
 } options[] = {
     {"-h", OPT_HELP}, {"--help", OPT_HELP}, {"-i", OPT_I}, {"-o", OPT_O},
-    {"-links", OPT_LINKS}, {"-s", OPT_S},
+    {"-links", OPT_LINKS}, {"-s", OPT_S}, {"--validate", OPT_VALIDATE},
 };
 #define NOPTIONS (sizeof options / sizeof *options)
 
@@ -302,6 +303,11 @@ static int parse(char **argv, size_t argc, arguments *a) {
             value = value[1] == '=' ? value + 2 : value[1] != 0 ? value + 1 : NULL;
             status = take(option, value, argv, argc, &i, a);
             return status != 0 ? status : 1;
+        case OPT_VALIDATE:
+            if (value != NULL)
+                return -1;
+            a->validate = 1;
+            break;
         case OPT_LINKS:
             if (value != NULL)          /* only as "-links=": ignored explicit argument */
                 return -1;
@@ -375,7 +381,7 @@ static void unmap_input(void *context, size_t i, hv_merge_input *in) {
  * hvJP2K opens the output for writing. A linked JPX file cannot replace
  * one of its inputs (the same file, through any name or link), which it
  * would link to; an embedded one can. */
-static int merge(char **names, size_t n, const char *output, int links, char *error,
+static int merge(char **names, size_t n, const char *output, int links, int validate, char *error,
                  size_t error_size) {
     hv_merge_inputs inputs = {map_input, unmap_input, NULL};
     hv_file f;
@@ -392,7 +398,7 @@ static int merge(char **names, size_t n, const char *output, int links, char *er
         }
     if (hv_file_create(&f, output, HV_FILE_KEEP_MODE, error, error_size) != 0)
         return -1;
-    if (hv_merge_files(&inputs, n, links, f.file, error, error_size) != 0) {
+    if (hv_merge_files(&inputs, n, links, validate, f.file, error, error_size) != 0) {
         hv_file_abort(&f);
         return -1;
     }
@@ -446,7 +452,7 @@ int main(int argc, char **argv) {
             p = comma + 1;
         }
     }
-    status = merge(names.v, names.n, a.output, a.links, error, sizeof error) != 0;
+    status = merge(names.v, names.n, a.output, a.links, a.validate, error, sizeof error) != 0;
     if (status != 0)
         fprintf(stderr, "hv_merge: %s\n", error);
     goto done;

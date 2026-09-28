@@ -139,6 +139,9 @@ const char *hv_rule_zplt_end(const hv_zplt *z);
  * it exceeds INT32_MAX, which the server's signed JPIP state cannot hold. */
 uint64_t hv_rule_packets(const hv_siz *siz, const Sgcod *sgcod, const Spcod *spcod);
 
+/* PLT sum against packet data, allowing SOP bytes outside the lengths. */
+const char *hv_rule_plt_coverage(uint64_t sum, uint64_t data_size, uint64_t sops);
+
 /* The counted PLT entries against hv_rule_packets: one entry per packet,
  * and in the profile a packet count the server can hold. */
 const char *hv_rule_plt_packets(const hv_plt_count *count, const hv_siz *siz,

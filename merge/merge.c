@@ -95,7 +95,7 @@ static hv_box *header_box(source *s, uint32_t type) {
     }
 }
 
-static int read_source(const hv_merge_input *in, source *s, char *error, size_t size) {
+static int read_source(const hv_merge_input *in, source *s, int validate, char *error, size_t size) {
     hv_boxes it;
     hv_box box;
     const char *message;
@@ -106,8 +106,8 @@ static int read_source(const hv_merge_input *in, source *s, char *error, size_t 
     memset(s, 0, sizeof *s);
     s->in = *in;
     if ((message = hv_check_jp2(in->buf, in->size, &s->jp2c, &at)) != NULL ||
-        (message = hv_codestream_check(in->buf, s->jp2c.payload, s->jp2c.end, HV_PROFILE, &at)) !=
-            NULL ||
+        (validate && (message = hv_codestream_check(in->buf, s->jp2c.payload, s->jp2c.end,
+                                                  HV_PROFILE, &at)) != NULL) ||
         (message = hv_check_jp2h(in->buf, in->size, &at)) != NULL)
         return hv_fail(error, size, "%s: %s at %zu", in->path, message, at);
     hv_boxes_file(&it, in->buf, in->size);
@@ -637,7 +637,7 @@ static char *link_url(const char *path, char *error, size_t size) {
  * Again: checks it against the first-pass record in *s (its size and
  * everything read_source records), whose mapping it replaces. On failure
  * the input is closed again and *s keeps no mapping. */
-static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int again,
+static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int again, int validate,
                       char *error, size_t error_size) {
     hv_merge_input in;
     source read;
@@ -647,7 +647,8 @@ static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int ag
         s->in.buf = NULL;
         return -1;
     }
-    bad = (again && in.size != s->in.size) || read_source(&in, &read, error, error_size) != 0 ||
+    bad = (again && in.size != s->in.size) ||
+          read_source(&in, &read, validate, error, error_size) != 0 ||
           (again && !same_source_record(s, &read));
     if (bad) {
         inputs->close(inputs->context, i, &in);
@@ -667,8 +668,8 @@ static void close_input(const hv_merge_inputs *inputs, size_t i, source *s) {
     s->in.buf = NULL;
 }
 
-int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *file, char *error,
-                   size_t error_size) {
+int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, int validate, FILE *file,
+                   char *error, size_t error_size) {
     writer w;
     source *s;
     char **urls = NULL;
@@ -696,7 +697,7 @@ int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *fil
      * recorded; opened one at a time, besides the first, which every later
      * one is compared with and which stays open. */
     for (i = 0; i < n; i++) {
-        if (open_input(inputs, i, &s[i], 0, error, error_size) != 0)
+        if (open_input(inputs, i, &s[i], 0, validate, error, error_size) != 0)
             goto done;
         /* The boxes copied whole where the JPX file puts them (T.801
          * M.11): the first input's jp2h, which is the JPX file's (where
@@ -746,7 +747,7 @@ int hv_merge_files(const hv_merge_inputs *inputs, size_t n, int links, FILE *fil
         goto done;
     for (i = 0; i < n; i++) {
         const hv_box *cs = &s[i].jp2c;
-        if (i > 0 && open_input(inputs, i, &s[i], 1, error, error_size) != 0)
+        if (i > 0 && open_input(inputs, i, &s[i], 1, validate, error, error_size) != 0)
             goto done;
         if (write_headers(&w, &s[i], &s[0]) != 0)
             goto done;
@@ -804,9 +805,9 @@ static void buffer_close(void *context, size_t i, hv_merge_input *in) {
     (void)in;
 }
 
-int hv_merge_buffers(const hv_merge_input *inputs, size_t n, int links, FILE *file, char *error,
-                     size_t error_size) {
+int hv_merge_buffers(const hv_merge_input *inputs, size_t n, int links, int validate, FILE *file,
+                     char *error, size_t error_size) {
     hv_merge_inputs from = {buffer_open, buffer_close, NULL};
     from.context = (void *)inputs;
-    return hv_merge_files(&from, n, links, file, error, error_size);
+    return hv_merge_files(&from, n, links, validate, file, error, error_size);
 }

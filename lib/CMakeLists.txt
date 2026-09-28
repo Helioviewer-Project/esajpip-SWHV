@@ -26,7 +26,6 @@ add_library(jpeg2000_io STATIC
     hv_geometry.c
     hv_mapping.c
     hv_error.c
-    hv_file.c
     hv_served.c
     ${jpeg2000_generated})
 esajpip_configure_target(jpeg2000_io)
