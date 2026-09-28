@@ -89,11 +89,12 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, hv_out 
     error[0] = 0;
     if (out->error != NULL)                     /* an earlier write failed */
         return hv_fail(error, error_size, "%s", out->error);
-    /* The codestream's main header as the transcode takes it before the
-     * header boxes, which hv_check_jp2h checks against it. */
+    /* The codestream as the transcode reads it (transcode.c: the flags of
+     * its hv_codestream_open, trailing zero PLT entries accepted), before
+     * the header boxes, which hv_check_jp2h checks against it. */
     if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL ||
-        (rule = hv_codestream_check(buf, jp2c.payload, jp2c.end, HV_PROFILE_HEADERS, &at)) !=
-            NULL ||
+        (rule = hv_codestream_check(buf, jp2c.payload, jp2c.end,
+                                    HV_PROFILE_HEADERS | HV_ACCEPT_PLT_PADDING, &at)) != NULL ||
         (rule = hv_check_jp2h(buf, size, &at)) != NULL)
         return hv_fail(error, error_size, "%s at %zu", rule, at);
     status = transcode_boxes(buf, size, ppx, ppy, out, error, error_size);

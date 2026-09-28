@@ -1148,6 +1148,39 @@ static void test_packet_rules(void) {
 }
 
 /* ------------------------------------------------------------------------
+ * Zero PLT entries after the last packet of the tile-part, as every EUI
+ * file has: accepted by the codestream-level and the file-level transcode
+ * alike.
+ * ------------------------------------------------------------------------ */
+
+static void test_plt_padding(void) {
+    static const uint8_t plt_code[2] = {0xFF, 0x58}, sot_code[2] = {0xFF, 0x90};
+    bytes file, cs = fixture_codestream("input", "solo_fsi174_127x129_RLCP_PLT.jp2", &file);
+    size_t plt[2], sot[2], end;
+    bytes b, f;
+
+    if (find_all(&cs, sot_code, 2, sot, 2) != 1 || find_all(&cs, plt_code, 2, plt, 2) != 1) {
+        check(0, "PLT padding: the fixture has not one tile-part with a PLT");
+        bytes_free(&file);
+        return;
+    }
+    end = plt[0] + 2 + get16(cs.data + plt[0] + 2);
+    b.size = cs.size + 2;
+    if ((b.data = malloc(b.size)) == NULL)
+        abort();
+    memcpy(b.data, cs.data, end);
+    b.data[end] = b.data[end + 1] = 0;            /* two zero Iplt */
+    memcpy(b.data + end + 2, cs.data + end, cs.size - end);
+    put16(b.data + plt[0] + 2, get16(cs.data + plt[0] + 2) + 2);
+    set_psot(&b);
+    f = jp2_file(&b, "jp2 ");
+    expect_file_output("zero PLT entries after the last packet", &f, &b);
+    bytes_free(&f);
+    bytes_free(&b);
+    bytes_free(&file);
+}
+
+/* ------------------------------------------------------------------------
  * Memory bounds for what headers declare
  * ------------------------------------------------------------------------ */
 
@@ -1647,6 +1680,7 @@ int main(void) {
         {"boxes", test_boxes},
         {"corrupted tile data", test_corruption},
         {"SOP, EPH and bit stuffing", test_packet_rules},
+        {"zero PLT entries after the last packet", test_plt_padding},
         {"memory bounds", test_memory_bounds},
         {"contribution limit", test_contribution_limit},
         {"layouts", test_layouts},
