@@ -16,6 +16,22 @@ if(ESAJPIP_SANITIZE AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     message(FATAL_ERROR "ESAJPIP_SANITIZE requires Clang or GCC")
 endif()
 
+# Use LTO for optimized builds when supported. Explicit CMake IPO settings
+# take precedence; keep the default Debug and sanitizer builds without LTO.
+if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION AND NOT ESAJPIP_SANITIZE)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT ESAJPIP_IPO_SUPPORTED LANGUAGES C CXX)
+    if(ESAJPIP_IPO_SUPPORTED)
+        foreach(config RELEASE RELWITHDEBINFO MINSIZEREL)
+            if(NOT DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION_${config})
+                set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_${config} ON)
+            endif()
+        endforeach()
+    else()
+        message(STATUS "LTO is not supported by this toolchain; building without it")
+    endif()
+endif()
+
 function(esajpip_configure_target target)
     set_target_properties(${target} PROPERTIES
         C_EXTENSIONS OFF
