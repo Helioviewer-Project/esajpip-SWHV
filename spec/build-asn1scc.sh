@@ -32,7 +32,8 @@ done < "$patch_dir/series"
 
 docker build -f "$repo/spec/Dockerfile.asn1scc" -t "$image" "$source_tree"
 
-docker run --rm --entrypoint sh "$image" -c '
+docker run --rm --entrypoint sh \
+    -v "$repo/spec/asn1scc-issues:/issues:ro" "$image" -c '
     set -eu
     cd /source/v4Tests
     compiler=../asn1scc/bin/Release/net10.0/asn1scc.dll
@@ -41,6 +42,11 @@ docker run --rm --entrypoint sh "$image" -c '
         -ac "$compiler" -l c -s false -acnv2
     ASN1SCC=$compiler ./scripts/runWireTests.sh
     ASN1SCC=$compiler sh ./scripts/runIcdPdusTests.sh
+    # Minimal reports exercise the installed compiler too. 0009 covers
+    # uPER as well as ACN; the wire suite above generates ACN only.
+    export ASN1SCC="dotnet /source/asn1scc/bin/Release/net10.0/asn1scc.dll"
+    sh /issues/0008-containing-length-overrun/run.sh
+    sh /issues/0009-varsize-length-failure/run.sh
 '
 
-echo "asn1scc: pinned upstream compiler with local patches built and ACN v2 regressions passed"
+echo "asn1scc: pinned upstream compiler with local patches built; ACN v2, icdPdus and issue regressions passed"

@@ -651,11 +651,11 @@ index 2f6ea5f..fd7d874 100644
      AcnBitStreamPos p;
      p.currentByte = bs->currentByte;
 diff --git a/asn1rust/src/lib.rs b/asn1rust/src/lib.rs
-index 587d719..4daa55d 100644
+index 587d719..c956007 100644
 --- a/asn1rust/src/lib.rs
 +++ b/asn1rust/src/lib.rs
-@@ -589,6 +589,23 @@ impl<'a> ByteStream<'a> {
-         self.current_byte = 0;
+@@ -685,6 +685,23 @@ impl<'a> BitStream<'a> {
+         self.fetch_data_prm = std::ptr::null_mut();
      }
  
 +    /// Check a CONTAINING region against the enclosing stream before narrowing it.
@@ -675,9 +675,9 @@ index 587d719..4daa55d 100644
 +        whole_bytes <= remaining_bytes && trailing_bytes <= remaining_bytes - whole_bytes
 +    }
 +
-     /// Number of bytes written so far.
+     /// Number of bytes consumed/produced so far (rounds up to the next byte).
      pub fn get_length(&self) -> Asn1SccSint {
-         self.current_byte
+         let mut ret = self.current_byte;
 diff --git a/v4Tests/scripts/runWireTests.sh b/v4Tests/scripts/runWireTests.sh
 index c41cf96..c9a25ef 100755
 --- a/v4Tests/scripts/runWireTests.sh

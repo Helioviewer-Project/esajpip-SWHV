@@ -11,6 +11,10 @@ do not mix with those of another series.
 Each active patch has a matching numbered directory in
 [`../asn1scc-issues/`](../asn1scc-issues/) with its report and reproducer.
 
+The build also runs the standalone C reproducers for 0008 (ASan) and 0009
+(UBSan, both uPER and ACN) against the installed compiler. The 0009 Rust
+reproducer is separate: run `run_rust.sh` with Cargo and the patched compiler.
+
 Applied now, in `series` order:
 
 - `0001-deferred-determinant-uninit.patch`: with `--acn-v2`, the C decoder copied
@@ -77,10 +81,20 @@ Applied now, in `series` order:
   `BIT STRING (CONTAINING ...)` and Rust paths also trusted the extended
   limit. All six C and six Rust region decoders now check the enclosing stream
   before narrowing it, leave the stream limit unchanged on rejection, and
-  return the field's error code. Test case `25-ACNV2-BOUNDARIES/022` checks
-  both string kinds with valid and truncated inputs under AddressSanitizer.
-  Report and reproducer:
+  return the field's error code; the Rust stream checks are methods of
+  `BitStream`, the stream the generated decoders are given. Test case
+  `25-ACNV2-BOUNDARIES/022` checks both string kinds with valid and truncated
+  inputs under AddressSanitizer. Report and reproducer:
   [`../asn1scc-issues/0008-containing-length-overrun/`](../asn1scc-issues/0008-containing-length-overrun/).
+- `0009-varsize-length-failure.patch`: the uPER decoder of a variable-size
+  OCTET STRING, which ACN also uses, decoded the contents when the length
+  failed to decode, and so accepted a length above the size bound, or no
+  input, as an empty string; with no input it copied from the stream's null
+  buffer. The C and Rust templates in `uper_c.stg` and `uper_rust.stg` now
+  decode the contents only after the length, and a failed OCTET STRING or
+  BIT STRING decode sets the error code. Test case `25-ACNV2-BOUNDARIES/023`
+  and its wire test, built with UBSan. Report and reproducer:
+  [`../asn1scc-issues/0009-varsize-length-failure/`](../asn1scc-issues/0009-varsize-length-failure/).
 
 ## Reference: the former fixes for deferred ACN
 

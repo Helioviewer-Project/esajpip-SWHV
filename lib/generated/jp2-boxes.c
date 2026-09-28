@@ -1427,8 +1427,11 @@ flag RreqMask_ACN_Decode(RreqMask* pVal, BitStream* pBitStrm, int* pErrCode)
 
 	ret = BitStream_DecodeConstraintWholeNumber(pBitStrm, &nCount, 1, 8);
 	*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQMASK;
-	pVal->nCount = (long)nCount;
-	ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
+	if (ret) {
+		pVal->nCount = (long)nCount;
+		ret = BitStream_DecodeOctetString_no_length(pBitStrm, pVal->arr, pVal->nCount);
+		*pErrCode = ret ? 0 : ERR_ACN_DECODE_RREQMASK;
+	}
 
     return ret && RreqMask_IsConstraintValid(pVal, pErrCode);
 }

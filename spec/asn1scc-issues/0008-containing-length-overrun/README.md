@@ -50,3 +50,15 @@ The same unchecked stream-limit change also occurs in the deferred
 string kinds in C and Rust. Ada keeps the buffer size fixed rather than
 narrowing its limit, so this particular out-of-buffer read does not follow
 from its templates.
+
+The Rust checks, `has_n_bytes` and `has_n_bits`, are methods of
+`BitStream` in `asn1rust/src/lib.rs`, the stream the generated decoders
+are given. The Rust ACN v2 code of test case 022 still does not compile,
+for reasons outside this patch: its encoders call a deferred
+patch function whose name the Rust backend leaves empty
+(`ret = (acn_n_count, pBitStrm, OuterOct_body_len, pErrCode);`), and its
+decoders do not pass the decoded length to the region, whose length stays 0.
+
+The C reproducer and wire case 022 pass with the rebuilt compiler.
+The corrected Rust runtime compiles, but the complete Rust regression
+for this bug remains blocked by the case 022 generation errors above.
