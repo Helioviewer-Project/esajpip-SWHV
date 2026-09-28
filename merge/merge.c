@@ -59,11 +59,11 @@ HV_DEFINE_DECODE(CdefEntry)
  * Inputs
  * ------------------------------------------------------------------------ */
 
-/* The Rsiz of a codestream hv_codestream_check accepted. */
+/* The Rsiz of a main header hv_check_jp2h accepted at the T.800 layer. */
 static unsigned codestream_rsiz(const uint8_t *buf, const hv_box *jp2c) {
     hv_codestream cs;
     unsigned rsiz = 0;
-    if (hv_codestream_open(&cs, buf, jp2c->payload, jp2c->end, HV_PROFILE) == 0)
+    if (hv_codestream_open(&cs, buf, jp2c->payload, jp2c->end, 0) == 0)
         rsiz = (unsigned)hv_codestream_siz(&cs)->fixed->rsiz;
     hv_codestream_close(&cs);
     return rsiz;

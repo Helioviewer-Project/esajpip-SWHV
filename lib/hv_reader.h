@@ -241,8 +241,10 @@ enum {
 /* Incremental PLT validation. No allocation or ownership of the input.
  * Initialize once per codestream. Begin each segment in traversal order,
  * then read it to completion before beginning another. A value of zero is
- * padding, not a packet. The input bytes must remain alive and unchanged
- * while read; copy hv_plt descriptors before advancing the structural reader.
+ * padding, not a packet. Copy hv_plt descriptors before advancing the
+ * structural reader. The cursor retains offsets, not a buffer pointer: each
+ * read takes the current buffer base. The buffer may move between calls, but
+ * its contents and the offsets must still describe the same unchanged file.
  *
  * With HV_PROFILE, end_tile checks coverage and resets the tile-part state;
  * end checks the total packet count using SIZ and COD. Neither may be omitted
@@ -252,7 +254,6 @@ enum {
  * Eager traversal uses this same decoder with its own standard-layer
  * tile-part checks. end_tile/end are for HV_PROFILE consumers only. */
 typedef struct {
-    const uint8_t *buf;
     size_t pos, end;
     unsigned flags;
     hv_zplt zplt;
@@ -267,11 +268,12 @@ typedef struct {
  * HV_PROFILE; HV_DEFER_PLT affects structural traversal only. */
 void hv_plt_init(hv_plt_reader *reader, unsigned flags);
 /* NULL or reader->error; ranges must come from the structural reader. */
-const char *hv_plt_begin(hv_plt_reader *reader, const uint8_t *buf, const hv_plt *plt);
+const char *hv_plt_begin(hv_plt_reader *reader, const hv_plt *plt);
 /* 1 with a length, 0 at segment end, -1 with reader->error. On a rule
  * violation, drains the rest of that segment before failing so malformed
- * encoding still takes precedence over Zplt and entry rules. */
-int hv_plt_read(hv_plt_reader *reader, uint64_t *value);
+ * encoding still takes precedence over Zplt and entry rules. buf must hold
+ * the file through the saved segment end for the duration of this call. */
+int hv_plt_read(hv_plt_reader *reader, const uint8_t *buf, uint64_t *value);
 const char *hv_plt_end_tile(hv_plt_reader *reader, size_t data_size);
 const char *hv_plt_end(hv_plt_reader *reader, const hv_siz *siz, const Cod *cod);
 

@@ -1970,37 +1970,65 @@ static void check_plt_cursor(void) {
     for (i = 0; i < sizeof cases / sizeof *cases; i++) {
         hv_plt range = {cases[i].z, 0, cases[i].size};
         hv_plt_init(&a, HV_PROFILE);
-        check(hv_plt_begin(&a, (const uint8_t *)cases[i].bytes, &range) == NULL,
+        check(hv_plt_begin(&a, &range) == NULL,
               "cursor begins without reading entries", NULL);
-        while (hv_plt_read(&a, &value) == 1) ;
+        while (hv_plt_read(&a, (const uint8_t *)cases[i].bytes, &value) == 1) ;
         check((a.error == NULL && cases[i].error == NULL) ||
               (a.error != NULL && cases[i].error != NULL && strcmp(a.error, cases[i].error) == 0),
               "PLT diagnostic precedence", a.error);
         if (a.error != NULL)
-            check(hv_plt_read(&a, &value) == -1, "PLT error is terminal", NULL);
+            check(hv_plt_read(&a, (const uint8_t *)cases[i].bytes, &value) == -1,
+                  "PLT error is terminal", NULL);
     }
     {
         const uint8_t entries[] = {3, 0};
         hv_plt range = {0, 0, sizeof entries};
         hv_plt_init(&a, HV_PROFILE);
         hv_plt_init(&b, HV_PROFILE);
-        hv_plt_begin(&a, entries, &range);
-        hv_plt_begin(&b, entries, &range);
-        check(hv_plt_read(&a, &value) == 1 && value == 3 && a.pos == 1 && b.pos == 0,
+        hv_plt_begin(&a, &range);
+        hv_plt_begin(&b, &range);
+        check(hv_plt_read(&a, entries, &value) == 1 && value == 3 && a.pos == 1 && b.pos == 0,
               "pause leaves the suffix unread and another cursor untouched", NULL);
-        check(hv_plt_read(&b, &value) == 1 && value == 3, "independent cursor", NULL);
+        check(hv_plt_read(&b, entries, &value) == 1 && value == 3, "independent cursor", NULL);
         check(hv_plt_end_tile(&b, 3) != NULL, "cannot complete an unread suffix", NULL);
-        check(hv_plt_read(&a, &value) == 1 && value == 0 && hv_plt_read(&a, &value) == 0 &&
+        check(hv_plt_read(&a, entries, &value) == 1 && value == 0 &&
+              hv_plt_read(&a, entries, &value) == 0 &&
               hv_plt_end_tile(&a, 3) == NULL, "resume and complete tile", a.error);
         range.end = 1;
-        hv_plt_begin(&a, entries, &range);
-        check(hv_plt_read(&a, &value) == -1 && strcmp(a.error, "plt.padding-position") == 0,
+        hv_plt_begin(&a, &range);
+        check(hv_plt_read(&a, entries, &value) == -1 && strcmp(a.error, "plt.padding-position") == 0,
               "padding state survives tile-part boundaries", a.error);
         hv_plt_init(&a, HV_PROFILE);
-        hv_plt_begin(&a, entries, &range);
-        hv_plt_read(&a, &value);
+        hv_plt_begin(&a, &range);
+        hv_plt_read(&a, entries, &value);
         check(hv_plt_end_tile(&a, 4) != NULL && strcmp(a.error, "plt.coverage") == 0,
               "deferred coverage", a.error);
+    }
+    {
+        /* Resume mid-segment after the original buffer has been released.
+         * Allocate its replacement first, guaranteeing a different address. */
+        const uint8_t file[] = {0xaa, 0xbb, 3, 0x81, 1, 0};
+        uint8_t *original = malloc(sizeof file), *replacement = malloc(sizeof file);
+        hv_plt range = {0, 2, sizeof file};
+        check(original != NULL && replacement != NULL, "remapped PLT buffers", NULL);
+        if (original != NULL && replacement != NULL) {
+            memcpy(original, file, sizeof file);
+            memcpy(replacement, file, sizeof file);
+            hv_plt_init(&a, HV_PROFILE);
+            check(hv_plt_begin(&a, &range) == NULL &&
+                  hv_plt_read(&a, original, &value) == 1 && value == 3 && a.pos == 3,
+                  "read first packet before remapping", a.error);
+            free(original);
+            original = NULL;
+            check(hv_plt_read(&a, replacement, &value) == 1 && value == 129 && a.pos == 5,
+                  "resume on replacement buffer at saved offset", a.error);
+            check(hv_plt_read(&a, replacement, &value) == 1 && value == 0 &&
+                  hv_plt_read(&a, replacement, &value) == 0 &&
+                  hv_plt_end_tile(&a, 132) == NULL,
+                  "remapping preserves packet sum and padding validation", a.error);
+        }
+        free(original);
+        free(replacement);
     }
     {
         bytes stream = simple();
@@ -2017,8 +2045,8 @@ static void check_plt_cursor(void) {
         check(status == 0 && saved.end > saved.start && cs.plt_reader.count.packets == 0,
               "structural walk does not consume PLT", cs.error);
         hv_plt_init(&a, HV_PROFILE);
-        hv_plt_begin(&a, stream.d, &saved);
-        while (hv_plt_read(&a, &value) == 1) ;
+        hv_plt_begin(&a, &saved);
+        while (hv_plt_read(&a, stream.d, &value) == 1) ;
         check(hv_plt_end_tile(&a, data_size) == NULL &&
               hv_plt_end(&a, hv_codestream_siz(&cs), hv_codestream_cod(&cs)) == NULL,
               "consume saved ranges after structural completion", a.error);

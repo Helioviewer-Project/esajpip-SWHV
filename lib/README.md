@@ -326,8 +326,11 @@ always means full validation under the requested rules.
 
 For later packet indexing, initialize an independent `hv_plt_reader` with
 `HV_PROFILE`. For each tile-part, call `hv_plt_begin` for each saved segment
-and consume lengths with `hv_plt_read`. Reading may pause and resume; only
-the consumed prefix has been checked. Keep the input alive and unchanged.
+and consume lengths with `hv_plt_read`, passing the current buffer base on each
+call. Reading may pause and resume; only the consumed prefix has been checked.
+The cursor keeps offsets, so the file may be unmapped between calls and
+remapped at another address. Each buffer must contain the same unchanged file
+through the saved segment end and remain alive for that read.
 Nonzero lengths describe packets; zero lengths are trailing padding. When
 building offsets, check each length against the remaining tile-part data
 before exposing the packet. After consuming the tile-part, call

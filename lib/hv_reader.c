@@ -1053,14 +1053,13 @@ static void plt_reset_tile(hv_plt_reader *r) {
     r->sum = 0;
 }
 
-const char *hv_plt_begin(hv_plt_reader *r, const uint8_t *buf, const hv_plt *plt) {
+const char *hv_plt_begin(hv_plt_reader *r, const hv_plt *plt) {
     int profile = (r->flags & HV_PROFILE) == HV_PROFILE;
     if (r->error != NULL) return r->error;
     if (r->pos != r->end)
         return r->error = "PLT segment not consumed";
     if (plt->start >= plt->end)
         return r->error = "invalid PLT";
-    r->buf = buf;
     r->pos = plt->start;
     r->end = plt->end;
     r->rule_error = hv_rule_zplt(&r->zplt, plt->zplt,
@@ -1068,13 +1067,13 @@ const char *hv_plt_begin(hv_plt_reader *r, const uint8_t *buf, const hv_plt *plt
     return NULL;
 }
 
-int hv_plt_read(hv_plt_reader *r, uint64_t *value) {
+int hv_plt_read(hv_plt_reader *r, const uint8_t *buf, uint64_t *value) {
     int profile = (r->flags & HV_PROFILE) == HV_PROFILE;
     int per_tile_part = (r->flags & HV_ACCEPT_PLT_PADDING) != 0;
     if (r->error != NULL) return -1;
     while (r->pos < r->end) {
         uint64_t v;
-        const char *error = plt_entry(r->buf, &r->pos, r->end, profile, &v);
+        const char *error = plt_entry(buf, &r->pos, r->end, profile, &v);
         if (error != NULL) {
             if (strcmp(error, "invalid PLT") == 0) {
                 r->error = error;
@@ -1082,7 +1081,7 @@ int hv_plt_read(hv_plt_reader *r, uint64_t *value) {
             }
             if (r->rule_error == NULL) r->rule_error = error;
             /* Overflow leaves pos unchanged; continue decoding the suffix. */
-            while (r->pos < r->end && (r->buf[r->pos++] & 0x80))
+            while (r->pos < r->end && (buf[r->pos++] & 0x80))
                 ;
             continue;
         }
@@ -1446,9 +1445,9 @@ static int tile_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
         if (!(cs->flags & HV_DEFER_PLT)) {
             uint64_t v;
             int status;
-            if ((error = hv_plt_begin(&cs->plt_reader, cs->buf, &cs->plt)) != NULL)
+            if ((error = hv_plt_begin(&cs->plt_reader, &cs->plt)) != NULL)
                 return fail(cs, error, pos);
-            while ((status = hv_plt_read(&cs->plt_reader, &v)) == 1)
+            while ((status = hv_plt_read(&cs->plt_reader, cs->buf, &v)) == 1)
                 ;
             if (status < 0)
                 return fail(cs, cs->plt_reader.error, pos);

@@ -942,6 +942,41 @@ static void test_opening(void) {
         test_opening_mode();
 }
 
+/* A tiled main header passes T.800 checks but not the served profile.
+ * Tile data stays untouched: default merging checks only the main header. */
+static void test_tiled_rreq(void) {
+    static const int rsiz1[] = {1}, rsiz2[] = {1, 4};
+    bytes jp2 = read_file(names[2]), out;
+    hv_merge_input in = {names[2], jp2.data, jp2.size};
+    hv_box jp2c;
+    char error[512];
+    size_t at;
+    int rsiz;
+    if (jp2.data == NULL || hv_check_jp2(jp2.data, jp2.size, &jp2c, &at) != NULL) {
+        check(0, "cannot prepare tiled Rsiz test");
+        bytes_free(&jp2);
+        return;
+    }
+    for (rsiz = 1; rsiz <= 2; rsiz++) {
+        unsigned tile_size = rsiz == 1 ? 128 : 1024;
+        put16(jp2.data + jp2c.payload + 6, (unsigned)rsiz);
+        put32(jp2.data + jp2c.payload + 24, tile_size);
+        put32(jp2.data + jp2c.payload + 28, tile_size);
+        if (merge_mode(&in, 1, 0, 0, &out, error, sizeof error) != 0) {
+            check(0, "tiled Rsiz %d: %s", rsiz, error);
+        } else {
+            expect_features("tiled Rsiz", &out, rsiz == 1 ? rsiz1 : rsiz2,
+                            rsiz == 1 ? 1 : 2);
+        }
+        bytes_free(&out);
+        check(merge_mode(&in, 1, 0, 1, &out, error, sizeof error) != 0 &&
+              strstr(error, "siz.single-tile") != NULL,
+              "validation rejects tiled Rsiz %d: %s", rsiz, error);
+        bytes_free(&out);
+    }
+    bytes_free(&jp2);
+}
+
 static void test_modes(void) {
     bytes normal, validated;
     char error[512];
@@ -1007,6 +1042,7 @@ int main(void) {
     } groups[] = {
         {"hvJP2K reference", test_reference},
         {"default and validation modes", test_modes},
+        {"tiled Reader Requirements", test_tiled_rreq},
         {"linked merge", test_links},
         {"reader requirements", test_rreq},
         {"header boxes", test_headers},

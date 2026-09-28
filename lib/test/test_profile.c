@@ -223,9 +223,9 @@ static void check_deferred(const uint8_t *buf, size_t size, const char *name) {
             if (item.kind == HV_TILE_PART) tile_at = item.start;
             if (item.plt != NULL) {
                 uint64_t value;
-                deferred = hv_plt_begin(&plt, buf, item.plt);
+                deferred = hv_plt_begin(&plt, item.plt);
                 if (deferred == NULL) {
-                    while (hv_plt_read(&plt, &value) == 1) ;
+                    while (hv_plt_read(&plt, buf, &value) == 1) ;
                     deferred = plt.error;
                 }
                 deferred_at = item.start;
