@@ -1,5 +1,15 @@
 # Fixed-size OCTET STRING decode fails without an error code
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 asn1scc 4.9.3.0, pinned revision
 `161cc2465b568685c09b0a218149fb514ea2a95e`, with patches 0001 through 0009.
 
@@ -36,7 +46,7 @@ and the generated runtime dependencies available offline.
 
 ## Fix
 
-[`../../asn1scc-patches/0010-fixedsize-error-code.patch`](../../asn1scc-patches/0010-fixedsize-error-code.patch)
+[`../../asn1scc-patches/reference/161cc246/0010-fixedsize-error-code.patch`](../../asn1scc-patches/reference/161cc246/0010-fixedsize-error-code.patch)
 passes the allocated error code through both generator call sites to the
 fixed-size template. C, Rust, and Ada assign it on failure. All backends'
 encode/decode signatures accept the new argument to keep the shared macro

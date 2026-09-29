@@ -6,9 +6,9 @@
 #
 # The compiler is the pinned build from spec/build-asn1scc.sh. By default it
 # runs in its Docker image (ASN1SCC_IMAGE, default esajpip-asn1scc). Set
-# ASN1SCC to run a copy of that build (with spec/asn1scc-patches applied)
-# directly, as in
-#   ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"
+# ASN1SCC to run a copy of that unmodified upstream build
+# directly with a compatible .NET 10 runtime, as in
+#   ASN1SCC="dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"
 #
 # With --check it only compares: it fails if generated/ is not what the
 # compiler makes of the model. spec/check-model.sh runs it so, always with

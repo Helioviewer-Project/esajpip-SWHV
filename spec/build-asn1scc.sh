@@ -11,7 +11,6 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_repo=$1
 image=${2:-esajpip-asn1scc}
 version=$(cat "$repo/spec/VERSION")
-patch_dir=$repo/spec/asn1scc-patches
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/esajpip-asn1scc.XXXXXX")
 source_tree=$temporary/source
 
@@ -24,12 +23,6 @@ git -C "$source_repo" cat-file -e "$version^{commit}"
 mkdir "$source_tree"
 git -C "$source_repo" archive "$version" | tar -x -C "$source_tree"
 
-# Fixes absent from the pinned upstream revision, in series order.
-while IFS= read -r patch_name; do
-    [ -n "$patch_name" ] || continue
-    patch -s -d "$source_tree" -p1 < "$patch_dir/$patch_name"
-done < "$patch_dir/series"
-
 docker build -f "$repo/spec/Dockerfile.asn1scc" -t "$image" "$source_tree"
 
 docker run --rm --entrypoint sh \
@@ -37,18 +30,19 @@ docker run --rm --entrypoint sh \
     set -eu
     cd /source/v4Tests
     compiler=../asn1scc/bin/Release/net10.0/asn1scc.dll
-    ../regression/bin/Release/net10.0/regression \
-        -tcd test-cases/acn/25-ACNV2-BOUNDARIES \
-        -ac "$compiler" -l c -s false -acnv2
+    for cases in 23-CONTAINING 24-DEDUCED-SIZE 25-ACNV2-BOUNDARIES; do
+        ../regression/bin/Release/net10.0/regression \
+            -tcd "test-cases/acn/$cases" \
+            -ac "$compiler" -l c -s false -acnv2
+    done
     ASN1SCC=$compiler ./scripts/runWireTests.sh
     ASN1SCC=$compiler sh ./scripts/runIcdPdusTests.sh
     # Minimal reports exercise the installed compiler too. 0009 covers
     # uPER as well as ACN; the wire suite above generates ACN only.
     export ASN1SCC="dotnet /source/asn1scc/bin/Release/net10.0/asn1scc.dll"
-    sh /issues/0008-containing-length-overrun/run.sh
-    sh /issues/0009-varsize-length-failure/run.sh
-    sh /issues/0010-fixedsize-error-code/run.sh
-    sh /issues/0011-external-length-error-code/run.sh
+    for issue in /issues/[0-9]*; do
+        sh "$issue/run.sh"
+    done
 '
 
-echo "asn1scc: pinned upstream compiler with local patches built; ACN v2, icdPdus and issue regressions passed"
+echo "asn1scc: unmodified pinned upstream compiler built; ACN v2, icdPdus and issue regressions passed"

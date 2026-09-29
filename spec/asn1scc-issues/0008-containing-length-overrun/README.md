@@ -1,5 +1,15 @@
 # A CONTAINING region longer than its stream is read past the buffer
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 With `--acn-v2`, an `OCTET STRING (CONTAINING X)` sized by an ACN length
 determinant (`body [size len]`) is decoded in place: the generated decoder
 narrows the stream to the region and decodes X there. The C template

@@ -1,5 +1,15 @@
 # ACN v2 C decoder reads an uninitialized temporary when a deferred determinant fails to decode
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 asn1scc 4.9.3.0 (161cc2465b568685c09b0a218149fb514ea2a95e), C backend,
 `--acn-v2`.
 
@@ -93,9 +103,8 @@ variable initialized (`let mut Msg_a_more: bool = false;`).
 
 ## Fix
 
-[`../../asn1scc-patches/0001-deferred-determinant-uninit.patch`](../../asn1scc-patches/0001-deferred-determinant-uninit.patch)
-(applies to 161cc246; `spec/build-asn1scc.sh` applies it until upstream
-has the fix):
+[`../../asn1scc-patches/reference/161cc246/0001-deferred-determinant-uninit.patch`](../../asn1scc-patches/reference/161cc246/0001-deferred-determinant-uninit.patch)
+(historical patch against 161cc246; no longer applied):
 
 - `StgC/acn_c.stg`: the three C copy templates emit the copy only when the
   decode succeeded, `if (ret) { ... }`, as the surrounding C templates do.

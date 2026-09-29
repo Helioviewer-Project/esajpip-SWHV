@@ -1,5 +1,15 @@
 # ACN v2: a determinant passed to SEQUENCE OF elements is not deferred
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 asn1scc 4.9.3.0 (161cc2465b568685c09b0a218149fb514ea2a95e), C backend,
 `--acn-v2`.
 
@@ -91,7 +101,7 @@ already passes the `AcnInsertedFieldRef` to each element, which patches it.
 
 ## Fix
 
-[`0002-deferred-sequence-of-arguments.patch`](../../asn1scc-patches/0002-deferred-sequence-of-arguments.patch)
+[`0002-deferred-sequence-of-arguments.patch`](../../asn1scc-patches/reference/161cc246/0002-deferred-sequence-of-arguments.patch)
 makes both collectors look through SEQUENCE OF children, nested ones
 included, to the element's reference type. `len` is then deferred:
 `InitDet` before the list, `PatchDet` in each element, and the existing

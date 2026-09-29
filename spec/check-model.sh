@@ -627,10 +627,13 @@ fi
 opj=${OPJ_DECOMPRESS:-opj_decompress}
 command -v "$opj" > /dev/null 2>&1 ||
     fail "OpenJPEG's opj_decompress not found; set OPJ_DECOMPRESS to it"
+# The ppm.index-112 pair has the same empty tile data as the existing
+# main.packet-headers-moved-48 control (only Zppm differs). OpenJPEG accepts
+# the gap but rejects the empty tile, so both reach the same listed limit.
 limits=$(cat << 'EOF_LIMITS'
 *rule-siz.xsiz-52.*	Image coordinates above INT_MAX	coordinates to INT_MAX; Xsiz is up to 2^32 - 1 (Table A.9)
 *rule-codestream.packet-count-29.*	Integer overflow	fewer than 2^32 packets; T.800 sets no limit
-*rule-main.packet-headers-moved-48.*|*rule-tile.packed-headers-91.*	Failed to decode tile	a tile without data, its packet headers in PPM or PPT (A.7.4, A.7.5)
+*rule-main.packet-headers-moved-48.*|*rule-tile.packed-headers-91.*|jp2-rule-ppm.index-112.jp2|jpx-embedded-rule-ppm.index-112.jpx	Failed to decode tile	a tile without data, its packet headers in PPM or PPT (A.7.4, A.7.5)
 *tile-unknown.*|*tile-ff30.*|*code-*-65392.*	Not sure how that happened|Sot length is less than	an unknown marker segment, or 0xFF30 to 0xFF3F, in a tile-part header, which a decoder skips (A.1, A.1.3)
 *jpx.no-jp2h-52.jpx|*jp2h.position-55.jpx	JP2H box missing	a jp2h before the codestreams; T.801 M.11.5 lets a JPX file omit it or place it anywhere at the top level
 jpx-embedded-header-jpx.cdef-colour-197.jpx	Need to read a PCLR box before the CMAP box	JP2-only component mapping; T.801 M.11.6 permits direct channel mapping without a palette

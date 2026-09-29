@@ -297,8 +297,8 @@ Resolution [] {
 
 -- Reader Requirements box, T.801 M.11.1. ML, NSF and NVF are inserted
 -- determinants; ML reaches the masks of the features through the element
--- types' parameter (spec/asn1scc-patches: deferred-sequence-of-arguments
--- and deferred-sibling-consumers).
+-- types' parameter (asn1scc issue #417: deferred-sequence-of-arguments
+-- and deferred-sibling-consumers, fixed in the pinned upstream compiler).
 
 StandardFeature <INTEGER:ml> [] {
     sf          [],

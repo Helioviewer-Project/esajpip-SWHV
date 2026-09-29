@@ -1,5 +1,15 @@
 # Deferred determinants: an absent producer is patched at bit 0, and the error code is set on success
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 At upstream commit `3b4e0ffc2d153e01c71964f37a3e73743e320eec`,
 `producerPatchEpilogue` still patches absent OPTIONAL producers.
 [Commit `d6fc8618`](https://github.com/esa/asn1scc/commit/d6fc8618b08e30e08a811d81538ae494a351e6d4)

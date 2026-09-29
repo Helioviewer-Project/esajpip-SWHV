@@ -1,5 +1,15 @@
 # External OCTET STRING length rejection leaves error code zero
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 Base: asn1scc `161cc2465b568685c09b0a218149fb514ea2a95e`, after patches
 0001 through 0010.
 
@@ -25,7 +35,7 @@ that stronger diagnostic property explicitly.
 
 ## Fix
 
-[`../../asn1scc-patches/0011-external-length-error-code.patch`](../../asn1scc-patches/0011-external-length-error-code.patch)
+[`../../asn1scc-patches/reference/161cc246/0011-external-length-error-code.patch`](../../asn1scc-patches/reference/161cc246/0011-external-length-error-code.patch)
 moves the existing error assignment after the guarded decode in the C and
 Rust variable-size and fixed-size external OCTET STRING templates. One
 assignment then covers bounds rejection and contents failure. It also

@@ -76,12 +76,12 @@ normally. Put CTest options after an explicit mode, for example
   links, a second `hv_file` while one is open, and a signal while writing.
 
 After a model change in `../spec/`, run `jpeg2000/generate.sh`. It needs the
-compiler that `../spec/build-asn1scc.sh` builds: the pinned revision with
-every local patch that `../spec/asn1scc-patches/series` lists, in order
-(`../spec/asn1scc-patches/README.md` describes each). Without
-`0004-icdpdus-reference-init`, for one, what `generate.sh` makes with
-`-icdPdus` does not link, and without `0001-deferred-determinant-uninit`
-the PLT decoder reads an uninitialized flag on truncated input.
+compiler that `../spec/build-asn1scc.sh` builds: the unmodified upstream
+revision pinned in `../spec/VERSION`. Former local fixes are archived in
+`../spec/asn1scc-patches/reference/`. The upstream fixes for
+`0004-icdpdus-reference-init` retain the initializers required by `-icdPdus`;
+`0001-deferred-determinant-uninit` prevents the PLT decoder from reading an
+uninitialized flag on truncated input.
 
 ## Hostile input
 

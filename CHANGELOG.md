@@ -19,7 +19,8 @@ while letting HTTP connections be pooled or replaced independently of channels.
   `spec/check-model.sh` checks the model, the corpus and the C code that
   restates the model, and that OpenJPEG decodes every standard-valid vector
   but those on the OpenJPEG limits it lists. The pinned asn1scc is built
-  with the local fixes in `spec/asn1scc-patches/`.
+  from unmodified upstream 4.9.7.0; the eleven local fixes for issue #417
+  are retired in `spec/asn1scc-patches/reference/161cc246/`.
 - `jpeg2000/`: a JPEG 2000 reader/writer (`jpeg2000`) on code generated from
   that model, applying the same cross-field rules as the corpus
   (`hv_rules`). It reads boxes and codestream items in place, one header or

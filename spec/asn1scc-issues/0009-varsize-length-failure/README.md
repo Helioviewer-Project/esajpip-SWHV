@@ -1,5 +1,15 @@
 # A variable-size string decodes after its length fails to
 
+## Upstream status
+
+Fixed upstream in ASN1SCC 4.9.7.0, pinned at
+`1afedf0c205c1fb783245e1f2d1e06cacc06d042`, as part of
+[issue #417](https://github.com/esa/asn1scc/issues/417).
+The patch is retired under
+[`../../asn1scc-patches/reference/161cc246/`](../../asn1scc-patches/reference/161cc246/).
+The report below describes the original failure; the reproducer is retained
+and passes with the unmodified pinned upstream compiler.
+
 asn1scc 4.9.3.0 (161cc2465b568685c09b0a218149fb514ea2a95e), C and Rust
 backends, uPER and ACN (a type without ACN encoding attributes is decoded by
 the uPER templates).
@@ -70,7 +80,7 @@ the `BitStream` stream checks of patch 0008.
 
 ## Fix
 
-[`../../asn1scc-patches/0009-varsize-length-failure.patch`](../../asn1scc-patches/0009-varsize-length-failure.patch),
+[`../../asn1scc-patches/reference/161cc246/0009-varsize-length-failure.patch`](../../asn1scc-patches/reference/161cc246/0009-varsize-length-failure.patch),
 in C and Rust: the OCTET STRING contents are decoded only when the length
 decoded, and set the error code when they fail; the BIT STRING decoder sets
 the error code when its length fails. Test case
