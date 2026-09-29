@@ -29,7 +29,7 @@ namespace server {
         std::string root_dir_;    ///< Root directory of the repository
 
         std::unique_ptr<jpip::ImageIndex> image;
-        std::map<std::string, std::unique_ptr<File>> file_map;
+        std::map<std::string, File> file_map;
 
         OpenResult ReadImage(const std::string &name_image_file,
                              jpip::ImageIndex *image_index);
@@ -54,21 +54,20 @@ namespace server {
         OpenResult OpenImage(const std::string &path_image_file);
 
         const jpip::Source *GetSource(const std::string &path_file) override {
-            std::map<std::string, std::unique_ptr<File>>::const_iterator found =
+            std::map<std::string, File>::const_iterator found =
                     file_map.find(path_file);
             if (found != file_map.end())
-                return found->second.get();
+                return &found->second;
 
-            std::unique_ptr<File> file(new File());
-            File::OpenResult opened = file->Open(path_file.c_str(), INT_MAX);
+            File &file = file_map[path_file];
+            File::OpenResult opened = file.Open(path_file.c_str(), INT_MAX);
             if (opened != File::OpenResult::OPENED) {
+                file_map.erase(path_file);
                 if (opened == File::OpenResult::TOO_LARGE)
                     ERROR("Unsupported JPEG 2000 source size in '" << path_file << "'");
                 return nullptr;
             }
-            const jpip::Source *result = file.get();
-            file_map.emplace(path_file, std::move(file));
-            return result;
+            return &file;
         }
 
         void ReleaseSource(const std::string &path) override { file_map.erase(path); }
