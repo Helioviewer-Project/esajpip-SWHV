@@ -35,9 +35,16 @@ data, not exact per-function accounting.
 This snapshot includes `walk_command`, broad direct ASN.1 replay, linked and
 embedded merge replay, and the new rule/mutation diagnostics. What remains:
 
-- `src/server/server.cc` reports no coverage even though server tests run.
-  Investigate coverage object mapping before assuming the live server loop is
-  untested.
+- The historical zero coverage for `src/server/server.cc` was a collection
+  problem, fixed on 2026-09-29. The forked test servers call `_exit`, so the
+  coverage build now flushes each child's profile explicitly and resets its
+  inherited counters. Each child uses a different filename pattern because
+  LLVM caches PID substitutions and does not reparse an unchanged pattern
+  ([runtime implementation](https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/profile/InstrProfilingFile.c)).
+  A focused `server` run produced separate parent and child profiles and
+  measured 84.09% line coverage and 66.02% branch coverage for `server.cc`.
+  This verifies collection; the whole-suite snapshot above has not been
+  refreshed.
 - `lib/hv_file.c`: the read and map error paths, and the signal handler,
   whose process is killed before it writes its profile.
 - `src/transcode`: the command's option and I/O error paths.
@@ -51,6 +58,22 @@ embedded merge replay, and the new rule/mutation diagnostics. What remains:
 - Transcode replay checks structural/profile validity and codestream
   idempotence. It does not prove pixel equivalence or independent decoder
   agreement.
+
+## Focused reader assertions added on 2026-09-29
+
+- Count released reader allocations after successful parsing, parse errors,
+  and failures while allocating tile pages. Cleanup checks now work without
+  a leak sanitizer.
+- Check exact error offsets for invalid JPX MinV, missing IPR metadata, and
+  baseline JPX color/header restrictions, using the existing corpus files.
+- Check BPCC's payload boundary with a reserved value just outside the box.
+- Allocate PLT inputs at their exact size and cover overflow followed by a
+  complete or truncated suffix, plus an unterminated maximum-length entry.
+
+The PLT recovery-loop `<` to `<=` survivor is not established as a reachable
+fault: recovery only follows successful decoding of a terminated, overflowing
+entry. The new cases test the decoder and cursor boundaries without changing
+production checks. No mutation score was recomputed for these additions.
 
 ## Diagnostic Checks Run
 

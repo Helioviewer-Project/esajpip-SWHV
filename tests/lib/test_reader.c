@@ -18,6 +18,12 @@
 /* The allocation hv_reader.c makes when fail_at counts down to 0 fails;
  * -1: none does. */
 static int fail_at = -1;
+/* Count non-null frees only while checking a reader's cleanup. */
+static int nfrees = -1;
+static void test_free(void *p) {
+    if (nfrees >= 0 && p != NULL) nfrees++;
+    free(p);
+}
 
 static int fails(void) { return fail_at >= 0 && fail_at-- == 0; }
 static void *test_malloc(size_t n) { return fails() ? NULL : malloc(n); }
@@ -34,10 +40,12 @@ static void *test_realloc(void *p, size_t n) { return fails() ? NULL : realloc(p
 #define malloc test_malloc
 #define calloc test_calloc
 #define realloc test_realloc
+#define free test_free
 #include "hv_reader.c"
 #undef malloc
 #undef calloc
 #undef realloc
+#undef free
 
 static int failures;
 static const char *dir;
@@ -1363,7 +1371,11 @@ static void check_codestreams(void) {
             }
             u16(&b, HV_EOC);
             ncallocs = 0;
+            nfrees = 0;
             error = cs_check(&b, 0, &at);
+            check(nfrees == (k < 2 ? 5 : 4),
+                  "close frees components, state, directory and each tile page", NULL);
+            nfrees = -1;
             /* the component's state (hv_segments), the directory of 2
              * pages, 299's page of 44 tiles, 0's of 256 */
             if (k == 0)
@@ -1382,9 +1394,12 @@ static void check_codestreams(void) {
                 p = exact(&b);
                 for (j = 1; j <= 5; j++) {
                     fail_at = j;
+                    nfrees = 0;
                     at = (size_t)-1;
                     error = hv_codestream_check(p, 0, b.n, 0, &at);
                     fail_at = -1;
+                    check(nfrees == j, "allocation failure frees every earlier allocation", NULL);
+                    nfrees = -1;
                     if (j == 5)
                         check(error == NULL, "no page to allocate", error);
                     else
@@ -1947,6 +1962,46 @@ static void check_corpus_items(void) {
     }
 }
 
+/* Preserve diagnostic locations, not just the rule names. */
+static void check_header_diagnostics(void) {
+    static const struct {
+        const char *file, *rule, *box;
+    } cases[] = {
+        {"jpx-embedded-header-file.ftyp-minor-73.jpx", "file.ftyp-minor", "ftyp"},
+        {"jpx-embedded-header-jpx.ipr-93.jpx", "jpx.ipr", "jpch"},
+        {"jpx-embedded-header-jpxb.header-override-162.jpx", "jpxb.header-override", NULL},
+        {"jpx-embedded-header-jpxb.colour-163.jpx", "jpxb.colour", NULL},
+    };
+    size_t i;
+    for (i = 0; i < sizeof cases / sizeof *cases; i++) {
+        bytes b = load(cases[i].file);
+        size_t want = b.n, at;
+        const char *error;
+        if (cases[i].box != NULL) {
+            for (want = 0; want + 8 <= b.n; want += get32(b.d + want))
+                if (memcmp(b.d + want + 4, cases[i].box, 4) == 0) break;
+            check(want < b.n, "diagnostic fixture has expected box", cases[i].file);
+        }
+        error = jpx_headers(&b, &at);
+        expect(cases[i].file, error, at, cases[i].rule, want);
+        release(&b);
+    }
+    {
+        /* A reserved depth immediately outside BPCC must not be decoded.
+         * This catches a one-byte overread even without ASan. */
+        const uint8_t data[] = {7, 0x30};
+        hv_box box = {0};
+        hv_header h;
+        size_t at = 0;
+        const char *error;
+        box.type = HV_BOX_BPCC; box.end = 1;
+        hv_header_init(&h, HV_BOX_JPCH, 1);
+        check(hv_rule_header_child(&h, HV_BOX_BPCC) == NULL, "BPCC child accepted", NULL);
+        error = read_header_child(data, &box, &h, &at);
+        check(error == NULL && h.bpcc_count == 1, "BPCC stops at its box boundary", error);
+    }
+}
+
 static void check_plt_cursor(void) {
     static const struct {
         const char *bytes;
@@ -1963,22 +2018,28 @@ static void check_plt_cursor(void) {
         {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00", 10, 0, "plt.value-overflow"},
         {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00\x80", 11, 0, "invalid PLT"},
         {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00", 10, 1, "plt.zplt-sequence"},
+        {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x80", 10, 0, "invalid PLT"},
+        {"\x82\x80\x80\x80\x80\x80\x80\x80\x80\x00\x01", 11, 0, "plt.value-overflow"},
     };
     hv_plt_reader a, b;
     uint64_t value;
     size_t i, at;
     for (i = 0; i < sizeof cases / sizeof *cases; i++) {
         hv_plt range = {cases[i].z, 0, cases[i].size};
+        uint8_t *input = malloc(cases[i].size);
+        if (input == NULL) abort();
+        memcpy(input, cases[i].bytes, cases[i].size);
         hv_plt_init(&a, HV_PROFILE);
         check(hv_plt_begin(&a, &range) == NULL,
               "cursor begins without reading entries", NULL);
-        while (hv_plt_read(&a, (const uint8_t *)cases[i].bytes, &value) == 1) ;
+        while (hv_plt_read(&a, input, &value) == 1) ;
         check((a.error == NULL && cases[i].error == NULL) ||
               (a.error != NULL && cases[i].error != NULL && strcmp(a.error, cases[i].error) == 0),
               "PLT diagnostic precedence", a.error);
         if (a.error != NULL)
-            check(hv_plt_read(&a, (const uint8_t *)cases[i].bytes, &value) == -1,
+            check(hv_plt_read(&a, input, &value) == -1,
                   "PLT error is terminal", NULL);
+        free(input);
     }
     {
         const uint8_t entries[] = {3, 0};
@@ -2604,6 +2665,7 @@ int main(int argc, char **argv) {
     check_rreqs();
     check_codestreams();
     check_plt_cursor();
+    check_header_diagnostics();
     check_plt_misuse();
     check_segment_gaps();
     check_box_gaps();

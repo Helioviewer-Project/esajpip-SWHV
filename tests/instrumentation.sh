@@ -42,7 +42,7 @@ esajpip_instrumentation() {
     coverage)
         ESAJPIP_CMAKE_EXTRA=-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
         ESAJPIP_CFLAGS="-fprofile-instr-generate -fcoverage-mapping -fno-omit-frame-pointer"
-        ESAJPIP_CXXFLAGS=$ESAJPIP_CFLAGS
+        ESAJPIP_CXXFLAGS="$ESAJPIP_CFLAGS -DESAJPIP_COVERAGE"
         ESAJPIP_LDFLAGS="-fprofile-instr-generate"
         ;;
     fuzz)

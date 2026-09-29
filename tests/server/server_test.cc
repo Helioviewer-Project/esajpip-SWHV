@@ -28,6 +28,12 @@
 #include "net/address.h"
 #include "server/server.h"
 
+#ifdef ESAJPIP_COVERAGE
+extern "C" void __llvm_profile_set_filename(const char *name);
+extern "C" void __llvm_profile_reset_counters(void);
+extern "C" int __llvm_profile_write_file(void);
+#endif
+
 using namespace std;
 
 namespace {
@@ -258,6 +264,17 @@ pid_t StartServer(const Config &config, const string &log_name,
     pid_t pid = fork();
     Check(pid >= 0, "Could not create the test server");
     if (pid == 0) {
+#ifdef ESAJPIP_COVERAGE
+        // LLVM caches %p and ignores an unchanged pattern. A different
+        // basename forces expansion with this child's PID.
+        const char *profile_pattern = getenv("LLVM_PROFILE_FILE");
+        string child_profile = profile_pattern ? profile_pattern : "%p.profraw";
+        size_t slash = child_profile.find_last_of('/');
+        child_profile.insert(slash == string::npos ? 0 : slash + 1, "child-");
+        __llvm_profile_set_filename(child_profile.c_str());
+        // Parent counters are collected by the parent process.
+        __llvm_profile_reset_counters();
+#endif
         setpgid(0, 0);
         net::InetAddress address = config.address().empty()
                                            ? net::InetAddress(config.port())
@@ -266,6 +283,13 @@ pid_t StartServer(const Config &config, const string &log_name,
                                                      config.port());
         int result = RunServer(config, address, log_name,
                                "esajpip server test", worker_threads);
+#ifdef ESAJPIP_COVERAGE
+        // _exit skips the profiling runtime's normal exit handler.
+        if (__llvm_profile_write_file() != 0) {
+            cerr << "Could not write server coverage profile" << endl;
+            result = 1;
+        }
+#endif
         _exit(result == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
     }
     setpgid(pid, pid);
