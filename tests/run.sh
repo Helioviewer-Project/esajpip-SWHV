@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds and runs every test of the project: jpeg2000_io and its tools
+# Builds and runs every test of the project: jpeg2000 and its tools
 # (hv_transcode, hv_merge, hv_walk), the transcoder and merger command
 # lines, the server, the model's static checks, and, with ESAJPIP_FUZZ=ON,
 # the libFuzzer smoke runs.
@@ -7,6 +7,7 @@
 #   tests/run.sh                        the whole suite, normal build
 #   tests/run.sh sanitize               the same under ASan and UBSan
 #   tests/run.sh normal -L tools        one label (tools, server, cli, model, fuzz)
+#   tests/run.sh normal -L jpip         JPIP library tests
 #   tests/run.sh normal -R transcode    one test
 #   tests/run.sh normal -N             list the tests without running them
 #

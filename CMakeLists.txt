@@ -74,53 +74,17 @@ else()
 endif()
 configure_file(server.ini ${CMAKE_CURRENT_BINARY_DIR}/server.ini)
 
-# The JPEG 2000 reader/writer (lib/), built as a static library.
-add_subdirectory(lib)
-# hv_transcode (transcode/) and hv_merge (merge/), on that library.
+# Libraries, format tools and server runtime.
+add_subdirectory(jpeg2000)
+add_subdirectory(jpip)
 add_subdirectory(transcode)
 add_subdirectory(merge)
+add_subdirectory(server)
 
-set(ESAJPIP_TOP src)
-set(ESAJPIP_SRCS
-    ${ESAJPIP_TOP}/config.cc
-    ${ESAJPIP_TOP}/data/file_segment.cc
-    ${ESAJPIP_TOP}/jpeg2000/coding_parameters.cc
-    ${ESAJPIP_TOP}/jpeg2000/file_manager.cc
-    ${ESAJPIP_TOP}/jpeg2000/image_index.cc
-    ${ESAJPIP_TOP}/jpip/databin_server.cc
-    ${ESAJPIP_TOP}/jpip/databin_writer.cc
-    ${ESAJPIP_TOP}/jpip/query.cc
-    ${ESAJPIP_TOP}/jpip/request.cc
-    ${ESAJPIP_TOP}/server/channel_engine.cc
-    ${ESAJPIP_TOP}/server/channel_work.cc
-    ${ESAJPIP_TOP}/server/connection.cc
-    ${ESAJPIP_TOP}/server/request_head.cc
-    ${ESAJPIP_TOP}/server/server.cc
-    ${ESAJPIP_TOP}/trace.cc)
-
-add_library(esajpip_core STATIC ${ESAJPIP_SRCS})
-esajpip_configure_target(esajpip_core)
-target_include_directories(esajpip_core BEFORE PUBLIC
-    ${ESAJPIP_TOP})
-target_link_libraries(esajpip_core PUBLIC
-    PkgConfig::PKG
-    PkgConfig::LLHTTP
-    PkgConfig::LIBUV
-    ZLIB::ZLIB
-    Threads::Threads)
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_definitions(esajpip_core PRIVATE
-        _PLATFORM_LINUX
-        _POSIX_C_SOURCE=200112L
-        _XOPEN_SOURCE=600)
-elseif(APPLE)
-    target_link_libraries(esajpip_core PUBLIC c++abi)
-endif()
-
-add_executable(esajpip ${ESAJPIP_TOP}/main.cc)
-esajpip_configure_target(esajpip)
-target_link_libraries(esajpip PRIVATE esajpip_core)
+# Explicit benchmark target; excluded from normal builds and installation.
+add_executable(jpip_bench EXCLUDE_FROM_ALL tools/jpip_bench.cc)
+esajpip_configure_target(jpip_bench)
+target_link_libraries(jpip_bench PRIVATE esajpip_server)
 
 install(TARGETS esajpip RUNTIME DESTINATION bin)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/server.ini DESTINATION bin)

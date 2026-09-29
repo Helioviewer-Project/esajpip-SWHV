@@ -40,7 +40,7 @@ Where it showed in this repository: a differential fuzz of the corpus
 (random byte mutations, each labelled by the harness and checked by the
 reader) crashed the harness under AddressSanitizer in
 `MainSegment_tilePart_rest_Containing_ACN_Decode` and the Iplt decoder, on
-mutants whose Psot or Lxxx grew past the file. The reader in `lib/` is not
+mutants whose Psot or Lxxx grew past the file. The reader in `jpeg2000/` is not
 exposed: it decodes `CodSegment` and `QcdSegment` only with the region
 length it has already checked against the buffer. The corpus is not
 affected: its length mutants stay within the file.

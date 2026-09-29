@@ -13,7 +13,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "trace.h"
+#include "server/trace.h"
 
 using namespace std;
 
@@ -49,22 +49,22 @@ int main() {
     char directory[] = "/tmp/esajpip-log-XXXXXX";
     Check(mkdtemp(directory) != NULL, "Could not create logging test directory");
     string base = string(directory) + "/server";
-    Check(trace::Initialize(base), "Could not initialize logging");
+    Check(server::trace::Initialize(base), "Could not initialize logging");
 
     LOG("first message");
     LOG("second message");
-    trace::Flush();
+    server::trace::Flush();
 
     thread worker([] {
         LOG("worker message");
     });
     worker.join();
-    trace::Flush();
+    server::trace::Flush();
 
     LOG(string(2000, 'x'));
-    trace::Flush();
+    server::trace::Flush();
     LOG("message after rollover");
-    trace::Flush();
+    server::trace::Flush();
 
     string active = FindLog(directory, "server.");
     Check(!active.empty(), "Active log was not created");
@@ -88,7 +88,7 @@ int main() {
     unlink(backup.c_str());
     Check(mkdir(backup.c_str(), 0700) == 0, "Could not obstruct log rollover");
     LOG(string(1100, 'x'));
-    trace::Flush();
+    server::trace::Flush();
     int active_fd = open(active.c_str(), O_RDONLY);
     Check(active_fd >= 0, "Could not open the disabled log");
     off_t disabled_size = lseek(active_fd, 0, SEEK_END);
@@ -96,21 +96,21 @@ int main() {
     Check(disabled_size >= 0, "Could not measure the disabled log");
 
     LOG("message after failed rollover");
-    trace::Flush();
+    server::trace::Flush();
     active_fd = open(active.c_str(), O_RDONLY);
     Check(active_fd >= 0, "Could not reopen the disabled log");
     Check(lseek(active_fd, 0, SEEK_END) == disabled_size,
           "Logging continued after rollover failure");
     close(active_fd);
 
-    trace::Drain();
+    server::trace::Drain();
     Check(rmdir(backup.c_str()) == 0, "Could not remove rollover obstruction");
 
     string shutdown_base = string(directory) + "/shutdown";
-    Check(trace::Initialize(shutdown_base),
+    Check(server::trace::Initialize(shutdown_base),
           "Could not reinitialize logging for shutdown");
     LOG("message queued before shutdown");
-    trace::Drain();
+    server::trace::Drain();
     string shutdown_log = FindLog(directory, "shutdown.");
     Check(!shutdown_log.empty() &&
                   ReadFile(shutdown_log).find("message queued before shutdown") !=
@@ -131,7 +131,7 @@ int main() {
         if (dup2(saturated_output[1], STDOUT_FILENO) < 0)
             _exit(2);
         close(saturated_output[1]);
-        if (!trace::Initialize(""))
+        if (!server::trace::Initialize(""))
             _exit(3);
         vector<thread> producers;
         for (int thread_index = 0; thread_index < 8; ++thread_index) {
@@ -146,9 +146,9 @@ int main() {
         if (write(burst_done[1], &done, 1) != 1)
             _exit(4);
         close(burst_done[1]);
-        trace::Flush();
+        server::trace::Flush();
         LOG("message after queue saturation");
-        trace::Drain();
+        server::trace::Drain();
         _exit(0);
     }
     close(saturated_output[1]);
@@ -189,12 +189,12 @@ int main() {
             _exit(2);
         if (broken_output[1] != STDOUT_FILENO)
             close(broken_output[1]);
-        if (!trace::Initialize(""))
+        if (!server::trace::Initialize(""))
             _exit(3);
         LOG("message to closed standard output");
-        trace::Flush();
+        server::trace::Flush();
         bool stdout_open = fcntl(STDOUT_FILENO, F_GETFD) >= 0;
-        trace::Drain();
+        server::trace::Drain();
         _exit(stdout_open ? 0 : 4);
     }
     close(broken_output[1]);

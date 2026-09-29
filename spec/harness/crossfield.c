@@ -170,18 +170,17 @@ static const char *cf_header(const cf_child *children, int n, uint32_t parent, c
              * (header.one-bpcc) never reach here. */
             for (j = 0; j < c->bpcc->depths.nCount; ++j)
                 state->bpcc[j] = (uint8_t) c->bpcc->depths.arr[j];
-            r = hv_rule_bpcc(h, state->bpcc, (size_t) c->bpcc->depths.nCount);
+            hv_rule_bpcc(h, state->bpcc, (size_t) c->bpcc->depths.nCount);
         }
         if (r == NULL && c->colr)
             r = hv_rule_colr(h, &c->colr->header, c->colr->rest.arr,
                              (size_t) c->colr->rest.nCount);
         if (r == NULL && c->pclr) {
             const PclrHeader *ph = &c->pclr->header;
-            r = hv_rule_pclr(h, ph->ne, (uint64_t) ph->depths.nCount);
-            for (j = 0; j < ph->depths.nCount && r == NULL; ++j)
-                r = hv_rule_pclr_column(h, ph->depths.arr[j]);
-            if (r == NULL)
-                r = hv_rule_pclr_end(h, c->pclr->entries.arr, (uint64_t) c->pclr->entries.nCount);
+            hv_rule_pclr(h, ph->ne, (uint64_t) ph->depths.nCount);
+            for (j = 0; j < ph->depths.nCount; ++j)
+                hv_rule_pclr_column(h, ph->depths.arr[j]);
+            r = hv_rule_pclr_end(h, c->pclr->entries.arr, (uint64_t) c->pclr->entries.nCount);
         }
         if (r == NULL && c->cmap) {
             for (j = 0; j < c->cmap->entries.nCount && r == NULL; ++j) {
@@ -207,7 +206,7 @@ static const char *cf_header(const cf_child *children, int n, uint32_t parent, c
             for (j = 0; j < c->cgrp->children.nCount && r == NULL; ++j) {
                 const CgrpPayload *p = &c->cgrp->children.arr[j].payload;
                 int colr = p->kind == CgrpPayload_colr_PRESENT;
-                r = hv_rule_cgrp_child(&g, colr ? HV_BOX_COLR : 1);
+                hv_rule_cgrp_child(&g, colr ? HV_BOX_COLR : 1);
                 if (r == NULL && colr)
                     r = hv_rule_colr(&g, &p->u.colr.header, p->u.colr.rest.arr,
                                      (size_t) p->u.colr.rest.nCount);
@@ -217,7 +216,7 @@ static const char *cf_header(const cf_child *children, int n, uint32_t parent, c
         if (r == NULL && c->res) {
             for (j = 0; j < c->res->children.nCount && r == NULL; ++j) {
                 const ResPayload *p = &c->res->children.arr[j].payload;
-                r = hv_rule_res_child(h, p->kind == resc_PRESENT ? HV_BOX_RESC
+                hv_rule_res_child(h, p->kind == resc_PRESENT ? HV_BOX_RESC
                                        : p->kind == resd_PRESENT ? HV_BOX_RESD : 1);
                 if (r == NULL && p->kind == resc_PRESENT)
                     r = hv_rule_extent(HV_BOX_RESC, (uint64_t) p->u.resc.extra.nCount);

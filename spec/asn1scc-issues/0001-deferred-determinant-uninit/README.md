@@ -141,7 +141,7 @@ The unmodified `161cc246` compiler still reports the Boolean load under
 prints `0 byte(s): decode ok=0 err=24` without a sanitizer report. Its
 `25-ACNV2-BOUNDARIES` regression, `runWireTests.sh`, and the full model gate
 in `spec/check-model.sh` pass. The model gate also confirms that
-`lib/generated/` matches this compiler.
+`jpeg2000/generated/` matches this compiler.
 
 ## Also noticed in Rust (separate)
 

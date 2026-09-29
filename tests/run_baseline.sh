@@ -101,16 +101,16 @@ write_reports() {
     profile=$2
     mkdir -p "$dir"
     report "$profile" "$dir/handwritten.txt" \
-        "$repo/lib" "$repo/merge" "$repo/transcode" "$repo/src" "$repo/tools" \
-        -ignore-filename-regex='/lib/generated/|/tests/'
+        "$repo/jpeg2000" "$repo/jpip" "$repo/merge" "$repo/transcode" "$repo/server" "$repo/tools" \
+        -ignore-filename-regex='/jpeg2000/generated/|/tests/'
     report "$profile" "$dir/generated.txt" \
-        "$repo/lib/generated" \
-        -ignore-filename-regex='/lib/generated/asn1crt'
+        "$repo/jpeg2000/generated" \
+        -ignore-filename-regex='/jpeg2000/generated/asn1crt'
     report "$profile" "$dir/asn1-runtime.txt" \
-        "$repo/lib/generated/asn1crt.c" \
-        "$repo/lib/generated/asn1crt_encoding.c" \
-        "$repo/lib/generated/asn1crt_encoding_acn.c" \
-        "$repo/lib/generated/asn1crt_encoding_uper.c"
+        "$repo/jpeg2000/generated/asn1crt.c" \
+        "$repo/jpeg2000/generated/asn1crt_encoding.c" \
+        "$repo/jpeg2000/generated/asn1crt_encoding_acn.c" \
+        "$repo/jpeg2000/generated/asn1crt_encoding_uper.c"
 }
 
 "$llvm_profdata" merge -sparse "$out"/profiles/*.profraw -o "$out/coverage.profdata"
@@ -146,12 +146,12 @@ if [ "${ESAJPIP_BASELINE_SPLIT:-OFF}" = ON ]; then
     split_reports="$out/by-test"
     if [ "$ctest_status" -eq 0 ]; then
         run_split normal-no-replay -E '^fuzz_replay_' || split_status=$?
-        run_split lib -R '^(reader_profile|writer_corpus|output_file|writer|served|reader|geometry)$' || split_status=$?
+        run_split jpeg2000 -R '^(reader_profile|writer_corpus|output_file|writer|served|reader|geometry)$' || split_status=$?
         run_split merge -R '^(merge|merge_command)$' || split_status=$?
         run_split transcode -R '^(transcode|transcode_command)$' || split_status=$?
         run_split server -R '^(logging|protocol|server|server_connection|jpeg2000)$' || split_status=$?
         run_split replay -R '^fuzz_replay_' || split_status=$?
-        run_split lib-merge-transcode -R '^(reader_profile|writer_corpus|output_file|writer|served|reader|geometry|merge|merge_command|transcode|transcode_command)$' || split_status=$?
+        run_split jpeg2000-merge-transcode -R '^(reader_profile|writer_corpus|output_file|writer|served|reader|geometry|merge|merge_command|transcode|transcode_command)$' || split_status=$?
     else
         mkdir -p "$split_reports"
         cat > "$split_reports/skipped.txt" <<EOF

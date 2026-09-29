@@ -8,8 +8,8 @@
 it rewrites the codestream in RPCL order with the given precincts and PLT
 markers, without recompressing it: every code-block keeps its coding passes,
 bytes and zero bit-planes, and only the packet headers change. It reads and
-writes headers, and lays out precincts and packets, with `jpeg2000_io`
-(`../lib/`: `hv_reader` with the shared rules of `hv_rules`, `hv_writer`,
+writes headers, and lays out precincts and packets, with `jpeg2000`
+(`../jpeg2000/`: `hv_reader` with the shared rules of `hv_rules`, `hv_writer`,
 `hv_geometry`).
 
 ## Usage
@@ -26,11 +26,12 @@ order: the `jp2c` box is transcoded, a top-level XML box ends before its
 first NUL (see below), the others are copied as read. The output is
 written to a temporary file next to it with the input's
 permissions (without the setuid, setgid and sticky bits) and renamed into
-place (`hv_file`, in `../tools/`: synced to disk before the rename, and
-removed if a signal ends the tool first; a replaced file keeps its owner and
+place (`hv_file`, in `../tools/`: the temporary is removed if a signal ends
+the tool first; a replaced file keeps its owner and
 group where the process may give them), so input and output may be the same
 file; an output that is a symbolic link is written where the link points,
-the file it names created if need be. On error nothing is written.
+the file it names created if need be. On error nothing is written. Replacement is
+atomic, with no crash-durability guarantee.
 Superboxes nested more than `HV_BOX_DEPTH_MAX` (32) deep are refused. Exit
 status: 0, 1 on error, 2 on usage errors.
 
@@ -43,7 +44,7 @@ codestream: merge the JPX file again from the new files.
 The output is for the JPIP server, so the input must be a JP2 file within
 the served profile (`../JPIP_PROFILE.md`) except for its tile-parts,
 which are rewritten. The reader checks this with the rules shared with the
-model (`../lib/`): the file rules of `hv_check_jp2` (signature, file type
+model (`../jpeg2000/`): the file rules of `hv_check_jp2` (signature, file type
 with the `jp2 ` brand and compatibility entry, exactly one `jp2c`, at most
 `INT_MAX` bytes; JPX files and raw codestreams fail) and the main-header
 rules of `HV_PROFILE_HEADERS` (zero origins, unit sampling, one tile,
@@ -151,7 +152,7 @@ inside superboxes are copied as read with the superbox.
 
 With the rest of the repository, so configuring needs the server's
 dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
-llhttp and libuv before it adds `lib/`, `transcode/` and `merge/`.
+llhttp and libuv before it adds `jpeg2000/`, `transcode/` and `merge/`.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
@@ -200,4 +201,4 @@ through a symbolic link, and nothing written or left behind on failure. With
 `TRANSCODE_ARCHIVE` set to directories, every `.jp2` file in them is
 transcoded and checked for a stable output too. The fixtures are described
 in `../tests/transcode/fixtures/FIXTURES.md`. The same run includes the reader's tests
-(`../tests/lib/`).
+(`../tests/jpeg2000/`).

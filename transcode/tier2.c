@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_codes.h"
-#include "hv_error.h"
+#include "jpeg2000/hv_codes.h"
+#include "jpeg2000/hv_error.h"
 
 /* Tag-tree value of a node not yet known: above any layer or bit-plane. */
 #define INF ((int32_t)1 << 30)
@@ -533,6 +533,48 @@ static int holds_marker(const uint8_t *p, size_t n) {
     return 0;
 }
 
+/* Tile-parts end between packets (A.4.2); skip ended and empty ones. */
+static void advance_tile_part(const hv_tile_data *tile, size_t *part, size_t *pos) {
+    while (*part < tile->nparts && *pos == tile->parts[*part].end)
+        if (++*part < tile->nparts)
+            *pos = tile->parts[*part].start;
+}
+
+/* Consume the packet's contributions in header order. */
+static int read_packet_body(const uint8_t *buf, size_t *pos, size_t end,
+                            hv_codeblocks *cb, size_t first, size_t pkt, int last_part,
+                            char *error, size_t error_size) {
+    size_t i;
+    for (i = first; i < cb->ncontrib; i++) {
+        hv_contribution *c = &cb->contrib[i];
+        if (c->length > end - *pos) {
+            return hv_fail(error, error_size, "%s",
+                           last_part ? OVERRUNS_THE_TILE
+                                     : "packet crosses a tile-part boundary");
+        }
+        /* B.10.7: "The sequence of bytes actually included for any
+         * given code-block must not end in a 0xFF"; and within it, a
+         * 0xFF is followed by a byte of at most 0x8F, as the coders'
+         * bit stuffing leaves it: a decoder reads 0xFF and a byte above
+         * 0x8F as a marker, which ends the coded data (C.3.4, Figure
+         * C.19; D.4, NOTE). The output places the bytes next to others,
+         * where such a pair would read as a marker. */
+        if (c->length > 0 && buf[*pos + (size_t)c->length - 1] == 0xFF) {
+            return hv_fail(error, error_size,
+                           "a code-block's contribution to packet %zu ends in 0xFF "
+                           "(T.800 B.10.7)", pkt);
+        }
+        if (holds_marker(buf + *pos, (size_t)c->length)) {
+            return hv_fail(error, error_size,
+                           "a code-block's contribution to packet %zu holds 0xFF and a "
+                           "byte above 0x8F, a marker (T.800 C.3.4)", pkt);
+        }
+        c->offset = *pos;
+        *pos += (size_t)c->length;
+    }
+    return 0;
+}
+
 int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npackets,
                     const hv_tile_data *tile, int sop, int eph, hv_codeblocks *cb,
                     char *error, size_t error_size) {
@@ -552,10 +594,7 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
         precinct_ref p = precinct_of(g, &packets[pkt]);
         size_t end, first = cb->ncontrib;
         int last_part;
-        /* Tile-parts end between packets (A.4.2); skip ended and empty ones. */
-        while (part < nparts && pos == parts[part].end)
-            if (++part < nparts)
-                pos = parts[part].start;
+        advance_tile_part(tile, &part, &pos);
         if (part == nparts) {
             status = hv_fail(error, error_size,
                              "truncated input is not supported: missing packets");
@@ -622,42 +661,11 @@ int hv_read_packets(const hv_geometry *g, const hv_packet *packets, size_t npack
             }
             pos += MARKER_SIZE;
         }
-        /* The packet body: the contributions' bytes in header order. */
-        for (i = first; i < cb->ncontrib; i++) {
-            hv_contribution *c = &cb->contrib[i];
-            if (c->length > end - pos) {
-                status = hv_fail(error, error_size, "%s",
-                                 last_part ? OVERRUNS_THE_TILE
-                                           : "packet crosses a tile-part boundary");
-                break;
-            }
-            /* B.10.7: "The sequence of bytes actually included for any
-             * given code-block must not end in a 0xFF"; and within it, a
-             * 0xFF is followed by a byte of at most 0x8F, as the coders'
-             * bit stuffing leaves it: a decoder reads 0xFF and a byte above
-             * 0x8F as a marker, which ends the coded data (C.3.4, Figure
-             * C.19; D.4, NOTE). The output places the bytes next to others,
-             * where such a pair would read as a marker. */
-            if (c->length > 0 && buf[pos + (size_t)c->length - 1] == 0xFF) {
-                status = hv_fail(error, error_size,
-                                 "a code-block's contribution to packet %zu ends in 0xFF "
-                                 "(T.800 B.10.7)", pkt);
-                break;
-            }
-            if (holds_marker(buf + pos, (size_t)c->length)) {
-                status = hv_fail(error, error_size,
-                                 "a code-block's contribution to packet %zu holds 0xFF and a "
-                                 "byte above 0x8F, a marker (T.800 C.3.4)", pkt);
-                break;
-            }
-            c->offset = pos;
-            pos += (size_t)c->length;
-        }
+        status = read_packet_body(buf, &pos, end, cb, first, pkt, last_part,
+                                  error, error_size);
     }
     if (status == 0) {
-        while (part < nparts && pos == parts[part].end)
-            if (++part < nparts)
-                pos = parts[part].start;
+        advance_tile_part(tile, &part, &pos);
         if (part < nparts) {
             if (zero_psot && marker_at(buf, pos, parts[part].end, HV_SOT)) {
                 status = hv_fail(error, error_size, "Psot=0 is only valid for the last tile-part");

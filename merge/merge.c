@@ -10,11 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_codes.h"
-#include "hv_decode.h"
-#include "hv_error.h"
-#include "hv_reader.h"
-#include "hv_writer.h"
+#include "jpeg2000/hv_codes.h"
+#include "jpeg2000/hv_decode.h"
+#include "jpeg2000/hv_error.h"
+#include "jpeg2000/hv_reader.h"
+#include "jpeg2000/hv_writer.h"
 #include "jp2-boxes.h"
 
 /* The Colour Specification boxes read from one jp2h. */
@@ -50,16 +50,13 @@ typedef struct {
     size_t error_size;
 } writer;
 
-HV_DEFINE_DECODE(Ihdr)
 HV_DEFINE_DECODE(ColrHeader)
-HV_DEFINE_DECODE(CdefCount)
-HV_DEFINE_DECODE(CdefEntry)
 
 /* ------------------------------------------------------------------------
  * Inputs
  * ------------------------------------------------------------------------ */
 
-/* The Rsiz of a main header hv_check_jp2h accepted at the T.800 layer. */
+/* The Rsiz of a main header hv_read_jp2h accepted at the T.800 layer. */
 static unsigned codestream_rsiz(const uint8_t *buf, const hv_box *jp2c) {
     hv_codestream cs;
     unsigned rsiz = 0;
@@ -101,14 +98,14 @@ static int read_source(const hv_merge_input *in, source *s, int validate, char *
     const char *message;
     size_t at;
     int status;
-    Ihdr ihdr;
+    hv_header header;
 
     memset(s, 0, sizeof *s);
     s->in = *in;
     if ((message = hv_check_jp2(in->buf, in->size, &s->jp2c, &at)) != NULL ||
         (validate && (message = hv_codestream_check(in->buf, s->jp2c.payload, s->jp2c.end,
                                                   HV_PROFILE, &at)) != NULL) ||
-        (message = hv_check_jp2h(in->buf, in->size, &at)) != NULL)
+        (message = hv_read_jp2h(in->buf, in->size, &header, &at)) != NULL)
         return hv_fail(error, size, "%s: %s at %zu", in->path, message, at);
     hv_boxes_file(&it, in->buf, in->size);
     while (hv_boxes_next(&it, &box, &message, &at) == 1) {
@@ -119,7 +116,7 @@ static int read_source(const hv_merge_input *in, source *s, int validate, char *
         else if (box.type == HV_BOX_JP2I)
             s->ipr++;
     }
-    /* hv_check_jp2h: one jp2h, ihdr first and NC = Csiz (at most 16,384),
+    /* hv_read_jp2h: one jp2h, ihdr first and NC = Csiz (at most 16,384),
      * at most one bpcc, pclr, cmap, cdef and res, each decoded by the
      * model's types. */
     hv_boxes_children(&it, in->buf, &s->jp2h);
@@ -138,41 +135,23 @@ static int read_source(const hv_merge_input *in, source *s, int validate, char *
     if (status < 0)
         return hv_fail(error, size, "%s: %s at %zu", in->path, message, at);
     s->rsiz = codestream_rsiz(in->buf, &s->jp2c);
-    if (HV_DECODE(Ihdr, &ihdr, in->buf, s->ihdr.payload, s->ihdr.end - s->ihdr.payload) != 0)
-        return hv_fail(error, size, "%s: ihdr at %zu cannot be decoded", in->path, s->ihdr.start);
-    s->nc = (unsigned)ihdr.nc;
-    if (s->cdef.type != 0) {
-        /* N, then N (Cn, Typ, Asoc), as hv_check_jp2h decoded them, each
-         * where the one before ended. */
-        const uint8_t *p = in->buf + s->cdef.payload;
-        size_t n = s->cdef.end - s->cdef.payload, used, one, c;
-        CdefCount count;
-        CdefEntry entry;
-        if (HV_DECODE_USED(CdefCount, &count, p, 0, n, &used) != 0)
-            return hv_fail(error, size, "%s: cdef at %zu cannot be decoded", in->path,
-                           s->cdef.start);
-        for (c = 0; c < count; c++, used += one) {
-            if (HV_DECODE_USED(CdefEntry, &entry, p, used, n - used, &one) != 0)
-                return hv_fail(error, size, "%s: cdef at %zu cannot be decoded", in->path,
-                               s->cdef.start);
-            s->opacity |= entry.typ == 1;
-            s->premultiplied |= entry.typ == 2;
-        }
-    }
+    s->nc = (unsigned)header.image.nc;
+    s->opacity = header.opacity;
+    s->premultiplied = header.premultiplied;
     return 0;
 }
 
 /* Byte i of a Colour Specification box's payload as the JPX file carries
- * it. Its APPROX, after METH and PREC (T.800 I.5.3.3): T.801 M.11.7.2 has
- * no 0, which JP2 files write, so 0 becomes 1 (as hvJP2K's jpx_colr). */
+ * it. A JP2 reader ignores PREC and APPROX (T.800 I.5.3.3); the output
+ * writes PREC 0 and APPROX 1 (T.801 M.11.7.2, as hvJP2K's jpx_colr). */
 enum { COLR_APPROX = 2 };
 
 static uint8_t colr_byte(const uint8_t *payload, size_t i) {
-    return i == COLR_APPROX && payload[i] == 0 ? 1 : payload[i];
+    return i == 1 ? 0 : i == COLR_APPROX ? 1 : payload[i];
 }
 
 /* An input's Colour Specification boxes as the JPX file holds them,
- * APPROX 0 written as 1 (colr_byte): the first input's in the jp2h
+ * PREC 0 and APPROX 1 (colr_byte): the first input's in the jp2h
  * (parent HV_BOX_JP2H), a later one's, where they differ from the first's,
  * in a cgrp (HV_BOX_CGRP). hv_rule_colr for a JPX jp2h or colour group,
  * which a JP2 file's jp2h need not keep (at most one with METH 1 and one
@@ -199,33 +178,6 @@ static int check_jpx_colrs(const source *s, uint32_t parent, char *error, size_t
     return rule == NULL ? 0
                         : hv_fail(error, size, "%s: %s at %zu, in %s", s->in.path, rule,
                                   s->colr[k - 1].start, where);
-}
-
-static int same_box_location(const hv_box *a, const hv_box *b) {
-    return a->type == b->type && a->start == b->start && a->payload == b->payload &&
-           a->end == b->end && a->to_end == b->to_end;
-}
-
-/* Every pass-1 value used to write the output, excluding the input mapping. */
-static int same_source_record(const source *a, const source *b) {
-    int i;
-    if (!same_box_location(&a->jp2h, &b->jp2h) ||
-        !same_box_location(&a->jp2c, &b->jp2c) ||
-        !same_box_location(&a->xml, &b->xml) ||
-        !same_box_location(&a->ihdr, &b->ihdr) ||
-        !same_box_location(&a->bpcc, &b->bpcc) ||
-        !same_box_location(&a->pclr, &b->pclr) ||
-        !same_box_location(&a->cmap, &b->cmap) ||
-        !same_box_location(&a->cdef, &b->cdef) ||
-        !same_box_location(&a->res, &b->res) ||
-        !same_box_location(&a->cgrp, &b->cgrp) ||
-        a->ncolr != b->ncolr || a->ipr != b->ipr || a->rsiz != b->rsiz || a->nc != b->nc ||
-        a->opacity != b->opacity || a->premultiplied != b->premultiplied)
-        return 0;
-    for (i = 0; i < a->ncolr; i++)
-        if (!same_box_location(&a->colr[i], &b->colr[i]))
-            return 0;
-    return 1;
 }
 
 /* The same contents, or both absent. */
@@ -284,7 +236,7 @@ static int write_through(writer *w, const uint8_t *bytes, size_t n) {
     return flush(w) != 0 ? -1 : write_file(w, bytes, n);
 }
 
-/* The signature and File Type boxes (T.800 I.5.1, T.801 M.11.1.2), as
+/* The signature and File Type boxes (T.800 I.5.1, T.801 M.8), as
  * hvJP2K writes them: brand jpx, MinV 1, compatible with jpx, and when the
  * codestreams are embedded with jp2 and jpxb too. */
 static int write_start(hv_out *out, int links) {
@@ -345,7 +297,7 @@ static int emit_box(sink *k, const source *s, const hv_box *box) {
 }
 
 /* A Colour Specification box as the JPX file holds it, its APPROX set
- * (colr_byte): METH, PREC and APPROX, which hv_check_jp2h has checked it
+ * (colr_byte): METH, PREC and APPROX, which hv_read_jp2h has checked it
  * has, then the rest as read. */
 static int emit_colr(sink *k, const source *s, const hv_box *box) {
     const uint8_t *p = s->in.buf + box->payload;
@@ -449,6 +401,11 @@ static int emit_generated_cmap(sink *k, const source *s, const source *first) {
     return status < 0 ? -1 : 0;
 }
 
+static int emit_differing(sink *k, const source *s, const hv_box *box,
+                          const source *first, const hv_box *original) {
+    return box->type != 0 && !same_box(s, box, first, original) ? emit_box(k, s, box) : 0;
+}
+
 /* The Codestream Header box: where the input's JP2 Header box is the
  * first input's, only its IPR boxes; otherwise its Image Header and what
  * differs from the first (hvJP2K's write_jpch_jplh), then the IPR boxes. */
@@ -457,17 +414,14 @@ static int jpch_contents(sink *k, const headers *h) {
     if (!h->same) {
         if (emit_box(k, s, &s->ihdr) != 0)
             return -1;
-        if (s->bpcc.type != 0 && !same_box(s, &s->bpcc, first, &first->bpcc) &&
-            emit_box(k, s, &s->bpcc) != 0)
+        if (emit_differing(k, s, &s->bpcc, first, &first->bpcc) != 0)
             return -1;
-        if (s->pclr.type != 0 && !same_box(s, &s->pclr, first, &first->pclr) &&
-            emit_box(k, s, &s->pclr) != 0)
+        if (emit_differing(k, s, &s->pclr, first, &first->pclr) != 0)
             return -1;
         if (s->pclr.type == 0 && first->pclr.type != 0) {
             if (emit_generated_cmap(k, s, first) != 0)
                 return -1;
-        } else if (s->cmap.type != 0 && !same_box(s, &s->cmap, first, &first->cmap) &&
-                   emit_box(k, s, &s->cmap) != 0) {
+        } else if (emit_differing(k, s, &s->cmap, first, &first->cmap) != 0) {
             return -1;
         }
     }
@@ -491,11 +445,9 @@ static int jplh_contents(sink *k, const headers *h) {
         return 0;
     if (!same_colrs(s, first) && emit_superbox(k, HV_BOX_CGRP, cgrp_contents, h) != 0)
         return -1;
-    if (s->cdef.type != 0 && !same_box(s, &s->cdef, first, &first->cdef) &&
-        emit_box(k, s, &s->cdef) != 0)
+    if (emit_differing(k, s, &s->cdef, first, &first->cdef) != 0)
         return -1;
-    if (s->res.type != 0 && !same_box(s, &s->res, first, &first->res) &&
-        emit_box(k, s, &s->res) != 0)
+    if (emit_differing(k, s, &s->res, first, &first->res) != 0)
         return -1;
     return 0;
 }
@@ -633,32 +585,23 @@ static char *link_url(const char *path, char *error, size_t size) {
     return url;
 }
 
-/* Opens input i. First (again = 0): reads it into *s, where it stays open.
- * Again: checks it against the first-pass record in *s (its size and
- * everything read_source records), whose mapping it replaces. On failure
- * the input is closed again and *s keeps no mapping. */
+/* Opens input i. The first pass validates and records its layout; the
+ * second only reacquires the immutable bytes. On failure, close any mapping. */
 static int open_input(const hv_merge_inputs *inputs, size_t i, source *s, int again, int validate,
                       char *error, size_t error_size) {
     hv_merge_input in;
-    source read;
-    int bad;
     memset(&in, 0, sizeof in);
     if (inputs->open(inputs->context, i, &in, error, error_size) != 0) {
         s->in.buf = NULL;
         return -1;
     }
-    bad = (again && in.size != s->in.size) ||
-          read_source(&in, &read, validate, error, error_size) != 0 ||
-          (again && !same_source_record(s, &read));
-    if (bad) {
+    if (!again && read_source(&in, s, validate, error, error_size) != 0) {
         inputs->close(inputs->context, i, &in);
         s->in.buf = NULL;
-        return again ? hv_fail(error, error_size, "%s: changed while merging", s->in.path) : -1;
+        return -1;
     }
     if (again)
         s->in = in;
-    else
-        *s = read;
     return 0;
 }
 

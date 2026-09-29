@@ -49,6 +49,6 @@ path. `spec/build-asn1scc.sh` also invokes the standalone C reproducer.
 ## Repository impact
 
 The reported fuzz failure was `UuidId: decoded=0 error=0`. Source inspection
-confirms it in `lib/generated/jp2-boxes.c`; `VendorId` uses the same template.
+confirms it in `jpeg2000/generated/jp2-boxes.c`; `VendorId` uses the same template.
 Both checked-in decoders receive the template's error assignment. The model
 and the fuzz assertion are unchanged.

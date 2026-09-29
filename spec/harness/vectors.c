@@ -24,7 +24,7 @@
  *      graphs.
  *
  * Build: spec/check-model.sh compiles this file with label.c, crossfield.c,
- * mapping.c, ../../lib/hv_rules.c (with lib/ on the include path) and the
+ * mapping.c, ../../jpeg2000/hv_rules.c (with jpeg2000/ on the include path) and the
  * generated C of the four modules and the asn1scc runtime, then runs it;
  * its command is the reference.
  */
@@ -761,17 +761,18 @@ static const FieldMutant field_mutants[] = {
     { "siz.rsiz", set_siz_rsiz, 3, "reserved (Table A.10); the server keeps any Rsiz", 0,
       X_LENIENT, "siz.rsiz", 0 },
     { "siz.xsiz", set_siz_xsiz, 0, "min-1", 0, X_STD, "decode", 0 },
-    { "siz.xsiz", set_siz_xsiz, PROFILE_MAX_DIMENSION + 1, "profile max+1", 0, X_PROF, "decode", 0 },
+    { "siz.xsiz", set_siz_xsiz, PROFILE_MAX_DIMENSION + 1, "profile max+1; too many tiles (B.11)", 0, X_STD, "siz.tile-count", 0 },
     { "siz.xsiz", set_siz_xsiz, 4294967295u,
-      "standard max; profile: beyond Siz-Profile and the tile", 0, X_PROF, "decode", 0 },
+      "standard max; too many tiles (B.11)", 0, X_STD, "siz.tile-count", 0 },
     { "siz.ysiz", set_siz_ysiz, 0, "min-1", 0, X_STD, "decode", 0 },
-    { "siz.ysiz", set_siz_ysiz, PROFILE_MAX_DIMENSION + 1, "profile max+1", 0, X_PROF, "decode", 0 },
+    { "siz.ysiz", set_siz_ysiz, PROFILE_MAX_DIMENSION + 1,
+      "profile max+1; too many tiles (B.11)", 0, X_STD, "siz.tile-count", 0 },
     { "siz.xosiz", set_siz_xosiz, 1, "profile max+1; standard valid", 0, X_PROF, "decode", 0 },
     { "siz.xosiz", set_siz_xosiz, 4, "== xsiz: empty image", 0, X_STD, "siz.origin-inside", 0 },
     { "siz.yosiz", set_siz_yosiz, 1, "profile max+1; standard valid", 0, X_PROF, "decode", 0 },
     { "siz.xtsiz", set_siz_xtsiz, 0, "min-1", 0, X_STD, "decode", 0 },
-    { "siz.xtsiz", set_siz_xtsiz, 3, "below xsiz: two tiles", 0, X_PROF, "siz.single-tile", 0 },
-    { "siz.ytsiz", set_siz_ytsiz, 3, "below ysiz: two tiles", 0, X_PROF, "siz.single-tile", 0 },
+    { "siz.xtsiz", set_siz_xtsiz, 3, "two tiles but only tile 0 is coded (B.11)", 0, X_STD, "codestream.tile-count", 0 },
+    { "siz.ytsiz", set_siz_ytsiz, 3, "two tiles but only tile 0 is coded (B.11)", 0, X_STD, "codestream.tile-count", 0 },
     { "siz.xtosiz", set_siz_xtosiz, 1, "tile origin past image origin", 0, X_STD,
       "siz.tile-origin", 0 },
     { "siz.ytosiz", set_siz_ytosiz, 1, "tile origin past image origin", 0, X_STD,
@@ -816,7 +817,7 @@ static const FieldMutant field_mutants[] = {
     { "sot.tpsot", set_sot_tpsot, 255, "reserved", 0, X_STD, "decode", 0 },
     { "sot.tnsot", set_sot_tnsot, 0, "unspecified count: valid", 0, X_VALID, NULL, 0 },
     { "sot.tnsot", set_sot_tnsot, 2, "count 2 with one tile-part", 0, X_STD, "sot.tnsot-count", 0 },
-    { "plt.zplt", set_plt_zplt, 1, "first PLT index is not zero", 0, X_STD, "plt.zplt-index", 0 },
+    { "plt.zplt", set_plt_zplt, 1, "Zplt starts at 1: valid at the standard layer", 0, X_PROF, "plt.zplt-sequence", 0 },
     { "plt.iplt.b0.bits", set_iplt_bits, 0,
       "packet length 0 (with the headers in the data a packet has at least one byte)", 0, X_STD,
       "plt.zero-length", 0 },
@@ -1877,7 +1878,7 @@ static const RuleMutant rule_mutants[] = {
       NULL },
     { "tlm.tile-parts", rule_tlm_length, "Ptlm one more than Psot (A.7.1)", 0, 0, X_LENIENT,
       "tlm.tile-parts", NULL },
-    { "tlm.index", rule_tlm_index, "one TLM, with Ztlm 1", 0, 0, X_LENIENT, "tlm.index", NULL },
+    { "tlm.index", rule_tlm_index, "one TLM, with Ztlm 1: valid (A.7.1)", 0, 0, X_VALID, NULL, NULL },
     { "tlm.stlm", rule_tlm_reserved, "Stlm bit 7 set (Table A.34)", 0, 0, X_LENIENT, "decode",
       NULL },
     { "plm", rule_plm, "PLM of the one tile-part: valid; the server skips it", 0, 0, X_VALID, NULL,
@@ -1937,11 +1938,11 @@ static const RuleMutant rule_mutants[] = {
     { "qcc.reserved-bits", rule_qcc_reserved,
       "a reversible step size with a low bit set (Table A.29)", 0, 0, X_LENIENT,
       "qcc.reserved-bits", NULL },
-    { "plm.index", rule_plm_index, "one PLM, with Zplm 1 (A.7.2)", 0, 0, X_LENIENT,
-      "plm.index", NULL },
+    { "plm.index", rule_plm_index, "one PLM, with Zplm 1: valid (A.7.2)", 0, 0, X_VALID,
+      NULL, NULL },
     { "plm.zero-length", rule_plm_zero, "PLM with a zero packet length, headers in the data",
       0, 0, X_LENIENT, "plm.zero-length", NULL },
-    { "ppm.index", rule_ppm_index, "one PPM, with Zppm 1 (A.7.4)", 0, 0, X_STD, "ppm.index",
+    { "ppm.index", rule_ppm_index, "one PPM, with Zppm 1: valid (A.7.4); profile excludes PPM", 0, 0, X_PROF, "decode",
       NULL },
     { "ppm.length", rule_ppm_length, "Nppm one more than the packet headers (A.7.4)", 0, 0,
       X_STD, "ppm.length", NULL },
@@ -3508,6 +3509,24 @@ static void hdr_jpx_jpch_colour(Jp2Family *f, int box) {
     multiple_colour(&f->boxes.arr[box_index(f, TopPayload_jpch_PRESENT, 0)].payload.u.jpch);
 }
 
+/* I.5.3.6: completeness counts distinct mapped channels and all colours. */
+static void hdr_cdef_missing_channel(Jp2Family *f, int box) {
+    hdr_cdef_unspecified(f, box);
+    Superbox *h = jp2h_of(f);
+    h->children.arr[h->children.nCount - 1].payload.u.cdef.entries.nCount = 2;
+}
+static void hdr_cdef_duplicate_channel(Jp2Family *f, int box) {
+    hdr_cdef_unspecified(f, box);
+    Superbox *h = jp2h_of(f);
+    h->children.arr[h->children.nCount - 1].payload.u.cdef.entries.arr[2].cn = 1;
+}
+static void hdr_cdef_missing_colour(Jp2Family *f, int box) {
+    hdr_cdef_unspecified(f, box);
+    Superbox *h = jp2h_of(f);
+    CdefEntry *first = &h->children.arr[h->children.nCount - 1].payload.u.cdef.entries.arr[0];
+    first->typ = first->asoc = 65535;
+}
+
 static const RuleMutant header_mutants[] = {
     { "jp2h.palette", hdr_palette, "pclr (2 entries) and cmap through it: valid", CF_JP2, 0,
       X_VALID, NULL, NULL },
@@ -3928,6 +3947,15 @@ static const RuleMutant header_mutants[] = {
       "JP2-compatible JPX, jp2h channels share Typ and Asoc", CF_JPX, 0, X_LENIENT, "cdef.pairs", NULL },
     { "jpx.jpch-cdef-colour", hdr_jpx_jpch_colour,
       "JP2-compatible JPX, jpch channels share Typ and Asoc (M.11.7.5): valid", CF_JPX, 0, X_VALID, NULL, NULL },
+    { "cdef.complete", hdr_cdef_missing_channel,
+      "three mapped channels but only two are defined (I.5.3.6)", CF_JP2, 0,
+      X_LENIENT, "cdef.complete", NULL },
+    { "cdef.complete", hdr_cdef_duplicate_channel,
+      "three entries but only two distinct channels are defined (I.5.3.6)", CF_JP2, 0,
+      X_LENIENT, "cdef.complete", NULL },
+    { "cdef.complete", hdr_cdef_missing_colour,
+      "all mapped channels defined but grey is missing (I.5.3.6)", CF_JP2, 0,
+      X_LENIENT, "cdef.complete", NULL },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -4126,7 +4154,7 @@ static void emit_eoc_mutants(Bytes valid, cf_kind kind, const char *base_name,
  * the server does, and at layer 1 in a tile-part header. FF30, a marker
  * without a segment (A.1.3), is skipped at layer 1; the profile excludes
  * it. An Iplt longer than the model's ten bytes, which T.800 allows, is
- * past a corpus bound (j2k-headers.asn1): lib/test covers it. */
+ * past a corpus bound (j2k-headers.asn1): tests/jpeg2000 covers it. */
 static void emit_insertion_mutants(Bytes valid, cf_kind kind, const char *base_name,
                                    const char *companions) {
     static const struct {

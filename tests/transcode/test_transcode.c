@@ -14,10 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_reader.h"
-#include "hv_writer.h"
-#include "tier2.h"
-#include "transcode.h"
+#include "jpeg2000/hv_reader.h"
+#include "jpeg2000/hv_writer.h"
+#include "transcode/tier2.h"
+#include "transcode/transcode.h"
 
 #ifndef TRANSCODE_FIXTURES
 #error "TRANSCODE_FIXTURES must name the fixture directory"

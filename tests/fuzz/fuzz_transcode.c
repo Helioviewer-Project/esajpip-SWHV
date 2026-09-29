@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "transcode.h"
+#include "transcode/transcode.h"
 
 /* Nonzero if the codestream reads through with these flags. */
 static int reads(const hv_out *cs, unsigned flags) {

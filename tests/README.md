@@ -8,8 +8,9 @@ tests/
   CMakeLists.txt   the gate (BUILD_TESTING) and the one registration helper
   run.sh           builds and runs the suite
   run_mutation.sh  mutation testing, with mutate.py making the mutants
-  lib/             jpeg2000_io: reader, rules, writer, hv_rewrite, geometry,
+  jpeg2000/        jpeg2000: reader, rules, writer, hv_rewrite, geometry,
                    hv_file, hv_served, hv_walk
+  jpip/            jpip: source/, index/, request/, response/ (see jpip/README.md)
   transcode/       hv_transcode: the library and its command line (fixtures/)
   merge/           hv_merge: the library and its command line (fixtures/)
   server/          the server's own tests
@@ -23,6 +24,7 @@ From the repository root:
 ./tests/run.sh
 ./tests/run.sh sanitize
 ./tests/run.sh normal -L tools
+ESAJPIP_TEST_TARGETS=jpip_tests ./tests/run.sh normal -L '^jpip$'
 ./tests/run.sh normal -R '^server$'
 ./tests/run.sh normal -N                   # list without running
 ```
@@ -52,8 +54,10 @@ Options:
   libFuzzer runtime).
 - `BUILD_TESTING` (default ON) gates every test.
 
-CTest labels: `tools` (jpeg2000_io and the two tools), `server`, `cli` (the two
+CTest labels: `tools` (jpeg2000, jpip and the two tools), `server`, `cli` (the two
 command-line tests), `model` (`model_static`) and `fuzz` (the fuzz targets).
+The JPIP library also has the `jpip` label and responsibility labels described
+in [its test guide](jpip/README.md).
 For an already built tree, `ctest --test-dir build --output-on-failure` remains
 sufficient.
 
@@ -95,7 +99,7 @@ ESAJPIP_JOBS=8 ESAJPIP_FUZZ_SECONDS=300 ESAJPIP_FUZZ_WORKERS=8 \
 
 # The rules of hv_rules.c that no test sees fail.
 ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 ESAJPIP_MUTATION_OPERATORS=rule \
-  sh tests/run_mutation.sh lib/hv_rules.c
+  sh tests/run_mutation.sh jpeg2000/hv_rules.c
 ```
 
 The mutation runner preserves each selected source under `WORK/original`.
@@ -107,7 +111,7 @@ Keep the snapshot with the report when investigating survivors. The
 checks every built mutant, including the last one. It has the `infrastructure`
 label so the default library mutation campaign does not repeat it per mutant.
 
-`tests/lib/test_rules.c` checks exact rule names, accepted boundary controls,
+`tests/jpeg2000/test_rules.c` checks exact rule names, accepted boundary controls,
 and observable counts, decoded bytes and state. It covers image/tile origins,
 PLT index sets and packet counts, fragment containment and SOC prefixes, URL
 percent decoding, palette padding, JPX color parameters, quantization step-list
@@ -157,7 +161,15 @@ build/profile-fuzz/tests/fuzz/fuzz_transcode -jobs=8 -workers=8 \
 | `merge` | The merger's library: box construction, JPX graph, color handling. |
 | `merge_command` | `hv_merge`'s command line and its files on disk. |
 | `logging` | Rotation, truncation, concurrent producers, dropped-record reporting, output failure and shutdown draining. Uses small test-only log limits. |
-| `protocol` | Configuration boundaries and missing keys, request semantics, cache state, window geometry, packet indexing primitives and exact JPP writer bytes/capacity boundaries. |
+| `jpip_request` | JPIP parameter parsing, JHV request shapes, selectors, route classification and cache-model diagnostics, linked without the server. |
+| `jpip_source` | Byte-range reads and failure boundaries on memory sources. |
+| `index_library` | Geometry differential and corpus indexing independent of packet access order. |
+| `jpip_packet_layout` | Progression coordinates, resolution selection and compact packet-index bounds. |
+| `jpip_cache` | Cache increments, saturation, augmentation and packed complete-bin state. |
+| `jpip_window` | Window-to-precinct traversal and resolution boundaries. |
+| `jpip_writer` | Exact JPP writer bytes, coalescing, capacity boundaries and metadata placeholders on memory sources. |
+| `jpip_library` | Stateful response generation and independent reconstruction of bins across budgets, remapping and repeated windows. |
+| `server_support` | Configuration boundaries and missing keys, address resolution and mapped-source integration. |
 | `jpeg2000` | Every committed source-vector label, all declared packets in accepted vectors, linked graphs, progression order, malformed file boundaries, and worker migration/serialization. |
 | `server_connection` | Incremental HTTP parsing and direct libuv connection callbacks, deadline transitions, ordered writes and graceful closure. |
 | `server` | The real serving loop: HTTP status/headers, admission, limits, channel routing, disconnects and shutdown. Its independent JPP reader reconstructs and verifies source bytes across the full response matrix and stateful scenarios. |
@@ -190,7 +202,7 @@ the model, manifest and server together. Do not hand-edit generated vectors or
 labels. The [coverage map](../spec/COVERAGE.md) records the tested rules and
 intentional boundaries. Regeneration is a separate Docker workflow needed only
 when the model or corpus generator changes; it also regenerates
-`lib/generated/`.
+`jpeg2000/generated/`.
 
 ## What a passing suite does not establish
 

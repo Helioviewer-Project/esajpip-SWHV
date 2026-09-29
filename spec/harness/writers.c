@@ -1,13 +1,13 @@
-/* writers.c — the writer of ../../lib judged by the model: every file the
+/* writers.c — the writer of ../../jpeg2000 judged by the model: every file the
  * library writes from the corpus is labeled at both layers (label.c), with
- * the whole-file decoders instead of the reader that ../../lib/test uses.
+ * the whole-file decoders instead of the reader that ../../jpeg2000/test uses.
  *
  * Usage:  writers <corpus-directory> [<seed> <mutants-per-vector> <scratch-directory>]
  *
  * For every vector of the corpus's manifest:
  *   - hv_rewrite, where the reader reads it through (flags 0, or
  *     HV_ACCEPT_PLT_PADDING): where the vector is in the writer's form,
- *     the rewrite is the vector byte for byte (lib/test/test_rewrite.c
+ *     the rewrite is the vector byte for byte (jpeg2000/test/test_rewrite.c
  *     checks that too); otherwise (hv_rewrite_result.uncomparable) it has
  *     labels no worse than the vector's, layer by layer, and is in the
  *     writer's form: hv_rewrite gives it back byte for byte.
@@ -27,7 +27,7 @@
  * linked merge writes the mutant to the scratch directory).
  *
  * Build: spec/check-model.sh compiles this file with label.c,
- * crossfield.c, mapping.c, ../../lib's sources, ../../transcode's and
+ * crossfield.c, mapping.c, ../../jpeg2000's sources, ../../transcode's and
  * ../../merge's library sources and the generated C of the four modules;
  * its command is the reference. */
 #define _XOPEN_SOURCE 700
@@ -37,11 +37,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_rewrite.h"
-#include "hv_served.h"
+#include "jpeg2000/hv_rewrite.h"
+#include "jpeg2000/hv_served.h"
 #include "label.h"
-#include "merge.h"
-#include "transcode.h"
+#include "merge/merge.h"
+#include "transcode/transcode.h"
 
 static int failures, checked, rewritten, transcoded, merged, companion_labels;
 

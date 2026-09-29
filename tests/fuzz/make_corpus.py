@@ -73,7 +73,7 @@ def asn1_types(repo: Path) -> int:
     """The number of PDU types, counted as tests/fuzz/CMakeLists.txt lists
     them in asn1_pdus.h."""
     return sum(len(ACN_DECODE.findall(header.read_bytes()))
-               for header in sorted((repo / "lib" / "generated").glob("*.h")))
+               for header in sorted((repo / "jpeg2000" / "generated").glob("*.h")))
 
 
 def codestream_windows(data: bytes, start: int, end: int, out: set[bytes]) -> None:

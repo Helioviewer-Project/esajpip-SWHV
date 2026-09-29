@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_error.h"
-#include "hv_reader.h"
+#include "jpeg2000/hv_error.h"
+#include "jpeg2000/hv_reader.h"
 #include "tier2.h"
 
 /* Memory bounds of one transcode, for what a header can declare with

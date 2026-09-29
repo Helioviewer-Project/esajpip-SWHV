@@ -3,8 +3,9 @@
 ## Start here
 
 esajpip reads JPEG 2000 files (`.jp2`, `.jpx`) and serves pieces of them to
-JHelioviewer over JPIP. The code that reads those files is
-`src/jpeg2000/file_manager.cc`. It has to reject malformed input without
+JHelioviewer over JPIP. `jpip/index/image_index.cc` uses the shared reader
+in `jpeg2000/hv_reader.c`; `server/storage/file_manager.cc` opens and maps the sources.
+The reader has to reject malformed input without
 crashing, and it has to accept exactly the files the project promises to
 support ([`JPIP_PROFILE.md`](../JPIP_PROFILE.md), "Supported JPEG 2000
 sources").
@@ -13,11 +14,11 @@ This directory is a **formal description of what a valid file looks like**,
 written in a machine-readable notation (ASN.1 with ACN encoding rules), plus
 a small program that turns that description into a **corpus of test files**:
 hundreds of tiny `.jp2`/`.jpx` files, each labeled "the server must
-accept this" or "the server must reject this". `tests/jpeg2000_test.cc` then
+accept this" or "the server must reject this". `tests/server/jpeg2000_test.cc` then
 opens every one and checks that the server agrees, and
-`tests/lib/test_profile.c` does the same for the reader,
+`tests/jpeg2000/test_profile.c` does the same for the reader,
 which shares most of the cross-field rules with the harness
-(`../lib/hv_rules.c`).
+(`../jpeg2000/hv_rules.c`).
 
 The point of doing it this way rather than writing test files by hand:
 
@@ -35,12 +36,12 @@ The point of doing it this way rather than writing test files by hand:
 
 The ASN.1 compiler runs offline, on a developer machine, only when the
 description changes; it is never part of the build. The server tests consume
-only the committed corpus through plain CMake/CTest, and the `esajpip`
-binary links no generated code. The reader/writer library in `../lib/`
-does: `lib/generate.sh` generates the header types of `jpeg2000-io.asn1`,
+only the committed corpus through plain CMake/CTest. The server now links the
+reader/writer library and its committed generated header decoders through
+`jpip`. `jpeg2000/generate.sh` generates the header types of `jpeg2000-io.asn1`,
 the profile types the reader checks against, and the box types and list
 elements it decodes one at a time (the script's `pdus` list) into
-`lib/generated/`, which is committed and built by the normal CMake build.
+`jpeg2000/generated/`, which is committed and built by the normal CMake build.
 
 **Status.** With the upstream compiler revision pinned here, the complete
 model generates C, that C builds as strict C11, and the sanitized harness
@@ -206,7 +207,7 @@ Sgcod [] {                              -- ACN: the byte layout of the same fiel
 | **label** | The vector's verdict at each layer: `valid` or `invalid`. |
 | **base** | One of four canonical, valid files everything else is derived from. |
 | **mutant** | A base with one deliberate change (a field out of range, a rule broken, a length off by one). |
-| **cross-field rule** | A validity rule ASN.1 cannot state (e.g. "csiz equals the number of components"); listed at the end of each `.asn1`. Most are in `../lib/hv_rules.c`, which the harness (`harness/crossfield*.{h,c}`) and the reader share; the structural ones (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, some box counts) are implemented in both, under the same names. |
+| **cross-field rule** | A validity rule ASN.1 cannot state (e.g. "csiz equals the number of components"); listed at the end of each `.asn1`. Most are in `../jpeg2000/hv_rules.c`, which the harness (`harness/crossfield*.{h,c}`) and the reader share; the structural ones (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, some box counts) are implemented in both, under the same names. |
 | **determinant** | An ACN field whose value controls the size or presence of another (e.g. `Lxxx` sizes the segment body). |
 | **harness** | `spec/harness/`: the offline C program that builds and labels the corpus. |
 | **manifest** | `tests/vectors/j2k/manifest.tsv`: one row per vector with its labels. |
@@ -219,28 +220,28 @@ file violates T.800/T.801. The boolean harness label is non-valid with that
 reason; it must not be interpreted as a standards defect. This recursion
 limit is separate from the ASN.1 whole-file model's corpus bounds on list
 and opaque-payload sizes. Depth-boundary regressions are constructed in
-`tests/lib/test_reader.c`, outside the conformance-vector manifest.
+`tests/jpeg2000/test_reader.c`, outside the conformance-vector manifest.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM, and the elements of the bodies the framing keeps opaque (COC, QCC, RGN, POC, TLM, PLM, PPM, PPT, CRG), which `../lib/hv_rules.c` reads one at a time. |
+| `j2k-headers.asn1` / `.acn` | Marker segment bodies: SIZ, COD, QCD, PLT (with its packet-length entries, `Iplt`), COM, and the elements of the bodies the framing keeps opaque (COC, QCC, RGN, POC, TLM, PLM, PPM, PPT, CRG), which `../jpeg2000/hv_rules.c` reads one at a time. |
 | `j2k-codestream.asn1` / `.acn` | Codestream framing: SOC, main header, tile-parts (SOT, tile headers, SOD, data), EOC. Imports the bodies. |
 | `jp2-boxes.asn1` / `.acn` | JP2/JPX box tree; `jp2c` carries a full codestream; `jpch`/`ftbl`/`flst`/`dtbl`/`url`/`asoc` and the header boxes (`jp2h`/`jplh` with `ihdr`, `bpcc`, `colr`, `pclr`, `cmap`, `cdef`, `res`, `cgrp`), `uinf`, `ftyp` and `rreq` in full, other boxes opaque. Imports the codestream. |
-| `jpeg2000-io.asn1` / `.acn` | The types only the reader/writer in `../lib/` needs: the box header (LBox, TBox, XLBox), a marker code, Lxxx, SOT, the Reader Requirements box in parts (`RreqHeader`, `RreqStandardFeature`, `RreqVendorFeature`, `FeatureCount`), the palette's NE and NPC (`PclrCounts`), and a Number List entry (`NlstEntry`, which the whole-file model keeps opaque). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. Everything else the reader and writer decode or encode is the whole-file model's own type (see "The reader/writer handles one element at a time"). `../lib/generate.sh` generates only the types in its `pdus` list and what they depend on: these, `CodSegment` and `QcdSegment` of `j2k-codestream.asn1`, the elements of SIZ, PLT and COM in `j2k-headers.asn1` (`SizFixed`, `Component`, `Zplt`, `Iplt`, `Rcom`) and the body elements `../lib/hv_rules.c` reads one at a time (`Qcd`, `ComponentIndex`, `ComponentIndex-Wide`, `CocStyle`, `RgnStyle`, `PocChange`, `PocChange-Wide`, `TlmHeader`, `Ttlm`, `Ttlm-Wide`, `Ptlm`, `Ptlm-Wide`, `Zplm`, `Zppm`, `Zppt`, `CrgEntry`), the profile types `SizFixed-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile`, and `FtypHeader`, `Brand`, `DataReferenceCount`, `UrlHeader`, `FragmentCount`, `Fragment`, the box tree rules' `UuidCount`, `UuidId` and `CrefType`, and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
-| `modules` | The four modules, in import order: the one list that `../lib/generate.sh`, `check-model.sh` and `../lib/CMakeLists.txt` read. |
-| `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../lib/generated/`. |
+| `jpeg2000-io.asn1` / `.acn` | The types only the reader/writer in `../jpeg2000/` needs: the box header (LBox, TBox, XLBox), a marker code, Lxxx, SOT, the Reader Requirements box in parts (`RreqHeader`, `RreqStandardFeature`, `RreqVendorFeature`, `FeatureCount`), the palette's NE and NPC (`PclrCounts`), and a Number List entry (`NlstEntry`, which the whole-file model keeps opaque). Decoded one at a time; lengths are ASN.1 fields, so `LBox = 0`, `LBox = 1` with XLBox, and `Psot = 0` are all expressible. Not used by the corpus harness. Everything else the reader and writer decode or encode is the whole-file model's own type (see "The reader/writer handles one element at a time"). `../jpeg2000/generate.sh` generates only the types in its `pdus` list and what they depend on: these, `CodSegment` and `QcdSegment` of `j2k-codestream.asn1`, the elements of SIZ, PLT and COM in `j2k-headers.asn1` (`SizFixed`, `Component`, `Zplt`, `Iplt`, `Rcom`) and the body elements `../jpeg2000/hv_rules.c` reads one at a time (`Qcd`, `ComponentIndex`, `ComponentIndex-Wide`, `CocStyle`, `RgnStyle`, `PocChange`, `PocChange-Wide`, `TlmHeader`, `Ttlm`, `Ttlm-Wide`, `Ptlm`, `Ptlm-Wide`, `Zplm`, `Zppm`, `Zppt`, `CrgEntry`), the profile types `SizFixed-Profile`, `MainMarkerCode-Profile` and `TileMarkerCode-Profile`, and `FtypHeader`, `Brand`, `DataReferenceCount`, `UrlHeader`, `FragmentCount`, `Fragment`, the box tree rules' `UuidCount`, `UuidId` and `CrefType`, and the header box types (`Ihdr`, `BitDepth`, `ColrHeader`, `CmapEntry`, `CdefCount`, `CdefEntry`, `Resolution`) of `jp2-boxes.asn1`. A type the reader or writer needs must be added to that list. |
+| `modules` | The four modules, in import order: the one list that `../jpeg2000/generate.sh`, `check-model.sh` and `../jpeg2000/CMakeLists.txt` read. |
+| `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../jpeg2000/generated/`. |
 | `asn1scc-patches/` | Local fixes for bugs present in `VERSION`, applied in `series` order, and a reference archive of former fixes (not applied). |
 | `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
 | `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, applies `asn1scc-patches/series`, builds the Docker image, and runs ACN v2 and `-icdPdus` regressions. |
-| `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../lib/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies, the parts of `Rreq` in `jpeg2000-io.asn1` among them; the tile-part and dimension limits restated in C. Then, with the Docker image: `../lib/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, duplicate vector names rejected, and `harness/writers.c` run on the corpus; last, OpenJPEG's `opj_decompress` on every standard-valid vector (see "Quick start"). |
+| `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../jpeg2000/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies, the parts of `Rreq` in `jpeg2000-io.asn1` among them; the tile-part and dimension limits restated in C. Then, with the Docker image: `../jpeg2000/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, duplicate vector names rejected, and `harness/writers.c` run on the corpus; last, OpenJPEG's `opj_decompress` on every standard-valid vector (see "Quick start"). |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/label.{h,c}` | The labels of a file at both layers: the generated decoders of each layer, `box_bounds_ok`, the cross-field rules, and the companion oracle of linked JPX files. |
-| `harness/writers.c` | The writer of `../lib` judged by the model: labels the files `hv_rewrite` (every vector the reader reads through), `hv_transcode` and `hv_merge` (every `.jp2` they take) write from the corpus, and checks that each is in the writer's form (`hv_rewrite` gives it back byte for byte). With a seed, it also mutates each vector at random and checks the mutants the same way: a differential fuzz of the writer. |
-| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` is shared with the standard reader through `hv_rule_fragments`. |
-| `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8; `lxxx` is `../lib/hv_mapping.c`'s, which the harness links), and the decode-only box-type mappings `boxtype`, `resboxtype`, `cgrpboxtype`, `jp2boxtype`, `jp2stdboxtype` and `jp2hboxtype`. |
+| `harness/writers.c` | The writer of `../jpeg2000` judged by the model: labels the files `hv_rewrite` (every vector the reader reads through), `hv_transcode` and `hv_merge` (every `.jp2` they take) write from the corpus, and checks that each is in the writer's form (`hv_rewrite` gives it back byte for byte). With a seed, it also mutates each vector at random and checks the mutants the same way: a differential fuzz of the writer. |
+| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../jpeg2000/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../jpeg2000/hv_reader.c` under the same names, and `flst.nf-count` is shared with the standard reader through `hv_rule_fragments`. |
+| `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8; `lxxx` is `../jpeg2000/hv_mapping.c`'s, which the harness links), and the decode-only box-type mappings `boxtype`, `resboxtype`, `cgrpboxtype`, `jp2boxtype`, `jp2stdboxtype` and `jp2hboxtype`. |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 
 ## How the pieces fit
@@ -253,12 +254,12 @@ and opaque-payload sizes. Depth-boundary regressions are constructed in
                       ─── mutates them ───────────────────┤
                       ─── encodes ─▶ bytes ─▶ decodes ────┘──▶ label per layer
                       ─── + harness/crossfield.c rules ──────▶ (valid/invalid)
-                          (shared rules: lib/hv_rules.c)  │
+                          (shared rules: jpeg2000/hv_rules.c)  │
                                         tests/vectors/j2k/*.jp2, *.jpx, manifest.tsv
                                                           │
-   tests/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
-   tests/lib/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
-   tests/lib/test_rewrite.c ─ hv_rewrite of each ────────────▶ must give the vector back
+   tests/server/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
+   tests/jpeg2000/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
+   tests/jpeg2000/test_rewrite.c ─ hv_rewrite of each ────────────▶ must give the vector back
    harness/writers.c ─ hv_rewrite, hv_transcode, hv_merge ──▶ label.c: expected labels
 ```
 
@@ -273,7 +274,7 @@ boxes the standard places elsewhere, and C rules reject those: an `flst`
 in a `jpch` decodes and fails `box.flst-placement`, a `jpch` in a `jpch`
 `box.nested-top-level`. Below the levels the types reach, and inside the
 boxes they keep opaque, the box tree rules (`hv_rule_box_tree` in
-`lib/hv_rules.c`) read the file's bytes: every box of every superbox of
+`jpeg2000/hv_rules.c`) read the file's bytes: every box of every superbox of
 the file's kind, to `HV_BOX_DEPTH_MAX` levels, with the placement and count
 rules of T.800 Annex I and T.801 Annex M. At layer 1 a file is a JPX file
 when its `ftyp` brand is `jpx `, a JP2 file otherwise (`Jp2File`, which
@@ -302,13 +303,13 @@ root.
 2. Regenerate the reader's code with the same compiler:
 
    ```sh
-   ASN1SCC_IMAGE=esajpip-asn1scc lib/generate.sh
+   ASN1SCC_IMAGE=esajpip-asn1scc jpeg2000/generate.sh
    ```
 
-   `lib/generate.sh` runs the compiler in that Docker image unless
+   `jpeg2000/generate.sh` runs the compiler in that Docker image unless
    `ASN1SCC` names a local copy of the same patched build, as in
    `ASN1SCC="$HOME/jhv/asn1scc-bin/dotnet/dotnet $HOME/jhv/asn1scc-bin/asn1scc/asn1scc.dll"`.
-   `check-model.sh` ignores `ASN1SCC`: it runs `lib/generate.sh --check`
+   `check-model.sh` ignores `ASN1SCC`: it runs `jpeg2000/generate.sh --check`
    with the image it builds the corpus with, so that both come from one
    compiler.
 3. Run the complete generation and harness gate:
@@ -317,7 +318,7 @@ root.
    ASN1SCC_IMAGE=esajpip-asn1scc spec/check-model.sh
    ```
 
-   This checks that `lib/generated/` matches the model, so regenerate it
+   This checks that `jpeg2000/generated/` matches the model, so regenerate it
    before running the gate, and then has OpenJPEG's `opj_decompress` (on
    the host; `OPJ_DECOMPRESS` names another) decode every standard-valid
    vector: each it rejects must be on a limit of OpenJPEG's the script
@@ -357,7 +358,7 @@ root.
    Both runners read `ESAJPIP_TEST_BUILD_DIR` for their build directory.
    Their defaults differ; if you set it, give each runner its own.
 5. Commit the changed model or harness, `spec/VERSION` and
-   `spec/asn1scc-patches/` if they changed, `lib/generated/`, and
+   `spec/asn1scc-patches/` if they changed, `jpeg2000/generated/`, and
    `tests/vectors/j2k/` together. Never edit vector files or manifest labels
    by hand.
 
@@ -467,7 +468,7 @@ types with no alternative at their level, and marker codes the layer does
 not admit in their position; the decoder ends with the layer's generated
 constraint check, `<Type>_IsConstraintValid`, so a value out of range is a
 decode failure too), and the cross-field rules for that layer hold
-(`crossfield.c`, with the shared rules of `../lib/hv_rules.c`). The
+(`crossfield.c`, with the shared rules of `../jpeg2000/hv_rules.c`). The
 compiler performs the evaluation, but the ASN.1/ACN model and the
 imperative cross-field rules are human-maintained sources that cite the
 corresponding standard clauses.
@@ -492,11 +493,11 @@ they occur, so both name the same rule for a file that breaks several.
 
 The rule lists at the end of each `.asn1` state each rule with its
 citation and name some of them. The names themselves are defined where the
-rules are implemented: the shared rules in `../lib/hv_rules.c`; the
+rules are implemented: the shared rules in `../jpeg2000/hv_rules.c`; the
 structural rules (segment placement and count, the `Zplt` sequence, PLT
 sums, the file's first boxes, some box counts) in
 `harness/crossfield_impl.h` and `harness/crossfield.c` and, under the same
-names, in `../lib/hv_reader.c`. `flst.nf-count` also runs in the standard
+names, in `../jpeg2000/hv_reader.c`. `flst.nf-count` also runs in the standard
 reader through `hv_rule_fragments`, including inside `j2cx`; the served
 profile instead requires `flst.one-fragment`. In the manifest, the two cross-file names,
 `flst.source-extent` and `url.missing-companion`, come from the companion
@@ -522,7 +523,7 @@ file it was reading); when its header-box checks break their contract with
 the `standard` and `reason` columns, it prints `FAIL (a)` to `FAIL (d)`
 lines, and `FAIL (e)` or `FAIL (f)` when the reader names another rule than
 `profile_reason`, or than `reason` for a codestream rule at the standard
-layer; which `../tests/lib/test_profile.c` explains at its top, with the
+layer; which `../tests/jpeg2000/test_profile.c` explains at its top, with the
 same details. Either way, look the name up in `manifest.tsv`; the cases
 below name the server, and apply to the reader in the same way:
 
@@ -548,9 +549,9 @@ below name the server, and apply to the reader in the same way:
 
 The `field` column also tells you which of the harness's mutation classes
 produced the vector (see "What the harness generates"), which narrows down
-the parser code involved: a length mutant points at `ReadBoxHeader` /
-`ReadCodestream`'s limit checks, a field mutant at the corresponding
-`Read*Marker`, a rule mutant at the structural checks.
+the parser code involved: a length mutant points at `hv_boxes_next` or
+`hv_codestream_next` framing checks, a field mutant at the corresponding
+generated decoder, and a rule mutant at the checks in `hv_rules.c`.
 
 Two things that look unusual are intentional. An `Iplt` written in more
 7-bit groups than its value needs is valid at both layers: the server bounds
@@ -799,14 +800,14 @@ The reader/writer decodes one header or one list element at a time (see
 | `Resolution` | 120 |
 | `PclrCounts` | 16 |
 
-The largest type in `../lib/generate.sh`'s `pdus` list is `CodSegment`.
+The largest type in `../jpeg2000/generate.sh`'s `pdus` list is `CodSegment`.
 None is sized by a list's bound: the palette's column depths, like SIZ's
 components, are decoded one at a time.
 
-The harness, the library in `../lib/` (`hv_reader.c`, `hv_writer.c`,
+The harness, the library in `../jpeg2000/` (`hv_reader.c`, `hv_writer.c`,
 `hv_rewrite.c`, `hv_rules.c`, `hv_geometry.c`, `hv_walk.c`, and
 `hv_mapping.c`, which
-provides the `lxxx` mapping for `lib/generated/` and the harness), and the
+provides the `lxxx` mapping for `jpeg2000/generated/` and the harness), and the
 tools in `../transcode/` and `../merge/`, which use the generated struct
 types, depend on the generated API, so they are what to touch when
 regenerating with a newer asn1scc. The server and `jpeg2000_test` never see
@@ -815,7 +816,7 @@ generated code.
 ### Mapping functions
 
 Three length mappings work in both directions: `psot` and `lbox` in
-`harness/mapping.c`, and `lxxx` in `../lib/hv_mapping.c`, which the reader,
+`harness/mapping.c`, and `lxxx` in `../jpeg2000/hv_mapping.c`, which the reader,
 the writer and the harness share. ACN's length determinants count payload
 bytes, while the wire length fields also count themselves and their
 neighbors:
@@ -848,7 +849,7 @@ server retains the original bytes. The model encoder writes `'abcd'` for
 other unknown types. `check-model.sh` verifies each mapping's list against
 the CHOICEs its determinants select, and that every `other` alternative is
 `'abcd'`; and that each marker code and box type named in
-`../lib/hv_codes.h` is the value the model states for the field of that
+`../jpeg2000/hv_codes.h` is the value the model states for the field of that
 name (a `present-when` value, a fixed INTEGER field or a termination
 pattern); the script lists the few it names that the model does not state
 (SOP, EPH, the FF30 to FF3F range, twelve box types and the brands).
@@ -901,7 +902,7 @@ the model goes and where its layers differ:
 - The contents of the XML and IPR boxes are opaque at both layers. T.800
   I.7.1 requires an XML box to hold a well-formed XML document, and T.801
   N.5.4 an IPR box to hold well-formed XML 1.0; checking that needs an XML
-  parser, which neither the model nor `lib/` has.
+  parser, which neither the model nor `jpeg2000/` has.
 - `LBox = 1` with `XLBox`: two possible determinants for one payload.
 - Marker segments T.800 does not define are skipped by their length at
   both layers (A.1: "the decoder shall use the length parameter to discard
@@ -910,6 +911,17 @@ the model goes and where its layers differ:
   and any segment but PLT in a tile-part header, as the server does.
   Unknown box types are valid at both layers and are decoded as opaque
   boxes.
+- Required EPH markers after every packet header (T.800 A.8.2) are not
+  checked: packet headers are opaque to the framing model and reader.
+  `transcode/tier2.c` checks them when transcoding.
+- The Profile-1 multi-tile rule (`Rsiz = 2`) follows T.800 (08/2002 and
+  11/2015), Table A.45: `XTsiz / min(XRsiz_i, YRsiz_i) >= 1024`.
+  Equality passes, and the bound does not apply to a single tile. The
+  official T.803 (02/2024) streams `p1_04`, `p1_05` and `p1_06` conflict
+  with this bound and fail `codestream.profile-1`. This discrepancy remains
+  unresolved; the comparison and original conformance files are preserved.
+  The current T.800 (2024) wording has not been verified. This has no
+  effect on supported server sources, which must use a single tile.
 - `Rsiz` is 0, 1 or 2 (T.800 Table A.10), or a Part 2 value (T.801 Table
   A.2) in a JPX file, at layer 1; the profile preserves any Rsiz for the
   client and validates packet-layout features separately. The standard
@@ -948,14 +960,14 @@ Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 1. update `spec/VERSION` when the upstream compiler revision changes, remove
    from `asn1scc-patches/series` the patches that revision already contains,
    and run its regressions;
-2. regenerate `lib/generated/` (Quick start step 2), then run
+2. regenerate `jpeg2000/generated/` (Quick start step 2), then run
    `check-model.sh` (Quick start step 3), which checks the generated reader
    code against the model;
 3. diff `manifest.tsv` against the previous one — new or removed rows must be
    explainable by the model, harness, or compiler change; label flips are
    findings;
 4. rerun Quick start step 4 (the server and tool test runners);
-5. commit the changed inputs, `VERSION`, `lib/generated/`, and corpus together.
+5. commit the changed inputs, `VERSION`, `jpeg2000/generated/`, and corpus together.
 
 Never edit vector files or manifest labels by hand.
 
@@ -968,8 +980,8 @@ syntax (text), and the JPP response stream (its message headers are
 7-bit-group chains like `Iplt`, but the payload is sized by the *value*
 assembled from the chain, which no determinant can reference).
 
-The complementary live-server suite in `tests/server_test.cc` includes an
-independent JPP reader in `tests/jpp_validation.h`. It reconstructs data-bins
+The complementary live-server suite in `tests/server/server_test.cc` includes an
+independent JPP reader in `tests/server/jpp_validation.h`. It reconstructs data-bins
 across HTTP chunks and successive responses, then compares them byte-for-byte
 with independently assembled source payloads and metadata placeholders.
 It covers embedded and linked JPX with unequal codestream geometry, partial
@@ -1006,7 +1018,7 @@ cite the standard's table so the disagreement can be settled by reading it.
 **Why is asn1scc not in the build?** It only needs to run when the model
 changes. For the corpus, the generated code is a judge, used once per model
 change to label files; the tests read the labeled files. For the reader in
-`../lib/`, its output is committed (`lib/generated/`) and compiled like any
+`../jpeg2000/`, its output is committed (`jpeg2000/generated/`) and compiled like any
 other source. Keeping the compiler offline keeps asn1scc and .NET out of the
 build.
 
@@ -1018,8 +1030,9 @@ standard.
 
 **Can the generated decoder replace `file_manager.cc`?** Not the whole-file
 decoder: the server indexes multi-megabyte files by offset without copying,
-and ACN models fully decoded, bounded records. The reader in `../lib/` is
-meant to: it steps from header to header, decodes one header or one list
-element at a time with the generated code, and applies the shared rules,
-to JP2 and JPX files alike. The whole-file model stays the specification
-and the test oracle.
+and ACN models fully decoded, bounded records. The shared reader in `../jpeg2000/`
+now supplies that parsing: it steps from header to header, decodes one header
+or one list element at a time with the generated code, and applies the shared
+rules to JP2 and JPX files alike. `jpip` adds deferred packet indexing and
+response generation. FileManager retains source opening and mapping. The
+whole-file model stays the specification and the corpus oracle.

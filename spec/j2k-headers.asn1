@@ -21,8 +21,8 @@
 -- decode error rather than a hand-written rule.
 --
 -- Cross-field rules that ASN.1 cannot state are listed at the end. They are
--- implemented once, in ../lib/hv_rules.c, which the harness
--- (harness/crossfield_impl.h) and the reader in ../lib share: those on one
+-- implemented once, in ../jpeg2000/hv_rules.c, which the harness
+-- (harness/crossfield_impl.h) and the reader in ../jpeg2000 share: those on one
 -- segment body (SIZ, COD), on PLT entries and Zplt, and those across the
 -- segments of a codestream (hv_segments), to which the harness and the
 -- reader pass the segments and tile-parts in codestream order. The server
@@ -45,7 +45,7 @@
 -- depends on Csiz or on a field before it, or runs on into the next
 -- segment of the same kind, which a CONTAINING region cannot state. Their
 -- element types are below ("Bodies read one element at a time");
--- ../lib/hv_rules.c decodes them with those types for the reader and the
+-- ../jpeg2000/hv_rules.c decodes them with those types for the reader and the
 -- harness alike.
 
 J2K-Headers DEFINITIONS AUTOMATIC TAGS ::= BEGIN
@@ -197,7 +197,7 @@ Rcom ::= INTEGER (0..1)                       -- 0 binary, 1 Latin-1
 
 -- ---------------------------------------------------------------------------
 -- Bodies read one element at a time: COC, QCC, RGN, POC, TLM, PLM, PPM,
--- PPT and CRG (see the top). ../lib/hv_rules.c decodes each with these
+-- PPT and CRG (see the top). ../jpeg2000/hv_rules.c decodes each with these
 -- types, one element after another up to the end Lxxx gives; a body that
 -- is not a whole number of its elements does not decode (reason
 -- `decode`). Their rules are at the end of this file. Layer 1 only: the
@@ -341,7 +341,7 @@ Scod-Profile ::= Scod (WITH COMPONENTS {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the bodies (../lib/hv_rules.c, shared by the
+-- Cross-field constraints for the bodies (../jpeg2000/hv_rules.c, shared by the
 -- harness and the reader; C++ in FileManager). Segment-length consistency
 -- is NOT listed: it is enforced by the CONTAINING framing plus `size
 -- deduced` in the .acn.
@@ -362,8 +362,8 @@ END
 --         a Part 2 codestream, 1x00 xxxx xxxx xxxx (siz.rsiz; a JP2 file
 --         holds none, jp2.rsiz in jp2-boxes.asn1). The profile preserves
 --         any Rsiz.
---   Plt:  the Zplt of a tile-part header's PLT segments are 0 to n - 1 for
---         n segments, each once, in any order (A.7.3: the entries are
+--   Plt:  the Zplt of a tile-part header's PLT segments are unique,
+--         with gaps allowed, in any order (A.7.3: the entries are
 --         "concatenated, in order of increasing Zplt"; A.1.3: marker
 --         segments "can appear in any order in a given header";
 --         plt.zplt-index). The profile takes them in segment order, 0, 1,
@@ -389,7 +389,7 @@ END
 --         entry at both layers.
 --
 -- Standard only, across the segments of a codestream (hv_segments in
--- ../lib/hv_rules.c, which returns the names below): the bodies the framing
+-- ../jpeg2000/hv_rules.c, which returns the names below): the bodies the framing
 -- keeps opaque, read one element at a time with the types above, and what
 -- the headers come to together. A body that is not its types' is reason
 -- `decode` (the reader: "invalid XXX").
@@ -412,18 +412,20 @@ END
 --         CSpoc below CEpoc (poc.resolution, poc.component), and in a
 --         later tile-part of a tile only if its first has one
 --         (poc.first-tile-part).
---   TLM (A.7.1): Ztlm 0 to n - 1, each once (tlm.index), one entry per
+--   TLM (A.7.1): unique Ztlm, gaps allowed (tlm.index), one entry per
 --         tile-part in codestream order, Ttlm its Isot (or ST 0: in tile
 --         order) and Ptlm its length (tlm.tile-parts).
---   PLM (A.7.2): Zplm 0 to n - 1, each once (plm.index), Nplm and the
+--   PLM (A.7.2): unique Zplm, gaps allowed (plm.index), Nplm and the
 --         Iplm entries of each tile-part in codestream order (plm.length,
 --         plm.tile-parts), their sum the tile-part's data (plm.coverage), no
 --         zero entry but with packed headers (plm.zero-length).
---   PPM, PPT (A.7.4, A.7.5): Zppm and Zppt 0 to n - 1, each once
+--   PPM, PPT (A.7.4, A.7.5): unique Zppm and Zppt, gaps allowed
 --         (ppm.index, ppt.index), Nppm the packet headers of each tile-part
 --         in order (ppm.length, ppm.tile-parts), a tile-part with Nppm 0
 --         holding no data (ppm.packet-headers), and no PPT with a PPM
 --         (ppm.ppt).
+--   Tiles (B.11, Table A.5): at most 65,535 (siz.tile-count); at least
+--         one tile-part per tile (codestream.tile-count).
 --   CRG (A.9.1): at most one (crg.once), one offset per component.
 --   The coding of each tile-component, from COD and COC, main and tile:
 --         the 5-3 transform with quantization style 0 and the 9-7 with 1 or
@@ -437,6 +439,10 @@ END
 --         (codestream.sop-unsignalled), with Lsop 4 (sop.length); EPH only
 --         where signalled (codestream.eph-unsignalled), and not in the data
 --         where the packet headers are packed (codestream.eph-in-data).
+
+-- Not checked: the presence of an EPH after every packet header when COD
+-- signals EPH (A.8.2). Packet headers are opaque here; this requires Tier-2
+-- parsing. transcode/tier2.c checks it when transcoding.
 
 -- Profile only:
 --   Siz:  xtsiz >= xsiz  and  ytsiz >= ysiz            (single tile)

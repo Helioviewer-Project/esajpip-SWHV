@@ -3,7 +3,7 @@
 # each built and run against the tests. A mutant the tests pass survives: a
 # change of behaviour that no test notices.
 #
-#   tests/run_mutation.sh [FILE...]     default: lib/hv_rules.c lib/hv_reader.c
+#   tests/run_mutation.sh [FILE...]     default: jpeg2000/hv_rules.c jpeg2000/hv_reader.c
 #
 # FILE is relative to the repository. The sources are copied to WORK/src,
 # which is built in WORK/build, so the checkout is never modified. Each
@@ -36,7 +36,7 @@ every=${ESAJPIP_MUTATION_EVERY:-1}
 tests=${ESAJPIP_MUTATION_TESTS:--L tools}
 timeout=${ESAJPIP_MUTATION_TIMEOUT:-120}
 python=${PYTHON:-python3}
-[ $# -gt 0 ] || set -- lib/hv_rules.c lib/hv_reader.c
+[ $# -gt 0 ] || set -- jpeg2000/hv_rules.c jpeg2000/hv_reader.c
 
 first=
 last=

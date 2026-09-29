@@ -187,19 +187,25 @@ rm -f "$work/new-link.jpx" "$work/new.jpx"
 # embedded one can.
 cp "$fixtures/input/swap_000.jp2" "$work/self.jp2"
 ln -s self.jp2 "$work/self-link.jp2"
-for output in "$work/self.jp2" "$work/self-link.jp2"; do
-    [ "$(status "$exe" -i "$work/self.jp2" -o "$output" -links)" = 1 ] ||
-        fail "-links over its input $output: expected 1"
-    grep -q "self.jp2 is also the output" "$work/stderr" ||
-        fail "-links over its input: $(cat "$work/stderr")"
-    cmp -s "$work/self.jp2" "$fixtures/input/swap_000.jp2" ||
-        fail "-links over its input changed it"
+ln "$work/self.jp2" "$work/self-hard.jp2"
+for output in "$work/self.jp2" "$work/self-link.jp2" "$work/self-hard.jp2"; do
+    for inputs in "$work/self.jp2" "$fixtures/input/swap_000.jp2,$work/self.jp2"; do
+        [ "$(status "$exe" -i "$inputs" -o "$output" -links)" = 1 ] ||
+            fail "-links over its input $output: expected 1"
+        grep -q "self.jp2 is also the output" "$work/stderr" ||
+            fail "-links over its input: $(cat "$work/stderr")"
+        cmp -s "$work/self.jp2" "$fixtures/input/swap_000.jp2" &&
+            cmp -s "$output" "$fixtures/input/swap_000.jp2" ||
+            fail "-links over its input changed it"
+        [ -z "$(find "$work" -name 'self*.jp2.*' -print)" ] ||
+            fail "-links over its input left a temporary file"
+    done
 done
 [ "$(status "$exe" -i "$work/self.jp2" -o "$work/self-link.jp2")" = 0 ] ||
     fail "embedded over its input: $(cat "$work/stderr")"
 [ -L "$work/self-link.jp2" ] && ! cmp -s "$work/self.jp2" "$fixtures/input/swap_000.jp2" ||
     fail "embedded over its input: not replaced through the link"
-rm -f "$work/self.jp2" "$work/self-link.jp2"
+rm -f "$work/self.jp2" "$work/self-link.jp2" "$work/self-hard.jp2"
 
 # An output that cannot be created: the message names it, not the
 # temporary file.

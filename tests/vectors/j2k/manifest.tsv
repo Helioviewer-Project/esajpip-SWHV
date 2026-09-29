@@ -63,16 +63,16 @@ jp2-siz.rsiz-32768.jp2	jp2	invalid	valid	jp2.rsiz	siz.rsiz	T.801 extensions (Tab
 jp2-siz.rsiz-1.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 1 (profile 0)	-	-
 jp2-siz.rsiz-3.jp2	jp2	invalid	valid	siz.rsiz	siz.rsiz	reserved (Table A.10); the server keeps any Rsiz	-	-
 jp2-siz.xsiz-0.jp2	jp2	invalid	invalid	decode	siz.xsiz	min-1	-	decode
-jp2-siz.xsiz-2147483648.jp2	jp2	valid	invalid	decode	siz.xsiz	profile max+1	-	decode
-jp2-siz.xsiz-4294967295.jp2	jp2	valid	invalid	decode	siz.xsiz	standard max; profile: beyond Siz-Profile and the tile	-	decode
+jp2-siz.xsiz-2147483648.jp2	jp2	invalid	invalid	siz.tile-count	siz.xsiz	profile max+1; too many tiles (B.11)	-	decode
+jp2-siz.xsiz-4294967295.jp2	jp2	invalid	invalid	siz.tile-count	siz.xsiz	standard max; too many tiles (B.11)	-	decode
 jp2-siz.ysiz-0.jp2	jp2	invalid	invalid	decode	siz.ysiz	min-1	-	decode
-jp2-siz.ysiz-2147483648.jp2	jp2	valid	invalid	decode	siz.ysiz	profile max+1	-	decode
+jp2-siz.ysiz-2147483648.jp2	jp2	invalid	invalid	siz.tile-count	siz.ysiz	profile max+1; too many tiles (B.11)	-	decode
 jp2-siz.xosiz-1.jp2	jp2	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-	decode
 jp2-siz.xosiz-4.jp2	jp2	invalid	invalid	siz.origin-inside	siz.xosiz	== xsiz: empty image	-	decode
 jp2-siz.yosiz-1.jp2	jp2	valid	invalid	decode	siz.yosiz	profile max+1; standard valid	-	decode
 jp2-siz.xtsiz-0.jp2	jp2	invalid	invalid	decode	siz.xtsiz	min-1	-	decode
-jp2-siz.xtsiz-3.jp2	jp2	valid	invalid	siz.single-tile	siz.xtsiz	below xsiz: two tiles	-	siz.single-tile
-jp2-siz.ytsiz-3.jp2	jp2	valid	invalid	siz.single-tile	siz.ytsiz	below ysiz: two tiles	-	siz.single-tile
+jp2-siz.xtsiz-3.jp2	jp2	invalid	invalid	codestream.tile-count	siz.xtsiz	two tiles but only tile 0 is coded (B.11)	-	siz.single-tile
+jp2-siz.ytsiz-3.jp2	jp2	invalid	invalid	codestream.tile-count	siz.ytsiz	two tiles but only tile 0 is coded (B.11)	-	siz.single-tile
 jp2-siz.xtosiz-1.jp2	jp2	invalid	invalid	siz.tile-origin	siz.xtosiz	tile origin past image origin	-	decode
 jp2-siz.ytosiz-1.jp2	jp2	invalid	invalid	siz.tile-origin	siz.ytosiz	tile origin past image origin	-	decode
 jp2-siz.csiz-0.jp2	jp2	invalid	invalid	decode	siz.csiz	min-1	-	decode
@@ -103,7 +103,7 @@ jp2-sot.tpsot-1.jp2	jp2	invalid	invalid	sot.tpsot-sequence	sot.tpsot	first tile-
 jp2-sot.tpsot-255.jp2	jp2	invalid	invalid	decode	sot.tpsot	reserved	-	decode
 jp2-sot.tnsot-0.jp2	jp2	valid	valid	-	sot.tnsot	unspecified count: valid	-	-
 jp2-sot.tnsot-2.jp2	jp2	invalid	invalid	sot.tnsot-count	sot.tnsot	count 2 with one tile-part	-	sot.tnsot-count
-jp2-plt.zplt-1.jp2	jp2	invalid	invalid	plt.zplt-index	plt.zplt	first PLT index is not zero	-	plt.zplt-sequence
+jp2-plt.zplt-1.jp2	jp2	valid	invalid	plt.zplt-sequence	plt.zplt	Zplt starts at 1: valid at the standard layer	-	plt.zplt-sequence
 jp2-plt.iplt.b0.bits-0.jp2	jp2	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0 (with the headers in the data a packet has at least one byte)	-	plt.coverage
 jp2-rule-codestream.one-cod-before-sot-0.jp2	jp2	invalid	invalid	codestream.one-cod-before-sot	codestream.one-cod-before-sot	two COD in main header	-	codestream.one-cod-before-sot
 jp2-rule-codestream.one-qcd-before-sot-1.jp2	jp2	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	two QCD in main header	-	codestream.one-qcd-before-sot
@@ -178,7 +178,7 @@ jp2-rule-rgn.once-78.jp2	jp2	invalid	valid	rgn.once	rgn.once	two RGN for compone
 jp2-rule-rgn.srgn-79.jp2	jp2	invalid	valid	decode	rgn.srgn	Srgn 1 (Table A.25: reserved)	-	-
 jp2-rule-tlm-80.jp2	jp2	valid	valid	-	tlm	TLM of the one tile-part: valid; the server skips it	-	-
 jp2-rule-tlm.tile-parts-81.jp2	jp2	invalid	valid	tlm.tile-parts	tlm.tile-parts	Ptlm one more than Psot (A.7.1)	-	-
-jp2-rule-tlm.index-82.jp2	jp2	invalid	valid	tlm.index	tlm.index	one TLM, with Ztlm 1	-	-
+jp2-rule-tlm.index-82.jp2	jp2	valid	valid	-	tlm.index	one TLM, with Ztlm 1: valid (A.7.1)	-	-
 jp2-rule-tlm.stlm-83.jp2	jp2	invalid	valid	decode	tlm.stlm	Stlm bit 7 set (Table A.34)	-	-
 jp2-rule-plm-84.jp2	jp2	valid	valid	-	plm	PLM of the one tile-part: valid; the server skips it	-	-
 jp2-rule-plm.coverage-85.jp2	jp2	invalid	valid	plm.coverage	plm.coverage	PLM lengths one byte more than the data (A.7.2)	-	-
@@ -203,9 +203,9 @@ jp2-rule-coc.codeblock-area-105.jp2	jp2	invalid	invalid	coc.codeblock-area	coc.c
 jp2-rule-poc.first-tile-part-107.jp2	jp2	invalid	invalid	poc.first-tile-part	poc.first-tile-part	POC in the second tile-part of a tile, none in the first (A.6.6)	-	decode
 jp2-rule-qcc.style-108.jp2	jp2	invalid	valid	qcc.style	qcc.style	Sqcc style 3 (Table A.28: reserved)	-	-
 jp2-rule-qcc.reserved-bits-109.jp2	jp2	invalid	valid	qcc.reserved-bits	qcc.reserved-bits	a reversible step size with a low bit set (Table A.29)	-	-
-jp2-rule-plm.index-110.jp2	jp2	invalid	valid	plm.index	plm.index	one PLM, with Zplm 1 (A.7.2)	-	-
+jp2-rule-plm.index-110.jp2	jp2	valid	valid	-	plm.index	one PLM, with Zplm 1: valid (A.7.2)	-	-
 jp2-rule-plm.zero-length-111.jp2	jp2	invalid	valid	plm.zero-length	plm.zero-length	PLM with a zero packet length, headers in the data	-	-
-jp2-rule-ppm.index-112.jp2	jp2	invalid	invalid	ppm.index	ppm.index	one PPM, with Zppm 1 (A.7.4)	-	decode
+jp2-rule-ppm.index-112.jp2	jp2	valid	invalid	decode	ppm.index	one PPM, with Zppm 1: valid (A.7.4); profile excludes PPM	-	decode
 jp2-rule-ppm.length-113.jp2	jp2	invalid	invalid	ppm.length	ppm.length	Nppm one more than the packet headers (A.7.4)	-	decode
 jp2-header-jp2h.palette-0.jp2	jp2	valid	valid	-	jp2h.palette	pclr (2 entries) and cmap through it: valid	-	-
 jp2-header-jp2h.resolution-1.jp2	jp2	valid	valid	-	jp2h.resolution	res with resc and resd: valid	-	-
@@ -299,6 +299,9 @@ jp2-header-jp2.ipr-nested-125.jp2	jp2	valid	valid	-	jp2.ipr-nested	IPR 1 and an 
 jp2-header-file.ftyp-brand-126.jp2	jp2	valid	invalid	file.ftyp-brand	file.ftyp-brand	a JPX file listing 'jp2 ', named .jp2: valid, profile invalid (ReadFileType)	-	file.ftyp-brand
 jp2-header-box.containment-165.jp2	jp2	invalid	valid	box.containment	box.containment	colr in res (T.800 Figure I.1: in jp2h)	-	-
 jp2-header-jp2.inst-opaque-187.jp2	jp2	valid	valid	-	jp2.inst-opaque	inst is unknown to JP2 (T.800 I.8): valid	-	-
+jp2-header-cdef.complete-200.jp2	jp2	invalid	valid	cdef.complete	cdef.complete	three mapped channels but only two are defined (I.5.3.6)	-	-
+jp2-header-cdef.complete-201.jp2	jp2	invalid	valid	cdef.complete	cdef.complete	three entries but only two distinct channels are defined (I.5.3.6)	-	-
+jp2-header-cdef.complete-202.jp2	jp2	invalid	valid	cdef.complete	cdef.complete	all mapped channels defined but grey is missing (I.5.3.6)	-	-
 jp2-precincts.jp2	jp2	valid	valid	-	-	base	-	-
 jp2-precincts-sig-bad.jp2	jp2	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-	file.signature
 jp2-precincts-len-0-11.jp2	jp2	invalid	invalid	decode	LBox@0x0	length patched	-	decode
@@ -484,16 +487,16 @@ jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	T.801 extensions (Tab
 jpx-embedded-siz.rsiz-1.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 1 (profile 0)	-	-
 jpx-embedded-siz.rsiz-3.jpx	jpx	invalid	valid	siz.rsiz	siz.rsiz	reserved (Table A.10); the server keeps any Rsiz	-	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-	decode
-jpx-embedded-siz.xsiz-2147483648.jpx	jpx	valid	invalid	decode	siz.xsiz	profile max+1	-	decode
-jpx-embedded-siz.xsiz-4294967295.jpx	jpx	valid	invalid	decode	siz.xsiz	standard max; profile: beyond Siz-Profile and the tile	-	decode
+jpx-embedded-siz.xsiz-2147483648.jpx	jpx	invalid	invalid	siz.tile-count	siz.xsiz	profile max+1; too many tiles (B.11)	-	decode
+jpx-embedded-siz.xsiz-4294967295.jpx	jpx	invalid	invalid	siz.tile-count	siz.xsiz	standard max; too many tiles (B.11)	-	decode
 jpx-embedded-siz.ysiz-0.jpx	jpx	invalid	invalid	decode	siz.ysiz	min-1	-	decode
-jpx-embedded-siz.ysiz-2147483648.jpx	jpx	valid	invalid	decode	siz.ysiz	profile max+1	-	decode
+jpx-embedded-siz.ysiz-2147483648.jpx	jpx	invalid	invalid	siz.tile-count	siz.ysiz	profile max+1; too many tiles (B.11)	-	decode
 jpx-embedded-siz.xosiz-1.jpx	jpx	valid	invalid	decode	siz.xosiz	profile max+1; standard valid	-	decode
 jpx-embedded-siz.xosiz-4.jpx	jpx	invalid	invalid	siz.origin-inside	siz.xosiz	== xsiz: empty image	-	decode
 jpx-embedded-siz.yosiz-1.jpx	jpx	valid	invalid	decode	siz.yosiz	profile max+1; standard valid	-	decode
 jpx-embedded-siz.xtsiz-0.jpx	jpx	invalid	invalid	decode	siz.xtsiz	min-1	-	decode
-jpx-embedded-siz.xtsiz-3.jpx	jpx	valid	invalid	siz.single-tile	siz.xtsiz	below xsiz: two tiles	-	siz.single-tile
-jpx-embedded-siz.ytsiz-3.jpx	jpx	valid	invalid	siz.single-tile	siz.ytsiz	below ysiz: two tiles	-	siz.single-tile
+jpx-embedded-siz.xtsiz-3.jpx	jpx	invalid	invalid	codestream.tile-count	siz.xtsiz	two tiles but only tile 0 is coded (B.11)	-	siz.single-tile
+jpx-embedded-siz.ytsiz-3.jpx	jpx	invalid	invalid	codestream.tile-count	siz.ytsiz	two tiles but only tile 0 is coded (B.11)	-	siz.single-tile
 jpx-embedded-siz.xtosiz-1.jpx	jpx	invalid	invalid	siz.tile-origin	siz.xtosiz	tile origin past image origin	-	decode
 jpx-embedded-siz.ytosiz-1.jpx	jpx	invalid	invalid	siz.tile-origin	siz.ytosiz	tile origin past image origin	-	decode
 jpx-embedded-siz.csiz-0.jpx	jpx	invalid	invalid	decode	siz.csiz	min-1	-	decode
@@ -524,7 +527,7 @@ jpx-embedded-sot.tpsot-1.jpx	jpx	invalid	invalid	sot.tpsot-sequence	sot.tpsot	fi
 jpx-embedded-sot.tpsot-255.jpx	jpx	invalid	invalid	decode	sot.tpsot	reserved	-	decode
 jpx-embedded-sot.tnsot-0.jpx	jpx	valid	valid	-	sot.tnsot	unspecified count: valid	-	-
 jpx-embedded-sot.tnsot-2.jpx	jpx	invalid	invalid	sot.tnsot-count	sot.tnsot	count 2 with one tile-part	-	sot.tnsot-count
-jpx-embedded-plt.zplt-1.jpx	jpx	invalid	invalid	plt.zplt-index	plt.zplt	first PLT index is not zero	-	plt.zplt-sequence
+jpx-embedded-plt.zplt-1.jpx	jpx	valid	invalid	plt.zplt-sequence	plt.zplt	Zplt starts at 1: valid at the standard layer	-	plt.zplt-sequence
 jpx-embedded-plt.iplt.b0.bits-0.jpx	jpx	invalid	invalid	plt.zero-length	plt.iplt.b0.bits	packet length 0 (with the headers in the data a packet has at least one byte)	-	plt.coverage
 jpx-embedded-rule-codestream.one-cod-before-sot-0.jpx	jpx	invalid	invalid	codestream.one-cod-before-sot	codestream.one-cod-before-sot	two COD in main header	-	codestream.one-cod-before-sot
 jpx-embedded-rule-codestream.one-qcd-before-sot-1.jpx	jpx	invalid	invalid	codestream.one-qcd-before-sot	codestream.one-qcd-before-sot	two QCD in main header	-	codestream.one-qcd-before-sot
@@ -600,7 +603,7 @@ jpx-embedded-rule-rgn.once-78.jpx	jpx	invalid	valid	rgn.once	rgn.once	two RGN fo
 jpx-embedded-rule-rgn.srgn-79.jpx	jpx	invalid	valid	decode	rgn.srgn	Srgn 1 (Table A.25: reserved)	-	-
 jpx-embedded-rule-tlm-80.jpx	jpx	valid	valid	-	tlm	TLM of the one tile-part: valid; the server skips it	-	-
 jpx-embedded-rule-tlm.tile-parts-81.jpx	jpx	invalid	valid	tlm.tile-parts	tlm.tile-parts	Ptlm one more than Psot (A.7.1)	-	-
-jpx-embedded-rule-tlm.index-82.jpx	jpx	invalid	valid	tlm.index	tlm.index	one TLM, with Ztlm 1	-	-
+jpx-embedded-rule-tlm.index-82.jpx	jpx	valid	valid	-	tlm.index	one TLM, with Ztlm 1: valid (A.7.1)	-	-
 jpx-embedded-rule-tlm.stlm-83.jpx	jpx	invalid	valid	decode	tlm.stlm	Stlm bit 7 set (Table A.34)	-	-
 jpx-embedded-rule-plm-84.jpx	jpx	valid	valid	-	plm	PLM of the one tile-part: valid; the server skips it	-	-
 jpx-embedded-rule-plm.coverage-85.jpx	jpx	invalid	valid	plm.coverage	plm.coverage	PLM lengths one byte more than the data (A.7.2)	-	-
@@ -626,9 +629,9 @@ jpx-embedded-rule-coc.codeblock-area-105.jpx	jpx	invalid	invalid	coc.codeblock-a
 jpx-embedded-rule-poc.first-tile-part-107.jpx	jpx	invalid	invalid	poc.first-tile-part	poc.first-tile-part	POC in the second tile-part of a tile, none in the first (A.6.6)	-	decode
 jpx-embedded-rule-qcc.style-108.jpx	jpx	invalid	valid	qcc.style	qcc.style	Sqcc style 3 (Table A.28: reserved)	-	-
 jpx-embedded-rule-qcc.reserved-bits-109.jpx	jpx	invalid	valid	qcc.reserved-bits	qcc.reserved-bits	a reversible step size with a low bit set (Table A.29)	-	-
-jpx-embedded-rule-plm.index-110.jpx	jpx	invalid	valid	plm.index	plm.index	one PLM, with Zplm 1 (A.7.2)	-	-
+jpx-embedded-rule-plm.index-110.jpx	jpx	valid	valid	-	plm.index	one PLM, with Zplm 1: valid (A.7.2)	-	-
 jpx-embedded-rule-plm.zero-length-111.jpx	jpx	invalid	valid	plm.zero-length	plm.zero-length	PLM with a zero packet length, headers in the data	-	-
-jpx-embedded-rule-ppm.index-112.jpx	jpx	invalid	invalid	ppm.index	ppm.index	one PPM, with Zppm 1 (A.7.4)	-	decode
+jpx-embedded-rule-ppm.index-112.jpx	jpx	valid	invalid	decode	ppm.index	one PPM, with Zppm 1: valid (A.7.4); profile excludes PPM	-	decode
 jpx-embedded-rule-ppm.length-113.jpx	jpx	invalid	invalid	ppm.length	ppm.length	Nppm one more than the packet headers (A.7.4)	-	decode
 jpx-embedded-header-jpx.header-defaults-50.jpx	jpx	valid	valid	-	jpx.header-defaults	jp2h ihdr and colr as the default for both codestreams, empty jpch: valid	-	-
 jpx-embedded-header-jpch.palette-51.jpx	jpx	valid	valid	-	jpch.palette	pclr and cmap in a jpch: valid	-	-

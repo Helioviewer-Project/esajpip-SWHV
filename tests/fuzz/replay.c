@@ -31,7 +31,7 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "hv_served.h"
+#include "jpeg2000/hv_served.h"
 
 #define LLVMFuzzerTestOneInput replay_reader_rewrite
 #include "fuzz_reader_rewrite.c"

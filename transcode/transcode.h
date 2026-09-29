@@ -23,8 +23,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "hv_reader.h"
-#include "hv_writer.h"
+#include "jpeg2000/hv_reader.h"
+#include "jpeg2000/hv_writer.h"
 
 /* Transcodes the codestream in buf[start, end) and appends the result to
  * out. Precinct width and height exponents: 1 to 15 (2 to 32,768 samples).
@@ -42,12 +42,13 @@ int hv_transcode_codestream(const uint8_t *buf, size_t start, size_t end, int pp
  * the result to out. The input must be one the output can serve: it must
  * pass the served profile's file rules (hv_check_jp2: no JPX, no raw
  * codestream) and main-header rules (HV_PROFILE_HEADERS), and have the
- * header boxes T.800 requires (hv_check_jp2h), which it keeps. What else the
+ * header boxes T.800 requires (hv_read_jp2h), which it keeps. What else the
  * profile asks for is written here: the tile-parts, and a COD without SOP.
  * The output passes HV_PROFILE and is at most INT_MAX bytes. The boxes are
  * kept in order: the codestream box is transcoded, a top-level XML box ends
  * before its first NUL (XML has none; old Kakadu wrote one at the end),
- * every other box is copied as read and superboxes are checked.
+ * other boxes are copied in order and superboxes are checked. MinV, PREC
+ * and APPROX are ignored on input and emitted as zero (I.5.2, I.5.3.3).
  * 0, or -1 with a message in error; on failure out is as it was
  * (hv_out_rewind), and fails at once if out->error is set. */
 int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, hv_out *out,

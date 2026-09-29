@@ -4,7 +4,7 @@
 `jpx_merge.pyx`, `jpx_common.pyx`). It merges JP2 files into a JPX movie
 for JHelioviewer and the JPIP server, embedding their codestreams or
 linking to them, and writes the same bytes as hvJP2K but for the
-differences below. It reads the inputs with `jpeg2000_io` (`../lib/`:
+differences below. It reads the inputs with `jpeg2000` (`../jpeg2000/`:
 `hv_reader` with the shared rules of `hv_rules`), and writes the boxes it
 makes itself (`ftyp`, `rreq`, a generated `cmap`, `nlst`, `flst`, `url`,
 `dtbl`) with `hv_writer`, from the model's types.
@@ -45,18 +45,18 @@ bytes, where hvJP2K decodes it as text and fails on bytes the locale's
 encoding rejects; a NUL byte in it is an error (it would end the text
 early); and `-h` prints hv_merge's own usage text.
 
+Inputs are immutable. Their bytes and sizes must remain unchanged throughout
+both passes, including between unmapping and reopening. Mutation is a
+configuration/operational error outside the merger's contract. With `-links`,
+the inputs must also remain unchanged for as long as the resulting JPX is used.
+
 The inputs are read in two passes, as hvJP2K does. The first input is
 checked once and stays mapped throughout. Each later input is checked,
-unmapped, then mapped and checked again before its bytes are used. Each
-check includes `hv_check_jp2` and `hv_check_jp2h`, linked or embedded.
-With `--validate`, both passes additionally validate the whole codestream
-with `HV_PROFILE`. The second pass must find what the
-first recorded, on which the output written before it depends (the `rreq`
-box, the `cdef` and `res` rule below): the file's size, where each box the
-output uses lies, the number of `colr` and IPR boxes, Rsiz, the component
-count and the opacity channels; otherwise the input "changed while merging".
-Contents are not compared: the header, IPR and XML boxes and an embedded
-codestream are copied as the second pass finds them. At most two inputs are
+unmapped, then mapped again to write the output using its recorded layout.
+The first pass checks `hv_check_jp2` and `hv_check_jp2h`, linked or embedded.
+With `--validate`, it additionally validates the whole codestream with
+`HV_PROFILE`. The second pass does not repeat validation or compare source
+properties. At most two inputs are
 mapped at a time. Mapping reads only what is used: the checks and a linked
 merge touch the headers, an embedded merge reads each codestream once. Every
 box copied from an input, the codestream, header, IPR and XML boxes alike,
@@ -70,13 +70,13 @@ output is left as it was. With `-links`, the second open (the first input's
 only one) supplies the header, IPR and XML boxes; the codestream stays in
 the input JP2 file. The output is
 written to a temporary file next to it and renamed into place (`hv_file`, in
-`../tools/`: synced to disk before the rename, and removed if a signal ends
-the tool first); on error nothing is written. An existing output keeps its
+`../tools/`: the temporary is removed if a signal ends the tool first); on error nothing is written. An existing output keeps its
 permissions (without the setuid, setgid and sticky bits), and its owner
 and group where the process may give them; one that is a symbolic link is
 written where the link points, the file it names created if need be, as
 when hvJP2K opens it for writing. Exit status: 0 (also for `-h`), 1 on
-error, 2 on usage errors.
+error, 2 on usage errors. Output replacement is atomic, with no crash-durability
+guarantee.
 
 A linked JPX file records each input's path and its codestream's offset
 and length, so the inputs must stay as they are: rewriting one, as
@@ -145,8 +145,8 @@ servable codestreams during merging.
 
 Errors about an input name the file and, where a shared rule fails, the
 rule and its offset, as in `siz.zero-origin at 410`. The others are
-described in words: a missing `cdef` or `res`, too many `colr` boxes, a
-file that changed between the passes, and the limits. The output must be
+described in words: a missing `cdef` or `res`, too many `colr` boxes, and
+the limits. The output must be
 at most `INT_MAX` bytes (`file.size-limit`), and a link must name a `.jp2`
 file (`url.jp2-target`). Limits: an input's `jp2h` holds at most 16 `colr`
 boxes, a JPX file at most 16,777,215 inputs, and a linked one at most
@@ -165,14 +165,14 @@ them and keeps the IPR 1 that announces them.
 | --- | --- |
 | `hv_merge.c` | The command: options, `-s`, mapping the inputs, writing the output file. |
 | `merge.h` / `.c` | `hv_merge_files`: checks the inputs, and writes the JPX file box by box to a stream, opening each input when it needs it (`hv_merge_buffers` for inputs already in memory). |
-| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and within the served profile, the reader requirement cases of hvJP2K's tests, IPR boxes carried into each `jpch`, an XML box with LBox = 0 given a length, rejected inputs (Rsiz bit 15, header boxes, `colr` counts and methods, the limits), inputs opened on demand (`test_opening`: how often each is opened, at most two at a time, a failed first or second open, an input changed between the passes, in size or in Rsiz), and 1,024- and 1,025-character links; `cli_test.sh`: the command (options as `argparse` parses them, `-s`, permissions, symbolic links, `-links` over an input, failures). |
+| `test/` | `test_merge.c`: hvJP2K's output byte for byte (`fixtures/`), the linked merge box for box against it and within the served profile, the reader requirement cases of hvJP2K's tests, IPR boxes carried into each `jpch`, an XML box with LBox = 0 given a length, rejected inputs (Rsiz bit 15, header boxes, `colr` counts and methods, the limits), inputs opened on demand (`test_opening`: how often each is opened, at most two at a time, a failed first or second open), and 1,024- and 1,025-character links; `cli_test.sh`: the command (options as `argparse` parses them, `-s`, permissions, symbolic links, `-links` over an input, failures). |
 | `fuzz_merge.c` | libFuzzer target: two JP2 files from one input, merged in both modes; an accepted merge must pass `hv_check_jpx` and `hv_check_jpx_headers`, plus `HV_PROFILE` for each codestream in validation mode. |
 
 ## Build and test
 
 With the rest of the repository, so configuring needs the server's
 dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
-llhttp and libuv before it adds `lib/`, `transcode/` and `merge/`.
+llhttp and libuv before it adds `jpeg2000/`, `transcode/` and `merge/`.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
@@ -205,7 +205,8 @@ fuzz/tests/fuzz/fuzz_merge -max_len=262144 corpus/
 Measured on macOS arm64 with a Release build, without LTO, on 2026-09-28.
 Medians of nine runs after warm-up, alternating implementations with a warm
 filesystem cache. Times are milliseconds. C timings include CLI startup and
-atomic output synchronization; hvJP2K timings are warm Cython library calls.
+the file/directory synchronization used at that revision (since removed);
+hvJP2K timings are warm Cython library calls.
 
 | Input and output | Before | Default | `--validate` | hvJP2K |
 | --- | ---: | ---: | ---: | ---: |

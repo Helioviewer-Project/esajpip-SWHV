@@ -86,14 +86,14 @@ contents each fail with the type's error code.
 mask, `RreqMask ::= OCTET STRING (SIZE (1 | 2 | 4 | 8))`. The library does
 not call it: it decodes the masks through `RreqHeader_fuam_ACN_Decode` and
 `RreqHeader_dcm_ACN_Decode`, which take the length from the header and
-guard the contents. `lib/generated` changes only in `RreqMask_ACN_Decode`.
+guard the contents. `jpeg2000/generated` changes only in `RreqMask_ACN_Decode`.
 
 ## Verification
 
 With the templates changed as in the patch (the compiler reads its `.stg`
 files at run time): `run.sh` and `run_rust.sh` pass; `runWireTests.sh`
 fails at 023 before and passes after; `runIcdPdusTests.sh` passes;
-`lib/generate.sh` changes only `RreqMask_ACN_Decode`, and esajpip's tests
+`jpeg2000/generate.sh` changes only `RreqMask_ACN_Decode`, and esajpip's tests
 pass under ASan and UBSan with that output.
 
 Independent validation on 2026-09-28 rebuilt the pinned revision with the full

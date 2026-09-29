@@ -29,8 +29,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "hv_reader.h"
-#include "merge.h"
+#include "jpeg2000/hv_reader.h"
+#include "merge/merge.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096

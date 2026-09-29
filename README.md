@@ -70,13 +70,29 @@ profile, Valgrind and Debian-container runners, and the fuzz targets under
 `tests/fuzz` (with `ESAJPIP_FUZZ=ON`).
 
 The same build also produces three tools from the JPEG 2000 reader/writer
-library in [`lib/`](lib/README.md): `hv_transcode`
+library in [`jpeg2000/`](jpeg2000/README.md): `hv_transcode`
 ([`transcode/`](transcode/README.md)) and `hv_merge`
 ([`merge/`](merge/README.md)), which prepare image data for the server
 (see below), and `hv_walk`, which checks files with the reader.
 Their tests run separately, with `tests/run.sh`. The formal
 description of the accepted files, and the test corpus generated from it,
 are in [`spec/`](spec/README.md).
+
+## Source layout
+
+| Directory | Build target | Responsibility |
+| --- | --- | --- |
+| [`jpeg2000/`](jpeg2000/README.md) | `jpeg2000` | C format parsing, validation, geometry and rewriting |
+| [`jpip/`](jpip/README.md) | `jpip` | C++ JPIP request parsing, indexed targets and response generation |
+| `server/` | `esajpip_server`, `esajpip` | File mapping, HTTP, channels, scheduling and logging |
+| `merge/`, `transcode/` | `hv_merge`, `hv_transcode` | Format tools using the C library |
+| [`tests/`](tests/README.md) | Test executables | Independent library tests and server integration |
+
+Each production component owns its CMake definition. The `jpip` library links
+`jpeg2000`; server dependencies remain on `esajpip_server`. Within `jpip/`,
+`source/`, `index/`, `request/` and `response/` group the library responsibilities.
+Within `server/`, `storage/` supplies mapped files and `http/` handles request
+heads and connections; channel orchestration remains at the server root.
 
 ## Configure the server
 

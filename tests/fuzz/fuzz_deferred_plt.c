@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_reader.h"
+#include "jpeg2000/hv_reader.h"
 
 static void check_stream(const uint8_t *data, size_t start, size_t end) {
     hv_codestream cs;
@@ -51,7 +51,8 @@ static void check_stream(const uint8_t *data, size_t start, size_t end) {
             deferred = hv_plt_end_tile(&plt, item.end - item.start);
             deferred_at = tile_at;
         } else if (item.kind == HV_END) {
-            deferred = hv_plt_end(&plt, hv_codestream_siz(&cs), hv_codestream_cod(&cs));
+            deferred = hv_plt_end(&plt, hv_rule_packets(hv_codestream_siz(&cs),
+                  &hv_codestream_cod(&cs)->sgcod, &hv_codestream_cod(&cs)->spcod));
             deferred_at = item.start;
         }
         if (deferred != NULL)

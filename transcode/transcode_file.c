@@ -2,8 +2,8 @@
 #include <limits.h>
 #include <string.h>
 
-#include "hv_error.h"
-#include "hv_reader.h"
+#include "jpeg2000/hv_error.h"
+#include "jpeg2000/hv_reader.h"
 #include "transcode.h"
 
 /* ------------------------------------------------------------------------
@@ -42,7 +42,7 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, hv
     hv_boxes it;
     hv_box box;
     const char *message;
-    size_t at, start;
+    size_t at, start, copied;
     int status;
 
     hv_boxes_file(&it, buf, size);
@@ -72,8 +72,20 @@ static int transcode_boxes(const uint8_t *buf, size_t size, int ppx, int ppy, hv
         }
         if (hv_is_superbox(box.type) && check_children(buf, &box, 1, error, error_size) != 0)
             return -1;
+        copied = out->size;
         if (hv_write_bytes(out, buf + box.start, box.end - box.start) != 0)
             return -1;
+        /* The input reader ignores these fields; the JP2 writer emits zero. */
+        if (box.type == HV_BOX_FTYP)
+            memset(out->data + copied + box.payload - box.start + 4, 0, 4);
+        else if (box.type == HV_BOX_JP2H) {
+            hv_boxes children;
+            hv_box child;
+            hv_boxes_children(&children, buf, &box);
+            while (hv_boxes_next(&children, &child, &message, &at) == 1)
+                if (child.type == HV_BOX_COLR)
+                    memset(out->data + copied + child.payload - box.start + 1, 0, 2);
+        }
     }
     /* status < 0 is not reached: hv_check_jp2 read the same boxes. */
     return status < 0 ? hv_fail(error, error_size, "%s at %zu", message, at) : 0;
@@ -85,17 +97,18 @@ int hv_transcode_file(const uint8_t *buf, size_t size, int ppx, int ppy, hv_out 
     const char *rule;
     hv_box jp2c;
     int status;
+    hv_header header;
 
     error[0] = 0;
     if (out->error != NULL)                     /* an earlier write failed */
         return hv_fail(error, error_size, "%s", out->error);
     /* The codestream as the transcode reads it (transcode.c: the flags of
      * its hv_codestream_open, trailing zero PLT entries accepted), before
-     * the header boxes, which hv_check_jp2h checks against it. */
+     * the header boxes, which hv_read_jp2h checks against it. */
     if ((rule = hv_check_jp2(buf, size, &jp2c, &at)) != NULL ||
         (rule = hv_codestream_check(buf, jp2c.payload, jp2c.end,
                                     HV_PROFILE_HEADERS | HV_ACCEPT_PLT_PADDING, &at)) != NULL ||
-        (rule = hv_check_jp2h(buf, size, &at)) != NULL)
+        (rule = hv_read_jp2h(buf, size, &header, &at)) != NULL)
         return hv_fail(error, error_size, "%s at %zu", rule, at);
     status = transcode_boxes(buf, size, ppx, ppy, out, error, error_size);
     if (status == 0 && out->size - out_start > INT_MAX)

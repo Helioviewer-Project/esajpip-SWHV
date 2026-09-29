@@ -49,7 +49,7 @@ Applied now, in `series` order:
   did not link. `BackendAst/DAstInitialize.fs` now records that call for
   every reference, as it did for complex types. Test case
   `v4Tests/test-cases/icd-pdus/001` and `v4Tests/scripts/runIcdPdusTests.sh`,
-  which `../build-asn1scc.sh` runs. `lib/generate.sh` relies on it (the
+  which `../build-asn1scc.sh` runs. `jpeg2000/generate.sh` relies on it (the
   model's `RreqMask` and `Extra`). Report and reproducer:
   [`../asn1scc-issues/0004-icdpdus-reference-init/`](../asn1scc-issues/0004-icdpdus-reference-init/).
 - `0005-deferred-fixed-size-determinant.patch`: with `--acn-v2`, deferred size

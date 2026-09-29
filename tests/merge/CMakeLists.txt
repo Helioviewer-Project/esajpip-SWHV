@@ -5,11 +5,10 @@ set(MERGE_TRANSCODE_FIXTURES ${PROJECT_SOURCE_DIR}/tests/transcode/fixtures)
 
 add_executable(test_merge test_merge.c ${PROJECT_SOURCE_DIR}/merge/merge.c)
 esajpip_configure_target(test_merge)
-target_include_directories(test_merge PRIVATE ${PROJECT_SOURCE_DIR}/merge)
 target_compile_definitions(test_merge PRIVATE
     MERGE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
     TRANSCODE_FIXTURES="${MERGE_TRANSCODE_FIXTURES}")
-target_link_libraries(test_merge PRIVATE jpeg2000_io)
+target_link_libraries(test_merge PRIVATE jpeg2000)
 esajpip_add_test(merge COMMAND test_merge LABELS tools)
 
 esajpip_add_test(merge_command

@@ -63,21 +63,21 @@ The script configures `BUILD_TESTING=ON` with the `coverage` flags from
 `tests/instrumentation.sh`, runs the whole of CTest, and writes three
 `llvm-cov report` outputs:
 
-- `handwritten.txt`: `lib`, `merge`, `transcode`, `src` and `tools`, excluding
+- `handwritten.txt`: `jpeg2000`, `jpip`, `merge`, `transcode`, `server` and `tools`, excluding
   generated and test files.
-- `generated.txt`: `lib/generated`, excluding the ASN.1 runtime files.
+- `generated.txt`: `jpeg2000/generated`, excluding the ASN.1 runtime files.
 - `asn1-runtime.txt`: `asn1crt*.c`.
 
 With `ESAJPIP_BASELINE_SPLIT=ON`, the script also writes
 `build/coverage-report/by-test/` reports for these deterministic groups:
 
 - `normal-no-replay`
-- `lib`
+- `jpeg2000`
 - `merge`
 - `transcode`
 - `server`
 - `replay`
-- `lib-merge-transcode`
+- `jpeg2000-merge-transcode`
 
 The compiler and the profiler must be the same LLVM, so when Homebrew's LLVM
 provides `llvm-cov` the script also builds with its `clang`; `LLVM_COV`,
@@ -110,7 +110,7 @@ a JP2 file); a `merge` input is a 4-byte big-endian split offset followed by
 two JP2 files, which is the layout `tests/fuzz/fuzz_merge.c` documents; an
 `asn1` input is a byte that selects the PDU type, modulo the number of types,
 followed by its encoding. The types are those with a `T_ACN_Decode` in
-`lib/generated`, in the order of the headers' names, which CMake writes to
+`jpeg2000/generated`, in the order of the headers' names, which CMake writes to
 `build/.../tests/fuzz/asn1_pdus.h`; `make_corpus.py` gives every type the
 structures at the starts of boxes, marker segments and their bodies in four
 vectors.
@@ -223,9 +223,9 @@ ESAJPIP_DOCKER_PLATFORM=linux/amd64 sh tests/run_linux_docker.sh fuzz-msan
 ## Mutation
 
 ```sh
-sh tests/run_mutation.sh                         # lib/hv_rules.c lib/hv_reader.c
-ESAJPIP_MUTATION_OPERATORS=rule sh tests/run_mutation.sh lib/hv_rules.c
-ESAJPIP_MUTATION_LINES=600-900 sh tests/run_mutation.sh lib/hv_rules.c
+sh tests/run_mutation.sh                         # jpeg2000/hv_rules.c jpeg2000/hv_reader.c
+ESAJPIP_MUTATION_OPERATORS=rule sh tests/run_mutation.sh jpeg2000/hv_rules.c
+ESAJPIP_MUTATION_LINES=600-900 sh tests/run_mutation.sh jpeg2000/hv_rules.c
 ESAJPIP_MUTATION_TESTS="-L tools -E _command" sh tests/run_mutation.sh merge/merge.c
 ```
 

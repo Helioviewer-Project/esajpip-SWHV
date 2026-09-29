@@ -25,7 +25,7 @@
 #endif
 
 
-/* The rules on values are shared with the reader: ../../lib/hv_rules.c. */
+/* The rules on values are shared with the reader: ../../jpeg2000/hv_rules.c. */
 static const char *CF_CAT3(cf_siz, CF_S, )(const CF_T(Siz) *s, cf_layer layer,
                                           const CF_COD *cod) {
     hv_siz v = cf_siz_view(s);
@@ -86,7 +86,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
     const hv_siz siz = cf_siz_view(&cs->siz.body);
     const char *r;
 
-    /* In the reader's order (../../lib/hv_reader.c): SIZ, then each
+    /* In the reader's order (../../jpeg2000/hv_reader.c): SIZ, then each
      * segment as it comes, a COD's rules where the COD is. */
     if ((r = CF_CAT3(cf_siz, CF_S, )(&cs->siz.body, layer, NULL)) != NULL) return r;
     tiles = hv_rule_tiles(&siz);
@@ -177,7 +177,7 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 if (profile && tp_plts == 0) return "codestream.no-plt";
                 if ((r = hv_segments_data(&segments, tp->rest.data.arr,
                                           (size_t) tp->rest.data.nCount, (unsigned) tp_plts,
-                                          plt_sum, zeros, profile ? NULL : &zplt)) != NULL)
+                                          plt_sum, zeros)) != NULL)
                     return r;
             }
             continue;
@@ -245,8 +245,8 @@ static const char *CF_CAT3(cf_codestream, CF_S, )(const CF_T(Codestream) *cs, cf
                 return NULL;
     }
     if (main_cod != NULL && plts > 0)
-        return hv_rule_plt_packets(&count, &siz, &main_cod->sgcod,
-                                   &main_cod->spcod, profile);
+        return hv_rule_plt_packets(&count,
+            hv_rule_packets(&siz, &main_cod->sgcod, &main_cod->spcod), profile);
     return NULL;
 }
 

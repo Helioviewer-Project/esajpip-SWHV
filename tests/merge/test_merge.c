@@ -16,8 +16,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "hv_reader.h"
-#include "merge.h"
+#include "jpeg2000/hv_reader.h"
+#include "merge/merge.h"
 
 #ifndef MERGE_FIXTURES
 #error "MERGE_FIXTURES must name the fixture directory"
@@ -296,7 +296,10 @@ static void expect_error(const char *name, const hv_merge_input *in, size_t n, i
 static void test_rreq(void) {
     static const int only[] = {1}, rsiz2[] = {1, 4}, rsiz0[] = {1, 5}, all[] = {1, 2, 5, 9, 10, 15};
     /* Channel 0 described as opacity and as premultiplied opacity. */
-    static const uint8_t cdef[22] = {0, 0, 0, 22, 'c', 'd', 'e', 'f', 0, 2,
+    static const uint8_t cdef[40] = {0, 0, 0, 40, 'c', 'd', 'e', 'f', 0, 5,
+                                     0, 0, 0, 0, 0, 1,  /* red */
+                                     0, 1, 0, 0, 0, 2,  /* green */
+                                     0, 2, 0, 0, 0, 3,  /* blue */
                                      0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0};
     bytes jp2 = {NULL, 0}, opacity, out;
     hv_merge_input in[2];
@@ -649,18 +652,27 @@ static void test_headers_mode(void) {
     in[1].size = bad.size;
     expect_error("16 colr boxes", in, 2, 0, error);
     bytes_free(&bad);
-    /* APPROX other than 0 in a JP2 file (T.800 I.5.3.3, Table I.11), which
-     * the JPX file would carry: in a baseline file, APPROX 4 in its jp2h
-     * breaks jpxb.colour (T.801 M.9.2.4). */
+    /* I.5.3.3: the input reader ignores APPROX. The writer normalizes
+     * it to 1, so input values 2 and 4 do not change the output profile. */
     bad = insert_in_jp2h(&files[0], colr.end, colrs, 0);
     in[1].buf = bad.data;
     in[1].size = bad.size;
     bad.data[colr.start + HV_BOX_HEADER + 2] = 2;
-    expect_error("APPROX 2, second input", in, 2, 0, "colr.prec-approx");
+    if (merge(in, 2, 0, &out, error, sizeof error) != 0)
+        check(0, "APPROX 2, second input: %s", error);
+    else {
+        expect_served("APPROX 2, second input", &out, in);
+        bytes_free(&out);
+    }
     in[0].buf = bad.data;
     in[0].size = bad.size;
     bad.data[colr.start + HV_BOX_HEADER + 2] = 4;
-    expect_error("APPROX 4, first input", in, 1, 0, "colr.prec-approx");
+    if (merge(in, 1, 0, &out, error, sizeof error) != 0)
+        check(0, "APPROX 4, first input: %s", error);
+    else {
+        expect_served("APPROX 4, first input", &out, in);
+        bytes_free(&out);
+    }
     in[0] = inputs[0];
     bytes_free(&bad);
     bad = insert_in_jp2h(&files[0], colr.end, colrs, 16 * (colr.end - colr.start));
@@ -816,11 +828,10 @@ done:
 }
 
 /* Inputs opened on demand: counts what hv_merge_files opens, and can
- * fail an open or change an input between passes. */
+ * fail a first or second open. */
 typedef struct {
     int opens[NINPUTS], open, most;
-    size_t fail_at, fail_second_at, shrink_at, change_at;  /* NINPUTS: never */
-    const uint8_t *changed;
+    size_t fail_at, fail_second_at;  /* NINPUTS: never */
 } counting;
 
 static int counting_open(void *context, size_t i, hv_merge_input *in, char *error,
@@ -831,10 +842,6 @@ static int counting_open(void *context, size_t i, hv_merge_input *in, char *erro
         return -1;
     }
     *in = inputs[i];
-    if (i == c->shrink_at && c->opens[i] > 0)
-        in->size--;
-    if (i == c->change_at && c->opens[i] > 0)
-        in->buf = c->changed;
     c->opens[i]++;
     if (++c->open > c->most)
         c->most = c->open;
@@ -866,10 +873,8 @@ static int merge_counting(counting *c, int links, char *error, size_t error_size
 
 static void test_opening_mode(void) {
     counting c;
-    bytes changed = {NULL, 0};
-    hv_box jp2c;
     char error[512];
-    size_t i, at;
+    size_t i;
     int links;
 
     for (i = 0; i < NINPUTS; i++)
@@ -877,7 +882,7 @@ static void test_opening_mode(void) {
             return;
     for (links = 0; links < 2; links++) {
         memset(&c, 0, sizeof c);
-        c.fail_at = c.fail_second_at = c.shrink_at = c.change_at = NINPUTS;
+        c.fail_at = c.fail_second_at = NINPUTS;
         check(merge_counting(&c, links, error, sizeof error) == 0, "on demand: %s", error);
         check(c.most <= 2 && c.open == 0, "on demand: at most %d open, %d left open", c.most,
               c.open);
@@ -887,48 +892,19 @@ static void test_opening_mode(void) {
     }
     memset(&c, 0, sizeof c);
     c.fail_at = 3;
-    c.fail_second_at = c.shrink_at = c.change_at = NINPUTS;
+    c.fail_second_at = NINPUTS;
     check(merge_counting(&c, 0, error, sizeof error) != 0 && strstr(error, "cannot open") != NULL &&
               c.open == 0,
           "failed open: \"%s\", %d left open", error, c.open);
-    memset(&c, 0, sizeof c);
-    c.fail_at = c.fail_second_at = c.change_at = NINPUTS;
-    c.shrink_at = 2;
-    check(merge_counting(&c, 0, error, sizeof error) != 0 &&
-              strstr(error, "changed while merging") != NULL && c.open == 0,
-          "changed input: \"%s\", %d left open", error, c.open);
-
     for (links = 0; links < 2; links++) {
         memset(&c, 0, sizeof c);
-        c.fail_at = c.shrink_at = c.change_at = NINPUTS;
+        c.fail_at = NINPUTS;
         c.fail_second_at = links ? NINPUTS - 1 : 2;
         check(merge_counting(&c, links, error, sizeof error) != 0 &&
                   strstr(error, "cannot open") != NULL && c.open == 0 &&
                   c.opens[c.fail_second_at] == 1,
               "failed second open, links=%d: \"%s\", %d left open", links, error, c.open);
     }
-
-    changed.data = malloc(files[2].size);
-    if (changed.data == NULL ||
-        hv_check_jp2(files[2].data, files[2].size, &jp2c, &at) != NULL) {
-        check(0, "cannot prepare a changed input");
-        bytes_free(&changed);
-        return;
-    }
-    changed.size = files[2].size;
-    memcpy(changed.data, files[2].data, changed.size);
-    changed.data[jp2c.payload + 7] ^= 1;       /* Rsiz, same size and valid SIZ */
-    for (links = 0; links < 2; links++) {
-        memset(&c, 0, sizeof c);
-        c.fail_at = c.fail_second_at = c.shrink_at = NINPUTS;
-        c.change_at = 2;
-        c.changed = changed.data;
-        check(merge_counting(&c, links, error, sizeof error) != 0 &&
-                  strstr(error, "changed while merging") != NULL && c.open == 0,
-              "same-size changed input, links=%d: \"%s\", %d left open", links, error,
-              c.open);
-    }
-    bytes_free(&changed);
 }
 
 static void test_headers(void) {

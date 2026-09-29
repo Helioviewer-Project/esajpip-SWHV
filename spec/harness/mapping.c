@@ -1,7 +1,7 @@
 /* mapping.c — see mapping.h. The psot and lbox decode mappings below
  * wrap wire values below their offsets to huge payload lengths, which
  * the generated decoder rejects. The shared lxxx mapping in
- * ../../lib/hv_mapping.c explicitly returns an invalid size for Lxxx < 2. */
+ * ../../jpeg2000/hv_mapping.c explicitly returns an invalid size for Lxxx < 2. */
 #include "mapping.h"
 
 asn1SccUint MAPPING_ENCODE_NAME(psot)(asn1SccUint n) { return n + 12; }

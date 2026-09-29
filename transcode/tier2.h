@@ -11,8 +11,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "hv_geometry.h"
-#include "hv_writer.h"
+#include "jpeg2000/hv_geometry.h"
+#include "jpeg2000/hv_writer.h"
 
 #define HV_NONE SIZE_MAX
 

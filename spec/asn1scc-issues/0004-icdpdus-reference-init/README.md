@@ -87,4 +87,4 @@ same failure remains with the first three patches. Adding
 `0004-icdpdus-reference-init.patch` makes `run.sh` print
 `Rec initialized, valid=1`, and the dedicated `runIcdPdusTests.sh`
 regression passes. `spec/check-model.sh` also confirms that the committed
-reader code in `lib/generated/` matches the fully patched compiler.
+reader code in `jpeg2000/generated/` matches the fully patched compiler.

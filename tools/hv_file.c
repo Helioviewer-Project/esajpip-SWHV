@@ -6,17 +6,19 @@
 #include "hv_file.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "hv_error.h"
+#include "jpeg2000/hv_error.h"
 
 /* The suffix mkstemp replaces. */
 static const char suffix[] = ".XXXXXX";
+
+/* Only one output is active at a time; keep its stdio buffer off the stack. */
+static char output_buffer[128 * 1024];
 
 /* ------------------------------------------------------------------------
  * The temporary file removed on a signal
@@ -225,6 +227,10 @@ int hv_file_create(hv_file *f, const char *path, int mode, char *error, size_t e
         discard(f);
         return hv_fail(error, error_size, "cannot write %s: %s", path, strerror(errno));
     }
+    if (setvbuf(f->file, output_buffer, _IOFBF, sizeof output_buffer) != 0) {
+        discard(f);
+        return hv_fail(error, error_size, "cannot buffer %s", path);
+    }
     return 0;
 }
 
@@ -234,40 +240,9 @@ int hv_file_write(hv_file *f, const void *bytes, size_t size, char *error, size_
     return 0;
 }
 
-/* Syncs the directory holding `path`, so that a rename in it is on disk.
- * 0, or -1 with errno set; file systems that cannot sync a directory
- * (EINVAL) count as done. */
-static int sync_directory(const char *path) {
-    const char *slash = strrchr(path, '/');
-    char *dir;
-    int fd, status, saved;
-    if (slash == NULL) {
-        dir = strdup(".");
-    } else if ((dir = malloc((size_t)(slash - path) + 2)) != NULL) {
-        size_t n = slash == path ? 1 : (size_t)(slash - path);   /* "/" for "/x" */
-        memcpy(dir, path, n);
-        dir[n] = 0;
-    }
-    if (dir == NULL) {
-        errno = ENOMEM;
-        return -1;
-    }
-    fd = open(dir, O_RDONLY);
-    free(dir);
-    if (fd < 0)
-        return -1;
-    status = fsync(fd) != 0 && errno != EINVAL ? -1 : 0;
-    saved = errno;
-    close(fd);
-    errno = saved;
-    return status;
-}
-
 int hv_file_commit(hv_file *f, char *error, size_t error_size) {
     int status = 0, saved = 0;
     if (f->file != NULL && fflush(f->file) != 0)
-        status = -1;
-    if (status == 0 && fsync(f->fd) != 0)
         status = -1;
     if (status != 0)
         saved = errno;
@@ -285,12 +260,6 @@ int hv_file_commit(hv_file *f, char *error, size_t error_size) {
         errno = saved;
         discard(f);
         return hv_fail(error, error_size, "cannot write %s: %s", f->path, strerror(saved));
-    }
-    if (sync_directory(f->target) != 0) {
-        saved = errno;
-        clear(f);
-        return hv_fail(error, error_size, "%s is written, but its directory cannot be synced: %s",
-                       f->path, strerror(saved));
     }
     clear(f);
     return 0;

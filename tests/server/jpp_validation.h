@@ -1,3 +1,5 @@
+#pragma once
+
 // Included by server_test.cc to reuse its live-server and HTTP harness.
 // The decoder follows T.808 A.2 and D.3; it uses no production JPIP code.
 namespace jpp_test {
@@ -147,7 +149,7 @@ void CheckReader() {
 }
 
 void Number(string &bytes, uint64_t value, int width) {
-    for (int i = width - 1; i >= 0; --i) bytes.push_back(value >> (8 * i));
+    for (int i = width - 1; i >= 0; --i) bytes.push_back(static_cast<char>(value >> (8 * i)));
 }
 
 string Box(const char *type, const string &payload) {
@@ -218,10 +220,10 @@ Fixture MakeFixture(const string &directory) {
         for (int layer = 0; layer < layers; ++layer)
             for (int precinct = 0; precinct < 130; ++precinct) {
                 string packet;
-                for (int tag : {stream + 1, layer + 1, precinct, 0x5A}) packet.push_back(tag);
+                for (int tag : {stream + 1, layer + 1, precinct, 0x5A}) packet.push_back(static_cast<char>(tag));
                 // Force packet fragmentation and multi-byte offsets/lengths.
                 if (precinct == 129) packet.append(128 + layer, 'a' + stream);
-                if (packet.size() >= 128) lengths.push_back(0x81);
+                if (packet.size() >= 128) lengths.push_back('\x81');
                 lengths.push_back(packet.size() & 127);
                 fixture.bins[Key(0, stream, precinct)] += packet;
                 data += packet;
@@ -330,11 +332,12 @@ void Stateful(uint16_t port, const Expected &expected, const string &name) {
     Require(created.body.size() == 3 && cache.Read(created.body) == 4,
             "Zero budget did not return EOR");
     string base = "/jpip?cid=" + cid;
-    for (int budget : {1, 2}) {
+    for (int budget : {1, 2, 3, 4, 22, 59, 60}) {
         SendRequest(fd, base + "&len=" + to_string(budget));
         Response response = ReadResponse(fd);
-        Require(response.body.size() == 3 && cache.Read(response.body) == 4,
-                "Sub-EOR budget did not return EOR");
+        Require(response.headers.find("200 OK") != string::npos &&
+                response.body.size() == 3 && cache.Read(response.body) == 4,
+                "Tiny budget did not return byte-limit EOR on the existing channel");
     }
 
     // Start inside bin 0's association placeholder and bin 1's box contents.

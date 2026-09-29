@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "hv_file.h"
+#include "tools/hv_file.h"
 #include "merge.h"
 
 typedef struct {
@@ -327,6 +327,11 @@ static int parse(char **argv, size_t argc, arguments *a) {
     return unrecognized ? -1 : 0;
 }
 
+typedef struct {
+    char **names;
+    const struct stat *output;  /* existing linked output, otherwise NULL */
+} input_files;
+
 /* An input mapped while hv_merge_files has it open: the file is opened
  * (without blocking, so that a FIFO fails at once), mapped and closed
  * again, and the mapping dropped on close. Mapped, not read: the checks
@@ -336,7 +341,8 @@ static int parse(char **argv, size_t argc, arguments *a) {
  * removes the temporary output first, so the output is left as it was. */
 static int map_input(void *context, size_t i, hv_merge_input *in, char *error,
                      size_t error_size) {
-    char **names = context;
+    const input_files *files = context;
+    char **names = files->names;
     struct stat st;
     int fd;
     in->path = names[i];
@@ -350,6 +356,15 @@ static int map_input(void *context, size_t i, hv_merge_input *in, char *error,
     }
     if (!S_ISREG(st.st_mode)) {
         snprintf(error, error_size, "cannot open %s: not a regular file", names[i]);
+        close(fd);
+        return -1;
+    }
+    /* Reuse the open file's identity rather than stat every input separately. */
+    if (files->output != NULL && st.st_dev == files->output->st_dev &&
+        st.st_ino == files->output->st_ino) {
+        snprintf(error, error_size,
+                 "%s is also the output: a linked JPX file cannot replace a file it links to",
+                 names[i]);
         close(fd);
         return -1;
     }
@@ -383,19 +398,13 @@ static void unmap_input(void *context, size_t i, hv_merge_input *in) {
  * would link to; an embedded one can. */
 static int merge(char **names, size_t n, const char *output, int links, int validate, char *error,
                  size_t error_size) {
-    hv_merge_inputs inputs = {map_input, unmap_input, NULL};
+    struct stat out;
+    input_files files = {names, NULL};
+    hv_merge_inputs inputs = {map_input, unmap_input, &files};
     hv_file f;
-    struct stat out, in;
-    size_t i;
 
-    inputs.context = names;
-    for (i = 0; links && stat(output, &out) == 0 && i < n; i++)
-        if (stat(names[i], &in) == 0 && in.st_dev == out.st_dev && in.st_ino == out.st_ino) {
-            snprintf(error, error_size,
-                     "%s is also the output: a linked JPX file cannot replace a file it links to",
-                     names[i]);
-            return -1;
-        }
+    if (links && stat(output, &out) == 0)
+        files.output = &out;
     if (hv_file_create(&f, output, HV_FILE_KEEP_MODE, error, error_size) != 0)
         return -1;
     if (hv_merge_files(&inputs, n, links, validate, f.file, error, error_size) != 0) {

@@ -8,9 +8,8 @@
  * which is replaced or, for a link to no file yet, created, and the link
  * stays. Error messages name the output as given, never the temporary.
  *
- * The new contents are on disk before the rename (fsync), and the rename
- * is too (fsync of the directory), so a crash leaves the old file or the
- * new one, never an empty or partial one. While the temporary file exists,
+ * Replacement is atomic; crash durability is not guaranteed.
+ * While the temporary file exists,
  * SIGINT, SIGTERM, SIGHUP and SIGQUIT remove it before they take their
  * course (the handler that was there, or the default); a signal the
  * process ignores (nohup's SIGHUP) stays ignored. So does SIGBUS, which a
@@ -60,11 +59,9 @@ int hv_file_create(hv_file *f, const char *path, int mode, char *error, size_t e
 /* Writes size bytes through f->file. 0, or -1 with a message in error. */
 int hv_file_write(hv_file *f, const void *bytes, size_t size, char *error, size_t error_size);
 
-/* Flushes and syncs the temporary file, closes it, renames it over the
- * output and syncs the directory. 0, or -1 with a message in error and
- * the temporary file removed (unless the directory sync failed: the output
- * is then replaced, but may not survive a crash). Either way f is
- * finished. */
+/* Flushes and closes the temporary file, then renames it over the output.
+ * 0, or -1 with a message in error and the temporary file removed.
+ * Either way f is finished. */
 int hv_file_commit(hv_file *f, char *error, size_t error_size);
 
 /* Closes and removes the temporary file: the output stays as it was. */

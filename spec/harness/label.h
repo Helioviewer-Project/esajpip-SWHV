@@ -2,7 +2,7 @@
  * generated decoders of layer 1 (Jp2Family) and layer 2 (Jp2File-Profile
  * or JpxFile-Profile), which also check the ASN.1 constraints, and applies
  * crossfield.c. vectors.c labels the corpus with it, writers.c the files
- * that ../../lib's writer writes. */
+ * that ../../jpeg2000's writer writes. */
 #ifndef J2K_HARNESS_LABEL_H
 #define J2K_HARNESS_LABEL_H
 
@@ -27,7 +27,7 @@ typedef enum {
  * Jp2Header and Jp2HeaderPayload's Res at layer 1 of a JP2 file,
  * TopPayload-Profile's Superbox-Profile and DataReferences-Profile at
  * layer 2 of a .jpx, none at layer 2 of a .jp2 (Jp2Payload-Profile). The
- * box tree rules (hv_rule_box_tree, ../../lib/hv_rules.c) read deeper, to
+ * box tree rules (hv_rule_box_tree, ../../jpeg2000/hv_rules.c) read deeper, to
  * every superbox of the file's kind, and so do hv_is_superbox's callers:
  * hv_walk and hv_transcode check the framing of every box that holds
  * boxes, at any depth. */

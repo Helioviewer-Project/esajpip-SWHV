@@ -1,6 +1,6 @@
 -- jpeg2000-io.asn1
 --
--- Header types for the JPEG 2000 reader/writer in ../lib (hv_reader,
+-- Header types for the JPEG 2000 reader/writer in ../jpeg2000 (hv_reader,
 -- hv_writer), which hv_walk, hv_transcode and hv_merge use.
 -- Unlike the whole-file model (j2k-codestream.asn1, jp2-boxes.asn1), these
 -- types are decoded and encoded one at a time by a hand-written walker that
@@ -40,7 +40,7 @@
 -- whole-file model keeps opaque. spec/check-model.sh compares each copy
 -- with its original, SotSegment with TilePart included.
 --
--- Struct sizes (asn1scc 4.9.3.0, C, 64-bit): see ../lib/README.md, "Struct
+-- Struct sizes (asn1scc 4.9.3.0, C, 64-bit): see ../jpeg2000/README.md, "Struct
 -- sizes".
 
 JPEG2000-IO DEFINITIONS AUTOMATIC TAGS ::= BEGIN

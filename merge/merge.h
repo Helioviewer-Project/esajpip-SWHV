@@ -6,7 +6,7 @@
  * codestream (asoc, nlst). A port of hvJP2K's jpx_merge.
  *
  * Every input must pass the served profile's container checks (hv_check_jp2)
- * and the header checks (hv_check_jp2h). The default leaves the remaining
+ * and the header checks (hv_read_jp2h). The default leaves the remaining
  * codestream opaque. With validate nonzero, HV_PROFILE checks the complete
  * codestream too, including PLT. Output container and header checks are the
  * same in both modes (hv_check_jpx, hv_check_jpx_headers). What
@@ -22,10 +22,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/* One input. With links, the JPX file records path (resolved with
- * realpath) and the codestream's offset and length in buf, so buf must
- * hold the file at path, and the file must not change after the merge
- * (hv_transcode on it in place, for one, moves the codestream). */
+/* One immutable input: its bytes and size must remain unchanged throughout
+ * hv_merge_files or hv_merge_buffers, including between acquisitions.
+ * Mutation is a configuration/operational error outside this contract.
+ * With links, buf must hold the file at path, and that file must remain
+ * unchanged for as long as the linked JPX is used. */
 typedef struct {
     const char *path;       /* for messages, and for links */
     const uint8_t *buf;     /* the whole file */
@@ -35,16 +36,12 @@ typedef struct {
 /* The inputs, opened when needed: open fills *in for input i, whose path
  * stays valid until hv_merge_files returns and whose bytes stay valid until
  * close; 0, or -1 with a message in error. hv_merge_files opens the first
- * input once, checks it and keeps it open. It opens every later input
- * twice and checks it both times (hv_check_jp2 and hv_check_jp2h, plus the
- * complete codestream with HV_PROFILE when validate is nonzero), linked or embedded.
- * The second time,
- * its size and what the first pass recorded (where its boxes lie, its colr
- * and IPR box counts, Rsiz, component count and opacity channels) must be
- * as before; then its header, IPR and XML boxes, and its codestream unless
- * linked, are
- * copied as they are then: their contents are not compared with the first
- * pass. At most two inputs are open at a time. */
+ * input once, checks it and keeps it open. It opens every later input twice.
+ * The first pass checks hv_check_jp2 and hv_read_jp2h, plus the complete
+ * codestream with HV_PROFILE when validate is nonzero. The second pass only
+ * reacquires the same immutable bytes and uses the recorded layout to copy
+ * header, IPR and XML boxes, and the codestream unless linked. At most two
+ * inputs are open at a time. */
 typedef struct {
     int (*open)(void *context, size_t i, hv_merge_input *in, char *error, size_t error_size);
     void (*close)(void *context, size_t i, hv_merge_input *in);

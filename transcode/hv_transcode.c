@@ -27,9 +27,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include "hv_file.h"
-#include "hv_served.h"
-#include "hv_writer.h"
+#include "tools/hv_file.h"
+#include "jpeg2000/hv_served.h"
+#include "jpeg2000/hv_writer.h"
 #include "transcode.h"
 
 static void usage(void) {

@@ -32,7 +32,7 @@
 --     jplh; CgrpBox). At the top level a cgrp is opaque, so that a rule
 --     names its placement.
 --   * Below the levels the types reach, and in the boxes they keep opaque,
---     the box tree rules (hv_rule_box_tree, ../lib/hv_rules.c) read the
+--     the box tree rules (hv_rule_box_tree, ../jpeg2000/hv_rules.c) read the
 --     file's bytes: every box to HV_BOX_DEPTH_MAX levels in every superbox
 --     of the file's kind, where the placement and count rules at the end
 --     apply, and the contents of the UUID Info, UUID List, UUID, Data Entry
@@ -70,10 +70,10 @@
 -- Cross-field rules are at the end. The box tree rules, the JPX box rules
 -- (hv_rule_child, hv_rule_url, hv_rule_flst, hv_rule_fragment_dr,
 -- hv_rule_jpx, hv_rule_fragments) and the header box rules are
--- ../lib/hv_rules.c, shared by the harness (harness/crossfield_impl.h,
+-- ../jpeg2000/hv_rules.c, shared by the harness (harness/crossfield_impl.h,
 -- harness/crossfield.c) and the reader; the file rules (signature, ftyp,
 -- one flst per ftbl, the NDR and NF counts) are implemented in both the
--- harness and ../lib/hv_reader.c (the NF count in the harness only; see
+-- harness and ../jpeg2000/hv_reader.c (the NF count in the harness only; see
 -- the end).
 
 JP2-Boxes DEFINITIONS AUTOMATIC TAGS ::= BEGIN
@@ -234,7 +234,7 @@ InnerPayload ::= CHOICE {
 -- I.5.2: all conforming JP2 readers "shall properly interpret all files
 -- with 'jp2 ' in one of the CLi fields"; T.801 M.2.1), and is also
 -- decoded as one. The UUID Info and UUID boxes are checked by the box
--- tree rules (../lib/hv_rules.c, hv_rule_box_tree), whatever their level.
+-- tree rules (../jpeg2000/hv_rules.c, hv_rule_box_tree), whatever their level.
 -- ---------------------------------------------------------------------------
 
 Jp2File ::= SEQUENCE {
@@ -275,7 +275,7 @@ Jp2HeaderPayload ::= CHOICE {
 
 -- ---------------------------------------------------------------------------
 -- Box contents the box tree rules read one element at a time
--- (../lib/hv_rules.c, hv_rule_box_tree), in boxes the whole-file model
+-- (../jpeg2000/hv_rules.c, hv_rule_box_tree), in boxes the whole-file model
 -- keeps opaque or does not reach.
 -- ---------------------------------------------------------------------------
 
@@ -628,9 +628,9 @@ DataEntryUrl-Profile ::= DataEntryUrl (WITH COMPONENTS {
 END
 
 -- ===========================================================================
--- Cross-field constraints for the box layer (../lib/hv_rules.c and, for
+-- Cross-field constraints for the box layer (../jpeg2000/hv_rules.c and, for
 -- the file rules, harness/crossfield_impl.h, harness/crossfield.c and
--- ../lib/hv_reader.c; see the top)
+-- ../jpeg2000/hv_reader.c; see the top)
 -- ===========================================================================
 --
 -- The file's kind. At layer 1 a file whose ftyp brand is 'jpx ' is a JPX
@@ -834,7 +834,8 @@ END
 --       (cmap.component) and palette columns below NPC
 --       (cmap.palette-column).
 --     JP2, the channels: cdef channels below the channel count, cmap's or
---       NC (cdef.channel); opacity from unsigned components or palette
+--       NC (cdef.channel); every channel and every colour is defined
+--       when cdef is present (cdef.complete; I.5.3.6); opacity from unsigned components or palette
 --       columns (cdef.opacity-signed; Table I.16); Asoc a colour of the
 --       first colr's colourspace, where it gives one (cdef.asoc; Table
 --       I.18); with the codestream's multiple component transform, an RGB
@@ -861,7 +862,7 @@ END
 --     M.9.2.7); the first codestream's fragments are in the file, in order
 --     (jpxb.fragments; M.9.2.5).
 --   Not checked: that cdef is absent when the channels are the colours in
---     order and that it describes every colour (I.5.3.6); opct against
+--     order (I.5.3.6); opct against
 --     cdef; the header of a linked codestream against the linked file's
 --     SIZ; the boxes a cref stands for; the baseline rules on compositing
 --     layers, codestreams and cross-references (M.9.2.2, M.9.2.3, M.9.2.6),

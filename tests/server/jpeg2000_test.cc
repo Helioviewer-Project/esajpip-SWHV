@@ -12,9 +12,9 @@
 #include <uv.h>
 #include <zlib.h>
 
-#include "jpeg2000/file_manager.h"
-#include "jpip/databin_server.h"
-#include "jpip/request.h"
+#include "server/storage/file_manager.h"
+#include "jpip/response/databin_server.h"
+#include "jpip/request/request.h"
 #include "server/channel_engine.h"
 #include "server/channel_work.h"
 
@@ -35,10 +35,10 @@ static vector<char> GenerateEngineResponse(const string &directory,
     server::ChannelEngine engine(128);
     Check(engine.Init(directory), "Could not initialize the channel engine");
 
-    jpeg2000::FileManager::OpenResult open_result;
+    server::FileManager::OpenResult open_result;
     thread open([&] { open_result = engine.Open("image.jp2"); });
     open.join();
-    Check(open_result == jpeg2000::FileManager::OpenResult::OPENED,
+    Check(open_result == server::FileManager::OpenResult::OPENED,
           "Could not open an image on a migrated engine thread");
 
     jpip::Request request;
@@ -115,7 +115,7 @@ struct PooledResponse {
         switch (result.kind) {
         case server::ChannelWork::Kind::OPEN:
             if (result.open !=
-                    jpeg2000::FileManager::OpenResult::OPENED ||
+                    server::FileManager::OpenResult::OPENED ||
                 !work.Begin(std::move(self->request), false,
                             self->output.data(), self->output.size()))
                 self->failed = true;
@@ -170,8 +170,8 @@ struct PooledResponse {
 
 static void CheckProgressionMappings() {
     for (int progression = 0; progression <= 4; ++progression) {
-        jpeg2000::CodingParameters parameters;
-        parameters.size = jpeg2000::Size(19, 13);
+        jpip::CodingParameters parameters;
+        parameters.size = jpip::Size(19, 13);
         parameters.num_levels = 3;
         parameters.num_layers = 4;
         parameters.num_components = 3;
@@ -197,9 +197,9 @@ static void CheckProgressionMappings() {
                              x < parameters.resolutions[resolution].num_precincts.x;
                              ++x) {
                             int index = parameters.GetProgressionIndex(
-                                    jpeg2000::Packet(
+                                    jpip::Packet(
                                             layer, resolution, component,
-                                            jpeg2000::Point(x, y)));
+                                            jpip::Point(x, y)));
                             Check(index >= 0 &&
                                           index < parameters.GetNumPackets() &&
                                           !seen[index],
@@ -213,15 +213,15 @@ static void CheckProgressionMappings() {
 }
 
 static void Append16(vector<unsigned char> &data, uint16_t value) {
-    data.push_back(value >> 8);
-    data.push_back(value);
+    data.push_back(static_cast<unsigned char>(value >> 8));
+    data.push_back(static_cast<unsigned char>(value));
 }
 
 static void Append32(vector<unsigned char> &data, uint32_t value) {
-    data.push_back(value >> 24);
-    data.push_back(value >> 16);
-    data.push_back(value >> 8);
-    data.push_back(value);
+    data.push_back(static_cast<unsigned char>(value >> 24));
+    data.push_back(static_cast<unsigned char>(value >> 16));
+    data.push_back(static_cast<unsigned char>(value >> 8));
+    data.push_back(static_cast<unsigned char>(value));
 }
 
 static uint32_t Read32(const vector<unsigned char> &data, size_t offset) {
@@ -232,15 +232,15 @@ static uint32_t Read32(const vector<unsigned char> &data, size_t offset) {
 }
 
 static void Set32(vector<unsigned char> &data, size_t offset, uint32_t value) {
-    data[offset] = value >> 24;
-    data[offset + 1] = value >> 16;
-    data[offset + 2] = value >> 8;
-    data[offset + 3] = value;
+    data[offset] = static_cast<unsigned char>(value >> 24);
+    data[offset + 1] = static_cast<unsigned char>(value >> 16);
+    data[offset + 2] = static_cast<unsigned char>(value >> 8);
+    data[offset + 3] = static_cast<unsigned char>(value);
 }
 
 static void Append64(vector<unsigned char> &data, uint64_t value) {
-    Append32(data, value >> 32);
-    Append32(data, value);
+    Append32(data, static_cast<uint32_t>(value >> 32));
+    Append32(data, static_cast<uint32_t>(value));
 }
 
 static void AppendBox(vector<unsigned char> &file, uint32_t type,
@@ -706,20 +706,20 @@ static void WriteFile(const string &path, const vector<unsigned char> &data) {
 }
 
 static bool OpenImage(const string &directory, const string &name,
-                      jpeg2000::FileManager *manager) {
+                      server::FileManager *manager) {
     Check(manager->Init(directory), "Could not initialize the file manager");
     return manager->OpenImage(name) ==
-           jpeg2000::FileManager::OpenResult::OPENED;
+           server::FileManager::OpenResult::OPENED;
 }
 
-static jpeg2000::FileManager::OpenResult OpenImageResult(
+static server::FileManager::OpenResult OpenImageResult(
         const string &directory, const string &name) {
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     Check(manager.Init(directory), "Could not initialize the file manager");
     return manager.OpenImage(name);
 }
 
-static bool RejectDataRequest(jpeg2000::FileManager &manager,
+static bool RejectDataRequest(server::FileManager &manager,
                               const string &line) {
     jpip::Request request;
     jpip::DataBinServer server;
@@ -741,17 +741,17 @@ static vector<string> SplitTabs(const string &line) {
 
 static bool IndexGeneratedVector(const string &directory, const string &name,
                                  string *failure_stage) {
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     if (!manager.Init(directory + "/")) {
         *failure_stage = "initialization";
         return false;
     }
-    if (manager.OpenImage(name) != jpeg2000::FileManager::OpenResult::OPENED) {
+    if (manager.OpenImage(name) != server::FileManager::OpenResult::OPENED) {
         *failure_stage = "opening";
         return false;
     }
 
-    jpeg2000::ImageIndex *image = manager.GetImage();
+    jpip::ImageIndex *image = manager.GetImage();
     if (image == NULL || image->GetNumCodestreams() == 0) {
         *failure_stage = "codestream discovery";
         return false;
@@ -759,29 +759,29 @@ static bool IndexGeneratedVector(const string &directory, const string &name,
 
     for (size_t codestream = 0; codestream < image->GetNumCodestreams();
          codestream++) {
-        data::File *file = manager.GetFile(image->GetPathName(codestream));
+        const jpip::Source *file = manager.GetSource(image->GetPathName(codestream));
         if (file == NULL) {
             *failure_stage = "opening codestream " + to_string(codestream);
             return false;
         }
 
-        const jpeg2000::CodingParameters *parameters =
+        const jpip::CodingParameters *parameters =
                 image->GetCodingParameters(codestream);
         for (int layer = 0; layer < parameters->num_layers; layer++) {
             for (int resolution = 0; resolution <= parameters->num_levels;
                  resolution++) {
-                const jpeg2000::Size &precincts =
+                const jpip::Size &precincts =
                         parameters->resolutions[resolution].num_precincts;
                 for (int component = 0;
                      component < parameters->num_components; component++) {
                     for (int y = 0; y < precincts.y; y++) {
                         for (int x = 0; x < precincts.x; x++) {
-                            data::FileSegment packet;
+                            jpip::FileSegment packet;
                             if (!image->GetPacket(
                                         file, codestream,
-                                        jpeg2000::Packet(
+                                        jpip::Packet(
                                                 layer, resolution, component,
-                                                jpeg2000::Point(x, y)),
+                                                jpip::Point(x, y)),
                                         &packet)) {
                                 *failure_stage = "indexing codestream " +
                                                  to_string(codestream);
@@ -797,14 +797,14 @@ static bool IndexGeneratedVector(const string &directory, const string &name,
 }
 
 static void CheckPLTBoundaries(const string &directory, const string &name) {
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     Check(manager.Init(directory + "/") &&
-                  manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
+                  manager.OpenImage(name) == server::FileManager::OpenResult::OPENED,
           "Could not open the generated PLT boundary fixture");
-    jpeg2000::ImageIndex *image = manager.GetImage();
-    data::File *file = manager.GetFile(image->GetPathName(0));
+    jpip::ImageIndex *image = manager.GetImage();
+    const jpip::Source *file = manager.GetSource(image->GetPathName(0));
     Check(file != NULL, "Could not map the generated PLT boundary fixture");
-    const data::FileSegment &header = image->GetMainHeader(0);
+    const jpip::FileSegment &header = image->GetMainHeader(0);
     // SOT (12), two PLT markers (6 each), SOD (2). The second tile-part
     // has two-byte packet lengths, so its header takes 28 bytes.
     uint64_t start = header.offset + header.length + 26;
@@ -812,9 +812,9 @@ static void CheckPLTBoundaries(const string &directory, const string &name) {
     const int offsets[] = {0, 1, 128 + 28, 256 + 28};
     const int order[] = {2, 0, 3, 1};
     for (int layer : order) {
-        data::FileSegment segment;
+        jpip::FileSegment segment;
         Check(image->GetPacket(file, 0,
-                              jpeg2000::Packet(layer, 0, 0, jpeg2000::Point()),
+                              jpip::Packet(layer, 0, 0, jpip::Point()),
                               &segment) &&
                       segment.offset == start + offsets[layer] &&
                       segment.length == static_cast<uint64_t>(lengths[layer]),
@@ -832,11 +832,11 @@ static void CheckLinkedGraphs() {
     const int offsets[] = {0, 1, 156, 284}; // includes the second tile-part header
     const int order[] = {2, 0, 3, 1};
     for (int graph = 0; graph < 3; ++graph) {
-        jpeg2000::FileManager manager;
+        server::FileManager manager;
         Check(manager.Init(directory + "/") &&
-                      manager.OpenImage(names[graph]) == jpeg2000::FileManager::OpenResult::OPENED,
+                      manager.OpenImage(names[graph]) == server::FileManager::OpenResult::OPENED,
               "Could not open the generated linked-JPX graph");
-        jpeg2000::ImageIndex *image = manager.GetImage();
+        jpip::ImageIndex *image = manager.GetImage();
         Check(image->GetNumCodestreams() == 2, "Wrong linked codestream count");
         for (int stream = 0; stream < 2; ++stream) {
             int reference = references[graph][stream];
@@ -852,11 +852,11 @@ static void CheckLinkedGraphs() {
                 bool simple = references[graph][stream] == 1;
                 if (simple && layer != 0)
                     continue;
-                data::File *file = manager.GetFile(image->GetPathName(stream));
-                const data::FileSegment &header = image->GetMainHeader(stream);
-                data::FileSegment segment;
+                const jpip::Source *file = manager.GetSource(image->GetPathName(stream));
+                const jpip::FileSegment &header = image->GetMainHeader(stream);
+                jpip::FileSegment segment;
                 Check(file != NULL && image->GetPacket(file, stream,
-                              jpeg2000::Packet(layer, 0, 0, jpeg2000::Point()), &segment) &&
+                              jpip::Packet(layer, 0, 0, jpip::Point()), &segment) &&
                               segment.offset == header.offset + header.length +
                                       (simple ? 20 : 26 + offsets[layer]) &&
                               segment.length == static_cast<uint64_t>(lengths[layer]),
@@ -867,13 +867,13 @@ static void CheckLinkedGraphs() {
 }
 
 static void CheckAssociationMetadata(const string &directory, const string &name) {
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     Check(manager.Init(directory + "/") &&
-                  manager.OpenImage(name) == jpeg2000::FileManager::OpenResult::OPENED,
+                  manager.OpenImage(name) == server::FileManager::OpenResult::OPENED,
           "Could not open the generated association fixture");
-    jpeg2000::ImageIndex *image = manager.GetImage();
-    data::File *file = manager.GetFile(image->GetPathName(0));
-    const jpeg2000::Metadata &metadata = image->GetMetadata();
+    jpip::ImageIndex *image = manager.GetImage();
+    const jpip::Source *file = manager.GetSource(image->GetPathName(0));
+    const jpip::Metadata &metadata = image->GetMetadata();
     // One label box (12 bytes), optionally followed by an XML box (15).
     // Even the malformed child header remains part of the opaque payload.
     uint64_t length = name == "jpx-asoc-one-child.jpx" ? 12 : 27;
@@ -915,22 +915,34 @@ static void CheckFragmentTableMetadata(const string &directory,
         AppendBox(references, 0x75726C20, url); // url
         if (nested_associations)
             AppendBox(references, 0x61736F63, {'d'}); // asoc inside dtbl
+        // T.801 M.11.2: dtbl is NDR followed by URL entries. Preserve the
+        // former server's malformed fixture as an explicit rejection, then
+        // exercise valid nested associations in jpch and ftbl below.
+        if (nested_associations) {
+            vector<unsigned char> invalid = file;
+            AppendBox(invalid, 0x6474626C, references);
+            WriteFile(directory + "jpx-dtbl-association.jpx", invalid);
+            server::FileManager invalid_manager;
+            Check(!OpenImage(directory, "jpx-dtbl-association.jpx", &invalid_manager),
+                  "Accepted a non-URL entry in dtbl");
+            references.resize(references.size() - 9); // remove only the asoc in dtbl
+        }
         AppendBox(file, 0x6474626C, references); // dtbl
 
         const char *name = nested_associations ? "jpx-nested-associations.jpx"
                                                : "jpx-ftbl-extra.jpx";
         WriteFile(directory + name, file);
-        jpeg2000::FileManager manager;
+        server::FileManager manager;
         Check(OpenImage(directory, name, &manager),
               "Could not parse JPX with extra superbox children");
-        const jpeg2000::Metadata &metadata = manager.GetImage()->GetMetadata();
+        const jpip::Metadata &metadata = manager.GetImage()->GetMetadata();
         Check(metadata.bins.empty() && metadata.bin0.size() == 1,
               "Nested JPX boxes escaped into separate metadata bins");
-        const jpeg2000::Metadata::Part &part = metadata.bin0[0];
-        Check(part.data == data::FileSegment(0, table_start) &&
-                      part.placeholder.header == data::FileSegment(table_start, 8) &&
+        const jpip::Metadata::Part &part = metadata.bin0[0];
+        Check(part.data == jpip::FileSegment(0, table_start) &&
+                      part.placeholder.header == jpip::FileSegment(table_start, 8) &&
                       part.placeholder.id == 0 && part.placeholder.is_jp2c &&
-                      metadata.tail == data::FileSegment(table_end, file.size() - table_end),
+                      metadata.tail == jpip::FileSegment(table_end, file.size() - table_end),
               "Fragment-table contents leaked into metadata bin zero");
     }
 }
@@ -964,8 +976,8 @@ static void CheckSourceForms(const string &directory) {
             for (uint64_t length : {uint64_t(15), uint64_t(codestream.size() + 15),
                                     uint64_t(codestream.size() + 17), UINT64_MAX}) {
                 vector<unsigned char> bad = bytes;
-                Set32(bad, prefix.size() + 8, length >> 32);
-                Set32(bad, prefix.size() + 12, length);
+                Set32(bad, prefix.size() + 8, static_cast<uint32_t>(length >> 32));
+                Set32(bad, prefix.size() + 12, static_cast<uint32_t>(length));
                 check("bad-xlbox-" + to_string(length) + extension, bad, false);
             }
             bytes.resize(prefix.size() + 15); // one byte missing from XLBox
@@ -1009,7 +1021,7 @@ static void CheckSourceForms(const string &directory) {
           MakeJP2(ShortenFirstPLT(MakeOpenEndedTilePart(codestream), 0)), false);
     // The tile-part runs up to the codestream's final EOC; its packet data
     // is not scanned for markers, as with any Psot, so bytes FF D9 inside
-    // a packet do not end it (as in lib/hv_reader.c).
+    // a packet do not end it (as in jpeg2000/hv_reader.c).
     {
         vector<unsigned char> embedded = codestream;  // one one-byte packet
         embedded.insert(embedded.end() - 2, {0xFF, 0xD9});
@@ -1035,7 +1047,7 @@ static void CheckSourceForms(const string &directory) {
     nested = MakeEmbeddedJPX(codestream);
     AppendBox(nested, 0x61736F63, metadata);
     WriteFile(directory + "nested-associations.jpx", nested);
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     Check(OpenImage(directory, "nested-associations.jpx", &manager),
           "Rejected nested opaque associations");
     const auto &bins = manager.GetImage()->GetMetadata().bins;
@@ -1332,56 +1344,56 @@ int main() {
     Check(pooled_response.Generate(directory) == plain_engine_response,
           "Pool scheduling changed the generated response");
 
-    jpeg2000::FileManager manager;
+    server::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
     Check(manager.GetImage()->GetNumCodestreams() == 1, "Wrong JP2 codestream count");
 
-    jpeg2000::FileManager relative_link_manager;
+    server::FileManager relative_link_manager;
     Check(OpenImage(directory, "nested/relative.jpx", &relative_link_manager),
           "Could not resolve a linked JPX URL relative to its containing file");
     Check(relative_link_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong relative linked-JPX codestream count");
 
-    jpeg2000::FileManager marker_after_tile_part_manager;
+    server::FileManager marker_after_tile_part_manager;
     Check(!OpenImage(directory, "marker-after-tile-part.jp2",
                      &marker_after_tile_part_manager),
           "Accepted a marker segment after tile-part data");
 
     for (const char *name : {"duplicate-cod.jp2", "duplicate-qcd.jp2"}) {
-        jpeg2000::FileManager duplicate_marker_manager;
+        server::FileManager duplicate_marker_manager;
         Check(!OpenImage(directory, name, &duplicate_marker_manager),
               "Accepted a repeated main-header COD or QCD marker");
     }
 
-    jpeg2000::FileManager main_com_manager;
+    server::FileManager main_com_manager;
     Check(OpenImage(directory, "main-com.jp2", &main_com_manager),
           "Rejected a main-header COM marker");
     for (const char *name : {"qcd-length-3.jp2", "qcd-length-198.jp2",
                              "com-length-4.jp2", "com-rcom-2.jp2"}) {
-        jpeg2000::FileManager marker_length_manager;
+        server::FileManager marker_length_manager;
         Check(!OpenImage(directory, name, &marker_length_manager),
               "Accepted a QCD or COM marker outside T.800's ranges");
     }
 
     for (const char *name : {"main-coc.jp2", "main-poc.jp2"}) {
-        jpeg2000::FileManager main_override_manager;
+        server::FileManager main_override_manager;
         Check(!OpenImage(directory, name, &main_override_manager),
               "Accepted unsupported main-header coding instructions");
     }
 
-    jpeg2000::FileManager main_ppm_manager;
+    server::FileManager main_ppm_manager;
     Check(!OpenImage(directory, "main-ppm.jp2", &main_ppm_manager),
           "Accepted packet headers moved into the main header (PPM)");
 
-    jpeg2000::FileManager main_ff30_manager;
+    server::FileManager main_ff30_manager;
     Check(!OpenImage(directory, "main-ff30.jp2", &main_ff30_manager),
           "Accepted a segment-less 0xFF30 marker in the main header");
 
-    jpeg2000::FileManager valid_mct_manager;
+    server::FileManager valid_mct_manager;
     Check(OpenImage(directory, "valid-mct.jp2", &valid_mct_manager),
           "Rejected a valid Part 1 multiple component transform");
     for (const char *name : {"short-mct.jp2", "mismatched-mct.jp2"}) {
-        jpeg2000::FileManager invalid_mct_manager;
+        server::FileManager invalid_mct_manager;
         Check(!OpenImage(directory, name, &invalid_mct_manager),
               "Accepted invalid multiple component transform inputs");
     }
@@ -1389,156 +1401,156 @@ int main() {
     for (const char *name : {"wrong-tile-part-count.jp2",
                              "wrong-first-tile-part.jp2",
                              "inconsistent-tile-part-count.jp2"}) {
-        jpeg2000::FileManager tile_part_manager;
+        server::FileManager tile_part_manager;
         Check(!OpenImage(directory, name, &tile_part_manager),
               "Accepted inconsistent JPEG 2000 tile-part numbering");
     }
 
     for (const char *name : {"tile-cod.jp2", "tile-qcd.jp2", "tile-com.jp2",
                              "late-cod.jp2", "late-qcd.jp2"}) {
-        jpeg2000::FileManager tile_marker_manager;
+        server::FileManager tile_marker_manager;
         Check(!OpenImage(directory, name, &tile_marker_manager),
               "Accepted COD or QCD in a tile-part header");
     }
 
     for (const char *name : {"missing-signature.jp2", "bad-signature.jp2",
                              "missing-file-type.jp2", "wrong-brand.jp2"}) {
-        jpeg2000::FileManager preamble_manager;
+        server::FileManager preamble_manager;
         Check(!OpenImage(directory, name, &preamble_manager),
               "Accepted an invalid JPEG 2000 file preamble");
     }
 
-    jpeg2000::FileManager nested_codestream_manager;
+    server::FileManager nested_codestream_manager;
     Check(!OpenImage(directory, "nested-codestream.jpx",
                      &nested_codestream_manager),
           "Accepted a JPX codestream box outside the top level");
-    jpeg2000::FileManager open_ended_manager;
+    server::FileManager open_ended_manager;
     Check(OpenImage(directory, "open-ended-codestream.jpx",
                     &open_ended_manager),
           "Rejected a top-level box extending to the end of the file");
-    jpeg2000::FileManager nested_open_ended_manager;
+    server::FileManager nested_open_ended_manager;
     Check(!OpenImage(directory, "nested-open-ended.jpx",
                      &nested_open_ended_manager),
           "Accepted a nested box whose length extends past its superbox");
-    jpeg2000::FileManager empty_reference_manager;
+    server::FileManager empty_reference_manager;
     Check(!OpenImage(directory, "empty-reference.jpx",
                      &empty_reference_manager),
           "Accepted an empty JPX data-reference URL");
 
-    data::File *file = manager.GetFile(directory + "image.jp2");
+    const jpip::Source *file = manager.GetSource(directory + "image.jp2");
     Check(file != NULL, "Could not reopen valid JP2");
-    data::FileSegment packet;
+    jpip::FileSegment packet;
     Check(manager.GetImage()->GetPacket(file, 0,
-                                        jpeg2000::Packet(0, 0, 0, jpeg2000::Point()),
+                                        jpip::Packet(0, 0, 0, jpip::Point()),
                                         &packet),
           "Could not index valid JP2 packet");
     Check(packet.length == 1, "Wrong JP2 packet length");
 
-    jpeg2000::FileManager open_ended_tile_part_manager;
+    server::FileManager open_ended_tile_part_manager;
     Check(OpenImage(directory, "open-ended-tile-part.jp2",
                     &open_ended_tile_part_manager),
           "Rejected a final tile-part with Psot equal to zero");
 
-    jpeg2000::FileManager repeated_plt_index_manager;
+    server::FileManager repeated_plt_index_manager;
     Check(!OpenImage(directory, "repeated-plt-index.jp2",
                      &repeated_plt_index_manager),
           "Accepted duplicate PLT marker indices");
 
-    jpeg2000::FileManager short_plt_manager;
+    server::FileManager short_plt_manager;
     Check(OpenImage(directory, "short-plt.jp2", &short_plt_manager),
           "Rejected a lazy-indexed PLT coverage fixture during parsing");
-    data::File *short_plt_file =
-            short_plt_manager.GetFile(directory + "short-plt.jp2");
+    const jpip::Source *short_plt_file =
+            short_plt_manager.GetSource(directory + "short-plt.jp2");
     Check(short_plt_file != NULL, "Could not open PLT coverage fixture");
     Check(short_plt_manager.GetImage()->GetPacket(
               short_plt_file, 0,
-              jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+              jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Could not index the first packet in the PLT coverage fixture");
     Check(!short_plt_manager.GetImage()->GetPacket(
               short_plt_file, 0,
-              jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
+              jpip::Packet(1, 0, 0, jpip::Point()), &packet),
           "Accepted PLT lengths shorter than their tile-part data");
 
-    jpeg2000::FileManager extra_packet_manager;
+    server::FileManager extra_packet_manager;
     Check(OpenImage(directory, "extra-tile-part-packet.jp2",
                     &extra_packet_manager),
           "Rejected a lazy-indexed extra-packet fixture during parsing");
-    data::File *extra_packet_file = extra_packet_manager.GetFile(
+    const jpip::Source *extra_packet_file = extra_packet_manager.GetSource(
             directory + "extra-tile-part-packet.jp2");
     Check(extra_packet_file != NULL &&
               !extra_packet_manager.GetImage()->GetPacket(
                       extra_packet_file, 0,
-                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Accepted packet data beyond the COD-derived packet set");
 
-    jpeg2000::FileManager extra_plt_manager;
+    server::FileManager extra_plt_manager;
     Check(OpenImage(directory, "extra-plt-entry.jp2", &extra_plt_manager),
           "Rejected a lazy-indexed extra-PLT fixture during parsing");
-    data::File *extra_plt_file =
-            extra_plt_manager.GetFile(directory + "extra-plt-entry.jp2");
+    const jpip::Source *extra_plt_file =
+            extra_plt_manager.GetSource(directory + "extra-plt-entry.jp2");
     Check(extra_plt_file != NULL &&
               !extra_plt_manager.GetImage()->GetPacket(
                       extra_plt_file, 0,
-                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Accepted a PLT entry beyond the tile-part data");
 
-    jpeg2000::FileManager multiple_plt_manager;
+    server::FileManager multiple_plt_manager;
     Check(OpenImage(directory, "multiple-plt.jp2", &multiple_plt_manager),
           "Rejected multiple PLT markers in one tile-part");
-    data::File *multiple_plt_file =
-            multiple_plt_manager.GetFile(directory + "multiple-plt.jp2");
+    const jpip::Source *multiple_plt_file =
+            multiple_plt_manager.GetSource(directory + "multiple-plt.jp2");
     Check(multiple_plt_file != NULL &&
               multiple_plt_manager.GetImage()->GetPacket(
                       multiple_plt_file, 0,
-                      jpeg2000::Packet(1, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(1, 0, 0, jpip::Point()), &packet),
           "Could not index packets across PLT markers");
 
-    jpeg2000::FileManager zero_padding_manager;
+    server::FileManager zero_padding_manager;
     Check(OpenImage(directory, "zero-padded-plt.jp2", &zero_padding_manager),
           "Rejected zero-padded PLT fixture during parsing");
-    data::File *zero_padding_file =
-            zero_padding_manager.GetFile(directory + "zero-padded-plt.jp2");
+    const jpip::Source *zero_padding_file =
+            zero_padding_manager.GetSource(directory + "zero-padded-plt.jp2");
     Check(zero_padding_file != NULL, "Could not open zero-padded PLT fixture");
     Check(zero_padding_manager.GetImage()->GetPacket(
                   zero_padding_file, 0,
-                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                  jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Rejected deployed zero PLT padding");
     Check(packet.length == 1, "Wrong packet before zero PLT padding");
 
-    jpeg2000::FileManager zero_logical_manager;
+    server::FileManager zero_logical_manager;
     Check(OpenImage(directory, "zero-logical-plt.jp2",
                     &zero_logical_manager),
           "Rejected the lazy-indexed zero packet during parsing");
-    data::File *zero_logical_file =
-            zero_logical_manager.GetFile(directory + "zero-logical-plt.jp2");
+    const jpip::Source *zero_logical_file =
+            zero_logical_manager.GetSource(directory + "zero-logical-plt.jp2");
     Check(zero_logical_file != NULL &&
               !zero_logical_manager.GetImage()->GetPacket(
                   zero_logical_file, 0,
-                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                  jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Accepted a zero-length logical packet");
 
-    jpeg2000::FileManager nonzero_padding_manager;
+    server::FileManager nonzero_padding_manager;
     Check(OpenImage(directory, "nonzero-padded-plt.jp2",
                     &nonzero_padding_manager),
           "Rejected lazy-indexed nonzero PLT padding fixture during parsing");
-    data::File *nonzero_padding_file = nonzero_padding_manager.GetFile(
+    const jpip::Source *nonzero_padding_file = nonzero_padding_manager.GetSource(
             directory + "nonzero-padded-plt.jp2");
     Check(nonzero_padding_file != NULL,
           "Could not open nonzero PLT padding fixture");
     Check(!nonzero_padding_manager.GetImage()->GetPacket(
                   nonzero_padding_file, 0,
-                  jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                  jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Accepted nonzero data after the logical PLT packet list");
 
     for (const char *name : {"pcrl.jp2", "cprl.jp2"}) {
-        jpeg2000::FileManager progression_manager;
+        server::FileManager progression_manager;
         Check(OpenImage(directory, name, &progression_manager),
               "Could not parse spatially progressive JP2");
-        data::File *progression_file = progression_manager.GetFile(directory + name);
+        const jpip::Source *progression_file = progression_manager.GetSource(directory + name);
         Check(progression_file != NULL, "Could not reopen spatially progressive JP2");
         Check(progression_manager.GetImage()->GetPacket(
                       progression_file, 0,
-                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(0, 0, 0, jpip::Point()), &packet),
               "Could not index spatially progressive JP2 packet");
         Check(packet.length == 1, "Wrong spatially progressive packet length");
     }
@@ -1557,48 +1569,49 @@ int main() {
     vector<char> progression_response;
     for (int progression = 0; progression <= 4; ++progression) {
         string name = "progression-" + to_string(progression) + ".jp2";
-        jpeg2000::FileManager progression_manager;
+        server::FileManager progression_manager;
         Check(OpenImage(directory, name, &progression_manager),
               "Could not parse progression-order indexing fixture");
-        data::File *progression_file = progression_manager.GetFile(directory + name);
+        const jpip::Source *progression_file = progression_manager.GetSource(directory + name);
         Check(progression_file != NULL,
               "Could not reopen progression-order indexing fixture");
-        jpeg2000::ImageIndex *image = progression_manager.GetImage();
-        jpeg2000::Packet first_packet(0, 0, 0, jpeg2000::Point());
-        data::FileSegment first_segment;
+        jpip::ImageIndex *image = progression_manager.GetImage();
+        jpip::Packet first_packet(0, 0, 0, jpip::Point());
+        jpip::FileSegment first_segment;
         Check(image->GetPacket(progression_file, 0, first_packet, &first_segment),
               "Could not index the first packet");
-        uint64_t first_plt_offset = progression_file->GetOffset();
+        int first_indexed = image->GetIndexedPackets(0);
+        Check(first_indexed == 1, "First lookup indexed more than one packet");
 
         int later = packet_order[progression][12];
-        jpeg2000::Packet later_packet(later / 8, (later / 4) % 2,
-                                     (later / 2) % 2, jpeg2000::Point(later % 2, 0));
+        jpip::Packet later_packet(later / 8, (later / 4) % 2,
+                                     (later / 2) % 2, jpip::Point(later % 2, 0));
         int later_index = 12;
         Check(later_index > 0 &&
                       image->GetPacket(progression_file, 0, later_packet, &packet),
               "Could not index a later packet");
-        Check(progression_file->GetOffset() == first_plt_offset + later_index,
+        Check(image->GetIndexedPackets(0) == first_indexed + later_index,
               "Indexed packets beyond the requested packet");
         Check(packet.offset == first_segment.offset + later_index &&
                       packet.length == 1,
               "Returned the wrong progression-order packet");
 
         int earlier = packet_order[progression][3];
-        jpeg2000::Packet earlier_packet(earlier / 8, (earlier / 4) % 2,
-                                       (earlier / 2) % 2, jpeg2000::Point(earlier % 2, 0));
+        jpip::Packet earlier_packet(earlier / 8, (earlier / 4) % 2,
+                                       (earlier / 2) % 2, jpip::Point(earlier % 2, 0));
         int earlier_index = 3;
-        uint64_t plt_offset = progression_file->GetOffset();
+        int indexed = image->GetIndexedPackets(0);
         Check(earlier_index < later_index &&
                       image->GetPacket(progression_file, 0, earlier_packet, &packet),
               "Could not retrieve an earlier packet after a later packet");
-        Check(progression_file->GetOffset() == plt_offset &&
+        Check(image->GetIndexedPackets(0) == indexed &&
                       packet.offset == first_segment.offset + earlier_index,
               "Rebuilt or returned the wrong earlier packet");
 
         for (int index = 0; index < 16; ++index) {
             int entry = packet_order[progression][index];
-            jpeg2000::Packet expected(entry / 8, (entry / 4) % 2,
-                                      (entry / 2) % 2, jpeg2000::Point(entry % 2, 0));
+            jpip::Packet expected(entry / 8, (entry / 4) % 2,
+                                      (entry / 2) % 2, jpip::Point(entry % 2, 0));
             Check(image->GetPacket(progression_file, 0, expected, &packet) &&
                           packet.offset == first_segment.offset + index &&
                           packet.length == 1,
@@ -1630,30 +1643,30 @@ int main() {
                   "Source progression order changed JPIP response bytes");
     }
     for (int progression = 0; progression <= 4; ++progression) {
-        jpeg2000::FileManager subsampled_manager;
+        server::FileManager subsampled_manager;
         Check(!OpenImage(directory,
                          "subsampled-" + to_string(progression) + ".jp2",
                          &subsampled_manager),
               "Accepted component sampling unsupported by the packet index");
     }
 
-    jpeg2000::FileManager multi_tile_manager;
+    server::FileManager multi_tile_manager;
     Check(!OpenImage(directory, "multi-tile.jp2", &multi_tile_manager),
           "Accepted a multi-tile codestream");
-    jpeg2000::FileManager tile_index_manager;
+    server::FileManager tile_index_manager;
     Check(!OpenImage(directory, "bad-tile-index.jp2", &tile_index_manager),
           "Accepted a nonzero tile index");
-    jpeg2000::FileManager maximum_tile_parts_manager;
+    server::FileManager maximum_tile_parts_manager;
     Check(OpenImage(directory, "64-tile-parts.jp2", &maximum_tile_parts_manager),
           "Rejected the maximum supported tile-part count");
-    data::File *maximum_tile_parts_file =
-            maximum_tile_parts_manager.GetFile(directory + "64-tile-parts.jp2");
+    const jpip::Source *maximum_tile_parts_file =
+            maximum_tile_parts_manager.GetSource(directory + "64-tile-parts.jp2");
     Check(maximum_tile_parts_file != NULL &&
               maximum_tile_parts_manager.GetImage()->GetPacket(
                       maximum_tile_parts_file, 0,
-                      jpeg2000::Packet(63, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(63, 0, 0, jpip::Point()), &packet),
           "Could not index the maximum supported tile-part count");
-    jpeg2000::FileManager excessive_tile_parts_manager;
+    server::FileManager excessive_tile_parts_manager;
     Check(!OpenImage(directory, "65-tile-parts.jp2", &excessive_tile_parts_manager),
           "Accepted too many tile-parts for the packet index");
 
@@ -1661,100 +1674,107 @@ int main() {
     WriteFile(large_file, jp2);
     Check(truncate(large_file.c_str(), static_cast<off_t>(INT_MAX) + 1) == 0,
           "Could not create a sparse large-file fixture");
-    jpeg2000::FileManager large_file_manager;
+    server::FileManager large_file_manager;
     Check(!OpenImage(directory, "large.jp2", &large_file_manager),
           "Accepted a file larger than the packet index can address");
+    Check(large_file_manager.GetSource(large_file) == nullptr,
+          "Mapped a source larger than INT_MAX");
+    WriteFile(directory + "large-linked.jpx",
+              MakeLinkedJPX("large.jp2", codestream.size()));
+    Check(OpenImageResult(directory, "large-linked.jpx") ==
+                  server::FileManager::OpenResult::INVALID,
+          "Did not reject an oversized linked source during image opening");
     string large_jpx = directory + "large.jpx";
     WriteFile(large_jpx, MakeLinkedJPX("image.jp2", codestream.size()));
     Check(truncate(large_jpx.c_str(), static_cast<off_t>(INT_MAX) + 1) == 0,
           "Could not create a sparse large-JPX fixture");
     Check(OpenImageResult(directory, "large.jpx") ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  server::FileManager::OpenResult::INVALID,
           "Accepted a linked JPX whose metadata offsets exceed the supported range");
     string empty_file = directory + "empty.jp2";
     WriteFile(empty_file, vector<unsigned char>());
     Check(OpenImageResult(directory, "empty.jp2") ==
-                  jpeg2000::FileManager::OpenResult::INVALID,
+                  server::FileManager::OpenResult::INVALID,
           "Did not classify an empty JPEG 2000 source as invalid");
 
-    jpeg2000::FileManager default_precinct_manager;
+    server::FileManager default_precinct_manager;
     Check(OpenImage(directory, "default-precincts.jp2", &default_precinct_manager),
           "Rejected a valid default precinct partition");
-    data::File *default_precinct_file =
-            default_precinct_manager.GetFile(directory + "default-precincts.jp2");
+    const jpip::Source *default_precinct_file =
+            default_precinct_manager.GetSource(directory + "default-precincts.jp2");
     Check(default_precinct_file != NULL &&
               default_precinct_manager.GetImage()->GetPacket(
                       default_precinct_file, 0,
-                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point(2, 0)), &packet),
+                      jpip::Packet(0, 0, 0, jpip::Point(2, 0)), &packet),
           "Did not apply the default precinct size");
     for (const char *name : {"excessive-precincts.jp2",
                              "excessive-packets.jp2"}) {
-        jpeg2000::FileManager excessive_packets_manager;
+        server::FileManager excessive_packets_manager;
         Check(!OpenImage(directory, name, &excessive_packets_manager),
               "Accepted a packet count exceeding the index range");
     }
-    jpeg2000::FileManager nonzero_origin_manager;
+    server::FileManager nonzero_origin_manager;
     Check(!OpenImage(directory, "nonzero-origin.jp2", &nonzero_origin_manager),
           "Accepted an unsupported nonzero image origin");
 
-    jpeg2000::FileManager maximum_code_block_style_manager;
+    server::FileManager maximum_code_block_style_manager;
     Check(OpenImage(directory, "code-block-style-63.jp2",
                     &maximum_code_block_style_manager),
           "Rejected the maximum Part 1 code-block style");
     for (const char *name : {"code-block-style-64.jp2",
                              "code-block-style-255.jp2"}) {
-        jpeg2000::FileManager reserved_code_block_style_manager;
+        server::FileManager reserved_code_block_style_manager;
         Check(!OpenImage(directory, name, &reserved_code_block_style_manager),
               "Accepted a reserved code-block style bit");
     }
-    jpeg2000::FileManager sop_manager;
+    server::FileManager sop_manager;
     Check(!OpenImage(directory, "sop-markers.jp2", &sop_manager),
           "Accepted SOP markers outside the served source profile");
 
-    jpeg2000::FileManager lowest_zero_precinct_manager;
+    server::FileManager lowest_zero_precinct_manager;
     Check(OpenImage(directory, "precinct-lowest-zero.jp2",
                     &lowest_zero_precinct_manager),
           "Rejected zero precinct exponents at the lowest resolution");
     for (const char *name : {"precinct-higher-ppx-zero.jp2",
                              "precinct-higher-ppy-zero.jp2"}) {
-        jpeg2000::FileManager zero_precinct_manager;
+        server::FileManager zero_precinct_manager;
         Check(!OpenImage(directory, name, &zero_precinct_manager),
               "Accepted a zero precinct exponent above the lowest resolution");
     }
 
-    jpeg2000::FileManager embedded_manager;
+    server::FileManager embedded_manager;
     Check(OpenImage(directory, "embedded.jpx", &embedded_manager),
           "Could not parse valid embedded JPX");
     Check(embedded_manager.GetImage()->GetNumCodestreams() == 1,
           "Wrong embedded JPX codestream count");
 
-    jpeg2000::FileManager embedded_two_manager;
+    server::FileManager embedded_two_manager;
     Check(OpenImage(directory, "embedded-two.jpx", &embedded_two_manager),
           "Could not parse embedded JPX with distinct codestreams");
     Check(embedded_two_manager.GetImage()->GetNumCodestreams() == 2 &&
               embedded_two_manager.GetImage()->GetCodingParameters(0)->size.x == 1 &&
               embedded_two_manager.GetImage()->GetCodingParameters(1)->size.x == 2,
           "Did not retain embedded codestream parameters");
-    data::File *embedded_file =
-            embedded_two_manager.GetFile(directory + "embedded-two.jpx");
+    const jpip::Source *embedded_file =
+            embedded_two_manager.GetSource(directory + "embedded-two.jpx");
     Check(embedded_file != NULL &&
               embedded_two_manager.GetImage()->GetPacket(
                       embedded_file, 1,
-                      jpeg2000::Packet(0, 0, 0, jpeg2000::Point()), &packet),
+                      jpip::Packet(0, 0, 0, jpip::Point()), &packet),
           "Could not index the second embedded codestream");
 
-    jpeg2000::FileManager header_first_manager;
+    server::FileManager header_first_manager;
     Check(OpenImage(directory, "header-first-embedded.jpx",
                     &header_first_manager),
           "Could not parse JPX with headers before its codestream boxes");
-    const jpeg2000::Metadata &header_first_metadata =
+    const jpip::Metadata &header_first_metadata =
             header_first_manager.GetImage()->GetMetadata();
     Check(header_first_metadata.bin0.size() == 2 &&
               header_first_metadata.bin0[0].placeholder.id == 0 &&
               header_first_metadata.bin0[1].placeholder.id == 1,
           "JPX placeholders do not follow physical codestream order");
 
-    jpeg2000::FileManager mixed_manager;
+    server::FileManager mixed_manager;
     Check(!OpenImage(directory, "mixed.jpx", &mixed_manager),
           "Accepted mixed embedded and linked JPX codestreams");
 
@@ -1860,7 +1880,7 @@ int main() {
               multi_stream_length > 3 && multi_stream_last,
           "An omitted stream retained the previous codestream selection");
 
-    jpeg2000::FileManager linked_manager;
+    server::FileManager linked_manager;
     Check(OpenImage(directory, "linked.jpx", &linked_manager),
           "Could not parse valid linked JPX");
     Check(linked_manager.GetImage()->GetNumCodestreams() == 1,
@@ -1873,7 +1893,7 @@ int main() {
     WriteFile(directory + "lazy.jpx",
               MakeLinkedMovie({directory + "image.jp2", later_frame},
                               codestream.size()));
-    jpeg2000::FileManager lazy_manager;
+    server::FileManager lazy_manager;
     Check(OpenImage(directory, "lazy.jpx", &lazy_manager),
           "Could not open the lazy-header fixture");
     jpip::Request lazy_request;
@@ -1921,38 +1941,38 @@ int main() {
     remove(later_frame.c_str());
     remove((directory + "lazy.jpx").c_str());
 
-    jpeg2000::FileManager self_linked_manager;
+    server::FileManager self_linked_manager;
     Check(!OpenImage(directory, "self-linked.jpx", &self_linked_manager),
           "Accepted a JPX linked to itself");
 
-    jpeg2000::FileManager outside_linked_manager;
+    server::FileManager outside_linked_manager;
     Check(OpenImage(directory, "outside-linked.jpx", &outside_linked_manager),
           "Rejected a trusted JPX link outside the image directory");
 
     string outside_name = outside_file.substr(outside_file.find_last_of('/') + 1);
     string target_traversal = "../" + outside_name;
     Check(OpenImageResult(directory, target_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
+                  server::FileManager::OpenResult::INVALID_PATH,
           "Accepted parent traversal in a target path");
     string uri_traversal = "/../" + outside_name;
     Check(OpenImageResult(directory, uri_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
+                  server::FileManager::OpenResult::INVALID_PATH,
           "Accepted parent traversal in a URI path");
     string embedded_traversal = "unused/../image.jp2";
     Check(OpenImageResult(directory, embedded_traversal) ==
-                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
+                  server::FileManager::OpenResult::INVALID_PATH,
           "Accepted an embedded parent path segment");
     string nul_path = "image.jp2";
     nul_path.push_back('\0');
     nul_path += ".jp2";
     Check(OpenImageResult(directory, nul_path) ==
-                  jpeg2000::FileManager::OpenResult::INVALID_PATH,
+                  server::FileManager::OpenResult::INVALID_PATH,
           "Accepted a file path containing NUL");
     Check(OpenImageResult(directory, "image.jpeg") ==
-                  jpeg2000::FileManager::OpenResult::UNSUPPORTED,
+                  server::FileManager::OpenResult::UNSUPPORTED,
           "Did not distinguish an unsupported image type");
     Check(OpenImageResult(directory, "missing.jp2") ==
-                  jpeg2000::FileManager::OpenResult::NOT_FOUND,
+                  server::FileManager::OpenResult::NOT_FOUND,
           "Did not distinguish a missing image");
 
     vector<unsigned char> malformed_plt = jp2;
@@ -1960,32 +1980,32 @@ int main() {
     malformed_plt[plt + 2] = 0;
     malformed_plt[plt + 3] = 2;
     WriteFile(directory + "bad-plt.jp2", malformed_plt);
-    jpeg2000::FileManager malformed_plt_manager;
+    server::FileManager malformed_plt_manager;
     Check(!OpenImage(directory, "bad-plt.jp2", &malformed_plt_manager),
           "Accepted invalid PLT marker length");
 
     vector<unsigned char> truncated = jp2;
     truncated.pop_back();
     WriteFile(directory + "truncated.jp2", truncated);
-    jpeg2000::FileManager truncated_manager;
+    server::FileManager truncated_manager;
     Check(!OpenImage(directory, "truncated.jp2", &truncated_manager),
           "Accepted truncated JP2");
 
     WriteFile(directory + "truncated-linked.jpx",
               MakeLinkedJPX(directory + "truncated.jp2", codestream.size()));
-    jpeg2000::FileManager truncated_linked_manager;
+    server::FileManager truncated_linked_manager;
     Check(!OpenImage(directory, "truncated-linked.jpx", &truncated_linked_manager),
           "Accepted a JPX linked to a truncated JP2");
 
     WriteFile(directory + "bad-reference.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size(), 2));
-    jpeg2000::FileManager reference_manager;
+    server::FileManager reference_manager;
     Check(!OpenImage(directory, "bad-reference.jpx", &reference_manager),
           "Accepted inconsistent JPX data-reference count");
 
     WriteFile(directory + "bad-fragment.jpx",
               MakeLinkedJPX(directory + "image.jp2", codestream.size() - 1));
-    jpeg2000::FileManager fragment_manager;
+    server::FileManager fragment_manager;
     Check(!OpenImage(directory, "bad-fragment.jpx", &fragment_manager),
           "Accepted invalid JPX fragment range");
 
@@ -2007,7 +2027,7 @@ int main() {
               response[response_length - 1] == 0,
           "Unlimited response has no window-done EOR");
 
-    jpeg2000::FileManager many_layers_manager;
+    server::FileManager many_layers_manager;
     Check(OpenImage(directory, "many-layers.jp2", &many_layers_manager),
           "Could not parse the many-layer response fixture");
     jpip::Request many_layers_request;
@@ -2044,7 +2064,7 @@ int main() {
     Check(response_length > 0 && last,
           "Did not complete a response for a window with defaults");
 
-    jpeg2000::FileManager window_manager;
+    server::FileManager window_manager;
     Check(OpenImage(directory, "window-map.jp2", &window_manager),
           "Could not parse the window-mapping fixture");
     jpip::Request mapped_window_request;

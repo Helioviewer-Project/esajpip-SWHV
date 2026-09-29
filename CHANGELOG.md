@@ -20,7 +20,7 @@ while letting HTTP connections be pooled or replaced independently of channels.
   restates the model, and that OpenJPEG decodes every standard-valid vector
   but those on the OpenJPEG limits it lists. The pinned asn1scc is built
   with the local fixes in `spec/asn1scc-patches/`.
-- `lib/`: a JPEG 2000 reader/writer (`jpeg2000_io`) on code generated from
+- `jpeg2000/`: a JPEG 2000 reader/writer (`jpeg2000`) on code generated from
   that model, applying the same cross-field rules as the corpus
   (`hv_rules`). It reads boxes and codestream items in place, one header or
   list element at a time, checks the served profile, the JP2/JPX header

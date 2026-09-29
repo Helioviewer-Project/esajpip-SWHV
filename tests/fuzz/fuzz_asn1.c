@@ -6,7 +6,7 @@
  * The first byte selects the type (modulo the number of types), the rest is
  * its encoding. asn1_pdus.h lists every type with a T_ACN_Decode, in the
  * order of the generated headers; tests/fuzz/CMakeLists.txt writes it from
- * lib/generated, so a type the model adds is fuzzed without an edit here.
+ * jpeg2000/generated, so a type the model adds is fuzzed without an edit here.
  *
  * For each input, whatever the selected type:
  *   - T_Initialize's value, when it encodes (satisfying T_IsConstraintValid

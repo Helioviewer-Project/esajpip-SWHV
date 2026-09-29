@@ -35,7 +35,7 @@ data, not exact per-function accounting.
 This snapshot includes `walk_command`, broad direct ASN.1 replay, linked and
 embedded merge replay, and the new rule/mutation diagnostics. What remains:
 
-- The historical zero coverage for `src/server/server.cc` was a collection
+- The historical zero coverage for `server/server.cc` was a collection
   problem, fixed on 2026-09-29. The forked test servers call `_exit`, so the
   coverage build now flushes each child's profile explicitly and resets its
   inherited counters. Each child uses a different filename pattern because
@@ -45,15 +45,15 @@ embedded merge replay, and the new rule/mutation diagnostics. What remains:
   measured 84.09% line coverage and 66.02% branch coverage for `server.cc`.
   This verifies collection; the whole-suite snapshot above has not been
   refreshed.
-- `lib/hv_file.c`: the read and map error paths, and the signal handler,
+- `tools/hv_file.c`: the read and map error paths, and the signal handler,
   whose process is killed before it writes its profile.
-- `src/transcode`: the command's option and I/O error paths.
+- `transcode/`: the command's option and I/O error paths.
 - ASN.1 runtime: the generated code calls only part of `asn1crt*.c`, so its
   totals stay low; the functions it does call are reached through
   `fuzz_asn1`.
 - Mutation testing (`tests/run_mutation.sh`, `rule` operator) leaves
-  mutants of `lib/hv_rules.c` that the tests pass: rules no vector or test
-  case fails. `tests/lib/test_profile` requires a vector's rule only where it
+  mutants of `jpeg2000/hv_rules.c` that the tests pass: rules no vector or test
+  case fails. `tests/jpeg2000/test_profile` requires a vector's rule only where it
   fails the header layer, which is part of why.
 - Transcode replay checks structural/profile validity and codestream
   idempotence. It does not prove pixel equivalence or independent decoder

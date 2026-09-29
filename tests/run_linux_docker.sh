@@ -197,8 +197,9 @@ if [ "$profile" = valgrind ] || [ "$profile" = all ]; then
     cmake -S /src -B /tmp/esajpip-linux-valgrind \
         -DBUILD_TESTING=ON \
         -DCMAKE_BUILD_TYPE=Debug
-    build_parallel /tmp/esajpip-linux-valgrind --target replay protocol_test
-    /tmp/esajpip-linux-valgrind/tests/server/protocol_test
+    build_parallel /tmp/esajpip-linux-valgrind --target replay support_test jpip_tests
+    ctest --test-dir /tmp/esajpip-linux-valgrind --output-on-failure -L '^jpip$'
+    /tmp/esajpip-linux-valgrind/tests/server/support_test
     run_matrix /tmp/esajpip-linux-valgrind/tests/fuzz/corpus/asn1 valgrind \
         --tool=memcheck \
         --leak-check=full \

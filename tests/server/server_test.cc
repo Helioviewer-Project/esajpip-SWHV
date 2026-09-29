@@ -24,8 +24,8 @@
 
 #include <zlib.h>
 
-#include "config.h"
-#include "net/address.h"
+#include "server/config.h"
+#include "server/http/address.h"
 #include "server/server.h"
 
 #ifdef ESAJPIP_COVERAGE
@@ -259,7 +259,7 @@ string ReadLogs(const string &directory) {
     return contents;
 }
 
-pid_t StartServer(const Config &config, const string &log_name,
+pid_t StartServer(const server::Config &config, const string &log_name,
                   unsigned int worker_threads = 16) {
     pid_t pid = fork();
     Check(pid >= 0, "Could not create the test server");
@@ -276,12 +276,12 @@ pid_t StartServer(const Config &config, const string &log_name,
         __llvm_profile_reset_counters();
 #endif
         setpgid(0, 0);
-        net::InetAddress address = config.address().empty()
-                                           ? net::InetAddress(config.port())
-                                           : net::InetAddress(
+        server::InetAddress address = config.address().empty()
+                                           ? server::InetAddress(config.port())
+                                           : server::InetAddress(
                                                      config.address().c_str(),
                                                      config.port());
-        int result = RunServer(config, address, log_name,
+        int result = server::RunServer(config, address, log_name,
                                "esajpip server test", worker_threads);
 #ifdef ESAJPIP_COVERAGE
         // _exit skips the profiling runtime's normal exit handler.
@@ -385,7 +385,7 @@ int main() {
             "[channels]\nlimit = 4\n"
             "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
     WriteFile(directory + "/server.ini", config_text.data(), config_text.size());
-    Config config;
+    server::Config config;
     string error;
     Check(config.Load((directory + "/server.ini").c_str(), error),
           "Could not load the server test configuration");
@@ -779,7 +779,7 @@ int main() {
             "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
     WriteFile(directory + "/channel-limit.ini", channel_limit_text.data(),
               channel_limit_text.size());
-    Config channel_limit_config;
+    server::Config channel_limit_config;
     Check(channel_limit_config.Load((directory + "/channel-limit.ini").c_str(),
                                     error),
           "Could not load the channel-limit configuration");
@@ -822,7 +822,7 @@ int main() {
             "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
     WriteFile(directory + "/open-timeout.ini", open_timeout_text.data(),
               open_timeout_text.size());
-    Config open_timeout_config;
+    server::Config open_timeout_config;
     Check(open_timeout_config.Load((directory + "/open-timeout.ini").c_str(),
                                    error),
           "Could not load the image-open timeout configuration");

@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hv_reader.h"
-#include "hv_rewrite.h"
+#include "jpeg2000/hv_reader.h"
+#include "jpeg2000/hv_rewrite.h"
 
 static void check_rewrite_stability(const uint8_t *data, size_t size) {
     hv_out once, twice;

@@ -225,9 +225,9 @@ END
 
 -- ===========================================================================
 -- Cross-field constraints for the framing (the tile-part rules sot.*, the
--- tile-part limit and the packet count are ../lib/hv_rules.c, shared by
+-- tile-part limit and the packet count are ../jpeg2000/hv_rules.c, shared by
 -- the harness and the reader; the placement and count of segments are
--- implemented in both, harness/crossfield_impl.h and ../lib/hv_reader.c)
+-- implemented in both, harness/crossfield_impl.h and ../jpeg2000/hv_reader.c)
 -- ===========================================================================
 --
 -- Standard (both layers), T.800 A.3 and Table A.2:
@@ -253,7 +253,7 @@ END
 --   The bodies the framing keeps opaque (COC, QCC, RGN, POC, TLM, PLM, PPM,
 --     PPT, CRG), and what the segments and the tile-part data come to
 --     across headers: standard layer only, listed at the end of
---     j2k-headers.asn1 (hv_segments in ../lib/hv_rules.c).
+--     j2k-headers.asn1 (hv_segments in ../jpeg2000/hv_rules.c).
 --   Where a single unsubsampled tile with zero image and tile origins uses
 --     COD without packet-layout overrides and every tile-part has PLT, the
 --     nonzero Iplt count matches the packet count.

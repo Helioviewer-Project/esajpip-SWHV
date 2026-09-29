@@ -4,7 +4,7 @@
 # as strict C11 with AddressSanitizer and UndefinedBehaviorSanitizer, and
 # runs the corpus harness, which fails on any vector whose label or reason
 # is not the one its mutant expects, and then harness/writers.c, which
-# labels the files lib's writer writes from the corpus (hv_rewrite,
+# labels the files jpeg2000's writer writes from the corpus (hv_rewrite,
 # hv_transcode, hv_merge). Last, OpenJPEG's opj_decompress (on the host,
 # or OPJ_DECOMPRESS) decodes every standard-valid vector, but those on a
 # limit of OpenJPEG's the script lists.
@@ -16,7 +16,7 @@
 #   * each box-type mapping function of harness/mapping.c keeps exactly
 #     the TBox values of the CHOICEs it serves, and every `other`
 #     alternative is MAPPING_OTHER_BOX, a type no mapping keeps;
-#   * lib/hv_codes.h: every constant is written HV_<NAME> = 0x<hex> (but
+#   * jpeg2000/hv_codes.h: every constant is written HV_<NAME> = 0x<hex> (but
 #     the sizes listed below), and is the value the model states for the
 #     field of that name;
 #   * each marker-code value set selects exactly one field of its segment
@@ -34,8 +34,8 @@
 #   * the profile limits restated in C: the tile-part limit
 #     (HV_PROFILE_TILE_PARTS) and the dimension limit of the harness
 #     (PROFILE_MAX_DIMENSION, against SizFixed-Profile).
-# The compiler checks run lib/generate.sh --check with the same Docker
-# image as the corpus, whatever ASN1SCC says, so that lib/generated and the
+# The compiler checks run jpeg2000/generate.sh --check with the same Docker
+# image as the corpus, whatever ASN1SCC says, so that jpeg2000/generated and the
 # corpus come from one compiler.
 #
 # Assumptions about the layout of the model files: a type assignment starts
@@ -183,7 +183,7 @@ for function in $(cut -d ' ' -f 1 "$temporary/served" | sort -u); do
 done
 
 # ---------------------------------------------------------------------------
-# lib/hv_codes.h against the model: the values the model states for the
+# jpeg2000/hv_codes.h against the model: the values the model states for the
 # field of the same name (`present-when` values, fixed INTEGER fields and
 # marker termination patterns). The C names the model does not state are
 # listed in `unmodeled`, the constants that are not codes in `sizes` (and
@@ -196,7 +196,7 @@ done
         "$repo"/spec/*.asn1
     sed -En "s/^[[:space:]]*([A-Za-z][A-Za-z0-9]*)[[:space:]]*\[.*termination-pattern '(FF[0-9A-F]{2})'H.*/model code \1 0x\2 0x\2/p" \
         "$repo"/spec/*.acn
-    sed 's/^/c /' "$repo/lib/hv_codes.h"
+    sed 's/^/c /' "$repo/jpeg2000/hv_codes.h"
 } | awk '
     function number(s,    n, i) {
         if (s !~ /^0x/)
@@ -290,7 +290,7 @@ done
             if (!(k in c)) { print "check-model.sh: unmodeled " k " is not in hv_codes.h" > "/dev/stderr"; bad = 1 }
         exit bad
     }
-' || fail "lib/hv_codes.h differs from the model"
+' || fail "jpeg2000/hv_codes.h differs from the model"
 
 # ---------------------------------------------------------------------------
 # Marker-code value sets: every code of the set selects exactly one field of
@@ -522,7 +522,7 @@ counts=$(acn_body PclrCounts)
 tile_part=$(asn1_body TilePart-Profile)
 tnsot=$(printf '%s\n' "$tile_part" | sed -n 's/.* tnsot INTEGER (0\.\.\([0-9]*\)).*/\1/p')
 tpsot=$(printf '%s\n' "$tile_part" | sed -n 's/.* tpsot INTEGER (0\.\.\([0-9]*\)).*/\1/p')
-limit=$(sed -n 's/.*HV_PROFILE_TILE_PARTS = \([0-9]*\).*/\1/p' "$repo/lib/hv_rules.h")
+limit=$(sed -n 's/.*HV_PROFILE_TILE_PARTS = \([0-9]*\).*/\1/p' "$repo/jpeg2000/hv_rules.h")
 if [ -z "$tnsot" ] || [ -z "$tpsot" ] || [ "$tnsot" != "$limit" ] ||
    [ "$((tpsot + 1))" != "$limit" ]; then
     fail "tile-part limit: TilePart-Profile tpsot 0..$tpsot, tnsot 0..$tnsot;" \
@@ -545,8 +545,8 @@ echo "model: static checks passed"
 # ---------------------------------------------------------------------------
 # The compiler.
 # ---------------------------------------------------------------------------
-# lib/generated must be what this compiler makes of the model.
-ASN1SCC= ASN1SCC_IMAGE=$image sh "$repo/lib/generate.sh" --check
+# jpeg2000/generated must be what this compiler makes of the model.
+ASN1SCC= ASN1SCC_IMAGE=$image sh "$repo/jpeg2000/generate.sh" --check
 
 generated=$temporary/generated
 mkdir "$generated"
@@ -580,28 +580,27 @@ docker run --rm --entrypoint sh \
     "$image" -c '
         set -eu
         cc -std=c11 -pedantic-errors -Wall -Wextra -Werror \
-            -O1 -g -fsanitize=address,undefined -I/generated -I/project/lib \
+            -O1 -g -fsanitize=address,undefined -I/generated -I/project \
             /project/spec/harness/vectors.c \
             /project/spec/harness/label.c \
             /project/spec/harness/crossfield.c \
             /project/spec/harness/mapping.c \
-            /project/lib/hv_rules.c \
-            /project/lib/hv_mapping.c \
+            /project/jpeg2000/hv_rules.c \
+            /project/jpeg2000/hv_mapping.c \
             /generated/*.c \
             -o /tmp/vectors
         /tmp/vectors /corpus
         cc -std=c11 -pedantic-errors -Wall -Wextra -Werror \
-            -O1 -g -fsanitize=address,undefined -I/generated -I/project/lib \
-            -I/project/spec/harness -I/project/transcode -I/project/merge \
+            -O1 -g -fsanitize=address,undefined -I/generated -I/project \
             /project/spec/harness/writers.c \
             /project/spec/harness/label.c \
             /project/spec/harness/crossfield.c \
             /project/spec/harness/mapping.c \
-            /project/lib/hv_error.c \
-            /project/lib/hv_geometry.c /project/lib/hv_mapping.c \
-            /project/lib/hv_reader.c /project/lib/hv_rewrite.c \
-            /project/lib/hv_rules.c /project/lib/hv_served.c \
-            /project/lib/hv_writer.c \
+            /project/jpeg2000/hv_error.c \
+            /project/jpeg2000/hv_geometry.c /project/jpeg2000/hv_mapping.c \
+            /project/jpeg2000/hv_reader.c /project/jpeg2000/hv_rewrite.c \
+            /project/jpeg2000/hv_rules.c /project/jpeg2000/hv_served.c \
+            /project/jpeg2000/hv_writer.c \
             /project/transcode/transcode_file.c \
             /project/transcode/transcode.c \
             /project/transcode/tier2.c \
@@ -629,7 +628,6 @@ opj=${OPJ_DECOMPRESS:-opj_decompress}
 command -v "$opj" > /dev/null 2>&1 ||
     fail "OpenJPEG's opj_decompress not found; set OPJ_DECOMPRESS to it"
 limits=$(cat << 'EOF_LIMITS'
-*siz.xsiz-2147483648.*|*siz.xsiz-4294967295.*|*siz.ysiz-2147483648.*	Invalid number of tiles	at most 65,535 tiles in the grid; T.800 bounds Isot (A.4.2), not the grid
 *rule-siz.xsiz-52.*	Image coordinates above INT_MAX	coordinates to INT_MAX; Xsiz is up to 2^32 - 1 (Table A.9)
 *rule-codestream.packet-count-29.*	Integer overflow	fewer than 2^32 packets; T.800 sets no limit
 *rule-main.packet-headers-moved-48.*|*rule-tile.packed-headers-91.*	Failed to decode tile	a tile without data, its packet headers in PPM or PPT (A.7.4, A.7.5)
