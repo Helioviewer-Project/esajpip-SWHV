@@ -398,8 +398,11 @@ END
 --         exponent without quantization (Table A.29; qcd.reserved-bits,
 --         qcc.reserved-bits), and SPqcd's length for the style (Equation
 --         A-4: 3 n + 1 one-byte exponents, one two-byte value, or 3 n + 1
---         two-byte values, for any n up to 32, as its NOTE lets the
---         sub-bands be fewer than the levels give; qcd.length, qcc.length).
+--         two-byte values, for n up to 32; qcd.length, qcc.length).
+--         At SOD, effective COD/COC and QCD/QCC precedence must leave at
+--         least 1 + 3 NL entries for styles 0 and 2 (derived style 1 uses
+--         one value); codestream.quantization-coverage. The truncation
+--         NOTE permits surplus entries, not missing ones.
 --   COC, QCC, RGN (A.6.2, A.6.5, A.6.3): a component below Csiz (coc.,
 --         qcc., rgn.component), at most one for a component in a header
 --         and in a tile only in its first tile-part (coc., qcc., rgn.once);
@@ -428,7 +431,8 @@ END
 --         multiple component transform on components 0 to 2 of one
 --         transform (G.2; codestream.mct-transform).
 --   Profile 0 and Profile 1 (Rsiz 1 and 2): the restrictions of Table A.45
---         (codestream.profile-0, codestream.profile-1).
+--         (codestream.profile-0, codestream.profile-1). Profile 1 LL sizes
+--         use the effective tile coding after its COD/COC overrides.
 --   SOP and EPH (A.8.1, A.8.2): SOP in the data only where COD signals it
 --         (codestream.sop-unsignalled), with Lsop 4 (sop.length); EPH only
 --         where signalled (codestream.eph-unsignalled), and not in the data

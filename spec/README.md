@@ -239,7 +239,7 @@ and opaque-payload sizes. Depth-boundary regressions are constructed in
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
 | `harness/label.{h,c}` | The labels of a file at both layers: the generated decoders of each layer, `box_bounds_ok`, the cross-field rules, and the companion oracle of linked JPX files. |
 | `harness/writers.c` | The writer of `../lib` judged by the model: labels the files `hv_rewrite` (every vector the reader reads through), `hv_transcode` and `hv_merge` (every `.jp2` they take) write from the corpus, and checks that each is in the writer's form (`hv_rewrite` gives it back byte for byte). With a seed, it also mutates each vector at random and checks the mutants the same way: a differential fuzz of the writer. |
-| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` here only. |
+| `harness/crossfield*.{h,c}` | The cross-field rules, written once and instantiated for both layers' struct types. They call the rules of `../lib/hv_rules.c`, shared with the reader, for SIZ and COD, tile-parts, PLT entries, the packet count, the JPX boxes and the header boxes; the structural rules (segment placement and count, the `Zplt` sequence, PLT sums, the file's first boxes, and `jp2.one-codestream`, `ftbl.one-flst` and `dtbl.ndr-count`) are implemented here and in `../lib/hv_reader.c` under the same names, and `flst.nf-count` is shared with the standard reader through `hv_rule_fragments`. |
 | `harness/mapping.{h,c}` | The ACN mapping functions: three length mappings, because `Lxxx`, `Psot` and `LBox` count more than the payload (+2, +12, +8; `lxxx` is `../lib/hv_mapping.c`'s, which the harness links), and the decode-only box-type mappings `boxtype`, `resboxtype`, `cgrpboxtype`, `jp2boxtype`, `jp2stdboxtype` and `jp2hboxtype`. |
 | `../tests/vectors/j2k/` | The committed corpus: the vectors plus `manifest.tsv`. |
 
@@ -496,9 +496,9 @@ rules are implemented: the shared rules in `../lib/hv_rules.c`; the
 structural rules (segment placement and count, the `Zplt` sequence, PLT
 sums, the file's first boxes, some box counts) in
 `harness/crossfield_impl.h` and `harness/crossfield.c` and, under the same
-names, in `../lib/hv_reader.c`; one, `flst.nf-count`, in the harness only
-(the reader reads JPX boxes for the profile, where it is
-`flst.one-fragment`). In the manifest, the two cross-file names,
+names, in `../lib/hv_reader.c`. `flst.nf-count` also runs in the standard
+reader through `hv_rule_fragments`, including inside `j2cx`; the served
+profile instead requires `flst.one-fragment`. In the manifest, the two cross-file names,
 `flst.source-extent` and `url.missing-companion`, come from the companion
 oracle in `harness/label.c`. Some rules of the reader never appear as a
 manifest reason because a type rejects the vector first, with reason

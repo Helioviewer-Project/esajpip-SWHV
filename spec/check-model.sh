@@ -635,6 +635,7 @@ limits=$(cat << 'EOF_LIMITS'
 *rule-main.packet-headers-moved-48.*|*rule-tile.packed-headers-91.*	Failed to decode tile	a tile without data, its packet headers in PPM or PPT (A.7.4, A.7.5)
 *tile-unknown.*|*tile-ff30.*|*code-*-65392.*	Not sure how that happened|Sot length is less than	an unknown marker segment, or 0xFF30 to 0xFF3F, in a tile-part header, which a decoder skips (A.1, A.1.3)
 *jpx.no-jp2h-52.jpx|*jp2h.position-55.jpx	JP2H box missing	a jp2h before the codestreams; T.801 M.11.5 lets a JPX file omit it or place it anywhere at the top level
+jpx-embedded-header-jpx.cdef-colour-197.jpx	Need to read a PCLR box before the CMAP box	JP2-only component mapping; T.801 M.11.6 permits direct channel mapping without a palette
 jpx-linked*.jpx|jpx-graph-*.jpx	Expected a SOC marker	no Fragment Table boxes (T.801 M.11.3)
 EOF_LIMITS
 )

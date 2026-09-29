@@ -153,7 +153,8 @@ const char *hv_rule_plt_packets(const hv_plt_count *count, const hv_siz *siz,
  * QCC, RGN, POC, TLM, PLM, PPM, PPT, CRG), which these functions decode,
  * QCD's Sqcd and SPqcd, where each segment may be, and what the coding
  * and quantization of each tile-component come to: the transform against
- * the quantization style and the multiple component transform, Profile 0
+ * the quantization style, enough quantization entries for its decomposition,
+ * and the multiple component transform, Profile 0
  * and Profile 1 (Rsiz 1 and 2, Table A.45), the tile-part lengths of TLM,
  * the packet lengths of PLM, the packet headers of PPM and PPT against
  * the tile-parts, and the SOP and EPH markers in the tile-part data. Layer
@@ -185,8 +186,8 @@ typedef struct {
 typedef struct {
     hv_coding coc;                  /* the main header's COC, when main_coc */
     uint8_t main_coc, main_qcc;     /* the main header has a COC, a QCC */
-    uint8_t qcc_style;              /* the main QCC's quantization style */
-    uint8_t tile_transform, tile_levels, tile_qcc_style;
+    uint8_t qcc_style, qcc_coverage; /* quantization style and supported levels */
+    uint8_t tile_transform, tile_levels, tile_qcc_style, tile_qcc_coverage;
     uint32_t coc_header, qcc_header, rgn_header;
     uint16_t next;                  /* hv_segments.touched: the next, + 1 */
 } hv_component;
@@ -208,6 +209,14 @@ typedef struct {
     uint64_t runs, used;            /* tile-parts it describes, and read */
 } hv_series;
 
+/* Main-header component counts, excluding tile overrides when copied by
+ * tile_coding. Coverage is the largest decomposition supported by QCD/QCC;
+ * scalar-derived quantization covers all 32 levels. */
+typedef struct {
+    uint32_t levels[33], coverage[33];
+    uint32_t shortfall;
+} hv_quant_counts;
+
 typedef struct {
     const hv_siz *siz;
     hv_component *components;
@@ -218,8 +227,9 @@ typedef struct {
     uint32_t header;                /* 1 for the main header, then one per tile-part */
     /* The main header. */
     hv_coding cod;                  /* its COD */
-    uint8_t cod_sop, cod_eph, mct, qcd_style;
+    uint8_t cod_sop, cod_eph, mct, qcd_style, qcd_coverage;
     int ppm, crg;
+    hv_quant_counts quant;
     uint64_t pairs[2][2];           /* components by main transform and style class */
     /* The current tile-part. */
     hv_tile_count *tile;
@@ -227,7 +237,7 @@ typedef struct {
     uint64_t tpsot, psot;
     int tile_cod, tile_qcd, tile_poc, tile_ppts;
     hv_coding tile_coding;          /* its COD, in the first tile-part */
-    uint8_t tile_qcd_style, tile_mct;
+    uint8_t tile_qcd_style, tile_qcd_coverage, tile_mct;
     uint8_t ppt_seen[32];
     uint32_t touched;               /* components with a tile COC or QCC, + 1 */
     uint64_t parts;                 /* tile-parts before the current one */
@@ -417,7 +427,7 @@ typedef struct {
  *     gtso only in drep and at most one (M.11.15, M.11.15.1).
  *   asoc.children: an asoc holds two or more boxes (M.11.11).
  *   ftbl.one-flst: an ftbl holds one flst (M.11.3); dtbl.ndr-count: a
- *     dtbl starts with NDR.
+ *     dtbl starts with NDR and holds that many url boxes.
  *   lbl.characters: a lbl is UTF-8 without U+0000 to U+001F, U+007F to
  *     U+009F, '/', ';', '?', ':' and '#' (M.11.13).
  *   jpx.colr: a colr in jp2h or in a cgrp (M.11.7.2: "all JPX files shall
@@ -451,6 +461,7 @@ typedef struct {
     hv_extent *mdat;            /* in: room for mdat_cap extents, or NULL */
     size_t mdat_cap;
     size_t mdat_count;          /* out: the mdat boxes */
+    uint64_t ndr;               /* out: validated number of data references */
     int ipr;                    /* jp2i boxes, and cref boxes for one (Rtyp) */
     int jp2h, jp2c;             /* at the top level */
     int jp2h_late;              /* a top-level jp2h after a top-level jp2c */
@@ -472,7 +483,9 @@ const char *hv_rule_box_placed(const uint8_t *buf, const hv_box *box, uint32_t p
 
 /* The fragments of the codestreams of a JPX file (the flst of each ftbl,
  * at the top level or in a j2cx), after hv_rule_box_tree has successfully
- * walked the file into `tree`: each in this file (DR 0) as hv_rule_fragment_here
+ * walked the file into `tree`: exactly NF complete tuples (flst.nf-count),
+ * each decoded against the model (decode), DR <= NDR (flst.dr-range),
+ * and each in this file (DR 0) as hv_rule_fragment_here
  * requires, and in a baseline file (jpxb), those of the first codestream
  * as hv_rule_jpxb_fragment. NULL, or the rule and *at the flst box. */
 const char *hv_rule_fragments(const uint8_t *buf, size_t size, const hv_box_tree *tree,
@@ -679,6 +692,8 @@ void hv_rule_cmap_end(hv_header *h, const uint8_t *entries, size_t n);
  * multiple descriptions for a single channel"); at most one opacity or
  * premultiplied opacity channel for each colour, an opacity channel for
  * the whole image (Asoc 0) standing for every colour (cdef.opacity).
+ * These restrictions apply only to headers used by a JP2 reader (h->jp2);
+ * T.801 M.11.7.5 relaxes them for JPX-only headers.
  * Takes any n without allocating: up to HV_CDEF_PAIRWISE entries are
  * compared pairwise, more are sorted in `scratch`, room for n values, which
  * may be NULL for fewer. */

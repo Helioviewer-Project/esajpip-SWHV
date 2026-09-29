@@ -291,6 +291,169 @@ static void icc_boundaries(void) {
     rule(icc(data, 131), "colr.icc-header", "ICC header one short");
 }
 
+static void quant_values(Qcd *q, unsigned style, unsigned coverage) {
+    memset(q, 0, sizeof *q);
+    q->sqcd = style;
+    q->spqcd.nCount = style == 1 ? 2 : (int)((1 + 3 * coverage) * (style == 2 ? 2 : 1));
+}
+
+/* A.6.1/A.6.5: component overrides use component 0. Other components
+ * exercise the unchanged aggregate, and one-component cases remove the
+ * entire aggregate. Run both reversible and scalar-expounded coding. */
+static void effective_quantization(void) {
+    static const struct {
+        int levels, coverage, coc, qcc, tile_cod, tile_qcd, tile_coc, tile_qcc;
+        unsigned components;
+        int valid;
+    } cases[] = {
+        {1,0,-1,-1,-1,-1,-1,-1,2,0},
+        {1,1,-1,-1,-1,-1,-1,-1,2,1},
+        {1,2,-1,-1,-1,-1,-1,-1,2,1},
+        {1,1, 2,-1,-1,-1,-1,-1,2,0},
+        {1,1,-1, 0,-1,-1,-1,-1,2,0},
+        {1,1, 2, 2,-1,-1,-1,-1,2,1},
+        {1,0, 2,-1, 0,-1,-1,-1,2,1},
+        {1,1, 2, 0,-1, 2,-1,-1,2,1},
+        {1,1,-1,-1, 2,-1,-1,-1,2,0},
+        {1,1,-1,-1,-1, 0,-1,-1,2,0},
+        {1,1,-1,-1, 2, 2,-1,-1,2,1},
+        {1,1,-1,-1,-1,-1, 2,-1,2,0},
+        {1,1,-1,-1,-1,-1, 2, 2,2,1},
+        {1,1,-1,-1,-1,-1,-1, 0,2,0},
+        {1,1,-1,-1, 2, 2, 1, 1,2,1},
+        {1,1,-1,-1, 2, 2, 3, 2,2,0},
+        {1,1,-1,-1, 2, 2, 0, 0,2,1},
+        {1,0,-1,-1, 2, 0, 0, 0,1,1},
+        {1,0,-1,-1,-1,-1, 0, 0,1,1},
+        {1,0,-1,-1,-1,-1, 0, 0,2,0},
+        {0,0,-1,-1,-1,-1,32,32,2,1},
+    };
+    unsigned style;
+    size_t i;
+    for (style = 0; style <= 2; style++) for (i = 0; i < sizeof cases / sizeof *cases; i++) {
+        SizFixed f = {0};
+        Component components[2] = {{0}};
+        hv_siz siz = {0};
+        hv_component states[2] = {{0}};
+        hv_segments segments;
+        hv_tile_count tile = {0};
+        Cod cod = {0};
+        Qcd q;
+        uint8_t body[196] = {0};
+        int stage;
+        char what[96];
+        f.xsiz = 16; f.ysiz = f.xtsiz = f.ytsiz = 8; f.csiz = cases[i].components;
+        components[0].xrsiz = components[0].yrsiz = 1; components[1] = components[0];
+        siz.fixed = &f; siz.components = components; siz.ncomponents = cases[i].components;
+        hv_segments_init(&segments, &siz, states, 0);
+        cod.spcod.transform = style == 0; cod.spcod.levels = (unsigned)cases[i].levels;
+        cod.spcod.cbWidthExp = cod.spcod.cbHeightExp = 2; cod.sgcod.layers = 1;
+        rule(hv_segments_main(&segments, HV_COD, &cod, NULL, NULL, 0), NULL, "main COD");
+        quant_values(&q, style, (unsigned)cases[i].coverage);
+        rule(hv_segments_main(&segments, HV_QCD, NULL, &q, NULL, 0), NULL, "main QCD");
+        for (stage = 0; stage < 2; stage++) {
+            int coc = stage ? cases[i].tile_coc : cases[i].coc;
+            int qcc = stage ? cases[i].tile_qcc : cases[i].qcc;
+            if (stage) {
+                rule(hv_segments_tile_part(&segments, &tile, 0, 0, 100), NULL, "begin tile before overrides");
+                if (cases[i].tile_cod >= 0) {
+                    cod.spcod.levels = (unsigned)cases[i].tile_cod;
+                    rule(hv_segments_tile(&segments, HV_COD, &cod, NULL, NULL, 0), NULL, "tile COD");
+                }
+                if (cases[i].tile_qcd >= 0) {
+                    quant_values(&q, style, (unsigned)cases[i].tile_qcd);
+                    rule(hv_segments_tile(&segments, HV_QCD, NULL, &q, NULL, 0), NULL, "tile QCD");
+                }
+            }
+            if (coc >= 0) {
+                const uint8_t coc_body[] = {0, 0, (uint8_t)coc, 2, 2, 0, (uint8_t)(style == 0)};
+                rule(stage ? hv_segments_tile(&segments, HV_COC, NULL, NULL, coc_body, sizeof coc_body)
+                           : hv_segments_main(&segments, HV_COC, NULL, NULL, coc_body, sizeof coc_body), NULL, "COC override");
+            }
+            if (qcc >= 0) {
+                quant_values(&q, style, (unsigned)qcc);
+                body[1] = (uint8_t)style;
+                memcpy(body + 2, q.spqcd.arr, (size_t)q.spqcd.nCount);
+                rule(stage ? hv_segments_tile(&segments, HV_QCC, NULL, NULL, body, (size_t)q.spqcd.nCount + 2)
+                           : hv_segments_main(&segments, HV_QCC, NULL, NULL, body, (size_t)q.spqcd.nCount + 2), NULL, "QCC override");
+            }
+        }
+        snprintf(what, sizeof what, "effective quantization case %zu, style %u", i, style);
+        rule(hv_segments_data(&segments, body, 0, 0, 0, 0, NULL),
+             style == 1 || cases[i].valid ? NULL : "codestream.quantization-coverage", what);
+        if (style == 1 || cases[i].valid) {
+            hv_tile_count next = {0};
+            int levels = cases[i].coc >= 0 ? cases[i].coc : cases[i].levels;
+            int coverage = cases[i].qcc >= 0 ? cases[i].qcc : cases[i].coverage;
+            int shortfall = levels > coverage ||
+                (cases[i].components > 1 && cases[i].levels > cases[i].coverage);
+            rule(hv_segments_tile_part(&segments, &next, 1, 0, 100), NULL, "begin next tile");
+            rule(hv_segments_data(&segments, body, 0, 0, 0, 0, NULL),
+                 style != 1 && shortfall ? "codestream.quantization-coverage" : NULL,
+                 "previous tile overrides do not leak into the next tile");
+        }
+    }
+}
+
+static void profile1_overrides(void) {
+    unsigned override, main_levels, tile_levels;
+    for (override = 0; override < 3; override++)
+        for (main_levels = 0; main_levels <= 1; main_levels++)
+            for (tile_levels = 0; tile_levels <= 1; tile_levels++) {
+                SizFixed f = {0};
+                Component component = {0};
+                hv_siz siz = {0};
+                hv_component state = {0};
+                hv_segments s;
+                hv_tile_count tile = {0};
+                Cod cod = {0};
+                Qcd q;
+                const uint8_t coc[] = {0, 0, (uint8_t)tile_levels, 2, 2, 0, 1};
+                unsigned effective = override ? tile_levels : main_levels;
+                f.xsiz = f.ysiz = f.xtsiz = f.ytsiz = 256; f.csiz = 1; f.rsiz = 2;
+                component.xrsiz = component.yrsiz = 1;
+                siz.fixed = &f; siz.components = &component; siz.ncomponents = 1;
+                hv_segments_init(&s, &siz, &state, 0);
+                cod.sgcod.layers = 1; cod.spcod.transform = 1; cod.spcod.levels = main_levels;
+                cod.spcod.cbWidthExp = cod.spcod.cbHeightExp = 2;
+                quant_values(&q, 0, 1);
+                rule(hv_segments_main(&s, HV_COD, &cod, NULL, NULL, 0), NULL, "Profile 1 main COD");
+                rule(hv_segments_main(&s, HV_QCD, NULL, &q, NULL, 0), NULL, "Profile 1 QCD");
+                rule(hv_segments_tile_part(&s, &tile, 0, 0, 100), NULL, "Profile 1 allows later overrides");
+                if (override == 1) {
+                    cod.spcod.levels = tile_levels;
+                    rule(hv_segments_tile(&s, HV_COD, &cod, NULL, NULL, 0), NULL, "Profile 1 tile COD");
+                } else if (override == 2)
+                    rule(hv_segments_tile(&s, HV_COC, NULL, NULL, coc, sizeof coc), NULL, "Profile 1 tile COC");
+                rule(hv_segments_data(&s, coc, 0, 0, 0, 0, NULL), effective ? NULL : "codestream.profile-1",
+                     "Profile 1 uses effective LL dimensions");
+            }
+}
+
+static void channel_contexts(void) {
+    static const uint32_t parents[] = {HV_BOX_JP2H, HV_BOX_JPCH, HV_BOX_JPLH};
+    CdefEntry entries[HV_CDEF_PAIRWISE + 1];
+    uint64_t scratch[HV_CDEF_PAIRWISE + 1];
+    size_t count, i, parent;
+    int jp2, kind;
+    for (count = 2; count <= HV_CDEF_PAIRWISE + 1; count += HV_CDEF_PAIRWISE - 1)
+        for (parent = 0; parent < sizeof parents / sizeof *parents; parent++)
+            for (jp2 = 0; jp2 < 2; jp2++) for (kind = 0; kind < 2; kind++) {
+                hv_header h;
+                hv_header_init(&h, parents[parent], 1);
+                /* The JP2 compatibility flag belongs only to jp2h. */
+                h.jp2 = jp2 && parent == 0; h.cdef = 1;
+                for (i = 0; i < count; i++) {
+                    entries[i].cn = i; entries[i].typ = 65535; entries[i].asoc = 65535;
+                }
+                entries[0].typ = kind ? 1 : 0; entries[0].asoc = 1;
+                entries[1].typ = kind ? 2 : 0; entries[1].asoc = 1;
+                rule(hv_rule_cdef(&h, entries, count, NULL, scratch),
+                     h.jp2 ? (kind ? "cdef.opacity" : "cdef.pairs") : NULL, "CDEF JP2/JPX context");
+                check(h.cdef_cn == count - 1 && h.cdef_count == count, "JPX retains channel metadata");
+            }
+}
+
 int main(void) {
     siz_boundaries();
     plt_boundaries();
@@ -300,6 +463,9 @@ int main(void) {
     colour_boundaries();
     quantization_boundaries();
     icc_boundaries();
+    effective_quantization();
+    profile1_overrides();
+    channel_contexts();
     if (!failures) puts("all rule boundaries passed");
     return failures != 0;
 }

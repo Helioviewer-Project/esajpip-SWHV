@@ -2431,6 +2431,66 @@ static void check_box_depth(void) {
     release(&r);
 }
 
+/* M.11.3.1: complete NF tuples at both permitted ftbl locations, and
+ * references to a dtbl later in the file. NDR must describe real URLs. */
+static void check_fragment_lists(void) {
+    static const struct {
+        unsigned nf, tuples, trim, extra, dr, ndr;
+        uint64_t off;
+        const char *error;
+    } cases[] = {
+        {0, 0, 0, 0, 1, 1, 12, NULL},
+        {1, 1, 0, 0, 1, 1, 12, NULL},
+        {2, 2, 0, 0, 1, 1, 12, NULL},
+        {0, 0, 1, 0, 1, 1, 12, "decode"},
+        {0, 0, 2, 0, 1, 1, 12, "decode"},
+        {1, 1, 0, 0, 1, 2, 12, "dtbl.ndr-count"},
+        {1, 0, 0, 0, 1, 1, 12, "flst.nf-count"},
+        {0, 1, 0, 0, 1, 1, 12, "flst.nf-count"},
+        {2, 1, 0, 0, 1, 1, 12, "flst.nf-count"},
+        {1, 1, 1, 0, 1, 1, 12, "flst.nf-count"},
+        {1, 1, 0, 1, 1, 1, 12, "flst.nf-count"},
+        {1, 1, 0, 0, 1, 1, 11, "decode"},
+        {1, 1, 0, 0, 2, 1, 12, "flst.dr-range"},
+        {1, 1, 0, 0, 1, 0, 12, "flst.dr-range"},
+        {1, 1, 0, 0, 0, 1, 12, "flst.mdat"},
+    };
+    size_t k, at;
+    int nested;
+    for (nested = 0; nested < 2; nested++) for (k = 0; k < sizeof cases / sizeof *cases; k++) {
+        bytes r = {NULL, 0, 0}, b;
+        size_t j2cx = 0, ftbl, flst, dtbl = 0;
+        unsigned i;
+        const char *error;
+        char what[80];
+        add(&r, &JPCH); add(&r, &JP2C);
+        if (nested) {
+            j2cx = begin(&r, "j2cx");
+            box(&r, "j2ci", "\0\0\0\x01\0\0\0\0", 8);
+        } else add(&r, &JPCH); /* a header for the second top-level stream */
+        ftbl = begin(&r, "ftbl"); flst = begin(&r, "flst");
+        u16(&r, cases[k].nf);
+        for (i = 0; i < cases[k].tuples; i++) {
+            u64(&r, cases[k].off); u32(&r, 1); u16(&r, cases[k].dr);
+        }
+        r.n -= cases[k].trim;
+        if (cases[k].extra) u8(&r, 0);
+        end(&r, flst); end(&r, ftbl);
+        if (nested) end(&r, j2cx);
+        if (cases[k].ndr) {
+            dtbl = begin(&r, "dtbl"); u16(&r, cases[k].ndr);
+            box(&r, "url ", "\0\0\0\0file://a.jp2\0", 17);
+            end(&r, dtbl);
+        }
+        b = jpx_with(&r);
+        error = jpx_headers(&b, &at);
+        snprintf(what, sizeof what, "%s fragment list case %zu", nested ? "nested" : "top-level", k);
+        expect(what, error, at, cases[k].error,
+               b.n - r.n + (cases[k].ndr == 2 ? dtbl : flst));
+        release(&b); release(&r);
+    }
+}
+
 /* The rules' functions on what the reader does not pass them: other
  * segment codes, a grid without tiles, box extents, jpxb colours from a
  * cgrp, and fragments in order. */
@@ -2548,6 +2608,7 @@ int main(int argc, char **argv) {
     check_segment_gaps();
     check_box_gaps();
     check_box_depth();
+    check_fragment_lists();
     check_rule_functions();
     check_corpus_items();
     {

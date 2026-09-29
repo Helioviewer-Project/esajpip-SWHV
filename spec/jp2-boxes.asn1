@@ -680,10 +680,9 @@ END
 --     box.nested-jp2c, box.nested-top-level, box.flst-placement,
 --     box.url-placement, dtbl.non-url). Everywhere else at layer 1: the box
 --     tree rules, below.
---   FragmentList.fragments has exactly nf elements (flst.nf-count, harness
---     only: the reader reads JPX boxes for the profile, where
---     FragmentList-Profile rejects any NF but 1 first, and names it
---     flst.one-fragment).
+--   FragmentList.fragments has exactly nf elements (flst.nf-count in the
+--     harness and standard reader). At the profile layer,
+--     FragmentList-Profile rejects any NF but 1 first (flst.one-fragment).
 --   UrlHeader's VERS and FLAG are 0 (I.7.3.2): a type constraint, reason
 --     `decode`; the reader names it url.version-flags (hv_rules.c).
 --   DataEntryUrl.loc contains no NUL (the wire terminator is not part of
@@ -755,9 +754,11 @@ END
 --     (ftbl.one-flst), and a colr in jp2h or a cgrp (jpx.colr).
 --   A box inside a superbox framed as hv_boxes_next does not accept:
 --     box.framing.
--- The fragments in the file, JPX, layer 1 (hv_rule_fragments): each
---   fragment with DR 0 of each ftbl's flst (at the top level or in a j2cx)
---   within the payload of one mdat box (T.801 M.4; flst.mdat), the first at
+-- The fragments in the file, JPX, layer 1 (hv_rule_fragments): each flst,
+--   including those inside j2cx, has exactly NF complete tuples
+--   (flst.nf-count), valid Fragment fields (decode), and DR <= NDR
+--   (flst.dr-range). Each fragment with DR 0 of each ftbl's flst (at the
+--   top level or in a j2cx) is within the payload of one mdat box (T.801 M.4; flst.mdat), the first at
 --   its codestream's SOC (M.11.3.1; flst.codestream-start).
 --
 -- Header boxes, standard layer only (hv_rules.c; the reader's
@@ -817,6 +818,9 @@ END
 --     descriptions for a single channel"); at most one opacity or
 --     premultiplied opacity channel for each colour, an opacity channel of
 --     the whole image (Asoc 0) standing for every colour (cdef.opacity).
+--     These two restrictions apply only to headers used by a JP2 reader:
+--     jp2h in JP2 or JP2-compatible JPX. T.801 M.11.7.5 relaxes both for
+--     JPX-only headers, including jpch and jplh of JP2-compatible JPX.
 --   res: resc, resd or both (res.resc-resd).
 --   The header of each codestream: in a JP2 file jp2h; in a JPX file
 --     codestream k's jpch over jp2h's defaults (M.11.6), or jp2h alone when

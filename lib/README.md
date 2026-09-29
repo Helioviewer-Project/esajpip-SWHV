@@ -276,8 +276,9 @@ file's `mdat` boxes (16 bytes each).
   returns `box.depth-limit`, meaning incomplete validation rather than a
   standards violation; and the contents of `uinf`, `ulst`, `uuid`, a
   `uinf`'s or `dtbl`'s `url`, `lbl` and a `cref`'s type); in a JPX file
-  the fragments in the file (`hv_rule_fragments`: each in an `mdat`, the
-  first at SOC); MinV (`file.ftyp-minor`: 0 for JP2, 1 for JPX); in a JPX
+  the fragment lists (`hv_rule_fragments`: exactly NF complete, decodable
+  tuples, DR within the validated Data Reference table, local fragments in
+  an `mdat`, the first at SOC, including lists inside `j2cx`); MinV (`file.ftyp-minor`: 0 for JP2, 1 for JPX); in a JPX
   file the Reader Requirements box's contents, decoded one part at a time
   (above), without deprecated features; where `jp2h` is (for JPX at most
   one, and in a baseline file, `jpxb`, before the first `jp2c`, `ftbl`,

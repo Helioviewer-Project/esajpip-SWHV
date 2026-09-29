@@ -1548,7 +1548,7 @@ static void expect_marker(const char *name, const bytes *cs, const marker_case *
 static void test_markers(void) {
     /* TLM and PLM describe the fixture's tile-part (below). */
     static marker_case main_cases[] = {
-        {"QCC", {0xFF, 0x5D, 0x00, 0x05, 0x00, 0x40, 0x40}, 7, COPIED},
+        {"QCC missing values", {0xFF, 0x5D, 0x00, 0x05, 0x00, 0x40, 0x40}, 7, REJECTED},
         {"RGN", {0xFF, 0x5E, 0x00, 0x05, 0x00, 0x00, 0x07}, 7, COPIED},
         {"CRG", {0xFF, 0x63, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00}, 8, COPIED},
         {"COM", {0xFF, 0x64, 0x00, 0x05, 0x00, 0x01, 'x'}, 7, COPIED},
@@ -1560,14 +1560,16 @@ static void test_markers(void) {
         {"0xFF30", {0xFF, 0x30}, 2, REJECTED},
         {"0xFF3F", {0xFF, 0x3F}, 2, REJECTED},
         {"0xFF70", {0xFF, 0x70, 0x00, 0x04, 0x00, 0x00}, 6, REJECTED},
+        {"QCC", {0xFF, 0x5D}, 0, COPIED},
     };
-    static const marker_case tile_cases[] = {
+    static marker_case tile_cases[] = {
         {"COM", {0xFF, 0x64, 0x00, 0x05, 0x00, 0x01, 'x'}, 7, DROPPED},
         {"QCD", {0xFF, 0x5C, 0x00, 0x04, 0x40, 0x40}, 6, REJECTED},
         {"RGN", {0xFF, 0x5E, 0x00, 0x05, 0x00, 0x00, 0x07}, 7, REJECTED},
         {"POC", {0xFF, 0x5F, 0x00, 0x03, 0x00}, 5, REJECTED},
         {"0xFF30", {0xFF, 0x30}, 2, REJECTED},
         {"0xFF70", {0xFF, 0x70, 0x00, 0x04, 0x00, 0x00}, 6, REJECTED},
+        {"QCD complete", {0xFF, 0x5C}, 0, REJECTED},
     };
     bytes file, cs = fixture_codestream("input", "solo_fsi174_127x129_RLCP_PLT.jp2", &file);
     result plain = transcode(cs.data, cs.size, 7, 7);
@@ -1585,6 +1587,23 @@ static void test_markers(void) {
     while (get16(plain.out.data + out_sot) != HV_SOT)
         out_sot += 2 + get16(plain.out.data + out_sot + 2);
     psot = get32(cs.data + sot + 6);
+    /* Preserve the short QCC/QCD above as invalid-input regressions. The
+     * marker-support cases need the fixture's full quantization table. */
+    {
+        marker_case *qcc = &main_cases[sizeof main_cases / sizeof *main_cases - 1];
+        marker_case *qcd = &tile_cases[sizeof tile_cases / sizeof *tile_cases - 1];
+        size_t pos = 2, n;
+        while (get16(cs.data + pos) != HV_QCD)
+            pos += 2 + get16(cs.data + pos + 2);
+        n = get16(cs.data + pos + 2) - 2;   /* Sqcd and every SPqcd entry */
+        if (n + 5 > sizeof qcc->bytes) abort();
+        put16(qcc->bytes + 2, (uint16_t)(n + 3));
+        qcc->bytes[4] = 0;                /* Cqcc */
+        memcpy(qcc->bytes + 5, cs.data + pos + 4, n);
+        qcc->size = n + 5;
+        memcpy(qcd->bytes, cs.data + pos, n + 4);
+        qcd->size = n + 4;
+    }
     /* TLM: Ztlm 0, ST 0 and SP 1 (A.7.1): the tile-part's Psot. PLM: Zplm
      * 0, and the lengths of the PLT segment of its header (A.7.2). */
     put32(main_cases[4].bytes + 6, psot);
@@ -1608,6 +1627,11 @@ static void test_markers(void) {
                                        plain.out.data + out_sot, plain.out.size - out_sot)
                              : bytes_copy(plain.out.data, plain.out.size);
         snprintf(name, sizeof name, "%s in the main header", m->name);
+        if (i == 0) {
+            const char *error = read_error(in.data, 0, in.size, HV_ACCEPT_PLT_PADDING);
+            check(error != NULL && strcmp(error, "codestream.quantization-coverage") == 0,
+                  "short main QCC: expected missing quantization entries");
+        }
         expect_marker(name, &in, m, "main header", &expected);
         bytes_free(&expected);
         bytes_free(&in);
@@ -1619,7 +1643,19 @@ static void test_markers(void) {
         if (psot != 0)
             put32(in.data + sot + 6, psot + (uint32_t)m->size);
         snprintf(name, sizeof name, "%s in the tile-part header", m->name);
-        expect_marker(name, &in, m, "tile-part", &plain.out);
+        if (i == 1) {
+            /* The streaming transcoder rejects QCD before reaching SOD,
+             * where the reader detects the missing entries. The file API
+             * performs that complete reader check first. Test both errors. */
+            bytes invalid_file = jp2_file(&in, "jp2 ");
+            const char *error = read_error(in.data, 0, in.size, HV_ACCEPT_PLT_PADDING);
+            check(error != NULL && strcmp(error, "codestream.quantization-coverage") == 0,
+                  "short tile QCD: expected missing quantization entries");
+            expect_error(name, &in, "unsupported tile-part marker 0xFF5C");
+            expect_file_error(name, &invalid_file, "codestream.quantization-coverage at ");
+            bytes_free(&invalid_file);
+        } else
+            expect_marker(name, &in, m, "tile-part", &plain.out);
         bytes_free(&in);
     }
     bytes_free(&plain.out);

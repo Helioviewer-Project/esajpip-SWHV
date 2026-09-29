@@ -369,6 +369,10 @@ jp2-precincts-rule-plt.zplt-index-103.jp2	jp2	valid	invalid	plt.zplt-sequence	pl
 jp2-precincts-rule-coc.precincts-higher-zero-106.jp2	jp2	invalid	invalid	coc.precincts-higher-zero	coc.precincts-higher-zero	COC PPx 0 at r = 1 (Table A.21)	-	decode
 jp2-precincts-rule-codestream.profile-1-114.jp2	jp2	valid	valid	-	codestream.profile-1	Rsiz 2, Xsiz 257, NL 1: LL floor(257 / 2) = 128 (Table A.45): valid	-	-
 jp2-precincts-rule-codestream.profile-1-115.jp2	jp2	invalid	valid	codestream.profile-1	codestream.profile-1	Rsiz 2, Xsiz 258, NL 1: LL floor(258 / 2) = 129 (Table A.45: at most 128)	-	-
+jp2-precincts-rule-codestream.quantization-coverage-116.jp2	jp2	invalid	valid	codestream.quantization-coverage	codestream.quantization-coverage	NL 1 but QCD has only its LL exponent (A.6.4)	-	-
+jp2-precincts-rule-codestream.quantization-coverage-117.jp2	jp2	invalid	valid	codestream.quantization-coverage	codestream.quantization-coverage	NL 1 but QCC has only its LL exponent (A.6.5)	-	-
+jp2-precincts-rule-qcd.surplus-118.jp2	jp2	valid	valid	-	qcd.surplus	NL 1 with seven QCD exponents (A.6.4 truncation note): valid	-	-
+jp2-precincts-rule-codestream.profile-1-tile-119.jp2	jp2	valid	invalid	decode	codestream.profile-1-tile	Rsiz 2, width 256, main NL 0 overridden by tile NL 1: valid	-	decode
 jpx-embedded.jpx	jpx	valid	valid	-	-	base	-	-
 jpx-embedded-sig-bad.jpx	jpx	invalid	invalid	file.signature	jP.contents	signature contents zeroed (T.800 I.5.1)	-	file.signature
 jpx-embedded-len-0-11.jpx	jpx	invalid	invalid	decode	LBox@0x0	length patched	-	decode
@@ -722,6 +726,18 @@ jpx-embedded-header-inst.placement-183.jpx	jpx	invalid	valid	inst.placement	inst
 jpx-embedded-header-inst.placement-184.jpx	jpx	invalid	valid	inst.placement	inst.placement	inst in asoc (T.801 M.11.10.2)	-	-
 jpx-embedded-header-jpx.inst-comp-185.jpx	jpx	valid	valid	-	jpx.inst-comp	inst in comp (T.801 M.11.10.2): valid	-	-
 jpx-embedded-header-jpx.inst-jclx-186.jpx	jpx	valid	valid	-	jpx.inst-jclx	inst after jplh in jclx (T.801 M.11.10.2): valid	-	-
+jpx-embedded-header-j2cx.flst-188.jpx	jpx	valid	valid	-	j2cx.flst	j2cx/ftbl/flst: one complete external fragment; dtbl follows (M.11.3.1)	-	-
+jpx-embedded-header-j2cx.flst-189.jpx	jpx	valid	valid	-	j2cx.flst	j2cx/ftbl/flst: two complete external fragments (M.11.3.1)	-	-
+jpx-embedded-header-flst.nf-count-190.jpx	jpx	invalid	valid	flst.nf-count	flst.nf-count	j2cx/ftbl/flst: NF 1 without a tuple (M.11.3.1)	-	-
+jpx-embedded-header-flst.nf-191.jpx	jpx	invalid	valid	decode	flst.nf	j2cx/ftbl/flst: truncated NF (M.11.3.1)	-	-
+jpx-embedded-header-flst.nf-count-192.jpx	jpx	invalid	valid	flst.nf-count	flst.nf-count	j2cx/ftbl/flst: truncated tuple (M.11.3.1)	-	-
+jpx-embedded-header-flst.nf-count-193.jpx	jpx	invalid	valid	flst.nf-count	flst.nf-count	j2cx/ftbl/flst: trailing byte (M.11.3.1)	-	-
+jpx-embedded-header-flst.off-194.jpx	jpx	invalid	valid	decode	flst.off	j2cx/ftbl/flst: OFF 11 below 12 (M.11.3.1)	-	-
+jpx-embedded-header-flst.dr-range-195.jpx	jpx	invalid	valid	flst.dr-range	flst.dr-range	j2cx/ftbl/flst: DR 2 above NDR 1 (M.11.3.1)	-	-
+jpx-embedded-header-flst.dr-range-196.jpx	jpx	invalid	valid	flst.dr-range	flst.dr-range	j2cx/ftbl/flst: DR 1 without a dtbl (M.11.3.1)	-	-
+jpx-embedded-header-jpx.cdef-colour-197.jpx	jpx	valid	valid	-	jpx.cdef-colour	JPX channels 0 and 1 with Typ 0, Asoc 1 (M.11.7.5): valid	-	-
+jpx-embedded-header-cdef.pairs-198.jpx	jpx	invalid	valid	cdef.pairs	cdef.pairs	JP2-compatible JPX, jp2h channels share Typ and Asoc	-	-
+jpx-embedded-header-jpx.jpch-cdef-colour-199.jpx	jpx	valid	valid	-	jpx.jpch-cdef-colour	JP2-compatible JPX, jpch channels share Typ and Asoc (M.11.7.5): valid	-	-
 jp2-unknown-top-wxyz.jp2	jp2	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-	-
 jp2-unknown-top-binary.jp2	jp2	valid	valid	-	file.unknown-box	unlisted non-ASCII box type: valid and skipped	-	-
 jpx-unknown-top-wxyz.jpx	jpx	valid	valid	-	file.unknown-box	unlisted top-level box type: valid and skipped	-	-

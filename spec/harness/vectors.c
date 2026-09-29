@@ -1555,6 +1555,19 @@ static void profile1_width(Jp2Family *f, int box, uint32_t w) {
 }
 static void rule_profile1_ll_257(Jp2Family *f, int box) { profile1_width(f, box, 257); }
 static void rule_profile1_ll_258(Jp2Family *f, int box) { profile1_width(f, box, 258); }
+/* Counts follow effective coding, including tile overrides. */
+static void rule_quant_short(Jp2Family *f, int box) { qcd_of(f, box)->spqcd.nCount = 1; }
+static void rule_quant_qcc_short(Jp2Family *f, int box) { add_qcc(f, box, 0, 0x40, 1); }
+static void rule_quant_surplus(Jp2Family *f, int box) {
+    Qcd *q = qcd_of(f, box);
+    memset(q->spqcd.arr, 0x40, 7);
+    q->spqcd.nCount = 7;
+}
+static void rule_profile1_tile_levels(Jp2Family *f, int box) {
+    profile1_width(f, box, 256);
+    rule_tile_cod(f, box);                /* retain NL 1 and its precincts in the tile */
+    build_cod(cod_of(f, box), 0, 0);      /* overridable default: LL would be too large */
+}
 static void rule_zplt_permuted(Jp2Family *f, int box) {
     TilePart *tp = tp_of(f, box);                          /* precinct base: two packets */
     TileSegment first;
@@ -1938,6 +1951,18 @@ static const RuleMutant rule_mutants[] = {
     { "codestream.profile-1", rule_profile1_ll_258,
       "Rsiz 2, Xsiz 258, NL 1: LL floor(258 / 2) = 129 (Table A.45: at most 128)", 0, 1,
       X_LENIENT, "codestream.profile-1", NULL },
+    { "codestream.quantization-coverage", rule_quant_short,
+      "NL 1 but QCD has only its LL exponent (A.6.4)", 0, 1, X_LENIENT,
+      "codestream.quantization-coverage", NULL },
+    { "codestream.quantization-coverage", rule_quant_qcc_short,
+      "NL 1 but QCC has only its LL exponent (A.6.5)", 0, 1, X_LENIENT,
+      "codestream.quantization-coverage", NULL },
+    { "qcd.surplus", rule_quant_surplus,
+      "NL 1 with seven QCD exponents (A.6.4 truncation note): valid", 0, 1, X_VALID,
+      NULL, NULL },
+    { "codestream.profile-1-tile", rule_profile1_tile_levels,
+      "Rsiz 2, width 256, main NL 0 overridden by tile NL 1: valid", 0, 1, X_PROF,
+      "decode", NULL },
 };
 
 /* Rule mutants specific to linked JPX (need the linked base). */
@@ -3433,6 +3458,56 @@ static void hdr_jpx_top_lbl(Jp2Family *f, int box) {
     OCTETS(b->payload.u.lbl.data, "label", 5);
 }
 
+/* Raw nested lists deliberately bypass the top-level FragmentList type. */
+static void nested_fragments(Jp2Family *f, int nf, int tuples, int trim, int extra,
+                             int off, int dr, int ndr) {
+    unsigned char payload[128], table[64], list[32] = {0}, info[8] = {0};
+    const char *urls[] = {"file://jpx-linked-frame1.jp2"};
+    size_t n, m;
+    int i;
+    list[1] = (unsigned char)nf;
+    for (i = 0; i < tuples; i++) {
+        list[2 + 14*i + 7] = (unsigned char)off;
+        list[2 + 14*i + 11] = 1;
+        list[2 + 14*i + 13] = (unsigned char)dr;
+    }
+    m = put_box(table, "flst", list, (size_t)(2 + 14*tuples - trim + extra));
+    info[3] = 1;
+    n = put_box(payload, "j2ci", info, sizeof info);
+    n += put_box(payload + n, "ftbl", table, m);
+    other_top(f, "j2cx", payload, n);
+    if (ndr) add_dtbl(f, urls, 1);      /* reference table may follow its users */
+}
+static void hdr_nested_valid(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,0,0,12,1,1); }
+static void hdr_nested_two(Jp2Family *f, int box) { (void)box; nested_fragments(f,2,2,0,0,12,1,1); }
+static void hdr_nested_missing(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,0,0,0,12,1,1); }
+static void hdr_nested_nf(Jp2Family *f, int box) { (void)box; nested_fragments(f,0,0,1,0,12,1,1); }
+static void hdr_nested_short(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,1,0,12,1,1); }
+static void hdr_nested_extra(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,0,1,12,1,1); }
+static void hdr_nested_offset(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,0,0,11,1,1); }
+static void hdr_nested_dr(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,0,0,12,2,1); }
+static void hdr_nested_no_dtbl(Jp2Family *f, int box) { (void)box; nested_fragments(f,1,1,0,0,12,1,0); }
+
+static void multiple_colour(Superbox *h) {
+    InnerBox *c = append_child(h);
+    c->payload.kind = InnerPayload_cmap_PRESENT;
+    c->payload.u.cmap.entries.nCount = 2;
+    memset(c->payload.u.cmap.entries.arr, 0, 2 * sizeof *c->payload.u.cmap.entries.arr);
+    c = append_child(h);
+    set_cdef(c, 2, 0, 0, 1);
+    c->payload.u.cdef.entries.arr[1].cn = 1;
+}
+static void hdr_jpx_multiple_colour(Jp2Family *f, int box) {
+    (void)box; multiple_colour(jp2h_of(f));
+}
+static void hdr_jpx_compatible_colour(Jp2Family *f, int box) {
+    hdr_jpx_jp2_compatible(f, box); multiple_colour(jp2h_of(f));
+}
+static void hdr_jpx_jpch_colour(Jp2Family *f, int box) {
+    hdr_jpx_jp2_compatible(f, box);
+    multiple_colour(&f->boxes.arr[box_index(f, TopPayload_jpch_PRESENT, 0)].payload.u.jpch);
+}
+
 static const RuleMutant header_mutants[] = {
     { "jp2h.palette", hdr_palette, "pclr (2 entries) and cmap through it: valid", CF_JP2, 0,
       X_VALID, NULL, NULL },
@@ -3829,6 +3904,30 @@ static const RuleMutant header_mutants[] = {
       CF_JPX, 0, X_VALID, NULL, NULL },
     { "jp2.inst-opaque", hdr_inst_top, "inst is unknown to JP2 (T.800 I.8): valid",
       CF_JP2, 0, X_VALID, NULL, NULL },
+    { "j2cx.flst", hdr_nested_valid, "j2cx/ftbl/flst: one complete external fragment; dtbl follows (M.11.3.1)",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "j2cx.flst", hdr_nested_two, "j2cx/ftbl/flst: two complete external fragments (M.11.3.1)",
+      CF_JPX, 0, X_VALID, NULL, NULL },
+    { "flst.nf-count", hdr_nested_missing, "j2cx/ftbl/flst: NF 1 without a tuple (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "flst.nf-count", NULL },
+    { "flst.nf", hdr_nested_nf, "j2cx/ftbl/flst: truncated NF (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "decode", NULL },
+    { "flst.nf-count", hdr_nested_short, "j2cx/ftbl/flst: truncated tuple (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "flst.nf-count", NULL },
+    { "flst.nf-count", hdr_nested_extra, "j2cx/ftbl/flst: trailing byte (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "flst.nf-count", NULL },
+    { "flst.off", hdr_nested_offset, "j2cx/ftbl/flst: OFF 11 below 12 (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "decode", NULL },
+    { "flst.dr-range", hdr_nested_dr, "j2cx/ftbl/flst: DR 2 above NDR 1 (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "flst.dr-range", NULL },
+    { "flst.dr-range", hdr_nested_no_dtbl, "j2cx/ftbl/flst: DR 1 without a dtbl (M.11.3.1)",
+      CF_JPX, 0, X_LENIENT, "flst.dr-range", NULL },
+    { "jpx.cdef-colour", hdr_jpx_multiple_colour,
+      "JPX channels 0 and 1 with Typ 0, Asoc 1 (M.11.7.5): valid", CF_JPX, 0, X_VALID, NULL, NULL },
+    { "cdef.pairs", hdr_jpx_compatible_colour,
+      "JP2-compatible JPX, jp2h channels share Typ and Asoc", CF_JPX, 0, X_LENIENT, "cdef.pairs", NULL },
+    { "jpx.jpch-cdef-colour", hdr_jpx_jpch_colour,
+      "JP2-compatible JPX, jpch channels share Typ and Asoc (M.11.7.5): valid", CF_JPX, 0, X_VALID, NULL, NULL },
 };
 
 /* ------------------------------------------------------------------------ */

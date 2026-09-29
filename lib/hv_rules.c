@@ -248,24 +248,30 @@ static unsigned quant_style(uint64_t sqcd) {
  * quantization, its three low bits zero (Table A.29, A.1.3); two bytes for
  * the NLLL sub-band alone (derived); two per sub-band (expounded). The
  * sub-bands are 1 + 3 x NL, NL at most 32 (Equations A-4, A-5; their NOTE
- * lets sub-bands be truncated without correcting the segment, so the count
- * is not compared with NL). */
-static const char *quant_rule(uint64_t sqcd, const uint8_t *sp, size_t n, int qcc) {
+ * permits surplus entries after truncation). Coverage is checked against
+ * the effective decomposition at SOD, after tile overrides. */
+static const char *quant_rule(uint64_t sqcd, const uint8_t *sp, size_t n, int qcc,
+                               uint8_t *coverage) {
     size_t i;
-    switch (quant_style(sqcd)) {
+    unsigned style = quant_style(sqcd);
+    switch (style) {
     case 0:
         if (n < 1 || n > 97 || (n - 1) % 3 != 0) return qcc ? "qcc.length" : "qcd.length";
         for (i = 0; i < n; i++)
             if (sp[i] & 7) return qcc ? "qcc.reserved-bits" : "qcd.reserved-bits";
-        return NULL;
+        break;
     case 1:
-        return n != 2 ? (qcc ? "qcc.length" : "qcd.length") : NULL;
+        if (n != 2) return qcc ? "qcc.length" : "qcd.length";
+        break;
     case 2:
-        return n % 2 != 0 || n / 2 < 1 || n / 2 > 97 || (n / 2 - 1) % 3 != 0
-                   ? (qcc ? "qcc.length" : "qcd.length") : NULL;
+        if (n % 2 != 0 || n / 2 < 1 || n / 2 > 97 || (n / 2 - 1) % 3 != 0)
+            return qcc ? "qcc.length" : "qcd.length";
+        break;
     default:
         return qcc ? "qcc.style" : "qcd.style";
     }
+    *coverage = style == 1 ? 32 : (uint8_t)((n / (style == 2 ? 2 : 1) - 1) / 3);
+    return NULL;
 }
 
 /* The transform class of Table A.20 (1: 5-3 reversible) against the
@@ -361,6 +367,7 @@ static const char *coc_segment(hv_segments *s, const uint8_t *body, size_t n) {
  * component in a header and only in a tile's first tile-part. */
 static const char *qcc_segment(hv_segments *s, const uint8_t *body, size_t n) {
     Qcd q;
+    uint8_t coverage;
     uint32_t c;
     size_t used, rest;
     hv_component *k;
@@ -369,16 +376,18 @@ static const char *qcc_segment(hv_segments *s, const uint8_t *body, size_t n) {
         HV_DECODE_USED(Qcd, &q, body, used, n - used, &rest) != 0 || used + rest != n)
         return decode_error;
     if (c >= s->siz->ncomponents) return "qcc.component";
-    if ((error = quant_rule(q.sqcd, q.spqcd.arr, (size_t)q.spqcd.nCount, 1)) != NULL) return error;
+    if ((error = quant_rule(q.sqcd, q.spqcd.arr, (size_t)q.spqcd.nCount, 1, &coverage)) != NULL) return error;
     k = &s->components[c];
     if (k->qcc_header == s->header || (!in_main(s) && s->tpsot != 0)) return "qcc.once";
     if (in_main(s)) {
         k->main_qcc = 1;
         k->qcc_style = (uint8_t)quant_style(q.sqcd);
+        k->qcc_coverage = coverage;
     } else {
         if (s->rsiz_profile == 1) return "codestream.profile-0";   /* main header only */
         touch(s, c);
         k->tile_qcc_style = (uint8_t)quant_style(q.sqcd);
+        k->tile_qcc_coverage = coverage;
     }
     k->qcc_header = s->header;
     return NULL;
@@ -602,7 +611,8 @@ const char *hv_segments_main(hv_segments *s, uint16_t code, const Cod *cod, cons
         return codeblock_profile(s, &cod->spcod);
     case HV_QCD:
         s->qcd_style = (uint8_t)quant_style(qcd->sqcd);
-        return quant_rule(qcd->sqcd, qcd->spqcd.arr, (size_t)qcd->spqcd.nCount, 0);
+        return quant_rule(qcd->sqcd, qcd->spqcd.arr, (size_t)qcd->spqcd.nCount, 0,
+                          &s->qcd_coverage);
     case HV_COC: return coc_segment(s, body, n);
     case HV_QCC: return qcc_segment(s, body, n);
     case HV_RGN: return rgn_segment(s, body, n);
@@ -647,6 +657,12 @@ static unsigned tile_style(const hv_segments *s, uint32_t c) {
     return k->qcc_header == s->header ? k->tile_qcc_style
          : s->tile_qcd ? s->tile_qcd_style
          : k->main_qcc ? k->qcc_style : s->qcd_style;
+}
+static unsigned tile_coverage(const hv_segments *s, uint32_t c) {
+    const hv_component *k = &s->components[c];
+    return k->qcc_header == s->header ? k->tile_qcc_coverage
+         : s->tile_qcd ? s->tile_qcd_coverage
+         : k->main_qcc ? k->qcc_coverage : s->qcd_coverage;
 }
 static unsigned tile_levels(const hv_segments *s, uint32_t c) {
     const hv_component *k = &s->components[c];
@@ -713,7 +729,6 @@ static const char *main_profile(hv_segments *s) {
         }
     } else if (s->rsiz_profile == 2) {
         static const char p1[] = "codestream.profile-1";
-        uint64_t p, nx, ny;
         if (f->xsiz > limit || f->ysiz > limit || f->xosiz > limit || f->yosiz > limit ||
             f->xtosiz > limit || f->ytosiz > limit)
             return p1;
@@ -724,25 +739,8 @@ static const char *main_profile(hv_segments *s) {
                 if (f->xtsiz < 1024 * m) return p1;
             }
         }
-        /* The LL resolution of every tile, components 0 to 3, by the main
-         * header's levels: the columns and rows of the grid apart. */
-        nx = (f->xsiz - f->xtosiz + f->xtsiz - 1) / f->xtsiz;
-        ny = (f->ysiz - f->ytosiz + f->ytsiz - 1) / f->ytsiz;
-        for (c = 0; c < n && c < 4; c++) {
-            unsigned l = s->components[c].main_coc ? s->components[c].coc.levels : s->cod.levels;
-            for (p = 0; p < nx; p++) {
-                uint64_t x0 = f->xtosiz + p * f->xtsiz, x1 = x0 + f->xtsiz;
-                if (x0 < f->xosiz) x0 = f->xosiz;
-                if (x1 > f->xsiz) x1 = f->xsiz;
-                if (!ll_fits(x0, x1, 0, 0, l)) return p1;
-            }
-            for (p = 0; p < ny; p++) {
-                uint64_t y0 = f->ytosiz + p * f->ytsiz, y1 = y0 + f->ytsiz;
-                if (y0 < f->yosiz) y0 = f->yosiz;
-                if (y1 > f->ysiz) y1 = f->ysiz;
-                if (!ll_fits(0, 0, y0, y1, l)) return p1;
-            }
-        }
+        /* LL dimensions depend on tile COD/COC overrides: tile_coding
+         * checks them after the first tile-part header. */
     }
     return NULL;
 }
@@ -755,7 +753,12 @@ static const char *main_end(hv_segments *s) {
         const hv_component *k = &s->components[c];
         unsigned t = k->main_coc ? k->coc.transform : s->cod.transform;
         unsigned q = k->main_qcc ? k->qcc_style : s->qcd_style;
+        unsigned levels = k->main_coc ? k->coc.levels : s->cod.levels;
+        unsigned coverage = k->main_qcc ? k->qcc_coverage : s->qcd_coverage;
         s->pairs[t != 0][q != 0]++;
+        s->quant.levels[levels]++;
+        s->quant.coverage[coverage]++;
+        s->quant.shortfall += levels > coverage;
     }
     if ((error = main_profile(s)) != NULL ||
         (error = series_start(&s->tlm, "tlm.index")) != NULL ||
@@ -828,7 +831,8 @@ const char *hv_segments_tile(hv_segments *s, uint16_t code, const Cod *cod, cons
         if (s->rsiz_profile == 1) return "codestream.profile-0";
         s->tile_qcd = 1;
         s->tile_qcd_style = (uint8_t)quant_style(qcd->sqcd);
-        return quant_rule(qcd->sqcd, qcd->spqcd.arr, (size_t)qcd->spqcd.nCount, 0);
+        return quant_rule(qcd->sqcd, qcd->spqcd.arr, (size_t)qcd->spqcd.nCount, 0,
+                          &s->tile_qcd_coverage);
     case HV_COC: return coc_segment(s, body, n);
     case HV_QCC: return qcc_segment(s, body, n);
     case HV_RGN: return rgn_segment(s, body, n);
@@ -858,20 +862,29 @@ int hv_segments_packed(const hv_segments *s) {
  * transform of components 0 to 2 under the multiple component transform
  * (G.2, G.3: the reversible one with the 5-3 filter, the irreversible one
  * with the 9-7), and Profile 1's LL resolution. The components the
- * header sets are checked one by one, the others by the classes of the
- * main header's pairs. */
+ * header sets are checked one by one, the others by the main header's
+ * transform/style classes and level/coverage counts. */
 static const char *tile_coding(hv_segments *s) {
     uint64_t pairs[2][2];
-    uint32_t c;
+    hv_quant_counts quant = s->quant;
+    uint32_t c, remaining = (uint32_t)s->siz->ncomponents;
     unsigned t, q;
     memcpy(pairs, s->pairs, sizeof pairs);
     for (c = s->touched; c != 0; c = s->components[c - 1].next) {
         const hv_component *k = &s->components[c - 1];
         unsigned mt = k->main_coc ? k->coc.transform : s->cod.transform;
         unsigned mq = k->main_qcc ? k->qcc_style : s->qcd_style;
+        unsigned levels = k->main_coc ? k->coc.levels : s->cod.levels;
+        unsigned coverage = k->main_qcc ? k->qcc_coverage : s->qcd_coverage;
         pairs[mt != 0][mq != 0]--;
+        quant.levels[levels]--;
+        quant.coverage[coverage]--;
+        quant.shortfall -= levels > coverage;
+        remaining--;
         if (!quant_fits(tile_transform(s, c - 1), tile_style(s, c - 1)))
             return "codestream.quantization-transform";
+        if (tile_levels(s, c - 1) > tile_coverage(s, c - 1))
+            return "codestream.quantization-coverage";
     }
     for (t = 0; t < 2; t++)
         for (q = 0; q < 2; q++)
@@ -879,6 +892,21 @@ static const char *tile_coding(hv_segments *s) {
                 !quant_fits(s->tile_cod ? s->tile_coding.transform : t,
                             s->tile_qcd ? s->tile_qcd_style : q))
                 return "codestream.quantization-transform";
+    /* Untouched components retain their main COC/QCC unless a tile
+     * default replaces that side. Histograms avoid a component scan per
+     * tile; only the overrides above require individual checks. */
+    if (s->tile_cod && s->tile_qcd) {
+        if (remaining && s->tile_coding.levels > s->tile_qcd_coverage)
+            return "codestream.quantization-coverage";
+    } else if (s->tile_cod) {
+        for (q = 0; q < s->tile_coding.levels; q++)
+            if (quant.coverage[q]) return "codestream.quantization-coverage";
+    } else if (s->tile_qcd) {
+        for (t = s->tile_qcd_coverage + 1; t <= 32; t++)
+            if (quant.levels[t]) return "codestream.quantization-coverage";
+    } else if (quant.shortfall) {
+        return "codestream.quantization-coverage";
+    }
     if ((s->tile_cod ? s->tile_mct : s->mct) && s->siz->ncomponents >= 3 &&
         (tile_transform(s, 0) != tile_transform(s, 1) ||
          tile_transform(s, 0) != tile_transform(s, 2)))
@@ -1427,6 +1455,8 @@ static const char *tree_end(tree_walk *w, const hv_box *box, int depth, size_t *
     const tree_level *l = &w->level[depth];
     *at = box->start;
     if (!w->jpx) return NULL;
+    if (box->type == HV_BOX_DTBL && (uint64_t)l->children != w->tree->ndr)
+        return "dtbl.ndr-count";
     if (box->type == HV_BOX_FTBL && l->flst != 1) return "ftbl.one-flst";   /* M.11.3 */
     if (box->type == HV_BOX_ASOC && l->children < 2) return "asoc.children";
     if (box->type == HV_BOX_COMP && (l->children == 0 || l->first != HV_BOX_COPT))
@@ -1483,6 +1513,7 @@ static const char *tree_walk_box(tree_walk *w, const hv_box *box, int depth, siz
             *at = box->start;
             return "dtbl.ndr-count";        /* no NDR */
         }
+        w->tree->ndr = ndr;
         inner.payload += used;
     }
     hv_boxes_children(&children, w->buf, &inner);
@@ -1576,23 +1607,28 @@ static const char *fragments_in(const uint8_t *buf, hv_boxes *it, const hv_box_t
         }
         if (box.type != HV_BOX_FTBL) continue;
         hv_boxes_children(&children, buf, &box);
-        flst.type = 0;                  /* an ftbl without children */
-        while (hv_boxes_next(&children, &flst, &error, at) == 1 && flst.type != HV_BOX_FLST)
-            ;
-        if (flst.type != HV_BOX_FLST ||
-            HV_DECODE_USED(FragmentCount, &nf, buf, flst.payload, flst.end - flst.payload,
-                           &used) != 0)
-            continue;               /* ftbl.one-flst, flst.nf-count */
-        *at = flst.start;
-        for (i = 0, p = flst.payload + used;
-             i < nf && flst.end - p >= HV_FIXED(Fragment); i++, p += HV_FIXED(Fragment)) {
-            if (HV_DECODE(Fragment, &f, buf, p, HV_FIXED(Fragment)) != 0)
-                break;
-            if (f.dr == 0 &&
-                (error = hv_rule_fragment_here(tree->mdat, n, buf, f.off, f.len, i == 0)) != NULL)
-                return error;
-            if (jpxb && first && (error = hv_rule_jpxb_fragment(&end, f.dr, f.off, f.len)) != NULL)
-                return error;
+        /* The tree check established one flst and valid child framing. */
+        while (hv_boxes_next(&children, &flst, &error, at) == 1) {
+            if (flst.type != HV_BOX_FLST) continue;
+            *at = flst.start;
+            if (HV_DECODE_USED(FragmentCount, &nf, buf, flst.payload, flst.end - flst.payload,
+                               &used) != 0)
+                return decode_error;
+            p = flst.payload + used;
+            if ((flst.end - p) % HV_FIXED(Fragment) != 0 ||
+                (flst.end - p) / HV_FIXED(Fragment) != nf)
+                return "flst.nf-count";
+            for (i = 0; i < nf; i++, p += HV_FIXED(Fragment)) {
+                if (HV_DECODE(Fragment, &f, buf, p, HV_FIXED(Fragment)) != 0)
+                    return decode_error;
+                if ((error = hv_rule_fragment_dr(f.dr, tree->ndr, 0)) != NULL)
+                    return error;
+                if (f.dr == 0 &&
+                    (error = hv_rule_fragment_here(tree->mdat, n, buf, f.off, f.len, i == 0)) != NULL)
+                    return error;
+                if (jpxb && first && (error = hv_rule_jpxb_fragment(&end, f.dr, f.off, f.len)) != NULL)
+                    return error;
+            }
         }
     }
     return NULL;
@@ -1983,6 +2019,10 @@ const char *hv_rule_cdef(hv_header *h, const CdefEntry *entries, size_t n, const
         for (i = 0; i < n; i++)
             if (entries[i].cn > h->cdef_cn) h->cdef_cn = (uint32_t)entries[i].cn;
     }
+    /* M.11.7.5 relaxes both JP2 channel restrictions for headers a JP2
+     * reader does not use. In a JP2-compatible JPX file, only jp2h is
+     * parsed by that reader; its jpch/jplh headers describe JPX use. */
+    if (!h->jp2) return NULL;
     if (n <= HV_CDEF_PAIRWISE) {
         for (i = 0; i < n; i++)
             for (k = 0; k < i; k++)
