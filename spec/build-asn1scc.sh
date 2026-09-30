@@ -25,8 +25,7 @@ git -C "$source_repo" archive "$version" | tar -x -C "$source_tree"
 
 docker build -f "$repo/spec/Dockerfile.asn1scc" -t "$image" "$source_tree"
 
-docker run --rm --entrypoint sh \
-    -v "$repo/spec/asn1scc-issues:/issues:ro" "$image" -c '
+docker run --rm --entrypoint sh "$image" -c '
     set -eu
     cd /source/v4Tests
     compiler=../asn1scc/bin/Release/net10.0/asn1scc.dll
@@ -37,12 +36,6 @@ docker run --rm --entrypoint sh \
     done
     ASN1SCC=$compiler ./scripts/runWireTests.sh
     ASN1SCC=$compiler sh ./scripts/runIcdPdusTests.sh
-    # Minimal reports exercise the installed compiler too. 0009 covers
-    # uPER as well as ACN; the wire suite above generates ACN only.
-    export ASN1SCC="dotnet /source/asn1scc/bin/Release/net10.0/asn1scc.dll"
-    for issue in /issues/[0-9]*; do
-        sh "$issue/run.sh"
-    done
 '
 
-echo "asn1scc: unmodified pinned upstream compiler built; ACN v2, icdPdus and issue regressions passed"
+echo "asn1scc: unmodified pinned upstream compiler built; upstream CONTAINING, deduced-size, ACN v2, wire and icdPdus regressions passed"

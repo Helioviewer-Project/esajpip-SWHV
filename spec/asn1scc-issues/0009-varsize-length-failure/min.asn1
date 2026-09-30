@@ -1,4 +1,0 @@
-Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
-    Mask ::= OCTET STRING (SIZE (0..8))
-    Bits ::= BIT STRING (SIZE (0..8))
-END

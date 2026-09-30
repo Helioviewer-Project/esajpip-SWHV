@@ -1,4 +1,0 @@
-Min DEFINITIONS AUTOMATIC TAGS ::= BEGIN
-    Item ::= SEQUENCE { data OCTET STRING (SIZE (1..4)) }
-    Msg ::= SEQUENCE { items SEQUENCE (SIZE (0..4)) OF Item }
-END

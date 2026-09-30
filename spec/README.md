@@ -83,9 +83,8 @@ their wire form. Further extensions should follow this order when a
 concrete need justifies them:
 
 1. Keep the deferred-ACN compiler regressions passing and the compiler
-   revision pinned in `spec/VERSION`. Retain the reproducers in
-   `spec/asn1scc-issues/`. Build the generated code as strict C11 and run
-   the harness in Linux Docker with AddressSanitizer and
+   revision pinned in `spec/VERSION`. Build the generated code as strict
+   C11 and run the harness in Linux Docker with AddressSanitizer and
    UndefinedBehaviorSanitizer whenever the model changes. Do not hand-edit
    generated output or corpus labels.
 2. Expand the highest-value production paths first: packet indexing across
@@ -233,8 +232,7 @@ and opaque-payload sizes. Depth-boundary regressions are constructed in
 | `modules` | The four modules, in import order: the one list that `../jpeg2000/generate.sh`, `check-model.sh` and `../jpeg2000/CMakeLists.txt` read. |
 | `VERSION` | The exact upstream asn1scc revision used to generate the corpus and `../jpeg2000/generated/`. |
 | `asn1scc-patches/` | Retired patch series grouped by original upstream base, with their original application order (not applied). |
-| `asn1scc-issues/` | Reports and minimal reproducers for the compiler bugs those fixes address. |
-| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, builds unmodified upstream in Docker, and runs CONTAINING, deduced-size, ACN v2, wire, `-icdPdus` and issue regressions. |
+| `build-asn1scc.sh` | Exports `VERSION` from a local compiler repository into a temporary clean tree, builds unmodified upstream in Docker, and runs CONTAINING, deduced-size, ACN v2, wire and `-icdPdus` regressions. |
 | `check-model.sh` | The static checks (alone with `--static`, which needs only sh, sed and awk): each box-type mapping function against the CHOICEs it serves and the `'abcd'` sentinel of `other`; `../jpeg2000/hv_codes.h` against the values the model states, every constant written `HV_X = 0x...`; each marker-code value set against the fields of its segment `SEQUENCE`; the ACN encodings the model restates and the ASN.1 types it copies, the parts of `Rreq` in `jpeg2000-io.asn1` among them; the tile-part and dimension limits restated in C. Then, with the Docker image: `../jpeg2000/generated/` against the model, the complete model generated and built as strict C11 with ASan/UBSan, the corpus harness run, duplicate vector names rejected, and `harness/writers.c` run on the corpus; last, OpenJPEG's `opj_decompress` on every standard-valid vector (see "Quick start"). |
 | `COVERAGE.md` | Maps modeled T.800/T.801 rules to corpus evidence, server enforcement, deliberate profile decisions, and remaining boundaries. |
 | `harness/vectors.c` | The generator: builds bases, derives mutants, labels, writes files and manifest. |
@@ -291,8 +289,7 @@ root.
 1. Get an asn1scc repository containing the commit pinned in `spec/VERSION`.
    Its checked-out branch and working tree do not matter: the build script
    exports that upstream commit to a clean tree, builds the unmodified
-   compiler in Linux Docker, and runs the relevant upstream regressions
-   and all eleven preserved C reproducers:
+   compiler in Linux Docker, and runs the relevant upstream regressions:
 
    ```sh
    spec/build-asn1scc.sh ~/git/asn1scc esajpip-asn1scc
@@ -569,9 +566,9 @@ The compiler is built from the exact upstream revision in `spec/VERSION`
 without local patches. Issue [#417](https://github.com/esa/asn1scc/issues/417)
 integrated all eleven local fixes in upstream 4.9.7.0, with additional
 corrections. The original series remains in
-`spec/asn1scc-patches/reference/161cc246/`; its numbered reports and
-reproducers remain in `spec/asn1scc-issues/`. The build runs all eleven C
-reproducers. The separate Rust reproducers require Cargo.
+`spec/asn1scc-patches/reference/161cc246/`. The resolved issue reports and
+local reproducers were removed after retirement. The compiler build runs
+upstream regression cases, wire tests and `-icdPdus` checks.
 Issue [#415](https://github.com/esa/asn1scc/issues/415) added cases under
 asn1scc's `v4Tests/test-cases/acn/25-ACNV2-BOUNDARIES/` for the backend
 mechanisms exposed by this model:
@@ -964,9 +961,10 @@ generated decoder supports those alternate encodings.
 Regenerate when a model or harness changes, or when moving to a newer asn1scc:
 
 1. update `spec/VERSION` when the upstream compiler revision changes and
-   run its regressions and the preserved issue reproducers. Any new local
-   fixes must record their upstream base and numbered application order;
-   retire superseded series under `asn1scc-patches/reference/<upstream-base>/`;
+   run its regressions. Any new local fixes must record their upstream base
+   and numbered application order. Retire superseded series under
+   `asn1scc-patches/reference/<upstream-base>/` and remove their resolved
+   issue reports and local reproducers;
 2. regenerate `jpeg2000/generated/` (Quick start step 2), then run
    `check-model.sh` (Quick start step 3), which checks the generated reader
    code against the model;

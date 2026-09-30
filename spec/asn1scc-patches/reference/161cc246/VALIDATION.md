@@ -14,8 +14,9 @@ determinants, and test registration and coverage.
 All eleven archived patch files and their `series` file are byte-identical
 to the preceding esajpip commit. Their original base is
 `161cc2465b568685c09b0a218149fb514ea2a95e`, not the new compiler pin.
-All issue reproducer sources and scripts are unchanged. The current build
-exports the new pin and applies no patches.
+All issue reproducer sources and scripts were unchanged during validation.
+They were subsequently removed after retirement. The compiler build exports
+the new pin, applies no patches and runs the upstream regressions.
 
 The default Docker image `esajpip-asn1scc` was rebuilt by
 `spec/build-asn1scc.sh`. The assemblies in `~/jhv/asn1scc-bin/asn1scc` were
@@ -32,8 +33,8 @@ not as a native macOS executable.
 | Upstream C ACN v2 `25-ACNV2-BOUNDARIES` | 26 configurations pass |
 | Upstream wire tests | 19 byte-exact checks, truncated input and warning/rejection checks pass |
 | Upstream `-icdPdus` checks | Pass |
-| Preserved local C reproducers 0001–0011 | All pass, including their ASan/UBSan checks |
-| Preserved Rust reproducers 0009–0011 | All pass, with legacy/v2 and uPER modes selected by their scripts |
+| Local C reproducers 0001–0011, before removal | All pass, including their ASan/UBSan checks |
+| Local Rust reproducers 0009–0011, before removal | All pass, with legacy/v2 and uPER modes selected by their scripts |
 | Generated production parser | Byte-identical to checked-in C and headers |
 | Full model and writer harness, ASan/UBSan | 845 vectors; all expected labels and reasons pass |
 | Regenerated corpus | Existing files and manifest byte-identical |
@@ -47,7 +48,7 @@ not as a native macOS executable.
 The extended profile checks address errors, undefined behavior, unsigned
 integer overflow, implicit conversions and local bounds. It uses Homebrew
 LLVM 23.1.2. The Linux checks use the repository's Debian 13 diagnostic
-image. Rust emits an unused-comparison warning in the preserved 0011
+image. Rust emitted an unused-comparison warning in the local 0011
 reproducer; it is not suppressed and does not affect the result.
 
 The model writer harness rewrote 389 inputs, transcoded 107 and merged 128;
@@ -108,7 +109,9 @@ ESAJPIP_JOBS=8 tests/run_linux_docker.sh all
 
 After the fuzz build, run each of the five executables with its corresponding
 copied corpus and `-max_total_time=300 -seed=417 -print_final_stats=1`.
-The preserved `run_rust.sh` scripts need Cargo and the pinned compiler.
+The local C and Rust reproducer runs used the sources and scripts retained
+in esajpip commit `b78568c`; the Rust scripts require Cargo and the pinned
+compiler. Those files were removed after retirement.
 Raw logs, corpora and campaign summaries from this run are retained under
 `/private/tmp/esajpip-asn1scc-417/`.
 
