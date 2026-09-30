@@ -169,16 +169,21 @@ namespace jpip {
             return !suffix->empty();
         }
 
-        bool ParseRange(const string &text, char separator, int *first, int *last) {
-            const char *position = text.c_str();
-            if (!ParseInteger(&position, first))
+        bool ParseRange(const char **position, uint64_t *first, uint64_t *last) {
+            if (!ParseUnsignedInteger(position, UINT64_MAX, first))
                 return false;
             *last = *first;
-            if (*position != '\0') {
-                if (*position++ != separator || !ParseInteger(&position, last))
-                    return false;
+            if (**position == '-') {
+                ++*position;
+                if (**position >= '0' && **position <= '9') {
+                    if (!ParseUnsignedInteger(position, UINT64_MAX, last) ||
+                        *last < *first)
+                        return false;
+                } else {
+                    *last = UINT64_MAX;
+                }
             }
-            return *position == '\0';
+            return true;
         }
 
         bool ParseTransports(const string &value, bool *accepts_http) {
@@ -239,18 +244,15 @@ namespace jpip {
             return true;
         }
 
-        bool ParseContext(const string &value, int *first, int *last) {
+        bool ParseContext(const string &value, uint64_t *first, uint64_t *last) {
             string decoded;
             if (!Decode(value, &decoded) || decoded.compare(0, 5, "jpxl<") != 0 ||
                 decoded.size() < 7 || decoded.back() != '>')
                 return false;
 
-            if (!ParseRange(decoded.substr(5, decoded.size() - 6), '-', first, last) ||
-                *first < 0 || *last < *first)
-                return false;
-            *first = Clamp(*first, 0, ResponseRequest::MAX_CODESTREAM_INDEX);
-            *last = Clamp(*last, 0, ResponseRequest::MAX_CODESTREAM_INDEX);
-            return true;
+            decoded.pop_back();
+            const char *position = decoded.c_str() + 5;
+            return ParseRange(&position, first, last) && *position == '\0';
         }
 
         bool ParseModel(const string &value, vector<Request::ModelUpdate> *model,
@@ -365,18 +367,9 @@ namespace jpip {
     bool Request::ParseStream(const string &value) {
         const char *position = value.c_str();
         while (*position != '\0') {
-            uint64_t range_first;
-            if (!ParseUnsignedInteger(&position, UINT64_MAX, &range_first))
+            uint64_t range_first, last;
+            if (!ParseRange(&position, &range_first, &last))
                 return false;
-            uint64_t last = range_first;
-            if (*position == '-') {
-                ++position;
-                if (*position == '\0' || *position == ',' || *position == ':')
-                    last = UINT64_MAX;
-                else if (!ParseUnsignedInteger(&position, UINT64_MAX, &last) ||
-                         last < range_first)
-                    return false;
-            }
 
             uint64_t step = 1;
             if (*position == ':') {
@@ -498,8 +491,9 @@ namespace jpip {
                              "Invalid or unsupported JPIP model parameter");
                 }
             } else if (name == "context") {
-                if (ParseContext(value, &x, &y)) {
-                    AddContext(x, y);
+                uint64_t first, last;
+                if (ParseContext(value, &first, &last)) {
+                    AddContext(first, last);
                 } else {
                     valid = false;
                     SetError(error_message, "Invalid JPIP context parameter");

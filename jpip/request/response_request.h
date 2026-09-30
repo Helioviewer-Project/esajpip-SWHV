@@ -32,7 +32,7 @@ namespace jpip {
         // Ranges are visited in insertion order. These methods also record
         // which selector is present and the default for unqualified models.
         void AddStream(uint64_t first, uint64_t last, uint64_t step = 1);
-        void AddContext(int first, int last);
+        void AddContext(uint64_t first, uint64_t last);
 
         struct Parameters {
             bool fsiz = false;

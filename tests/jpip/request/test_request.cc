@@ -325,6 +325,65 @@ static void CheckRouteClassification() {
 
 }
 
+static void CheckOpenContextRanges() {
+    struct Case {
+        const char *context;
+        size_t available;
+        vector<int> selected;
+    };
+    const Case cases[] = {
+        {"jpxl<0->", 4, {0, 1, 2, 3}},
+        {"jpxl%3C2-%3E", 4, {2, 3}},
+        {"jpxl<3->", 4, {3}},
+        {"jpxl<4->", 4, {}},
+        {"jpxl<0->", 0, {}},
+        {"jpxl<2-99>", 4, {2, 3}},
+        {"jpxl<100001->", 100002, {100001}},
+        {"jpxl<100001>", 100002, {100001}},
+        {"jpxl<2147483648->", 4, {}},
+        {"jpxl<18446744073709551615->", 4, {}}
+    };
+    for (const Case &test : cases) {
+        jpip::Request request;
+        Check(request.ParseTarget(string("/jpip?cid=7&context=") + test.context),
+              "Could not parse a valid context range");
+        Check(SelectCodestreams(request, test.available) == test.selected,
+              "Wrong context range expansion");
+        int stream = -1;
+        Check(request.GetUnqualifiedModelCodestream(4, &stream) && stream == 0,
+              "Context range changed the unqualified model default");
+    }
+
+    jpip::Request combined;
+    int stream = -1;
+    Check(combined.ParseTarget(
+              "/jpip?context=jpxl<2->&stream=1,3-&context=jpxl<0-1>&model=P0") &&
+              SelectCodestreams(combined, 5) == vector<int>({2, 3, 4, 1, 0}) &&
+              combined.GetUnqualifiedModelCodestream(5, &stream) && stream == 1,
+          "Combined ranges lost order, deduplication or the model default");
+
+    jpip::Request boundary;
+    Check(boundary.ParseTarget("/jpip?context=jpxl<0->"),
+          "Could not parse an open context selection");
+    vector<int> selected;
+    Check(boundary.SelectCodestreams(100001, &selected) &&
+              selected.size() == 100001 && selected.front() == 0 &&
+              selected.back() == 100000,
+          "Rejected the maximum context selection");
+    Check(!boundary.SelectCodestreams(100002, &selected),
+          "Accepted an oversized open context selection");
+
+    const char *invalid[] = {
+        "jpxl<>", "jpxl<->", "jpxl<-1>", "jpxl<3-1>", "jpxl<1-->",
+        "jpxl<1-a>", "jpxl<1-2-3>", "jpxl<1->junk", "jpxl<1-", "jpxl<+1->",
+        "jpxl<1-:2>", "jpxl<1,2>", "jpxl<1->,jpxl<2>", "jpxl<1->[s0i0]",
+        "jpxl<18446744073709551616->", "jpxl<0-18446744073709551616>"
+    };
+    for (const char *context : invalid)
+        Check(RejectRequest(string("/jpip?context=") + context),
+              "Accepted malformed or unsupported context syntax");
+}
+
 static void CheckDiagnostics() {
     struct Case { const char *model; const char *error; };
     const Case cases[] = {
@@ -344,6 +403,7 @@ static void CheckDiagnostics() {
 int main() {
     CheckJHVRequests();
     CheckRouteClassification();
+    CheckOpenContextRanges();
     CheckDiagnostics();
     return EXIT_SUCCESS;
 }

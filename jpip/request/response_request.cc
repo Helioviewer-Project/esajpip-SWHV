@@ -9,7 +9,7 @@ namespace jpip {
         has_stream = true;
     }
 
-    void ResponseRequest::AddContext(int first, int last) {
+    void ResponseRequest::AddContext(uint64_t first, uint64_t last) {
         codestream_selections.emplace_back(first, last, 1);
     }
 

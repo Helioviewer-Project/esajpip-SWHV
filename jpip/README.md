@@ -26,8 +26,11 @@ HTTP runtime, libuv, gzip, GLib, or logging dependency. Its public operations ar
 Build selections with `ResponseRequest::AddStream(first, last, step)` and
 `AddContext(first, last)`. They preserve insertion order and record the first
 explicit stream used by unqualified cache-model updates. Context selection
-alone leaves that default at stream 0. An explicit first stream outside the
-target is not silently replaced by a later available stream. `SetRequest`
+alone leaves that default at stream 0. `UINT64_MAX` as the last endpoint
+represents an open range for either selector; expansion uses the target's
+codestream count and enforces the combined selection limit. An explicit first
+stream outside the target is not silently replaced by a later available stream.
+`SetRequest`
 rejects descending/zero-step ranges, negative response budgets, and invalid
 cache-bin identifiers before changing session state. Other request fields
 retain their presence flags. The parsed `Request::has_metareq` flag is available

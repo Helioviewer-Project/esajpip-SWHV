@@ -352,6 +352,8 @@ void Stateful(uint16_t port, const Expected &expected, const string &name) {
           "&stream=0&fsiz=260,1&rsiz=3,1&roff=0,0");
     Fetch(fd, cache, Select(expected, 1, 0, 64), base +
           "&context=jpxl%3C1%3E&fsiz=260,1&rsiz=130,1&roff=0,0");
+    Fetch(fd, cache, Select(expected, 1, 0, 129), base +
+          "&context=jpxl%3C1-%3E&fsiz=260,1");
 
     // Channel cache survives socket replacement, but no parser state does.
     shutdown(fd, SHUT_RDWR); close(fd);
