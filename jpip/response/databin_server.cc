@@ -117,6 +117,8 @@ namespace jpip {
                 }
                 window.coding_parameters =
                         image_index.GetCodingParameters(codestream);
+                window.woi.layers = static_cast<int>(min<uint64_t>(
+                        request.layers, window.coding_parameters->num_layers));
                 Size resolution_size;
                 if (!MapWindow(request, *window.coding_parameters,
                                &window.woi, &resolution_size))

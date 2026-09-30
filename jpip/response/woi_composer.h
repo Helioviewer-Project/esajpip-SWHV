@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "woi.h"
 #include "jpip/index/packet.h"
 #include "jpip/index/coding_parameters.h"
@@ -22,6 +24,7 @@ namespace jpip {
         Point pxy2;            ///< Bottom-right corner of the WOI
         bool more_packets;     ///< Flag to control the last packet
         int max_resolution;    ///< Maximum resolution
+        int max_layers = 0;
         Size min_precinct_xy;  ///< Minimum precinct
         Size max_precinct_xy;  ///< Maximum precinct
         Packet current_packet; ///< Current packet
@@ -51,7 +54,8 @@ namespace jpip {
          * @param woi New WOI to use.
          */
         void Reset(const CodingParameters *coding_parameters, const WOI &woi) {
-            more_packets = true;
+            max_layers = std::min(woi.layers, coding_parameters->num_layers);
+            more_packets = max_layers > 0;
             current_packet = Packet();
             max_resolution = woi.resolution;
 
@@ -97,7 +101,7 @@ namespace jpip {
                             else {
                                 current_packet.resolution = 0;
 
-                                if (current_packet.layer < (coding_parameters->num_layers - 1)) current_packet.layer++;
+                                if (current_packet.layer < (max_layers - 1)) current_packet.layer++;
                                 else {
                                     more_packets = false;
                                     return false;

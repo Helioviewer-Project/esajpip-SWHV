@@ -1,5 +1,7 @@
 #pragma once
 
+#include <climits>
+
 #include "jpip/index/point.h"
 
 namespace jpip {
@@ -7,7 +9,8 @@ namespace jpip {
     /**
      * Class that identifies a WOI (Window Of Interest). This term
      * refers, from the point of view of the JPIP protocol, to a
-     * rectangular region of an image, for a resolution level.
+     * rectangular region of an image, at a resolution level and
+     * with a quality-layer limit.
      *
      * @see Point
      */
@@ -16,6 +19,7 @@ namespace jpip {
         Size size;        ///< Size of the WOI (width and height)
         Point position;    ///< Position of the upper-left corner of the WOI
         int resolution;    ///< Resolution level where the WOI is located (0 == the lowest)
+        int layers = INT_MAX; // Initial quality layers belonging to the window.
 
         /**
          * Initializes the resolution level to zero.
@@ -42,7 +46,8 @@ namespace jpip {
          * are equal.
          */
         friend bool operator==(const WOI &a, const WOI &b) {
-            return ((a.position == b.position) && (a.size == b.size) && (a.resolution == b.resolution));
+            return a.position == b.position && a.size == b.size &&
+                   a.resolution == b.resolution && a.layers == b.layers;
         }
 
         /**

@@ -432,22 +432,21 @@ namespace jpip {
                 if (ParsePair(value, &x, &y, &round)) {
                     resolution_size = Size(x, y);
                     has.fsiz = true;
-                    if (round == "round-up")
-                        round_direction = ROUNDUP;
-                    else if (round == "round-down")
+                    if (round.empty() || round == "round-down") {
                         round_direction = ROUNDDOWN;
-                    else if (round == "closest")
-                        round_direction = CLOSEST;
-                    else if (round.empty())
-                        round_direction = ROUNDDOWN;
-                    else {
-                        valid = false;
-                        SetError(error_message, "Invalid JPIP fsiz parameter");
+                        continue;
                     }
-                } else {
-                    valid = false;
-                    SetError(error_message, "Invalid JPIP fsiz parameter");
+                    if (round == "round-up") {
+                        round_direction = ROUNDUP;
+                        continue;
+                    }
+                    if (round == "closest") {
+                        round_direction = CLOSEST;
+                        continue;
+                    }
                 }
+                valid = false;
+                SetError(error_message, "Invalid JPIP fsiz parameter");
             } else if (name == "roff") {
                 if (ParsePair(value, &x, &y)) {
                     woi_position = Point(x, y);
@@ -472,6 +471,13 @@ namespace jpip {
                 } else {
                     valid = false;
                     SetError(error_message, "Invalid JPIP len parameter");
+                }
+            } else if (name == "layers") {
+                const char *position = value.c_str();
+                if (!ParseUnsignedInteger(&position, UINT64_MAX, &layers) ||
+                    *position != '\0') {
+                    valid = false;
+                    SetError(error_message, "Invalid JPIP layers parameter");
                 }
             } else if (name == "tid") {
                 routing.tid = true;

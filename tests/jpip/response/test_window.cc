@@ -34,6 +34,23 @@ static void CheckWOIPackets() {
         packets++;
     Check(packets == 4, "WOI navigation repeated the final packet");
 
+    jpip::WOI layered(jpip::Point(0, 0), jpip::Size(1, 1), 0);
+    for (int limit : {0, 1, 2, INT_MAX}) {
+        layered.layers = limit;
+        composer.Reset(&coding_parameters, layered);
+        packets = 0;
+        while (composer.HasPacket()) {
+            Check(composer.GetCurrentPacket().layer < min(limit, 2),
+                  "WOI exceeded its layer boundary");
+            ++packets;
+            composer.GetNextPacket(&coding_parameters);
+        }
+        Check(packets == min(limit, 2) * 2, "Wrong layer-limited packet count");
+    }
+    jpip::WOI different = layered;
+    different.layers = 1;
+    Check(different != layered, "Layer limit did not distinguish windows");
+
     jpip::CodingParameters boundary_parameters;
     boundary_parameters.size = jpip::Size(512, 1);
     boundary_parameters.num_levels = 0;

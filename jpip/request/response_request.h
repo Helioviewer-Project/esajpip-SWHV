@@ -64,6 +64,7 @@ namespace jpip {
         Size woi_size;           ///< WOI size
         Point woi_position;      ///< WOI position
         int length_response;     ///< Maximum response length
+        uint64_t layers = UINT64_MAX; // Omission requests all source layers.
         Parameters has;          ///< Parameters present in the request
         Size resolution_size;    ///< Size of the resolution level
         std::vector<ModelUpdate> model;

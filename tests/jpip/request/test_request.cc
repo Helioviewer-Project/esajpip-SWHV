@@ -384,6 +384,22 @@ static void CheckOpenContextRanges() {
               "Accepted malformed or unsupported context syntax");
 }
 
+static void CheckLayers() {
+    jpip::Request omitted;
+    Check(omitted.ParseTarget("/jpip?cid=7") && omitted.layers == UINT64_MAX,
+          "Omitted layers did not request all layers");
+    for (uint64_t count : {uint64_t(0), uint64_t(1), uint64_t(65536),
+                           uint64_t(INT_MAX) + 1, uint64_t(UINT64_MAX)}) {
+        jpip::Request request;
+        Check(request.ParseTarget("/jpip?cid=7&layers=" + to_string(count)) &&
+                  request.layers == count && !request.HasWOI(),
+              "Wrong layers value or unintended spatial window");
+    }
+    for (const char *value : {"", "-1", "+1", "1x", "1,2", "1-", "18446744073709551616"})
+        Check(RejectRequest(string("/jpip?layers=") + value),
+              "Accepted malformed layers");
+}
+
 static void CheckDiagnostics() {
     struct Case { const char *model; const char *error; };
     const Case cases[] = {
@@ -404,6 +420,7 @@ int main() {
     CheckJHVRequests();
     CheckRouteClassification();
     CheckOpenContextRanges();
+    CheckLayers();
     CheckDiagnostics();
     return EXIT_SUCCESS;
 }

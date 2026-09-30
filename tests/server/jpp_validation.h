@@ -67,6 +67,16 @@ public:
 
     bool Complete() const { return Complete(expected); }
 
+    bool MatchesPrefixes(const Expected &prefixes) const {
+        for (const auto &entry : prefixes) {
+            auto found = bins.find(entry.first);
+            if (found == bins.end() || found->second.bytes != entry.second ||
+                found->second.complete != (entry.second.size() == expected.at(entry.first).size()))
+                return false;
+        }
+        return true;
+    }
+
     unsigned Read(const string &body, const Expected *selection = NULL) {
         // Class and CSn default to zero at the start of each response.
         uint64_t cls = 0, stream = 0;
@@ -322,6 +332,53 @@ Expected Select(const Expected &expected, int stream, int first, int last) {
     return selection;
 }
 
+void Layers(uint16_t port, const Expected &expected, const string &name) {
+    int fd = Connect(port);
+    Require(fd >= 0, "Could not connect for layer tests");
+    SendRequest(fd, "/" + name + "?cnew=http&len=0");
+    Response created = ReadResponse(fd);
+    string cid = ChannelId(created.headers);
+    Cache cache(expected);
+    Require(cache.Read(created.body) == 4, "Layer test channel creation emitted data");
+    string base = "/jpip?cid=" + cid + "&stream=0-&fsiz=520,1";
+    for (uint64_t count : {uint64_t(0), uint64_t(1), uint64_t(2), uint64_t(UINT64_MAX)}) {
+        Expected prefixes;
+        for (const auto &entry : expected) {
+            if (get<0>(entry.first) != 0) {
+                prefixes.insert(entry);
+                continue;
+            }
+            if (count == 0) continue;
+            uint64_t layers = min<uint64_t>(count, 2 + get<1>(entry.first));
+            size_t length = 0;
+            for (uint64_t layer = 0; layer < layers; ++layer)
+                length += get<2>(entry.first) == 129 ? 132 + layer : 4;
+            prefixes[entry.first] = entry.second.substr(0, length);
+        }
+        string target = base + "&len=300" +
+                (count == UINT64_MAX ? "" : "&layers=" + to_string(count));
+        bool done = false;
+        for (int attempts = 0; !done && attempts < 1000; ++attempts) {
+            SendRequest(fd, target);
+            Response response = ReadResponse(fd);
+            Require(response.headers.find("200 OK") != string::npos, "Layer-limited request failed");
+            size_t before = cache.Size();
+            unsigned reason = cache.Read(response.body, &prefixes);
+            done = reason == 2;
+            Require(done || cache.Size() > before, "Layer-limited continuation stalled");
+        }
+        Require(done && cache.MatchesPrefixes(prefixes), "Layer boundary bytes or final flags differ");
+    }
+    Require(cache.Complete(), "Increasing layers failed to complete both source layer counts");
+    SendRequest(fd, base + "&layers=1");
+    Response lower = ReadResponse(fd);
+    Require(lower.body.size() == 3 && cache.Read(lower.body) == 2 && cache.Complete(),
+            "Lower layer limit retransmitted data or changed the cache");
+    SendRequest(fd, "/jpip?cclose=" + cid);
+    Require(ReadResponse(fd).headers.find("200 OK") != string::npos, "Layer test channel close failed");
+    close(fd);
+}
+
 void Stateful(uint16_t port, const Expected &expected, const string &name) {
     int fd = Connect(port);
     Require(fd >= 0, "Could not connect for stateful JPP test");
@@ -439,6 +496,9 @@ void CheckJPPResponses(uint16_t port, const string &directory) {
                                      linked ? "wire-linked.jpx" : "wire-embedded.jpx",
                                      gzip, modeled, context);
                     }
+            test_case = string("JPP layers/") + (linked ? "linked" : "embedded");
+            jpp_test::Layers(port, fixture.bins,
+                            linked ? "wire-linked.jpx" : "wire-embedded.jpx");
             test_case = string("JPP stateful/") + (linked ? "linked" : "embedded");
             jpp_test::Stateful(port, fixture.bins,
                               linked ? "wire-linked.jpx" : "wire-embedded.jpx");

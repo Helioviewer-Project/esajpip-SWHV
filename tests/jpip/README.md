@@ -11,7 +11,7 @@ construct their inputs directly.
 | `index/` | `index_library`, `jpip_packet_layout` | Corpus indexing, deferred errors, access order, progression coordinates, resolution selection and compact-index bounds |
 | `request/` | `jpip_request` | JPIP syntax, selectors, cache-model descriptors and routing-field values |
 | `response/` | `jpip_cache`, `jpip_window`, `jpip_writer` | Sparse cache packing, independent 2D packet sequences, canonical JPP integer boundaries, coalescing, buffer limits and placeholders |
-| `response/` | `jpip_library` | Stateful responses: independently reconstructed bins, source failures, remapping, budgets, repeated requests, viewport-to-zoom reuse and interleaved independent sessions |
+| `response/` | `jpip_library` | Stateful responses: independently reconstructed bins, source failures, remapping, budgets, repeated requests, viewport-to-zoom reuse, layer limits and interleaved independent sessions |
 
 `tests/jpeg2000/test_geometry.c` checks the C format library against independent
 standard-derived geometry. `index/test_packet_layout.cc` checks the C++

@@ -23,6 +23,11 @@ HTTP runtime, libuv, gzip, GLib, or logging dependency. Its public operations ar
   byte-limit EOR alone and leave the session usable. A smaller caller buffer
   that prevents progress still reports an error.
 
+Set `ResponseRequest::layers` to limit initial quality layers. Omission uses
+`UINT64_MAX` and requests all source layers. Zero returns metadata and headers
+without precinct packets. Changing the effective count restarts window traversal
+while preserving the client cache; only a source's final layer completes a bin.
+
 Build selections with `ResponseRequest::AddStream(first, last, step)` and
 `AddContext(first, last)`. They preserve insertion order and record the first
 explicit stream used by unqualified cache-model updates. Context selection

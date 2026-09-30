@@ -526,6 +526,44 @@ static void verify_synthetic() {
         check(image.Open(*sources.GetSource(image.GetPathName()),sources,jpx),image.GetError().c_str());
         jpip::ResponseRequest full=request(5,100);full.resolution_size=jpip::Size(5,3);
         full.AddStream(0,streams.size()-1);
+        std::map<Key,Bytes> header_bins;
+        for(const auto &bin:expected)if(std::get<0>(bin.first)!=0)header_bins.insert(bin);
+
+        jpip::DataBinServer layer_session;
+        Received layer_bins;
+        jpip::ResponseRequest limited = full;
+        limited.layers = 0;
+        fetch(layer_session, image, sources, limited, layer_bins);
+        check(layer_bins.bins == header_bins, "Zero layers emitted precinct packets or omitted headers");
+        for (size_t cs = 0; cs < streams.size(); ++cs)
+            check(image.GetIndexedPackets(cs) == 0, "Zero layers indexed packets");
+        limited.layers = 1;
+        fetch(layer_session, image, sources, limited, layer_bins);
+        std::map<Key,Bytes> one_layer = header_bins;
+        for (const auto &bin : expected)
+            if (std::get<0>(bin.first) == 0) {
+                one_layer[bin.first] = Bytes(bin.second.begin(), bin.second.begin() + 1);
+                check(!layer_bins.complete[bin.first], "Requested layer incorrectly completed a precinct");
+            }
+        check(layer_bins.bins == one_layer, "One layer differs from independent packet bytes");
+        int messages = layer_bins.messages;
+        for (uint64_t limit : {uint64_t(0), uint64_t(1)}) {
+            limited.layers = limit;
+            fetch(layer_session, image, sources, limited, layer_bins);
+            check(layer_bins.messages == messages, "Lower or repeated layer limit sent more data");
+        }
+        limited.layers = UINT64_MAX;
+        fetch(layer_session, image, sources, limited, layer_bins);
+        check(layer_bins.bins == expected, "Increasing layers lost or duplicated packet bytes");
+        for (const auto &bin : expected)
+            check(layer_bins.complete[bin.first], "All layers did not complete a bin");
+        messages = layer_bins.messages;
+        for (uint64_t limit : {uint64_t(1), uint64_t(2), uint64_t(65536), uint64_t(UINT64_MAX)}) {
+            limited.layers = limit;
+            fetch(layer_session, image, sources, limited, layer_bins);
+            check(layer_bins.messages == messages, "Cached layer changes retransmitted data");
+        }
+
         jpip::DataBinServer session;Received received;
         fetch(session,image,sources,full,received);
         check(received.bins==expected,"synthetic exact bin bytes or IDs differ");
@@ -533,8 +571,6 @@ static void verify_synthetic() {
         jpip::DataBinServer metadata_session;Received headers;
         jpip::ResponseRequest metadata_request=full;metadata_request.has.fsiz=false;
         fetch(metadata_session,image,sources,metadata_request,headers);
-        std::map<Key,Bytes> header_bins;
-        for(const auto &bin:expected)if(std::get<0>(bin.first)!=0)header_bins.insert(bin);
         check(headers.bins==header_bins,"metadata-only response contains wrong bins");
         jpip::DataBinServer empty_session;Received empty;
         jpip::ResponseRequest empty_request=full;
@@ -559,6 +595,52 @@ static void verify_synthetic() {
         for(const auto &bin:expected)if(std::get<0>(bin.first)!=0 || (std::get<2>(bin.first)/2)%3==2)cropped_bins.insert(bin);
         check(crop.bins==cropped_bins,"cropped window differs from independent precinct IDs");
     }
+}
+
+static void verify_layer_fragments() {
+    MemorySources sources;
+    sources.load("jpx-graph-frame2.jp2");
+    jpip::ImageIndex image("./jpx-graph-frame2.jp2");
+    check(image.Open(*sources.GetSource(image.GetPathName()), sources, false), image.GetError().c_str());
+    const Bytes &file = sources.bytes[image.GetPathName()];
+    uint64_t start = image.GetMainHeader(0).offset + image.GetMainHeader(0).length + 26;
+    const int lengths[] = {1, 127, 128, 129}, offsets[] = {0, 1, 156, 284};
+    Bytes expected;
+    for (int i = 0; i < 4; ++i)
+        expected.insert(expected.end(), file.begin() + start + offsets[i],
+                        file.begin() + start + offsets[i] + lengths[i]);
+
+    jpip::DataBinServer session;
+    Received received;
+    jpip::ResponseRequest r = request(4096, INT_MAX);
+    r.layers = 0;
+    fetch(session, image, sources, r, received);
+    r.layers = 3;
+    r.length_response = 220;
+    check(session.SetRequest(image, r), "Fragmented layer request rejected");
+    check(received.decode(generate(session, sources, 128)) == jpip::EOR::BYTE_LIMIT_REACHED,
+          "Fragmented layer request did not reach its byte limit");
+    Key precinct(0, 0, 0);
+    size_t prefix = received.bins[precinct].size();
+    check(prefix > 1 && prefix < 256 && !received.complete[precinct] &&
+          received.bins[precinct] == Bytes(expected.begin(), expected.begin() + prefix),
+          "Fragmented response has wrong layer prefix or completion flag");
+
+    int messages = received.messages;
+    r.layers = 1;
+    r.length_response = INT_MAX;
+    fetch(session, image, sources, r, received);
+    check(received.messages == messages, "Lower layer limit augmented a partially cached precinct");
+    r.layers = 3;
+    r.length_response = 220;
+    sources.remap();
+    fetch(session, image, sources, r, received);
+    check(received.bins[precinct] == Bytes(expected.begin(), expected.begin() + 256) &&
+          !received.complete[precinct], "Continuation exceeded or missed the third layer boundary");
+    r.layers = UINT64_MAX;
+    fetch(session, image, sources, r, received);
+    check(received.bins[precinct] == expected && received.complete[precinct],
+          "Final source layer did not finish the fragmented precinct");
 }
 
 static void verify_tiny_budgets() {
@@ -667,6 +749,7 @@ int main() {
     verify_interleaved_sessions();
     verify_synthetic();
     verify_tiny_budgets();
+    verify_layer_fragments();
     verify_typed_requests();
     verify_source_failures();
     verify_deferred_error();
