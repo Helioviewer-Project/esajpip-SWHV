@@ -63,7 +63,51 @@ static void CheckCacheModel() {
           "Accepted an unsupported cache-model data-bin class");
 }
 
+static void CheckSparsePacking() {
+    jpip::CacheModel model;
+    const jpip::CacheModel &view = model;
+    using jpip::DataBinClass;
+    model.AddToDataBin(DataBinClass::PRECINCT, 0, 0, 0, true);
+    model.AddToDataBin(DataBinClass::PRECINCT, 0, 2, 0, true);
+    model.AddToDataBin(DataBinClass::PRECINCT, 0, 3, 17);
+    model.AddToDataBin(DataBinClass::PRECINCT, 1, 0, 9);
+    model.AddToDataBin(DataBinClass::MAIN_HEADER, 0, 0, 5);
+    model.AddToDataBin(DataBinClass::TILE_HEADER, 1, 0, 7);
+    for (int repeat = 0; repeat < 3; ++repeat) {
+        model.Pack();
+        Check(view.GetDataBin(DataBinClass::PRECINCT, 0, 0) == INT_MAX &&
+                      view.GetDataBin(DataBinClass::PRECINCT, 0, 1) == 0 &&
+                      view.GetDataBin(DataBinClass::PRECINCT, 0, 2) == INT_MAX &&
+                      view.GetDataBin(DataBinClass::PRECINCT, 0, 3) == 17 &&
+                      view.GetDataBin(DataBinClass::PRECINCT, 0, 4) == 0,
+              "Packing crossed a hole or changed its suffix");
+        Check(view.GetDataBin(DataBinClass::PRECINCT, 1, 0) == 9 &&
+                      view.GetDataBin(DataBinClass::MAIN_HEADER, 0, 0) == 5 &&
+                      view.GetDataBin(DataBinClass::TILE_HEADER, 1, 0) == 7,
+              "Packing changed another stream or header class");
+    }
+    model.AugmentDataBin(DataBinClass::PRECINCT, 0, 1, INT_MAX);
+    model.Pack();
+    Check(model.AddToDataBin(DataBinClass::PRECINCT, 0, 1, 3) == INT_MAX &&
+                  model.AugmentDataBin(DataBinClass::PRECINCT, 0, 3, 7) == 17,
+          "Updating a packed prefix or partial suffix changed cached bytes");
+    model.AddToDataBin(DataBinClass::PRECINCT, 0, 3, 0, true);
+    model.Pack();
+    Check(view.GetDataBin(DataBinClass::PRECINCT, 0, 3) == INT_MAX &&
+                  view.GetDataBin(DataBinClass::PRECINCT, 0, 4) == 0 &&
+                  model.AddToDataBin(DataBinClass::PRECINCT, 0, 7, 11) == 11 &&
+                  view.GetDataBin(DataBinClass::PRECINCT, 0, 6) == 0,
+          "Emptying and regrowing packed storage lost its prefix or holes");
+    for (DataBinClass cls : {DataBinClass::EXTENDED_PRECINCT, DataBinClass::TILE_DATA,
+                            DataBinClass::EXTENDED_TILE})
+        Check(model.GetDataBin(cls, 0, 0) == -1 &&
+                      model.AddToDataBin(cls, 0, 0, 1) == -1 &&
+                      model.AugmentDataBin(cls, 0, 0, 1) == -1,
+              "An unsupported class changed cache state");
+}
+
 int main() {
+    CheckSparsePacking();
     CheckCacheModel();
     return EXIT_SUCCESS;
 }

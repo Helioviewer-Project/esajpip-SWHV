@@ -3,20 +3,15 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <thread>
 #include <vector>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <uv.h>
-#include <zlib.h>
 
 #include "server/storage/file_manager.h"
 #include "jpip/response/databin_server.h"
 #include "jpip/request/request.h"
-#include "server/channel_engine.h"
-#include "server/channel_work.h"
 
 using namespace std;
 
@@ -26,189 +21,6 @@ static void Check(bool condition, const char *message) {
     if (!condition) {
         cerr << message << endl;
         exit(EXIT_FAILURE);
-    }
-}
-
-static vector<char> GenerateEngineResponse(const string &directory,
-                                           bool gzip,
-                                           int output_size) {
-    server::ChannelEngine engine(128);
-    Check(engine.Init(directory), "Could not initialize the channel engine");
-
-    server::FileManager::OpenResult open_result;
-    thread open([&] { open_result = engine.Open("image.jp2"); });
-    open.join();
-    Check(open_result == server::FileManager::OpenResult::OPENED,
-          "Could not open an image on a migrated engine thread");
-
-    jpip::Request request;
-    Check(request.ParseTarget(
-                  "/jpip?stream=0&metareq=[*]!!&fsiz=1,1&rsiz=1,1&"
-                  "roff=0,0&cid=0"),
-          "Could not parse the migrated engine request");
-    bool begun = false;
-    string error;
-    thread begin([&] { begun = engine.Begin(request, gzip, &error); });
-    begin.join();
-    Check(begun, "Could not begin a response on a migrated engine thread");
-
-    vector<char> response;
-    vector<char> output(output_size);
-    server::ChannelEngine::GenerateResult result;
-    do {
-        int length = 0;
-        thread generate([&] {
-            result = engine.Generate(output.data(), output.size(), &length);
-        });
-        generate.join();
-        Check(result != server::ChannelEngine::GenerateResult::FAILED,
-              "Could not generate data on a migrated engine thread");
-        response.insert(response.end(), output.begin(), output.begin() + length);
-    } while (result != server::ChannelEngine::GenerateResult::COMPLETE);
-
-    thread finish([&] { engine.Finish(); });
-    finish.join();
-    return response;
-}
-
-static vector<char> Gunzip(const vector<char> &compressed) {
-    z_stream stream = {};
-    Check(inflateInit2(&stream, MAX_WBITS + 16) == Z_OK,
-          "Could not initialize migrated gzip validation");
-    stream.next_in = reinterpret_cast<Bytef *>(
-            const_cast<char *>(compressed.data()));
-    stream.avail_in = compressed.size();
-
-    vector<char> result;
-    char output[128];
-    int status;
-    do {
-        stream.next_out = reinterpret_cast<Bytef *>(output);
-        stream.avail_out = sizeof output;
-        status = inflate(&stream, Z_NO_FLUSH);
-        Check(status == Z_OK || status == Z_STREAM_END,
-              "Could not decompress the migrated gzip response");
-        result.insert(result.end(), output,
-                      output + sizeof output - stream.avail_out);
-    } while (status != Z_STREAM_END);
-    inflateEnd(&stream);
-    return result;
-}
-
-struct PooledResponse {
-    uv_loop_t loop;
-    server::ChannelWork *work = NULL;
-    jpip::Request request;
-    vector<char> output;
-    vector<char> response;
-    bool failed = false;
-
-    static void Completed(server::ChannelWork &work, void *owner) {
-        PooledResponse *self = static_cast<PooledResponse *>(owner);
-        const server::ChannelWork::Result &result = work.GetResult();
-        if (!result.error.empty()) {
-            cerr << result.error << endl;
-            self->failed = true;
-            return;
-        }
-
-        switch (result.kind) {
-        case server::ChannelWork::Kind::OPEN:
-            if (result.open !=
-                    server::FileManager::OpenResult::OPENED ||
-                !work.Begin(std::move(self->request), false,
-                            self->output.data(), self->output.size()))
-                self->failed = true;
-            break;
-        case server::ChannelWork::Kind::BEGIN:
-        case server::ChannelWork::Kind::GENERATE:
-            self->response.insert(self->response.end(), self->output.begin(),
-                                  self->output.begin() + result.length);
-            if (result.generation ==
-                server::ChannelEngine::GenerateResult::MORE) {
-                if (!work.Generate(self->output.data(), self->output.size()))
-                    self->failed = true;
-            } else if (result.generation ==
-                       server::ChannelEngine::GenerateResult::COMPLETE) {
-                if (!work.Cleanup())
-                    self->failed = true;
-            } else {
-                self->failed = true;
-            }
-            break;
-        case server::ChannelWork::Kind::CLEANUP:
-            break;
-        }
-    }
-
-    explicit PooledResponse(int output_size) : output(output_size) {
-    }
-
-    vector<char> Generate(const string &directory) {
-        Check(uv_loop_init(&loop) == 0,
-              "Could not initialize the channel-work test loop");
-        Check(request.ParseTarget(
-                      "/jpip?stream=0&metareq=[*]!!&fsiz=1,1&rsiz=1,1&"
-                      "roff=0,0&cid=0"),
-              "Could not parse the pooled channel request");
-        server::ChannelWork channel_work(&loop, 128, directory, Completed,
-                                         this);
-        work = &channel_work;
-        Check(work->IsInitialized() && work->Open("image.jp2"),
-              "Could not queue pooled image opening");
-        Check(!work->Open("image.jp2"),
-              "Queued concurrent work for one channel");
-        uv_run(&loop, UV_RUN_DEFAULT);
-        Check(!failed && !work->IsActive(),
-              "The pooled channel response failed");
-        work = NULL;
-        Check(uv_loop_close(&loop) == 0,
-              "The channel-work test loop retained handles");
-        return response;
-    }
-};
-
-static void CheckProgressionMappings() {
-    for (int progression = 0; progression <= 4; ++progression) {
-        jpip::CodingParameters parameters;
-        parameters.size = jpip::Size(19, 13);
-        parameters.num_levels = 3;
-        parameters.num_layers = 4;
-        parameters.num_components = 3;
-        parameters.progression = progression;
-        parameters.resolutions.emplace_back(1, 2);
-        parameters.resolutions.emplace_back(2, 1);
-        parameters.resolutions.emplace_back(3, 2);
-        parameters.resolutions.emplace_back(2, 3);
-        Check(parameters.FillPrecinctCounts(),
-              "Could not build progression-order test geometry");
-
-        vector<bool> seen(parameters.GetNumPackets());
-        int count = 0;
-        for (int layer = 0; layer < parameters.num_layers; ++layer)
-            for (int resolution = 0; resolution <= parameters.num_levels;
-                 ++resolution)
-                for (int component = 0;
-                     component < parameters.num_components; ++component)
-                    for (int y = 0;
-                         y < parameters.resolutions[resolution].num_precincts.y;
-                         ++y)
-                        for (int x = 0;
-                             x < parameters.resolutions[resolution].num_precincts.x;
-                             ++x) {
-                            int index = parameters.GetProgressionIndex(
-                                    jpip::Packet(
-                                            layer, resolution, component,
-                                            jpip::Point(x, y)));
-                            Check(index >= 0 &&
-                                          index < parameters.GetNumPackets() &&
-                                          !seen[index],
-                                  "Progression order does not map packets uniquely");
-                            seen[index] = true;
-                            ++count;
-                        }
-        Check(count == parameters.GetNumPackets(),
-              "Progression order does not cover every packet");
     }
 }
 
@@ -1111,12 +923,312 @@ static void CheckGeneratedCorpus() {
     Check(failures.empty(), "Generated JPEG 2000 corpus disagrees with the server");
 }
 
+static void CheckMappedResponses(server::FileManager &manager,
+                                 const string &directory) {
+    jpip::Request request;
+    Check(request.ParseTarget("/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
+          "Could not parse default-codestream request");
+    jpip::DataBinServer server;
+    Check(server.SetRequest(*manager.GetImage(), request),
+          "Rejected default codestream");
+    char response[4096];
+    int response_length = sizeof response;
+    bool last = false;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate default-codestream response");
+    Check(response_length > 0, "Generated empty default-codestream response");
+    Check(last, "Did not complete an unlimited response");
+    Check(response_length >= 3 && response[response_length - 3] == 0 &&
+              response[response_length - 2] == jpip::EOR::WINDOW_DONE &&
+              response[response_length - 1] == 0,
+          "Unlimited response has no window-done EOR");
+
+    server::FileManager many_layers_manager;
+    Check(OpenImage(directory, "many-layers.jp2", &many_layers_manager),
+          "Could not parse the many-layer response fixture");
+    jpip::Request many_layers_request;
+    Check(many_layers_request.ParseTarget(
+                  "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
+          "Could not parse the many-layer response request");
+    jpip::DataBinServer many_layers_server;
+    Check(many_layers_server.SetRequest(*many_layers_manager.GetImage(),
+                                        many_layers_request),
+          "Rejected the many-layer response request");
+    vector<char> many_layers_response(32768);
+    response_length = many_layers_response.size();
+    Check(many_layers_server.GenerateChunk(
+                  many_layers_manager, many_layers_response.data(),
+                  &response_length, &last),
+          "Could not generate the many-layer response");
+    Check(last && response_length > 10000 &&
+              many_layers_response[response_length - 3] == 0 &&
+              many_layers_response[response_length - 2] ==
+                      jpip::EOR::WINDOW_DONE &&
+              many_layers_response[response_length - 1] == 0,
+          "Did not complete the many-layer response");
+
+    jpip::Request default_window_request;
+    Check(default_window_request.ParseTarget("/jpip?fsiz=1,1&cid=0"),
+          "Could not parse a window with default region and offset");
+    jpip::DataBinServer default_window_server;
+    Check(default_window_server.SetRequest(*manager.GetImage(),
+                                           default_window_request),
+          "Rejected a window with default region and offset");
+    response_length = sizeof response;
+    Check(default_window_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a response for a window with defaults");
+    Check(response_length > 0 && last,
+          "Did not complete a response for a window with defaults");
+
+    server::FileManager window_manager;
+    Check(OpenImage(directory, "window-map.jp2", &window_manager),
+          "Could not parse the window-mapping fixture");
+    jpip::Request mapped_window_request;
+    Check(mapped_window_request.ParseTarget(
+                  "/jpip?fsiz=3,1&rsiz=1,1&roff=1,0&"
+                  "model=M0,Hm,H0&cid=0"),
+          "Could not parse a scaled window request");
+    jpip::DataBinServer mapped_window_server;
+    Check(mapped_window_server.SetRequest(*window_manager.GetImage(),
+                                           mapped_window_request),
+          "Rejected a scaled window request");
+    char mapped_window_response[4096];
+    int mapped_window_length = sizeof mapped_window_response;
+    Check(mapped_window_server.GenerateChunk(
+                  window_manager, mapped_window_response,
+                  &mapped_window_length, &last) && last,
+          "Could not generate a scaled window response");
+
+    jpip::Request full_window_request;
+    Check(full_window_request.ParseTarget(
+                  "/jpip?fsiz=2,1&rsiz=2,1&roff=0,0&"
+                  "model=M0,Hm,H0&cid=0"),
+          "Could not parse the equivalent full window request");
+    jpip::DataBinServer full_window_server;
+    Check(full_window_server.SetRequest(*window_manager.GetImage(),
+                                        full_window_request),
+          "Rejected the equivalent full window request");
+    char full_window_response[4096];
+    int full_window_length = sizeof full_window_response;
+    Check(full_window_server.GenerateChunk(
+                  window_manager, full_window_response,
+                  &full_window_length, &last) && last,
+          "Could not generate the equivalent full window response");
+    Check(mapped_window_length == full_window_length &&
+                  equal(mapped_window_response,
+                        mapped_window_response + mapped_window_length,
+                        full_window_response),
+          "Scaled window boundaries selected the wrong precincts");
+    Check(full_window_length > jpip::DataBinWriter::EOR_LENGTH,
+          "Full window fixture selected no precincts");
+
+    for (const char *query : {
+                 "/jpip?fsiz=2,1&roff=-1,0&model=M0,Hm,H0&cid=0",
+                 "/jpip?fsiz=2,1&roff=-2147483648,0&model=M0,Hm,H0&cid=0"}) {
+        jpip::Request default_region_request;
+        Check(default_region_request.ParseTarget(query),
+              "Could not parse a negative offset with default region");
+        jpip::DataBinServer default_region_server;
+        Check(default_region_server.SetRequest(*window_manager.GetImage(),
+                                               default_region_request),
+              "Rejected a negative offset with default region");
+        char default_region_response[4096];
+        int default_region_length = sizeof default_region_response;
+        Check(default_region_server.GenerateChunk(
+                      window_manager, default_region_response,
+                      &default_region_length, &last) && last,
+              "Could not generate a default-region response");
+        Check(default_region_length == full_window_length &&
+                      equal(default_region_response,
+                            default_region_response + default_region_length,
+                            full_window_response),
+              "Default region with negative offset did not reach the image edge");
+    }
+
+    for (int response_limit = 0; response_limit < jpip::DataBinWriter::EOR_LENGTH;
+         response_limit++) {
+        jpip::DataBinServer short_server;
+        jpip::Request short_request;
+        Check(short_request.ParseTarget("/jpip?len=" + to_string(response_limit) +
+                                  "&cid=0"),
+              "Could not parse a response limit shorter than an EOR message");
+        Check(short_server.SetRequest(*manager.GetImage(), short_request),
+              "Rejected a short response limit");
+        response_length = sizeof response;
+        Check(short_server.GenerateChunk(manager, response, &response_length, &last),
+              "Could not generate a short limited response");
+        Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
+                  response[0] == 0 &&
+                  response[1] == jpip::EOR::BYTE_LIMIT_REACHED &&
+                  response[2] == 0,
+              "Short limited response has no byte-limit EOR");
+    }
+
+    jpip::DataBinServer limited_server;
+    jpip::Request limited_request;
+    Check(limited_request.ParseTarget(
+              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0"),
+          "Could not parse a limited request");
+    Check(limited_server.SetRequest(*manager.GetImage(), limited_request),
+          "Rejected a limited request");
+    response_length = sizeof response;
+    Check(limited_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a limited response");
+    Check(last && response_length <= 128 && response_length >= 3 &&
+              response[response_length - 3] == 0 &&
+              response[response_length - 2] == jpip::EOR::BYTE_LIMIT_REACHED &&
+              response[response_length - 1] == 0,
+          "Limited response has no byte-limit EOR");
+
+    jpip::DataBinServer model_server;
+    jpip::Request model_request;
+    Check(model_request.ParseTarget("/jpip?model=M0,Hm,H0,P0&cid=0") &&
+              model_server.SetRequest(*manager.GetImage(), model_request),
+          "Rejected a valid cache model");
+    Check(RejectDataRequest(manager,
+                           "/jpip?model=M2147483647&cid=0"),
+          "Accepted an unavailable metadata bin");
+    Check(RejectDataRequest(manager,
+                           "/jpip?model=[0-100000]Hm&cid=0"),
+          "Accepted an unavailable cache-model codestream range");
+    Check(RejectDataRequest(manager,
+                           "/jpip?model=P2147483647&cid=0"),
+          "Accepted an unavailable precinct bin");
+    Check(RejectDataRequest(manager, "/jpip?model=H1&cid=0"),
+          "Accepted an unavailable tile-header bin");
+
+    jpip::Request headers_only_request;
+    Check(headers_only_request.ParseTarget(
+              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0"),
+          "Could not parse a headers-only request");
+    Check(server.SetRequest(*manager.GetImage(), headers_only_request),
+          "Rejected a headers-only request");
+    response_length = sizeof response;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a headers-only response");
+    Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
+              response[0] == 0 && response[1] == jpip::EOR::WINDOW_DONE &&
+              response[2] == 0,
+          "Headers-only response has no window-done EOR");
+
+    jpip::Request unlimited_request;
+    Check(unlimited_request.ParseTarget(
+              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
+          "Could not parse a second unlimited request");
+    Check(server.SetRequest(*manager.GetImage(), unlimited_request),
+          "Rejected a second unlimited request");
+    response_length = sizeof response;
+    Check(server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a second unlimited response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A previous response limit affected an unlimited response");
+
+    jpip::Request cropped_request;
+    Check(cropped_request.ParseTarget(
+              "/jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
+              "roff=-5,-5&len=512&cid=0"),
+          "Could not parse a partially overlapping window");
+    jpip::DataBinServer cropped_server;
+    Check(cropped_server.SetRequest(*manager.GetImage(), cropped_request),
+          "Rejected a partially overlapping window");
+    response_length = sizeof response;
+    Check(cropped_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a cropped-window response");
+
+    jpip::Request outside_request;
+    Check(outside_request.ParseTarget(
+              "/jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
+              "roff=2000000000,2000000000&len=512&cid=0"),
+          "Could not parse an out-of-range window");
+    jpip::DataBinServer outside_server;
+    Check(outside_server.SetRequest(*manager.GetImage(), outside_request),
+          "Rejected a window outside the image");
+    response_length = sizeof response;
+    Check(outside_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate an empty-window response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "An outside window did not produce only a window-done EOR");
+
+    jpip::Request empty_request;
+    Check(empty_request.ParseTarget(
+              "/jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0"),
+          "Could not parse an empty window");
+    jpip::DataBinServer empty_server;
+    Check(empty_server.SetRequest(*manager.GetImage(), empty_request),
+          "Rejected an empty window");
+    response_length = sizeof response;
+    Check(empty_server.GenerateChunk(manager, response, &response_length, &last),
+          "Could not generate a zero-sized-window response");
+    Check(response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A zero-sized window did not produce only a window-done EOR");
+
+    jpip::Request unavailable_stream_request;
+    Check(unavailable_stream_request.ParseTarget(
+              "/jpip?stream=1&fsiz=1,1&rsiz=1,1&roff=0,0&len=512&cid=0"),
+          "Could not parse unavailable codestream request");
+    jpip::DataBinServer unavailable_stream_server;
+    Check(unavailable_stream_server.SetRequest(*manager.GetImage(),
+                                                unavailable_stream_request),
+          "Rejected a non-existent codestream instead of ignoring it");
+    response_length = sizeof response;
+    Check(unavailable_stream_server.GenerateChunk(
+                  manager, response, &response_length, &last) &&
+              response_length == 3 && last && response[0] == 0 &&
+              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
+          "A non-existent codestream did not produce an empty response");
+
+}
+
+static void CheckSourceOwnership() {
+    char name[] = "/tmp/esajpip-source-XXXXXX";
+    Check(mkdtemp(name) != NULL, "Could not create ownership fixture directory");
+    string directory = string(name) + "/";
+    vector<unsigned char> bytes = MakeJP2(MakeCodestream());
+    WriteFile(directory + "first.jp2", bytes);
+    WriteFile(directory + "second.jp2", bytes);
+    server::FileManager manager;
+    Check(OpenImage(directory, "first.jp2", &manager), "Could not open ownership fixture");
+    string first = directory + "first.jp2", second = directory + "second.jp2";
+    const jpip::Source *source = manager.GetSource(first);
+    Check(source != NULL && manager.GetSource(first) == source,
+          "Repeated acquisition did not reuse the live source");
+    const jpip::Source *other = manager.GetSource(second);
+    Check(other != NULL && other != source, "Distinct sources shared a map entry");
+    manager.ReleaseSource(second);
+    unsigned char signature[12];
+    Check(manager.GetSource(first) == source && source->Read(0, signature, sizeof signature) &&
+                  equal(signature, signature + sizeof signature, bytes.begin()),
+          "Releasing another source invalidated the live source");
+    manager.ReleaseSource(first);
+    manager.ReleaseSource(first); // Repeated release is harmless.
+    source = manager.GetSource(first);
+    Check(source != NULL && source->Read(0, signature, sizeof signature),
+          "Released source could not be reacquired");
+    manager.ClearFiles();
+    manager.ClearFiles();
+    const jpip::Source *reopened = manager.GetSource(first);
+    Check(reopened != NULL && reopened->Read(0, signature, sizeof signature) &&
+                  equal(signature, signature + sizeof signature, bytes.begin()),
+          "Cleared mappings could not be reacquired with the same bytes");
+    string missing = directory + "missing.jp2";
+    Check(manager.GetSource(missing) == NULL && manager.GetSource(missing) == NULL &&
+                  manager.GetSource(first) == reopened,
+          "Failed acquisition retained an unusable entry or invalidated a live one");
+    WriteFile(missing, bytes);
+    Check(manager.GetSource(missing) != NULL, "Failed source entry prevented later acquisition");
+    manager.ClearFiles();
+    RemoveDirectory(name);
+}
+
 int main() {
+    CheckSourceOwnership();
     CheckGeneratedCorpus();
     CheckLinkedGraphs();
-    CheckProgressionMappings();
 
-    char directory_template[] = "/tmp/esajpip-jpeg2000-XXXXXX";
+    char directory_template[] = "/tmp/esajpip-file-manager-XXXXXX";
     char *directory_name = mkdtemp(directory_template);
     Check(directory_name != NULL, "Could not create JPEG 2000 test directory");
     string directory = string(directory_name) + "/";
@@ -1332,17 +1444,6 @@ int main() {
     WriteFile(outside_file, jp2);
     WriteFile(directory + "outside-linked.jpx",
               MakeLinkedJPX(outside_file, codestream.size()));
-
-    vector<char> plain_engine_response =
-            GenerateEngineResponse(directory, false, 128);
-    vector<char> gzip_engine_response =
-            GenerateEngineResponse(directory, true, 8);
-    Check(!plain_engine_response.empty() &&
-                  Gunzip(gzip_engine_response) == plain_engine_response,
-          "Migrating the channel engine changed the generated response");
-    PooledResponse pooled_response(128);
-    Check(pooled_response.Generate(directory) == plain_engine_response,
-          "Pool scheduling changed the generated response");
 
     server::FileManager manager;
     Check(OpenImage(directory, "image.jp2", &manager), "Could not parse valid JP2");
@@ -2009,260 +2110,10 @@ int main() {
     Check(!OpenImage(directory, "bad-fragment.jpx", &fragment_manager),
           "Accepted invalid JPX fragment range");
 
-    jpip::Request request;
-    Check(request.ParseTarget("/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
-          "Could not parse default-codestream request");
-    jpip::DataBinServer server;
-    Check(server.SetRequest(*manager.GetImage(), request),
-          "Rejected default codestream");
+    CheckMappedResponses(manager, directory);
     char response[4096];
-    int response_length = sizeof response;
+    int response_length;
     bool last = false;
-    Check(server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate default-codestream response");
-    Check(response_length > 0, "Generated empty default-codestream response");
-    Check(last, "Did not complete an unlimited response");
-    Check(response_length >= 3 && response[response_length - 3] == 0 &&
-              response[response_length - 2] == jpip::EOR::WINDOW_DONE &&
-              response[response_length - 1] == 0,
-          "Unlimited response has no window-done EOR");
-
-    server::FileManager many_layers_manager;
-    Check(OpenImage(directory, "many-layers.jp2", &many_layers_manager),
-          "Could not parse the many-layer response fixture");
-    jpip::Request many_layers_request;
-    Check(many_layers_request.ParseTarget(
-                  "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
-          "Could not parse the many-layer response request");
-    jpip::DataBinServer many_layers_server;
-    Check(many_layers_server.SetRequest(*many_layers_manager.GetImage(),
-                                        many_layers_request),
-          "Rejected the many-layer response request");
-    vector<char> many_layers_response(32768);
-    response_length = many_layers_response.size();
-    Check(many_layers_server.GenerateChunk(
-                  many_layers_manager, many_layers_response.data(),
-                  &response_length, &last),
-          "Could not generate the many-layer response");
-    Check(last && response_length > 10000 &&
-              many_layers_response[response_length - 3] == 0 &&
-              many_layers_response[response_length - 2] ==
-                      jpip::EOR::WINDOW_DONE &&
-              many_layers_response[response_length - 1] == 0,
-          "Did not complete the many-layer response");
-
-    jpip::Request default_window_request;
-    Check(default_window_request.ParseTarget("/jpip?fsiz=1,1&cid=0"),
-          "Could not parse a window with default region and offset");
-    jpip::DataBinServer default_window_server;
-    Check(default_window_server.SetRequest(*manager.GetImage(),
-                                           default_window_request),
-          "Rejected a window with default region and offset");
-    response_length = sizeof response;
-    Check(default_window_server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a response for a window with defaults");
-    Check(response_length > 0 && last,
-          "Did not complete a response for a window with defaults");
-
-    server::FileManager window_manager;
-    Check(OpenImage(directory, "window-map.jp2", &window_manager),
-          "Could not parse the window-mapping fixture");
-    jpip::Request mapped_window_request;
-    Check(mapped_window_request.ParseTarget(
-                  "/jpip?fsiz=3,1&rsiz=1,1&roff=1,0&"
-                  "model=M0,Hm,H0&cid=0"),
-          "Could not parse a scaled window request");
-    jpip::DataBinServer mapped_window_server;
-    Check(mapped_window_server.SetRequest(*window_manager.GetImage(),
-                                           mapped_window_request),
-          "Rejected a scaled window request");
-    char mapped_window_response[4096];
-    int mapped_window_length = sizeof mapped_window_response;
-    Check(mapped_window_server.GenerateChunk(
-                  window_manager, mapped_window_response,
-                  &mapped_window_length, &last) && last,
-          "Could not generate a scaled window response");
-
-    jpip::Request full_window_request;
-    Check(full_window_request.ParseTarget(
-                  "/jpip?fsiz=2,1&rsiz=2,1&roff=0,0&"
-                  "model=M0,Hm,H0&cid=0"),
-          "Could not parse the equivalent full window request");
-    jpip::DataBinServer full_window_server;
-    Check(full_window_server.SetRequest(*window_manager.GetImage(),
-                                        full_window_request),
-          "Rejected the equivalent full window request");
-    char full_window_response[4096];
-    int full_window_length = sizeof full_window_response;
-    Check(full_window_server.GenerateChunk(
-                  window_manager, full_window_response,
-                  &full_window_length, &last) && last,
-          "Could not generate the equivalent full window response");
-    Check(mapped_window_length == full_window_length &&
-                  equal(mapped_window_response,
-                        mapped_window_response + mapped_window_length,
-                        full_window_response),
-          "Scaled window boundaries selected the wrong precincts");
-    Check(full_window_length > jpip::DataBinWriter::EOR_LENGTH,
-          "Full window fixture selected no precincts");
-
-    for (const char *query : {
-                 "/jpip?fsiz=2,1&roff=-1,0&model=M0,Hm,H0&cid=0",
-                 "/jpip?fsiz=2,1&roff=-2147483648,0&model=M0,Hm,H0&cid=0"}) {
-        jpip::Request default_region_request;
-        Check(default_region_request.ParseTarget(query),
-              "Could not parse a negative offset with default region");
-        jpip::DataBinServer default_region_server;
-        Check(default_region_server.SetRequest(*window_manager.GetImage(),
-                                               default_region_request),
-              "Rejected a negative offset with default region");
-        char default_region_response[4096];
-        int default_region_length = sizeof default_region_response;
-        Check(default_region_server.GenerateChunk(
-                      window_manager, default_region_response,
-                      &default_region_length, &last) && last,
-              "Could not generate a default-region response");
-        Check(default_region_length == full_window_length &&
-                      equal(default_region_response,
-                            default_region_response + default_region_length,
-                            full_window_response),
-              "Default region with negative offset did not reach the image edge");
-    }
-
-    for (int response_limit = 0; response_limit < jpip::DataBinWriter::EOR_LENGTH;
-         response_limit++) {
-        jpip::DataBinServer short_server;
-        jpip::Request short_request;
-        Check(short_request.ParseTarget("/jpip?len=" + to_string(response_limit) +
-                                  "&cid=0"),
-              "Could not parse a response limit shorter than an EOR message");
-        Check(short_server.SetRequest(*manager.GetImage(), short_request),
-              "Rejected a short response limit");
-        response_length = sizeof response;
-        Check(short_server.GenerateChunk(manager, response, &response_length, &last),
-              "Could not generate a short limited response");
-        Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
-                  response[0] == 0 &&
-                  response[1] == jpip::EOR::BYTE_LIMIT_REACHED &&
-                  response[2] == 0,
-              "Short limited response has no byte-limit EOR");
-    }
-
-    jpip::DataBinServer limited_server;
-    jpip::Request limited_request;
-    Check(limited_request.ParseTarget(
-              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=128&cid=0"),
-          "Could not parse a limited request");
-    Check(limited_server.SetRequest(*manager.GetImage(), limited_request),
-          "Rejected a limited request");
-    response_length = sizeof response;
-    Check(limited_server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a limited response");
-    Check(last && response_length <= 128 && response_length >= 3 &&
-              response[response_length - 3] == 0 &&
-              response[response_length - 2] == jpip::EOR::BYTE_LIMIT_REACHED &&
-              response[response_length - 1] == 0,
-          "Limited response has no byte-limit EOR");
-
-    jpip::DataBinServer model_server;
-    jpip::Request model_request;
-    Check(model_request.ParseTarget("/jpip?model=M0,Hm,H0,P0&cid=0") &&
-              model_server.SetRequest(*manager.GetImage(), model_request),
-          "Rejected a valid cache model");
-    Check(RejectDataRequest(manager,
-                           "/jpip?model=M2147483647&cid=0"),
-          "Accepted an unavailable metadata bin");
-    Check(RejectDataRequest(manager,
-                           "/jpip?model=[0-100000]Hm&cid=0"),
-          "Accepted an unavailable cache-model codestream range");
-    Check(RejectDataRequest(manager,
-                           "/jpip?model=P2147483647&cid=0"),
-          "Accepted an unavailable precinct bin");
-    Check(RejectDataRequest(manager, "/jpip?model=H1&cid=0"),
-          "Accepted an unavailable tile-header bin");
-
-    jpip::Request headers_only_request;
-    Check(headers_only_request.ParseTarget(
-              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&len=0&cid=0"),
-          "Could not parse a headers-only request");
-    Check(server.SetRequest(*manager.GetImage(), headers_only_request),
-          "Rejected a headers-only request");
-    response_length = sizeof response;
-    Check(server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a headers-only response");
-    Check(response_length == jpip::DataBinWriter::EOR_LENGTH && last &&
-              response[0] == 0 && response[1] == jpip::EOR::WINDOW_DONE &&
-              response[2] == 0,
-          "Headers-only response has no window-done EOR");
-
-    jpip::Request unlimited_request;
-    Check(unlimited_request.ParseTarget(
-              "/jpip?fsiz=1,1&rsiz=1,1&roff=0,0&cid=0"),
-          "Could not parse a second unlimited request");
-    Check(server.SetRequest(*manager.GetImage(), unlimited_request),
-          "Rejected a second unlimited request");
-    response_length = sizeof response;
-    Check(server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a second unlimited response");
-    Check(response_length == 3 && last && response[0] == 0 &&
-              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
-          "A previous response limit affected an unlimited response");
-
-    jpip::Request cropped_request;
-    Check(cropped_request.ParseTarget(
-              "/jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
-              "roff=-5,-5&len=512&cid=0"),
-          "Could not parse a partially overlapping window");
-    jpip::DataBinServer cropped_server;
-    Check(cropped_server.SetRequest(*manager.GetImage(), cropped_request),
-          "Rejected a partially overlapping window");
-    response_length = sizeof response;
-    Check(cropped_server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a cropped-window response");
-
-    jpip::Request outside_request;
-    Check(outside_request.ParseTarget(
-              "/jpip?fsiz=4096,4096&rsiz=2000000000,2000000000&"
-              "roff=2000000000,2000000000&len=512&cid=0"),
-          "Could not parse an out-of-range window");
-    jpip::DataBinServer outside_server;
-    Check(outside_server.SetRequest(*manager.GetImage(), outside_request),
-          "Rejected a window outside the image");
-    response_length = sizeof response;
-    Check(outside_server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate an empty-window response");
-    Check(response_length == 3 && last && response[0] == 0 &&
-              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
-          "An outside window did not produce only a window-done EOR");
-
-    jpip::Request empty_request;
-    Check(empty_request.ParseTarget(
-              "/jpip?fsiz=4096,4096&rsiz=0,1&roff=0,0&len=512&cid=0"),
-          "Could not parse an empty window");
-    jpip::DataBinServer empty_server;
-    Check(empty_server.SetRequest(*manager.GetImage(), empty_request),
-          "Rejected an empty window");
-    response_length = sizeof response;
-    Check(empty_server.GenerateChunk(manager, response, &response_length, &last),
-          "Could not generate a zero-sized-window response");
-    Check(response_length == 3 && last && response[0] == 0 &&
-              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
-          "A zero-sized window did not produce only a window-done EOR");
-
-    jpip::Request unavailable_stream_request;
-    Check(unavailable_stream_request.ParseTarget(
-              "/jpip?stream=1&fsiz=1,1&rsiz=1,1&roff=0,0&len=512&cid=0"),
-          "Could not parse unavailable codestream request");
-    jpip::DataBinServer unavailable_stream_server;
-    Check(unavailable_stream_server.SetRequest(*manager.GetImage(),
-                                                unavailable_stream_request),
-          "Rejected a non-existent codestream instead of ignoring it");
-    response_length = sizeof response;
-    Check(unavailable_stream_server.GenerateChunk(
-                  manager, response, &response_length, &last) &&
-              response_length == 3 && last && response[0] == 0 &&
-              response[1] == jpip::EOR::WINDOW_DONE && response[2] == 0,
-          "A non-existent codestream did not produce an empty response");
 
     jpip::Request missing_file_request;
     Check(missing_file_request.ParseTarget("/jpip?stream=0&len=512&cid=0"),

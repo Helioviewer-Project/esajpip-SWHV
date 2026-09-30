@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 #include "jpip/index/coding_parameters.h"
 #include "jpip/index/packet_index.h"
@@ -169,7 +170,52 @@ static void CheckResolutionSelection() {
 
 }
 
+static void CheckProgressionMappings() {
+    for (int progression = 0; progression <= 4; ++progression) {
+        jpip::CodingParameters parameters;
+        parameters.size = jpip::Size(19, 13);
+        parameters.num_levels = 3;
+        parameters.num_layers = 4;
+        parameters.num_components = 3;
+        parameters.progression = progression;
+        parameters.resolutions.emplace_back(1, 2);
+        parameters.resolutions.emplace_back(2, 1);
+        parameters.resolutions.emplace_back(3, 2);
+        parameters.resolutions.emplace_back(2, 3);
+        Check(parameters.FillPrecinctCounts(),
+              "Could not build progression-order test geometry");
+
+        vector<bool> seen(parameters.GetNumPackets());
+        int count = 0;
+        for (int layer = 0; layer < parameters.num_layers; ++layer)
+            for (int resolution = 0; resolution <= parameters.num_levels;
+                 ++resolution)
+                for (int component = 0;
+                     component < parameters.num_components; ++component)
+                    for (int y = 0;
+                         y < parameters.resolutions[resolution].num_precincts.y;
+                         ++y)
+                        for (int x = 0;
+                             x < parameters.resolutions[resolution].num_precincts.x;
+                             ++x) {
+                            int index = parameters.GetProgressionIndex(
+                                    jpip::Packet(
+                                            layer, resolution, component,
+                                            jpip::Point(x, y)));
+                            Check(index >= 0 &&
+                                          index < parameters.GetNumPackets() &&
+                                          !seen[index],
+                                  "Progression order does not map packets uniquely");
+                            seen[index] = true;
+                            ++count;
+                        }
+        Check(count == parameters.GetNumPackets(),
+              "Progression order does not cover every packet");
+    }
+}
+
 int main() {
+    CheckProgressionMappings();
     CheckProgressionIndexes();
     CheckPacketIndexBounds();
     CheckResolutionSelection();

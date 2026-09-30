@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
+#include <set>
+#include <vector>
 
 #include "jpip/response/woi_composer.h"
 
@@ -95,7 +97,60 @@ static void CheckWOIPackets() {
           "Mapped the decomposition-limit window to the wrong precinct");
 }
 
+static void CheckWindowSequence() {
+    jpip::CodingParameters coding;
+    coding.size = jpip::Size(17, 11);
+    coding.num_levels = 2;
+    coding.num_components = 3;
+    coding.num_layers = 2;
+    coding.resolutions.emplace_back(2, 1);
+    coding.resolutions.emplace_back(2, 2);
+    coding.resolutions.emplace_back(4, 2);
+    Check(coding.FillPrecinctCounts(), "Could not build 2D window geometry");
+    jpip::WOIComposer composer;
+    Check(!composer.HasPacket() && !composer.GetNextPacket(&coding),
+          "A new composer exposed a packet");
+    struct Case { int x, y, width, height, resolution; };
+    const Case cases[] = {{0,0,17,11,2}, {4,2,1,1,2}, {3,1,2,2,2},
+                          {16,10,1,1,2}, {1,1,7,4,1}, {0,0,5,3,0}};
+    for (const Case &test : cases) {
+        vector<jpip::Packet> expected;
+        // Enumerate the window's pixels and deduplicate intersecting precincts.
+        // The reference uses no production coordinate or progression helpers.
+        for (int layer = 0; layer < coding.num_layers; ++layer)
+            for (int resolution = 0; resolution <= test.resolution; ++resolution) {
+                set<pair<int,int>> precincts;
+                int scale = 1 << (test.resolution - resolution);
+                const jpip::Size &size = coding.resolutions[resolution].precinct_size;
+                for (int y = test.y; y < test.y + test.height; ++y)
+                    for (int x = test.x; x < test.x + test.width; ++x)
+                        precincts.emplace(y / scale / size.y, x / scale / size.x);
+                for (int component = 0; component < coding.num_components; ++component)
+                    for (const pair<int,int> &xy : precincts)
+                        expected.emplace_back(layer, resolution, component,
+                                              jpip::Point(xy.second, xy.first));
+            }
+        composer.Reset(&coding, jpip::WOI(jpip::Point(test.x,test.y),
+                                        jpip::Size(test.width,test.height), test.resolution));
+        for (size_t i = 0; i < expected.size(); ++i) {
+            Check(composer.HasPacket(), "Window traversal stopped before its final packet");
+            const jpip::Packet &actual = composer.GetCurrentPacket();
+            const jpip::Packet &want = expected[i];
+            Check(actual.layer == want.layer && actual.resolution == want.resolution &&
+                          actual.component == want.component && actual.precinct_xy == want.precinct_xy,
+                  "Window traversal differs from the independent LRCP sequence");
+            Check(composer.GetNextPacket(&coding) == (i + 1 < expected.size()),
+                  "Window traversal has the wrong completion boundary");
+        }
+        Check(!composer.HasPacket() && !composer.GetNextPacket(&coding),
+              "Exhausted window exposed another packet");
+        // Reset again before finishing the first layer, as a new request does.
+        composer.Reset(&coding, jpip::WOI(jpip::Point(0,0),jpip::Size(1,1),0));
+    }
+}
+
 int main() {
+    CheckWindowSequence();
     CheckWOIPackets();
     return EXIT_SUCCESS;
 }

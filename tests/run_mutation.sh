@@ -68,7 +68,8 @@ for file in "$@"; do
 done
 
 cmake -S "$src" -B "$build" -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF >"$work/configure.log"
+    -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+    -DESAJPIP_TEST_TIMEOUT="$timeout" >"$work/configure.log"
 
 # ctest's status, and whether a test timed out, for the current copy.
 run_tests() {

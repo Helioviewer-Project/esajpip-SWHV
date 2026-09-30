@@ -13,7 +13,7 @@ tests/
   jpip/            jpip: source/, index/, request/, response/ (see jpip/README.md)
   transcode/       hv_transcode: the library and its command line (fixtures/)
   merge/           hv_merge: the library and its command line (fixtures/)
-  server/          the server's own tests
+  server/          storage, channel, HTTP and live-server tests (see server/README.md)
   fuzz/            corpus replay, plus libFuzzer targets with ESAJPIP_FUZZ=ON
   vectors/j2k/     the corpus and its manifest, shared by reader and server
 ```
@@ -25,7 +25,7 @@ From the repository root:
 ./tests/run.sh sanitize
 ./tests/run.sh normal -L tools
 ESAJPIP_TEST_TARGETS=jpip_tests ./tests/run.sh normal -L '^jpip$'
-./tests/run.sh normal -R '^server$'
+ESAJPIP_TEST_TARGETS=server_tests ./tests/run.sh normal -L '^server$'
 ./tests/run.sh normal -N                   # list without running
 ```
 
@@ -57,7 +57,8 @@ Options:
 CTest labels: `tools` (jpeg2000, jpip and the two tools), `server`, `cli` (the two
 command-line tests), `model` (`model_static`) and `fuzz` (the fuzz targets).
 The JPIP library also has the `jpip` label and responsibility labels described
-in [its test guide](jpip/README.md).
+in [its test guide](jpip/README.md). The server has `server_tests` and
+responsibility labels described in [its test guide](server/README.md).
 For an already built tree, `ctest --test-dir build --output-on-failure` remains
 sufficient.
 
@@ -170,12 +171,16 @@ build/profile-fuzz/tests/fuzz/fuzz_transcode -jobs=8 -workers=8 \
 | `jpip_writer` | Exact JPP writer bytes, coalescing, capacity boundaries and metadata placeholders on memory sources. |
 | `jpip_library` | Stateful response generation and independent reconstruction of bins across budgets, remapping and repeated windows. |
 | `server_support` | Configuration boundaries and missing keys, address resolution and mapped-source integration. |
-| `jpeg2000` | Every committed source-vector label, all declared packets in accepted vectors, linked graphs, progression order, malformed file boundaries, and worker migration/serialization. |
-| `server_connection` | Incremental HTTP parsing and direct libuv connection callbacks, deadline transitions, ordered writes and graceful closure. |
+| `server_storage` | Every committed source-vector label, declared packet ranges, linked graphs, malformed files, mapped-source responses and acquisition/release/retry ownership. |
+| `server_engine` | Thread migration and exact plain/gzip response equivalence. |
+| `server_worker` | Worker serialization, queued/started cancellation, completion, cleanup and reuse. |
+| `server_http` | Split-point and bytewise HTTP parsing, pipeline boundaries, reset and exact limits. |
+| `server_overlap` | Real overlapping exchanges, busy admission, waiting/active disconnects and generation failures before/after HTTP headers. |
+| `server_connection` | Direct libuv connection callbacks, deadline transitions, ordered writes and graceful closure. |
 | `server` | The real serving loop: HTTP status/headers, admission, limits, channel routing, disconnects and shutdown. Its independent JPP reader reconstructs and verifies source bytes across the full response matrix and stateful scenarios. |
 | `fuzz_replay_*` | Deterministic replay of the generated per-target seed corpora through the same assertions used by the libFuzzer targets. |
 
-`reader_profile` and `jpeg2000` read the same corpus, so a corpus change
+`reader_profile` and `server_storage` read the same corpus, so a corpus change
 concerns both the library and the server. The live JPP checks replace the old
 nonempty-body gzip and partial-model smoke tests. Matrix and stateful requests
 share one response-draining loop. Configuration cases alter one setting in one

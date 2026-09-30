@@ -235,7 +235,7 @@ fixture, the Debian build).
 When a model or parser rule changes:
 
 1. Regenerate the corpus and review every manifest label change.
-2. Run `jpeg2000_test`, which checks opening and every declared packet for all
+2. Run `file_manager_test`, which checks opening and every declared packet for all
    profile-valid rows and confirms rejection of every profile-invalid row.
 3. Update this map when a rule class, served-profile decision, or coverage
    boundary changes. Individual edge vectors remain discoverable in the

@@ -1,5 +1,22 @@
-# Server integration tests. JPEG 2000 and JPIP behavior now comes from
-# jpip; tests/jpip covers library algorithms independently of the server.
+# Adapters and lifecycle tests; library-only algorithms live in tests/jpip.
+add_custom_target(server_tests)
+
+function(server_add_test target name group source)
+    add_executable(${target} ${source})
+    esajpip_configure_target(${target})
+    target_link_libraries(${target} PRIVATE esajpip_server)
+    if(group STREQUAL "live")
+        set(timeout 90)
+    else()
+        set(timeout 30)
+    endif()
+    esajpip_add_test(${name} COMMAND ${target} LABELS server server_${group} TIMEOUT ${timeout})
+    if(group STREQUAL "live")
+        get_test_property(${name} TIMEOUT timeout)
+        target_compile_definitions(${target} PRIVATE ESAJPIP_LIVE_TEST_TIMEOUT=${timeout})
+    endif()
+    add_dependencies(server_tests ${target})
+endfunction()
 
 add_executable(logging_test logging_test.cc ${PROJECT_SOURCE_DIR}/server/trace.cc)
 esajpip_configure_target(logging_test)
@@ -8,29 +25,21 @@ target_compile_definitions(logging_test PRIVATE
     ESAJPIP_LOG_QUEUE_LIMIT=4096)
 target_include_directories(logging_test PRIVATE ${PROJECT_SOURCE_DIR})
 target_link_libraries(logging_test PRIVATE Threads::Threads)
-esajpip_add_test(logging COMMAND logging_test LABELS server)
+esajpip_add_test(logging COMMAND logging_test LABELS server server_support TIMEOUT 30)
+add_dependencies(server_tests logging_test)
 
-add_executable(support_test support_test.cc)
-esajpip_configure_target(support_test)
-target_link_libraries(support_test PRIVATE esajpip_server)
-esajpip_add_test(server_support COMMAND support_test LABELS server)
-
-add_executable(server_test server_test.cc)
-esajpip_configure_target(server_test)
-target_link_libraries(server_test PRIVATE esajpip_server)
-esajpip_add_test(server COMMAND server_test LABELS server)
-
-add_executable(server_connection_test server_connection_test.cc)
-esajpip_configure_target(server_connection_test)
-target_link_libraries(server_connection_test PRIVATE esajpip_server)
-esajpip_add_test(server_connection COMMAND server_connection_test LABELS server)
-
-set_tests_properties(server server_connection PROPERTIES
-    RESOURCE_LOCK server_ports)
-
-add_executable(jpeg2000_test jpeg2000_test.cc)
-esajpip_configure_target(jpeg2000_test)
-target_compile_definitions(jpeg2000_test PRIVATE
+server_add_test(support_test server_support support support_test.cc)
+server_add_test(file_manager_test server_storage storage file_manager_test.cc)
+target_compile_definitions(file_manager_test PRIVATE
     JPEG2000_VECTOR_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/vectors/j2k")
-target_link_libraries(jpeg2000_test PRIVATE esajpip_server)
-esajpip_add_test(jpeg2000 COMMAND jpeg2000_test LABELS server)
+server_add_test(channel_engine_test server_engine channel channel_engine_test.cc)
+server_add_test(channel_work_test server_worker channel channel_work_test.cc)
+server_add_test(server_overlap_test server_overlap live server_overlap_test.cc)
+foreach(target channel_engine_test channel_work_test server_overlap_test)
+    target_compile_definitions(${target} PRIVATE
+        VECTORS="${PROJECT_SOURCE_DIR}/tests/vectors/j2k")
+endforeach()
+server_add_test(request_head_test server_http http request_head_test.cc)
+server_add_test(server_connection_test server_connection http server_connection_test.cc)
+server_add_test(server_test server live server_test.cc)
+set_tests_properties(server server_overlap server_connection PROPERTIES RESOURCE_LOCK server_ports)

@@ -6,7 +6,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstring>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -16,7 +15,6 @@
 
 #include <uv.h>
 
-#include "jpip/request/request.h"
 #include "server/http/connection.h"
 
 using namespace std;
@@ -28,69 +26,6 @@ void Check(bool condition, const char *message) {
         cerr << message << endl;
         exit(EXIT_FAILURE);
     }
-}
-
-void CheckRequestSyntax() {
-    const char *invalid[] = {
-        "GET /movie.jpx?cnew=http HTTP/1.0\r\nHost: localhost\r\n\r\n",
-        "GET /movie.jpx?cnew=http HTTP/1.1junk\r\nHost: localhost\r\n\r\n",
-        "GET /jpip?cid=7 HTTP/1.1 trailing\r\nHost: localhost\r\n\r\n"
-    };
-    for (const char *head : invalid) {
-        server::RequestHeadParser parser;
-        size_t consumed;
-        Check(parser.Parse(head, strlen(head), &consumed) ==
-                      server::RequestHeadParser::MALFORMED,
-              "The HTTP parser accepted an invalid request line");
-    }
-}
-
-void CheckLongRequestTarget() {
-    const string prefix = "/image.jp2?padding=";
-    const size_t route_offsets[] = {1000, 1037};
-    for (size_t i = 0; i < 2; ++i) {
-        string target = prefix +
-                string(route_offsets[i] - prefix.size(), 'x') + "&cnew=http";
-        string head = "GET " + target + " HTTP/1.1\r\nHost: localhost\r\n\r\n";
-        server::RequestHeadParser parser;
-        size_t consumed;
-        Check(parser.Parse(head.data(), head.size(), &consumed) ==
-                      server::RequestHeadParser::COMPLETE,
-              "Could not parse the routing-limit request");
-
-        jpip::Request request;
-        Check(request.ParseTarget(target),
-              "Could not fully parse the routing-limit target");
-        Check(parser.HasJPIPRoute() && request.routing.cnew,
-              "A bounded request target was truncated before JPIP parsing");
-    }
-}
-
-void CheckRouteClassification() {
-    server::RequestHeadParser parser;
-    size_t consumed;
-    const string routed =
-            "GET /image.jp2?cnew=http HTTP/1.1\r\nHost: localhost\r\n\r\n";
-    Check(parser.Parse(routed.data(), routed.size(), &consumed) ==
-                  server::RequestHeadParser::COMPLETE &&
-                  parser.HasJPIPRoute(),
-          "Could not classify a complete JPIP request line");
-    parser.TakeRequest();
-
-    const string unrelated =
-            "GET /status HTTP/1.1\r\nHost: localhost\r\n\r\n";
-    Check(parser.Parse(unrelated.data(), unrelated.size(), &consumed) ==
-                  server::RequestHeadParser::COMPLETE &&
-                  !parser.HasJPIPRoute(),
-          "JPIP route classification survived parser reset");
-
-    server::RequestHeadParser partial_parser;
-    const string oversized = "GET /image.jp2?cnew=http&padding=" +
-            string(2050, 'x');
-    Check(partial_parser.Parse(oversized.data(), oversized.size(), &consumed) ==
-                  server::RequestHeadParser::TOO_LARGE &&
-                  partial_parser.HasJPIPRoute(),
-          "An oversized partial JPIP request lost route identification");
 }
 
 struct Exchange {
@@ -398,9 +333,6 @@ struct FailureExchange {
 
 int main() {
     signal(SIGPIPE, SIG_IGN);
-    CheckRequestSyntax();
-    CheckLongRequestTarget();
-    CheckRouteClassification();
 
     Exchange exchange;
     exchange.Run();

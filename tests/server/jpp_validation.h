@@ -1,6 +1,6 @@
 #pragma once
 
-// Included by server_test.cc to reuse its live-server and HTTP harness.
+// Included by server_fixture.h for the live-server tests.
 // The decoder follows T.808 A.2 and D.3; it uses no production JPIP code.
 namespace jpp_test {
 

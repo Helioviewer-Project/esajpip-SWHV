@@ -10,8 +10,8 @@ construct their inputs directly.
 | `source/` | `jpip_source` | Absolute reads, end boundaries and unchanged destinations on failed reads |
 | `index/` | `index_library`, `jpip_packet_layout` | Corpus indexing, deferred errors, access order, progression coordinates, resolution selection and compact-index bounds |
 | `request/` | `jpip_request` | JPIP syntax, selectors, cache-model descriptors and routing-field values |
-| `response/` | `jpip_cache`, `jpip_window`, `jpip_writer` | Cache state, precinct selection, exact JPP bytes, coalescing, buffer limits and placeholders |
-| `response/` | `jpip_library` | Stateful responses: independently reconstructed bins, source failures, remapping, budgets, repeated requests and viewport-to-zoom reuse |
+| `response/` | `jpip_cache`, `jpip_window`, `jpip_writer` | Sparse cache packing, independent 2D packet sequences, canonical JPP integer boundaries, coalescing, buffer limits and placeholders |
+| `response/` | `jpip_library` | Stateful responses: independently reconstructed bins, source failures, remapping, budgets, repeated requests, viewport-to-zoom reuse and interleaved independent sessions |
 
 `tests/jpeg2000/test_geometry.c` checks the C format library against independent
 standard-derived geometry. `index/test_packet_layout.cc` checks the C++
@@ -34,6 +34,8 @@ ctest --test-dir build/jpip-tests -L '^jpip$' --output-on-failure
 ctest --test-dir build/jpip-tests -L '^jpip_response$' --output-on-failure
 ctest --test-dir build/jpip-tests -R '^jpip_writer$' --output-on-failure
 ```
+
+Every library test has a 30-second CTest timeout.
 
 `jpip_tests` builds only these tests and their library dependencies. The project
 configuration still discovers the server's development packages. Group labels
@@ -67,8 +69,10 @@ the expected-result generator would hide matching errors. Keep malformed inputs
 and failure diagnostics when extending coverage. Introduce shared fixtures
 when multiple test files actually need them.
 
-Useful next extensions include numeric/escape/duplicate-field tables in
-`request/`, VBAS and header-size boundaries in `response/test_writer.cc`, and
-interleaved independent response sessions with controlled source failures in
-`response/test_session.cc`. These are extension points, not claims of new
-coverage from the directory reorganization.
+The suite also checks sparse complete prefixes separated by holes, regrowing
+packed cache storage, exact LRCP packet sequences from independently enumerated
+2D windows, and Bin-ID/VBAS boundaries through `UINT64_MAX`. Independent sessions
+use different budgets while their responses are outstanding. A third session's
+source failure must not change either response or its cache. Borrowed sources
+remain alive through each response; remapping is tested between responses, as
+required by the provider contract.

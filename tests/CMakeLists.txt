@@ -26,9 +26,9 @@ endif()
 set(ESAJPIP_TEST_ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 
 # esajpip_add_test(<name> COMMAND <command...> LABELS <label...>
-#                  [WORKING_DIRECTORY <dir>])
+#                  [WORKING_DIRECTORY <dir>] [TIMEOUT <seconds>])
 function(esajpip_add_test name)
-    cmake_parse_arguments(ARG "" "WORKING_DIRECTORY" "COMMAND;LABELS" ${ARGN})
+    cmake_parse_arguments(ARG "" "WORKING_DIRECTORY;TIMEOUT" "COMMAND;LABELS" ${ARGN})
     if(ARG_WORKING_DIRECTORY)
         add_test(NAME ${name} COMMAND ${ARG_COMMAND} WORKING_DIRECTORY ${ARG_WORKING_DIRECTORY})
     else()
@@ -37,6 +37,13 @@ function(esajpip_add_test name)
     set_tests_properties(${name} PROPERTIES
         LABELS "${ARG_LABELS}"
         ENVIRONMENT "${ESAJPIP_TEST_ENVIRONMENT}")
+    if(ARG_TIMEOUT)
+        # Preserve the mutation runner's explicit per-test deadline.
+        if(DEFINED ESAJPIP_TEST_TIMEOUT)
+            set(ARG_TIMEOUT "${ESAJPIP_TEST_TIMEOUT}")
+        endif()
+        set_tests_properties(${name} PROPERTIES TIMEOUT "${ARG_TIMEOUT}")
+    endif()
 endfunction()
 
 # The model's own checks that need no compiler (spec/check-model.sh --static).

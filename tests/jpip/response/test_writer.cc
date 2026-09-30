@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 #include "jpip/response/databin_writer.h"
 
@@ -248,7 +249,82 @@ static void CheckMetadataPlaceHolder() {
               "Wrong partial metadata place-holder payload");
 }
 
+static uint64_t DecodeInteger(const vector<unsigned char> &bytes, size_t &at) {
+    uint64_t value = 0;
+    size_t start = at;
+    for (;;) {
+        Check(at < bytes.size(), "Truncated reference VBAS");
+        unsigned char byte = bytes[at++];
+        Check(value <= (UINT64_MAX >> 7), "Overflow in reference VBAS");
+        value = (value << 7) | (byte & 127);
+        if (!(byte & 128)) break;
+    }
+    Check(at == start + 1 || (bytes[start] & 127) != 0,
+          "Noncanonical leading zero in VBAS");
+    return value;
+}
+
+static void CheckIntegerBoundaries() {
+    struct Case { uint64_t value; size_t bin_bytes, integer_bytes; };
+    const Case cases[] = {{0,1,1},{15,1,1},{16,2,1},{127,2,1},{128,2,2},
+                          {2047,2,2},{2048,3,2},{16383,3,2},{16384,3,3},
+                          {UINT32_MAX,5,5},{UINT64_MAX,10,10}};
+    const unsigned char payload = 0xa5;
+    jpip::Source source(&payload,1);
+    for (const Case &test : cases) {
+        size_t expected_length = test.bin_bytes + test.integer_bytes + 4;
+        for (int spare : {-1,0,3}) {
+            vector<char> buffer(expected_length + 5, static_cast<char>(0x55));
+            jpip::DataBinWriter writer;
+            writer.SetBuffer(buffer.data(), static_cast<int>(expected_length) + spare);
+            jpip::DataBinWriter::Result result = writer.Write(jpip::DataBinClass::PRECINCT,
+                    0, test.value, test.value, source, jpip::FileSegment(0,1), true);
+            if (spare < 0) {
+                Check(result == jpip::DataBinWriter::Result::FULL && writer.Finalize() == 0,
+                      "An undersized header left a partial message");
+                for (char byte : buffer) Check(byte == 0x55, "Rejected header wrote bytes");
+                continue;
+            }
+            Check(result == jpip::DataBinWriter::Result::WRITTEN,
+                  "A boundary header did not fit its exact buffer");
+            Check(writer.Finalize() == static_cast<ptrdiff_t>(expected_length),
+                  "A boundary header was not encoded at canonical length");
+            vector<unsigned char> encoded(buffer.begin(), buffer.begin() + expected_length);
+            size_t at = 1;
+            unsigned char first = encoded[0];
+            Check((first & 0x70) == 0x70, "First header omitted explicit class, stream or final flag");
+            uint64_t bin = first & 15;
+            if (first & 128) {
+                for (;;) {
+                    Check(at < encoded.size(), "Truncated reference Bin-ID");
+                    unsigned char byte = encoded[at++];
+                    Check(bin <= (UINT64_MAX >> 7), "Overflow in reference Bin-ID");
+                    bin = (bin << 7) | (byte & 127);
+                    if (!(byte & 128)) break;
+                }
+            }
+            Check(bin == test.value && at == test.bin_bytes,
+                  "Wrong boundary Bin-ID value or canonical length");
+            Check(DecodeInteger(encoded, at) == jpip::PRECINCT && DecodeInteger(encoded, at) == 0 &&
+                          DecodeInteger(encoded, at) == test.value && DecodeInteger(encoded, at) == 1 &&
+                          at + 1 == encoded.size() && encoded[at] == payload,
+                  "Boundary header or payload differs from its independent decoding");
+            if (spare == 3) {
+                Check(writer.WriteEOR(jpip::EOR::WINDOW_DONE) &&
+                              writer.Finalize() == static_cast<ptrdiff_t>(expected_length + 3) &&
+                              buffer[expected_length] == 0 &&
+                              buffer[expected_length + 1] == jpip::EOR::WINDOW_DONE &&
+                              buffer[expected_length + 2] == 0,
+                      "Exact header-plus-EOR capacity changed framing");
+            }
+            for (size_t i = expected_length + (spare == 3 ? 3 : 0); i < buffer.size(); ++i)
+                Check(buffer[i] == 0x55, "Header or EOR wrote beyond its capacity");
+        }
+    }
+}
+
 int main() {
+    CheckIntegerBoundaries();
     CheckJPIPMessages();
     CheckDataBinCapacity();
     CheckCoalescedJPIPMessages();

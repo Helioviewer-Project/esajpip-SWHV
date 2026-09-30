@@ -14,7 +14,7 @@ This directory is a **formal description of what a valid file looks like**,
 written in a machine-readable notation (ASN.1 with ACN encoding rules), plus
 a small program that turns that description into a **corpus of test files**:
 hundreds of tiny `.jp2`/`.jpx` files, each labeled "the server must
-accept this" or "the server must reject this". `tests/server/jpeg2000_test.cc` then
+accept this" or "the server must reject this". `tests/server/file_manager_test.cc` then
 opens every one and checks that the server agrees, and
 `tests/jpeg2000/test_profile.c` does the same for the reader,
 which shares most of the cross-field rules with the harness
@@ -48,7 +48,7 @@ model generates C, that C builds as strict C11, and the sanitized harness
 writes the corpus with unique names and no label mismatches. `spec/VERSION`
 pins unmodified upstream ASN1SCC 4.9.7.0. The eleven local fixes for
 issue #417 are archived under `spec/asn1scc-patches/reference/161cc246/`; no
-patches are applied. The corpus is committed under `tests/vectors/j2k/`, and `jpeg2000_test.cc` checks every
+patches are applied. The corpus is committed under `tests/vectors/j2k/`, and `file_manager_test.cc` checks every
 manifest row against the server parser and lazy packet indexer.
 
 If you are here to **run the current server tests**, use `./tests/run.sh` and
@@ -257,7 +257,7 @@ and opaque-payload sizes. Depth-boundary regressions are constructed in
                           (shared rules: jpeg2000/hv_rules.c)  │
                                         tests/vectors/j2k/*.jp2, *.jpx, manifest.tsv
                                                           │
-   tests/server/jpeg2000_test.cc ── OpenImage + GetPacket on each ▶ must match the label
+   tests/server/file_manager_test.cc ── OpenImage + GetPacket on each ▶ must match the label
    tests/jpeg2000/test_profile.c ─ hv_check_jp2/jpx + HV_PROFILE ▶ must match the profile label
    tests/jpeg2000/test_rewrite.c ─ hv_rewrite of each ────────────▶ must give the vector back
    harness/writers.c ─ hv_rewrite, hv_transcode, hv_merge ──▶ label.c: expected labels
@@ -448,7 +448,7 @@ Conventions worth knowing before you edit:
 
 ## The test contract
 
-For every vector, `jpeg2000_test` reads the committed file and its companions
+For every vector, `file_manager_test` reads the committed file and its companions
 from the corpus directory under the names in its manifest row, calls
 `FileManager::OpenImage`, and — if that succeeds — indexes every declared
 packet of every codestream with `GetPacket`.
@@ -512,7 +512,7 @@ vector: the corpus holds no file over `INT_MAX` bytes.
 
 ## When a vector fails
 
-For the server, `jpeg2000_test` prints `Generated vector <name> was
+For the server, `file_manager_test` prints `Generated vector <name> was
 accepted, expected rejection` or `Generated vector <name> was rejected
 during <stage>, expected acceptance`, each followed by the manifest's
 `(<reason>: <note>)`. For the reader, `test_profile` (run by
@@ -816,7 +816,7 @@ The harness, the library in `../jpeg2000/` (`hv_reader.c`, `hv_writer.c`,
 provides the `lxxx` mapping for `jpeg2000/generated/` and the harness), and the
 tools in `../transcode/` and `../merge/`, which use the generated struct
 types, depend on the generated API, so they are what to touch when
-regenerating with a newer asn1scc. The server and `jpeg2000_test` never see
+regenerating with a newer asn1scc. The server and `file_manager_test` never see
 generated code.
 
 ### Mapping functions
@@ -872,7 +872,7 @@ is labeled `decode` at that layer. The reader's `hv_is_superbox` lists more
 and leaves `dtbl` to its callers, because `hv_walk` and `hv_transcode`
 check the framing of every box that holds boxes.
 
-## The test loop in `jpeg2000_test.cc`
+## The test loop in `file_manager_test.cc`
 
 `CheckGeneratedCorpus()` reads every row of
 `tests/vectors/j2k/manifest.tsv`. Corpus files remain in their committed
@@ -892,7 +892,7 @@ The lazy packet lookup matters: some malformed packet-length tables are
 detectable only when the packet index is built, not while the file structure is
 opened.
 
-`jpeg2000_test.cc` also has hand-built fixtures. Those that cover a
+`file_manager_test.cc` also has hand-built fixtures. Those that cover a
 gap in the model ("Gaps") are the only test of that behavior; the rest
 overlap the corpus but run without it.
 
@@ -1010,7 +1010,7 @@ also be enabled for the live-server suite.
 
 ## Frequently asked
 
-**Why not just write the test files by hand?** `jpeg2000_test.cc` already
+**Why not just write the test files by hand?** `file_manager_test.cc` already
 contains a focused collection of hand-built cases. The corpus adds hundreds of
 systematic cases, one per field, bound, and layer, with expected
 outcomes derived rather than guessed. When the standard and the profile are

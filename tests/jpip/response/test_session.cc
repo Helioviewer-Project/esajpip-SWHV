@@ -596,7 +596,75 @@ static void verify_tiny_budgets() {
     }
 }
 
+static void verify_interleaved_sessions() {
+    MemorySources sources;
+    sources.load("jpx-graph-frame2.jp2");
+    const std::string path = "./jpx-graph-frame2.jp2";
+    jpip::ImageIndex first_image(path), second_image(path), reference_image(path);
+    for (jpip::ImageIndex *image : {&first_image, &second_image, &reference_image})
+        check(image->Open(*sources.GetSource(path), sources, false), "interleaved fixture failed");
+    jpip::ResponseRequest full = request(4096, INT_MAX);
+    jpip::DataBinServer reference;
+    Received expected;
+    fetch(reference, reference_image, sources, full, expected);
+
+    jpip::DataBinServer first, second;
+    Received first_bins, second_bins;
+    jpip::ResponseRequest small = request(4096, 100);
+    check(first.SetRequest(first_image, small) && second.SetRequest(second_image, full),
+          "interleaved requests rejected");
+    MemorySources failing_sources;
+    failing_sources.load("jpx-graph-frame2.jp2");
+    jpip::ImageIndex failing_image(path);
+    check(failing_image.Open(*failing_sources.GetSource(path), failing_sources, false),
+          "failure fixture rejected");
+    jpip::DataBinServer failing;
+    check(failing.SetRequest(failing_image, full), "failure setup rejected");
+    failing_sources.views.clear();
+    failing_sources.bytes.erase(path);
+    bool first_last = false, second_last = false;
+    Bytes first_response, second_response;
+    // Both channels have outstanding responses. The provider keeps borrowed
+    // sources alive until both responses finish, as its contract requires.
+    for (int calls = 0; !first_last || !second_last; ++calls) {
+        check(calls < 1000, "interleaved generation stalled");
+        if (calls == 1) {
+            check(!second_last, "Fixture did not keep a response active through failure");
+            char buffer[128]; int length = sizeof buffer; bool last = false;
+            check(!failing.GenerateChunk(failing_sources, buffer, &length, &last) &&
+                  failing.GetError().find(path) != std::string::npos,
+                  "controlled failure in another session lost its identity");
+        }
+        for (int which : {0,1}) {
+            bool &last = which == 0 ? first_last : second_last;
+            if (last) continue;
+            jpip::DataBinServer &session = which == 0 ? first : second;
+            Bytes &response = which == 0 ? first_response : second_response;
+            char buffer[128]; int length = sizeof buffer;
+            check(session.GenerateChunk(sources, buffer, &length, &last), session.GetError().c_str());
+            check(length > 0 && length <= static_cast<int>(sizeof buffer), "invalid interleaved chunk");
+            for (int i = 0; i < length; ++i) response.push_back(static_cast<unsigned char>(buffer[i]));
+        }
+    }
+    check(first_bins.decode(first_response) == jpip::EOR::BYTE_LIMIT_REACHED &&
+          second_bins.decode(second_response) == jpip::EOR::WINDOW_DONE &&
+          second_bins.bins == expected.bins && second_bins.complete == expected.complete,
+          "interleaving changed an independent channel's bins or completion");
+    sources.remap();
+    fetch(first, first_image, sources, small, first_bins);
+    check(first_bins.bins == expected.bins && first_bins.complete == expected.complete,
+          "an independent cache changed the other channel's continuation");
+    int first_messages = first_bins.messages, second_messages = second_bins.messages;
+    fetch(first, first_image, sources, full, first_bins);
+    fetch(second, second_image, sources, full, second_bins);
+    check(first_bins.messages == first_messages && second_bins.messages == second_messages,
+          "completed independent sessions resent cached data");
+
+
+}
+
 int main() {
+    verify_interleaved_sessions();
     verify_synthetic();
     verify_tiny_budgets();
     verify_typed_requests();
