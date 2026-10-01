@@ -25,15 +25,12 @@ public:
 
 private:
     llhttp_t parser;
-    llhttp_settings_t settings;
     RequestHead request;
     std::string header_name;
     std::string header_value;
     std::size_t head_size = 0;
     std::size_t line_size = 0;
     bool line_complete = false;
-    bool route_checked = false;
-    bool route_present = false;
     int host_count = 0;
     int content_length_count = 0;
     bool malformed = false;

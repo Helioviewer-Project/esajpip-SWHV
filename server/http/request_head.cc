@@ -53,12 +53,6 @@ string Trim(const string &value) {
 namespace server {
 
 RequestHeadParser::RequestHeadParser() {
-    llhttp_settings_init(&settings);
-    settings.on_url = ReadTarget;
-    settings.on_header_field = ReadHeaderName;
-    settings.on_header_value = ReadHeaderValue;
-    settings.on_header_value_complete = FinishHeader;
-    settings.on_headers_complete = FinishHead;
     Reset();
 }
 
@@ -69,11 +63,20 @@ void RequestHeadParser::Reset() {
     head_size = 0;
     line_size = 0;
     line_complete = false;
-    route_checked = false;
-    route_present = false;
     host_count = 0;
     content_length_count = 0;
     malformed = false;
+    // Callbacks are shared; parser.data identifies the individual parser.
+    static const llhttp_settings_t settings = [] {
+        llhttp_settings_t result;
+        llhttp_settings_init(&result);
+        result.on_url = ReadTarget;
+        result.on_header_field = ReadHeaderName;
+        result.on_header_value = ReadHeaderValue;
+        result.on_header_value_complete = FinishHeader;
+        result.on_headers_complete = FinishHead;
+        return result;
+    }();
     llhttp_init(&parser, HTTP_REQUEST, &settings);
     parser.data = this;
 }
@@ -174,10 +177,6 @@ RequestHeadParser::Result RequestHeadParser::Parse(const char *data,
         *consumed = 0;
     }
     CountBytes(data, *consumed);
-    if (line_complete && !route_checked) {
-        route_present = jpip::HasRoutingParameter(request.target);
-        route_checked = true;
-    }
 
     if ((!line_complete && line_size >= MAX_INITIAL_REQUEST_LINE) ||
         line_size > MAX_INITIAL_REQUEST_LINE || head_size > MAX_REQUEST_HEAD)
@@ -192,12 +191,11 @@ RequestHeadParser::Result RequestHeadParser::Parse(const char *data,
 bool RequestHeadParser::HasCompleteJPIPRequestLine() {
     return line_complete && llhttp_get_method(&parser) == HTTP_GET &&
            llhttp_get_http_major(&parser) == 1 &&
-           llhttp_get_http_minor(&parser) == 1 && route_present;
+           llhttp_get_http_minor(&parser) == 1 && HasJPIPRoute();
 }
 
 bool RequestHeadParser::HasJPIPRoute() const {
-    return route_checked ? route_present
-                         : jpip::HasRoutingParameter(request.target);
+    return jpip::HasRoutingParameter(request.target);
 }
 
 const string &RequestHeadParser::GetTarget() const {

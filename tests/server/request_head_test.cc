@@ -83,16 +83,21 @@ static void CheckSplitPoints() {
             "Accept-Encoding: gzip\r\nConnection: keep-alive, ClOsE\r\n"
             "Content-Length: 0\r\n\r\n";
     string next = "GET /status HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    size_t line_size = head.find('\n') + 1;
     for (size_t split = 1; split < head.size(); ++split) {
         RequestHeadParser parser;
         size_t consumed = 0;
         Check(parser.Parse(head.data(), split, &consumed) == RequestHeadParser::INCOMPLETE &&
                       consumed == split, "Fragment was not consumed exactly");
+        Check(parser.HasCompleteJPIPRequestLine() == (split >= line_size),
+              "Fragmented request line changed identification timing");
         string suffix = head.substr(split) + next;
         Check(parser.Parse(suffix.data(), suffix.size(), &consumed) == RequestHeadParser::COMPLETE &&
                       consumed == head.size() - split && parser.HasJPIPRoute(),
               "Split parser consumed the following request or lost routing");
         server::RequestHead request = parser.TakeRequest();
+        Check(!parser.HasCompleteJPIPRequestLine() && !parser.HasJPIPRoute(),
+              "Request-line identification survived reset");
         Check(request.target == target && request.accepts_gzip && request.close &&
                       !request.unsupported_body, "Split parsing changed head fields");
         Check(parser.Parse(next.data(), next.size(), &consumed) == RequestHeadParser::COMPLETE &&
@@ -108,7 +113,36 @@ static void CheckSplitPoints() {
         Check(parser.Parse(head.data() + at, 1, &consumed) ==
                       (at + 1 == head.size() ? RequestHeadParser::COMPLETE : RequestHeadParser::INCOMPLETE) &&
                       consumed == 1, "Bytewise parsing changed completion boundary");
+        Check(parser.HasCompleteJPIPRequestLine() == (at + 1 >= line_size),
+              "Bytewise request line changed identification timing");
     }
+}
+
+static void CheckIndependentParsers() {
+    RequestHeadParser first;
+    RequestHeadParser second;
+    const string partial = "GET /jpip?cid=7 HTTP/1.1\r\nHost: a\r\n"
+            "Accept-Encoding: gzip\r\nConnection: close\r\n";
+    const string unrelated = "GET /status HTTP/1.1\r\nHost: b\r\n\r\n";
+    size_t consumed;
+    Check(first.Parse(partial.data(), partial.size(), &consumed) ==
+                  RequestHeadParser::INCOMPLETE && consumed == partial.size() &&
+                  first.HasCompleteJPIPRequestLine(),
+          "Could not leave the first parser waiting for its final header line");
+    Check(second.Parse(unrelated.data(), unrelated.size(), &consumed) ==
+                  RequestHeadParser::COMPLETE && consumed == unrelated.size() &&
+                  !second.HasCompleteJPIPRequestLine() && !second.HasJPIPRoute(),
+          "The second parser inherited the first parser's routing");
+    server::RequestHead request = second.TakeRequest();
+    Check(request.target == "/status" && !request.accepts_gzip && !request.close,
+          "The second parser inherited the first parser's header fields");
+    Check(first.HasCompleteJPIPRequestLine() &&
+                  first.Parse("\r\n", 2, &consumed) == RequestHeadParser::COMPLETE &&
+                  consumed == 2,
+          "Resetting the second parser interrupted the first parser");
+    request = first.TakeRequest();
+    Check(request.target == "/jpip?cid=7" && request.accepts_gzip && request.close,
+          "Interleaved parsers changed routing or header fields");
 }
 
 static void CheckHeaders() {
@@ -182,6 +216,7 @@ int main() {
     CheckLongRequestTarget();
     CheckRouteClassification();
     CheckSplitPoints();
+    CheckIndependentParsers();
     CheckHeaders();
     CheckLimits();
     return EXIT_SUCCESS;
