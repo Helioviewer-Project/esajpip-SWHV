@@ -253,28 +253,27 @@ int main() {
                 "Conflicting close retained its connection");
     close(conflicting_close);
 
-    string pipelined =
-            "GET /jpip?cid=" + channel_id +
-            "&context=jpxl%3C0%3E&model=M0&fsiz=1,1&rsiz=1,1&roff=0,0&"
-            "len=128&tid=0&handled "
-            "HTTP/1.1\r\nHost: localhost\r\n\r\n"
-            "GET /jpip?cid=" + channel_id +
-            "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128 "
-            "HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    string pipelined;
+    for (int i = 0; i < 8; ++i) {
+        pipelined += "GET /jpip?cid=" + channel_id +
+                "&stream=0&fsiz=1,1&rsiz=1,1&roff=0,0&len=128";
+        if (i % 2 == 0)
+            pipelined += "&context=jpxl%3C0%3E&model=M0&tid=0&handled";
+        pipelined += " HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    }
     WriteAll(channel, pipelined.data(), pipelined.size());
     string pipelined_input;
-    Response first_pipelined = ReadResponse(channel, &pipelined_input);
-    Response second_pipelined = ReadResponse(channel, &pipelined_input);
-    Check(first_pipelined.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  first_pipelined.headers.find("JPIP-tid: 0") != string::npos &&
-                  first_pipelined.headers.find(HANDLED_HEADER) != string::npos &&
-                  !first_pipelined.body.empty(),
-          "First pipelined request was not served correctly");
-    Check(second_pipelined.headers.find("HTTP/1.1 200 OK") == 0 &&
-                  second_pipelined.headers.find("JPIP-tid: 0") == string::npos &&
-                  second_pipelined.headers.find("JPIP-handled:") == string::npos &&
-                  !second_pipelined.body.empty(),
-          "Pipelined responses were not returned in request order");
+    for (int i = 0; i < 8; ++i) {
+        Response response = ReadResponse(channel, &pipelined_input);
+        bool optional_headers = i % 2 == 0;
+        Check(response.headers.find("HTTP/1.1 200 OK") == 0 &&
+                      (response.headers.find("JPIP-tid: 0") != string::npos) ==
+                              optional_headers &&
+                      (response.headers.find("JPIP-handled:") != string::npos) ==
+                              optional_headers &&
+                      !response.body.empty(),
+              "Pipelined responses were not returned in request order");
+    }
 
     string partial = "GET /jpip?cid=" + channel_id;
     WriteAll(channel, partial.data(), partial.size());

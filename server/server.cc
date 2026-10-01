@@ -257,7 +257,7 @@ private:
     static void ChannelTimerClosed(uv_handle_t *handle) noexcept {
         Channel *channel = static_cast<Channel *>(handle->data);
         channel->timer_closed = true;
-        channel->server->FinishChannel(*channel);
+        channel->server->AdvanceChannel(*channel);
     }
 
     void Accept(int status) {
@@ -433,14 +433,12 @@ private:
                             else
                                 channel.exchange->client->connection.Abort();
                         }
-                        StartCleanup(channel);
-                        FinishChannel(channel);
+                        AdvanceChannel(channel);
                     })) {
             exchange.writes--;
             client.connection.Abort();
         }
-        StartCleanup(channel);
-        FinishChannel(channel);
+        AdvanceChannel(channel);
     }
 
     void StartRequest(Channel &channel, unique_ptr<Exchange> exchange) {
@@ -454,7 +452,7 @@ private:
                     "Content-Length: 0\r\nConnection: close\r\n\r\n";
             SendChannelReply(channel, std::move(response));
         } else if (!channel.exchange->request.routing.cnew) {
-            Begin(channel);
+            AdvanceChannel(channel);
         }
     }
 
@@ -491,26 +489,16 @@ private:
         return NULL;
     }
 
-    void Begin(Channel &channel) {
-        Buffer *buffer = AcquireBuffer(channel);
-        if (buffer == NULL)
-            return;
-        channel.state = Channel::OPEN;
-        if (!channel.work.Begin(channel.exchange->request, UseGzip(channel),
-                                buffer->data.data(), buffer->data.size()))
-            Fail(channel, 500, "Internal Server Error",
-                 "The JPIP response could not be scheduled");
-    }
-
     void Generate(Channel &channel) {
-        if (channel.work.IsActive() ||
-            channel.exchange->generation_complete ||
-            channel.state == Channel::ENDING)
-            return;
         Buffer *buffer = AcquireBuffer(channel);
         if (buffer == NULL)
             return;
-        if (!channel.work.Generate(buffer->data.data(), buffer->data.size()))
+        bool begin = !channel.exchange->headers_sent;
+        bool queued = begin
+                ? channel.work.Begin(channel.exchange->request, UseGzip(channel),
+                                     buffer->data.data(), buffer->data.size())
+                : channel.work.Generate(buffer->data.data(), buffer->data.size());
+        if (!queued)
             Fail(channel, 500, "Internal Server Error",
                  "The JPIP response could not be scheduled");
     }
@@ -539,9 +527,7 @@ private:
                             End(channel);
                             return;
                         }
-                        if (!channel.exchange->generation_complete)
-                            Generate(channel);
-                        FinishChannel(channel);
+                        AdvanceChannel(channel);
                     })) {
             channel.exchange->writes--;
             End(channel);
@@ -563,65 +549,105 @@ private:
         }
     }
 
-    void CompleteWork(Channel &channel) {
-        const server::ChannelWork::Result &result = channel.work.GetResult();
-        if (result.kind == server::ChannelWork::Kind::OPEN) {
-            if (active_opens > 0)
-                active_opens--;
-            StartOpens();
-            if (channel.state == Channel::ENDING)
-                StartCleanup(channel);
-            else if (result.open != server::FileManager::OpenResult::OPENED)
-                OpenFailed(channel, result.open);
-            else {
+    void AdvanceChannel(Channel &channel,
+                        const server::ChannelWork::Result *completed = NULL) {
+        if (completed) {
+            const server::ChannelWork::Result &result = *completed;
+            switch (result.kind) {
+            case server::ChannelWork::Kind::OPEN:
+                if (active_opens > 0)
+                    active_opens--;
+                StartOpens();
+                if (channel.state == Channel::ENDING)
+                    break;
+                if (result.open != server::FileManager::OpenResult::OPENED) {
+                    OpenFailed(channel, result.open);
+                    return;
+                }
                 LOG("The channel " << channel.number
                                     << " has been opened for the image '"
                                     << server::EscapeForLog(Target(channel)) << "'");
-                // Opening has its own timeout; start a full interval for the
-                // first response chunk.
+                // Opening has its own timeout; restart it for the response.
                 channel.exchange->client->connection.BlockRequests();
-                Begin(channel);
+                channel.state = Channel::OPEN;
+                break;
+            case server::ChannelWork::Kind::FINISH:
+                channel.exchange->response_cleaned = true;
+                break;
+            case server::ChannelWork::Kind::CLOSE:
+                break;
+            case server::ChannelWork::Kind::BEGIN:
+            case server::ChannelWork::Kind::GENERATE: {
+                Buffer *buffer = channel.exchange->work_buffer;
+                channel.exchange->work_buffer = NULL;
+                if (buffer == NULL) {
+                    Fail(channel, 500, "Internal Server Error",
+                         "The JPIP response lost its output buffer");
+                    return;
+                }
+                if (channel.state == Channel::ENDING)
+                    break;
+                if (!result.error.empty()) {
+                    int code = result.request_rejected ? 400 : 500;
+                    Fail(channel, code,
+                         code == 400 ? "Bad Request" : "Internal Server Error",
+                         result.error);
+                    return;
+                }
+                bool final = result.generation ==
+                        server::ChannelEngine::GenerateResult::COMPLETE;
+                channel.exchange->generation_complete = final;
+                SendChunk(channel, *buffer, result.length, final);
+                break;
             }
-            return;
+            }
         }
-        if (result.kind == server::ChannelWork::Kind::FINISH) {
-            channel.exchange->response_cleaned = true;
-            // Finish preserves the engine, even if the channel ended meanwhile.
-            if (channel.state == Channel::ENDING)
-                StartCleanup(channel);
-            FinishChannel(channel);
-            return;
-        }
-        if (result.kind == server::ChannelWork::Kind::CLOSE) {
-            FinishChannel(channel);
-            return;
-        }
-        Buffer *buffer = channel.exchange->work_buffer;
-        channel.exchange->work_buffer = NULL;
-        if (buffer == NULL) {
-            Fail(channel, 500, "Internal Server Error",
-                 "The JPIP response lost its output buffer");
-            return;
-        }
+
+        // Consume the completed result before queuing work, which replaces it.
         if (channel.state == Channel::ENDING) {
             StartCleanup(channel);
-            return;
-        }
-        if (!result.error.empty()) {
-            int code = result.request_rejected ? 400 : 500;
-            Fail(channel, code,
-                 code == 400 ? "Bad Request" : "Internal Server Error",
-                 result.error);
-            return;
-        }
-        bool final = result.generation ==
-                server::ChannelEngine::GenerateResult::COMPLETE;
-        channel.exchange->generation_complete = final;
-        SendChunk(channel, *buffer, result.length, final);
-        if (!final)
-            Generate(channel);
-        else
+            if (!channel.work.IsClosed() || !channel.timer_closed)
+                return;
+        } else {
+            if (channel.state != Channel::OPEN)
+                return;
+            if (!channel.exchange->generation_complete) {
+                if (!channel.work.IsActive())
+                    Generate(channel);
+                return;
+            }
             StartCleanup(channel);
+            if (!channel.exchange->response_cleaned)
+                return;
+        }
+        if (channel.exchange->writes != 0)
+            return;
+
+        // Generation, cleanup, and writes have finished; no payload is in use.
+        for (Buffer &buffer : channel.buffers)
+            vector<char>().swap(buffer.data);
+        Client *client = channel.exchange->Detach();
+        bool close_connection = channel.exchange->close_connection;
+        if (channel.state == Channel::ENDING) {
+            dead_channels.push_back(channel.id);
+            uv_async_send(&reaper);
+        } else {
+            if (channel.waiting) {
+                unique_ptr<Exchange> waiting = std::move(channel.waiting);
+                StartRequest(channel, std::move(waiting));
+            } else if (channel.timer_initialized) {
+                uv_timer_start(&channel.timer, ChannelExpired,
+                               static_cast<uint64_t>(cfg.connection_timeout()) * 1000,
+                               0);
+            }
+        }
+        // FinishResponse can synchronously dispatch a retained request.
+        if (client && !client->connection.IsClosing()) {
+            if (close_connection)
+                client->connection.CloseGracefully();
+            else
+                client->connection.FinishResponse();
+        }
     }
 
     void OpenFailed(Channel &channel, server::FileManager::OpenResult result) {
@@ -671,22 +697,20 @@ private:
         }
         if (client)
             client->connection.Abort();
-        StartCleanup(channel);
-        FinishChannel(channel);
+        AdvanceChannel(channel);
     }
 
     void End(Channel &channel) {
         if (channel.state == Channel::ENDING) {
             CloseChannelTimer(channel);
-            FinishChannel(channel);
+            AdvanceChannel(channel);
             return;
         }
         BeginTermination(channel);
         if (channel.exchange->client &&
             !channel.exchange->client->connection.IsClosing())
             channel.exchange->client->connection.Abort();
-        StartCleanup(channel);
-        FinishChannel(channel);
+        AdvanceChannel(channel);
     }
 
     void CloseChannelTimer(Channel &channel) {
@@ -709,44 +733,6 @@ private:
         }
         SendError(*client, 503, "Service Unavailable", message,
                   &waiting->request);
-    }
-
-    void FinishChannel(Channel &channel) {
-        if (channel.exchange->writes != 0)
-            return;
-        if (channel.state == Channel::ENDING) {
-            if (!channel.work.IsClosed() || !channel.timer_closed)
-                return;
-        } else if (!channel.exchange->generation_complete ||
-                   !channel.exchange->response_cleaned) {
-            return;
-        }
-        // Generation, cleanup, and writes have finished; no payload is in use.
-        for (Buffer &buffer : channel.buffers)
-            vector<char>().swap(buffer.data);
-        Client *client = channel.exchange->Detach();
-        bool close_connection = channel.exchange->close_connection;
-        if (channel.state == Channel::ENDING) {
-            dead_channels.push_back(channel.id);
-            uv_async_send(&reaper);
-        } else {
-            channel.state = Channel::OPEN;
-            if (channel.waiting) {
-                unique_ptr<Exchange> waiting = std::move(channel.waiting);
-                StartRequest(channel, std::move(waiting));
-            } else if (channel.timer_initialized) {
-                uv_timer_start(&channel.timer, ChannelExpired,
-                               static_cast<uint64_t>(cfg.connection_timeout()) * 1000,
-                               0);
-            }
-        }
-        if (client && !client->connection.IsClosing()) {
-            if (close_connection) {
-                client->connection.CloseGracefully();
-            } else {
-                client->connection.FinishResponse();
-            }
-        }
     }
 
     void SendError(Client &client, int code, const char *reason,
@@ -962,7 +948,7 @@ Channel::Channel(Server *_server, string _id, uint64_t _number,
 
 void WorkDone(server::ChannelWork &, void *owner) {
     Channel *channel = static_cast<Channel *>(owner);
-    channel->server->CompleteWork(*channel);
+    channel->server->AdvanceChannel(*channel, &channel->work.GetResult());
 }
 
 } // namespace
