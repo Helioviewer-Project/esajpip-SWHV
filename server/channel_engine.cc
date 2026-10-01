@@ -111,6 +111,7 @@ void ChannelEngine::Finish() {
         memset(&compression, 0, sizeof compression);
         compression_active = false;
     }
+    vector<char>().swap(raw_buffer);
     gzip = false;
     raw_last = false;
     file_manager.ClearFiles();

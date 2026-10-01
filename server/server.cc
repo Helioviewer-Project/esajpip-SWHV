@@ -753,6 +753,9 @@ private:
         } else if (!channel.exchange->response_cleaned) {
             return;
         }
+        // Generation, cleanup, and writes have finished; no payload is in use.
+        for (Buffer &buffer : channel.buffers)
+            vector<char>().swap(buffer.data);
         Client *client = channel.exchange->Detach();
         bool close_connection = channel.exchange->head.close;
         if (channel.state == Channel::ENDING) {
