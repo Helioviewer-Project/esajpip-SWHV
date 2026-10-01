@@ -305,6 +305,11 @@ private:
     }
 
     void Route(Client &client, server::RequestHead &&head) {
+        if (client.exchange) {
+            ERROR("An HTTP connection is already attached to a JPIP exchange");
+            client.connection->Abort();
+            return;
+        }
         jpip::Request request;
         string error;
         if (!request.ParseTarget(head.target, &error)) {
@@ -350,8 +355,6 @@ private:
         }
         unique_ptr<Exchange> exchange = CreateExchange(
                 channel, client, std::move(request), std::move(head));
-        if (!exchange)
-            return;
         if (start) {
             StartRequest(channel, std::move(exchange));
         } else {
@@ -397,8 +400,6 @@ private:
         Channel *channel = created.get();
         unique_ptr<Exchange> exchange = CreateExchange(
                 *channel, client, std::move(request), std::move(head));
-        if (!exchange)
-            return;
         channels[id] = std::move(created);
         StartRequest(*channel, std::move(exchange));
         channel->state = Channel::OPEN_QUEUED;
@@ -409,11 +410,6 @@ private:
     unique_ptr<Exchange> CreateExchange(Channel &channel, Client &client,
                                         jpip::Request request,
                                         server::RequestHead head) {
-        if (client.exchange) {
-            ERROR("An HTTP connection is already attached to a JPIP exchange");
-            client.connection->Abort();
-            return unique_ptr<Exchange>();
-        }
         unique_ptr<Exchange> exchange(new Exchange(
                 &channel, &client, std::move(request), std::move(head)));
         client.exchange = exchange.get();
