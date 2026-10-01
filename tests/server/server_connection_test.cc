@@ -33,7 +33,7 @@ struct Exchange {
     uv_tcp_t listener;
     uv_timer_t response_timer;
     unique_ptr<server::Connection> connection;
-    server::Connection::Write writes[3];
+    server::Connection::Write writes[2];
     vector<string> requests;
     string response;
     uint16_t port = 0;
@@ -62,6 +62,12 @@ struct Exchange {
                                     if (!ok)
                                         self->failed.store(true);
                                 });
+                        if (!self->writes[0].active ||
+                            connection.Send(&self->writes[0], "unexpected",
+                                            [self](bool) {
+                                                self->failed.store(true);
+                                            }))
+                            self->failed.store(true);
                         bool second = connection.Send(
                                 &self->writes[1], "two", [self](bool ok) {
                                     if (!ok)
@@ -114,7 +120,7 @@ struct Exchange {
                 self->response_paused_reads = uv_is_active(handle) == 0;
         }, self);
         bool sent = self->connection->Send(
-                &self->writes[2], "three", [self](bool ok) {
+                &self->writes[0], "three", [self](bool ok) {
                     if (!ok)
                         self->failed.store(true);
                     if (ok)
@@ -353,10 +359,43 @@ struct FailureExchange {
     }
 };
 
+void CheckRejectedWrites() {
+    uv_loop_t loop;
+    Check(uv_loop_init(&loop) == 0, "Could not initialize rejected-write loop");
+    int completions = 0;
+    int closures = 0;
+    server::Connection connection(
+            0, 0,
+            [](server::Connection &, server::RequestHead &&) {
+                Check(false, "Unconnected socket delivered a request");
+            },
+            [](server::Connection &, server::Connection::ReadFailure) {
+                Check(false, "Unconnected socket reported a read");
+            },
+            [](server::Connection &) {
+                Check(false, "Disabled deadline expired");
+            },
+            [&closures](server::Connection &) { ++closures; });
+    Check(connection.Initialize(&loop), "Could not initialize unconnected socket");
+    server::Connection::Write write;
+    function<void(bool)> completed = [&completions](bool) { ++completions; };
+    Check(!connection.Send(&write, "", completed) && !write.active,
+          "Empty write became active");
+    Check(!connection.Send(&write, "unconnected", completed) && !write.active,
+          "Failed write submission became active");
+    connection.CloseGracefully();
+    Check(!connection.Send(&write, "closing", completed) && !write.active,
+          "Closing connection accepted a write");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    Check(completions == 0 && closures == 1 && uv_loop_close(&loop) == 0,
+          "Rejected writes retained pending work or changed callback lifetime");
+}
+
 }
 
 int main() {
     signal(SIGPIPE, SIG_IGN);
+    CheckRejectedWrites();
 
     Exchange exchange;
     exchange.Run();

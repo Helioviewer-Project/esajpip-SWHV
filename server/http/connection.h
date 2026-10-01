@@ -57,8 +57,7 @@ private:
     Deadline deadline = Deadline::NONE;
     std::size_t pending_writes = 0;
     int open_handles = 0;
-    bool requests_blocked = false;
-    bool response_active = false;
+    bool requests_paused = false;
     bool reading = false;
     bool graceful_close = false;
     bool shutdown_active = false;
@@ -81,8 +80,7 @@ private:
     void ReportReadFailure(ReadFailure failure);
     void Consume(const char *data, std::size_t size);
     void Dispatch(RequestHead &&request);
-    void SetDeadline(Deadline reason, int seconds);
-    void ClearDeadline();
+    void SetDeadline(Deadline reason);
     void StartShutdown();
     void CloseHandles();
     void HandleWriteCompleted(Write *write, int status);

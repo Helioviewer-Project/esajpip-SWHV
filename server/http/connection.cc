@@ -46,43 +46,40 @@ bool Connection::Accept(uv_stream_t *listener) {
 }
 
 bool Connection::Start() {
-    SetDeadline(Deadline::IDENTIFICATION, initial_timeout);
+    SetDeadline(Deadline::IDENTIFICATION);
     return StartReading();
 }
 
 void Connection::BlockRequests() {
-    requests_blocked = true;
+    requests_paused = true;
     StopReading();
-    SetDeadline(Deadline::BLOCKED, connection_timeout);
+    SetDeadline(Deadline::BLOCKED);
 }
 
 void Connection::StartResponse() {
-    response_active = true;
-    SetDeadline(Deadline::WRITE, connection_timeout);
+    requests_paused = true;
+    SetDeadline(Deadline::WRITE);
 }
 
 void Connection::FinishResponse() {
-    response_active = false;
-    requests_blocked = false;
+    requests_paused = false;
     if (IsClosing())
         return;
-    SetDeadline(Deadline::READ, connection_timeout);
+    SetDeadline(Deadline::READ);
     if (!StartReading())
         Abort();
 }
 
-void Connection::SetDeadline(Deadline reason, int seconds) {
+void Connection::SetDeadline(Deadline reason) {
     deadline = reason;
     if (!timer_initialized)
         return;
     uv_timer_stop(&timer);
+    int seconds = reason == Deadline::IDENTIFICATION
+            ? initial_timeout : connection_timeout;
     if (reason != Deadline::NONE && seconds > 0)
         uv_timer_start(&timer, TimerExpired,
                        static_cast<uint64_t>(seconds) * 1000, 0);
-}
-
-void Connection::ClearDeadline() {
-    SetDeadline(Deadline::NONE, 0);
 }
 
 void Connection::Allocate(uv_handle_t *handle, size_t suggested_size,
@@ -104,7 +101,7 @@ void Connection::Read(uv_stream_t *stream, ssize_t length,
 }
 
 bool Connection::StartReading() {
-    if (reading || requests_blocked || response_active || IsClosing())
+    if (reading || requests_paused || IsClosing())
         return true;
 
     if (retained_size > 0) {
@@ -113,7 +110,7 @@ bool Connection::StartReading() {
         Consume(retained_input, size);
     }
 
-    if (requests_blocked || response_active || IsClosing())
+    if (requests_paused || IsClosing())
         return true;
 
     if (uv_read_start(GetStream(), Allocate, Read) != 0)
@@ -148,7 +145,7 @@ void Connection::Consume(const char *data, size_t size) {
         offset += consumed;
         if (deadline == Deadline::IDENTIFICATION &&
             parser.HasCompleteJPIPRequestLine())
-            SetDeadline(Deadline::READ, connection_timeout);
+            SetDeadline(Deadline::READ);
         if (result == RequestHeadParser::INCOMPLETE)
             break;
         if (result == RequestHeadParser::MALFORMED) {
@@ -162,7 +159,7 @@ void Connection::Consume(const char *data, size_t size) {
 
         RequestHead request = parser.TakeRequest();
         Dispatch(std::move(request));
-        if (requests_blocked || response_active) {
+        if (requests_paused) {
             StopReading();
             if (offset < size) {
                 retained_size = min(size - offset, sizeof retained_input);
@@ -207,7 +204,6 @@ bool Connection::Send(Write *write, string first, const char *payload,
     write->first = std::move(first);
     write->last = std::move(last);
     write->completed = std::move(completed);
-    write->active = true;
     write->request.data = write;
 
     uv_buf_t buffers[3];
@@ -218,19 +214,15 @@ bool Connection::Send(Write *write, string first, const char *payload,
         buffers[count++] = uv_buf_init(const_cast<char *>(payload), payload_size);
     if (!write->last.empty())
         buffers[count++] = uv_buf_init(&write->last[0], write->last.size());
-    if (count == 0) {
-        write->active = false;
+    if (count == 0)
         return false;
-    }
 
-    pending_writes++;
-    int result = uv_write(&write->request, GetStream(), buffers, count,
-                          WriteCompleted);
-    if (result != 0) {
-        pending_writes--;
-        write->active = false;
+    if (uv_write(&write->request, GetStream(), buffers, count,
+                 WriteCompleted) != 0)
         return false;
-    }
+
+    write->active = true;
+    pending_writes++;
     return true;
 }
 
@@ -244,7 +236,7 @@ void Connection::HandleWriteCompleted(Write *write, int status) {
     write->active = false;
     function<void(bool)> completed = std::move(write->completed);
     if (status == 0 && deadline == Deadline::WRITE)
-        SetDeadline(Deadline::WRITE, connection_timeout);
+        SetDeadline(Deadline::WRITE);
     if (status != 0 && !IsClosing())
         Abort();
     if (completed) {
@@ -263,20 +255,18 @@ void Connection::CloseGracefully() {
     if (IsClosing())
         return;
     graceful_close = true;
-    requests_blocked = true;
+    requests_paused = true;
     retained_size = 0;
     StopReading();
-    if (pending_writes == 0) {
-        ClearDeadline();
+    if (pending_writes == 0)
         StartShutdown();
-    }
 }
 
 void Connection::StartShutdown() {
     if (shutdown_active || uv_is_closing(
             reinterpret_cast<uv_handle_t *>(&socket)))
         return;
-    ClearDeadline();
+    SetDeadline(Deadline::NONE);
     shutdown.data = this;
     shutdown_active = true;
     int result = uv_shutdown(&shutdown, GetStream(), ShutdownCompleted);
@@ -295,10 +285,10 @@ void Connection::ShutdownCompleted(uv_shutdown_t *request, int status) noexcept 
 void Connection::Abort() {
     if (IsClosing())
         return;
-    requests_blocked = true;
+    requests_paused = true;
     retained_size = 0;
     StopReading();
-    ClearDeadline();
+    SetDeadline(Deadline::NONE);
     CloseHandles();
 }
 
