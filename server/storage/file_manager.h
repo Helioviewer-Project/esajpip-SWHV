@@ -64,7 +64,7 @@ namespace server {
             if (opened != File::OpenResult::OPENED) {
                 file_map.erase(path_file);
                 if (opened == File::OpenResult::TOO_LARGE)
-                    ERROR("Unsupported JPEG 2000 source size in '" << path_file << "'");
+                    ERROR("Unsupported JPEG 2000 source size in '" << EscapeForLog(path_file) << "'");
                 return nullptr;
             }
             return &file;

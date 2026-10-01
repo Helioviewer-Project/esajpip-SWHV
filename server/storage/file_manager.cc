@@ -29,7 +29,7 @@ namespace server {
         }
         if (path_image_file.find('\0') != string::npos ||
             HasParentSegment(path_image_file)) {
-            ERROR("Invalid image file path: '" << path_image_file << "'");
+            ERROR("Invalid image file path: '" << EscapeForLog(path_image_file) << "'");
             return OpenResult::INVALID_PATH;
         }
         string path = path_image_file;
@@ -57,7 +57,8 @@ namespace server {
             return OpenResult::INVALID;
         if (opened != File::OpenResult::OPENED) return OpenResult::UNREADABLE;
         if (!index->Open(file, *this, extension == ".jpx")) {
-            ERROR("Cannot index '" << path << "': " << index->GetError());
+            ERROR("Cannot index '" << EscapeForLog(path) << "': "
+                  << EscapeForLog(index->GetError()));
             return OpenResult::INVALID;
         }
         return OpenResult::OPENED;

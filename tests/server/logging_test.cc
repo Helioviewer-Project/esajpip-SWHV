@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <dirent.h>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include "server/trace.h"
+#include "server/storage/file.h"
 
 using namespace std;
 
@@ -116,6 +118,22 @@ int main() {
                   ReadFile(shutdown_log).find("message queued before shutdown") !=
                       string::npos,
           "Logger shutdown did not drain queued records");
+
+    Check(server::trace::Initialize(string(directory) + "/escaped"),
+          "Could not initialize file-path logging");
+    server::File missing;
+    string path = string(directory) + "/missing\nFORGED\r\t.jp2";
+    Check(missing.Open(path.c_str(), 1024) == server::File::OpenResult::NOT_FOUND,
+          "Missing control-character path did not report not found");
+    server::trace::Drain();
+    string escaped_log = FindLog(directory, "escaped.");
+    Check(!escaped_log.empty(), "File-path log was not created");
+    string escaped_message = ReadFile(escaped_log);
+    Check(escaped_message.find("missing\\nFORGED\\r\\t.jp2'") != string::npos &&
+                  count(escaped_message.begin(), escaped_message.end(), '\n') == 1 &&
+                  escaped_message.find('\r') == string::npos &&
+                  escaped_message.find('\t') == string::npos,
+          "File-path control characters split or altered the log record");
 
     // Queue saturation: the child logs to a pipe that is not read until its
     // producers are done, so the logger blocks on the full pipe, the queue

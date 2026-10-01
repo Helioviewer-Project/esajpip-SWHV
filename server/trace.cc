@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <utility>
 
+#include <glib.h>
+
 using namespace std;
 
 namespace {
@@ -183,6 +185,14 @@ void CloseOutput() {
 } // namespace
 
 namespace server {
+
+string EscapeForLog(const string &text) {
+    char *escaped = g_strescape(text.c_str(), NULL);
+    string result(escaped);
+    g_free(escaped);
+    return result;
+}
+
 namespace trace {
 
 bool Initialize(const string &file_name) {

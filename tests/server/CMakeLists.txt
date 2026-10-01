@@ -24,7 +24,7 @@ target_compile_definitions(logging_test PRIVATE
     ESAJPIP_LOG_LIMIT=1024
     ESAJPIP_LOG_QUEUE_LIMIT=4096)
 target_include_directories(logging_test PRIVATE ${PROJECT_SOURCE_DIR})
-target_link_libraries(logging_test PRIVATE Threads::Threads)
+target_link_libraries(logging_test PRIVATE Threads::Threads PkgConfig::PKG)
 esajpip_add_test(logging COMMAND logging_test LABELS server server_support TIMEOUT 30)
 add_dependencies(server_tests logging_test)
 

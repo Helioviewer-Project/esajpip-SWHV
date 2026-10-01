@@ -5,6 +5,9 @@
 #include <string>
 
 namespace server {
+
+std::string EscapeForLog(const std::string &text);
+
 namespace trace {
 
 bool Initialize(const std::string &file_name);

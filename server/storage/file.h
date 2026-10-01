@@ -48,7 +48,8 @@ namespace server {
             int fd = open(file_name, O_RDONLY);
             if (fd == -1) {
                 int open_error = errno;
-                ERROR("Unable to open file: '" << file_name << "': " << g_strerror(open_error));
+                ERROR("Unable to open file: '" << EscapeForLog(file_name) << "': "
+                      << g_strerror(open_error));
                 return open_error == ENOENT || open_error == ENOTDIR
                         ? OpenResult::NOT_FOUND : OpenResult::FAILED;
             }
@@ -57,7 +58,7 @@ namespace server {
             if (fstat(fd, &file_stat) == -1) {
                 int stat_error = errno;
                 close(fd);
-                ERROR("Unable to inspect file: '" << file_name << "': "
+                ERROR("Unable to inspect file: '" << EscapeForLog(file_name) << "': "
                       << g_strerror(stat_error));
                 return OpenResult::FAILED;
             }
@@ -79,7 +80,7 @@ namespace server {
             if (mapped_address == MAP_FAILED) {
                 int map_error = errno;
                 close(fd);
-                ERROR("Unable to map file: '" << file_name << "': "
+                ERROR("Unable to map file: '" << EscapeForLog(file_name) << "': "
                       << g_strerror(map_error));
                 return OpenResult::FAILED;
             }

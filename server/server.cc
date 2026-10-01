@@ -13,7 +13,6 @@
 #include <vector>
 #include <unistd.h>
 
-#include <glib.h>
 #include <uv.h>
 
 #include "config.h"
@@ -48,13 +47,6 @@ int GenerateChannelId(string *id) {
         (*id)[i * 2 + 1] = hex[random[i] & 15];
     }
     return 0;
-}
-
-string EscapeForLog(const string &text) {
-    char *escaped = g_strescape(text.c_str(), NULL);
-    string result(escaped);
-    g_free(escaped);
-    return result;
 }
 
 class Server;
@@ -316,7 +308,8 @@ private:
         jpip::Request request;
         string error;
         if (!request.ParseTarget(head.target, &error)) {
-            LOG("Bad request: " << EscapeForLog(head.target) << ": " << EscapeForLog(error));
+            LOG("Bad request: " << server::EscapeForLog(head.target) << ": "
+                                << server::EscapeForLog(error));
             SendError(client, 400, "Bad Request", error, &request);
             if (!request.routing.cnew)
                 EndRequestedChannel(request);
@@ -333,7 +326,7 @@ private:
             return;
         }
         if (cfg.log_requests())
-            LOG("Request: " << EscapeForLog(head.target));
+            LOG("Request: " << server::EscapeForLog(head.target));
 
         if (request.routing.cnew) {
             NewChannel(client, std::move(request), std::move(head));
@@ -436,13 +429,16 @@ private:
 
         if (channel.exchange->request.routing.cclose) {
             BeginTermination(channel);
+            channel.exchange->headers_sent = true;
             client.connection->StartResponse();
             string response = "HTTP/1.1 200 OK\r\n" +
                     OptionalHeaders(channel.exchange->request) + COMMON_HEADERS +
                     "Content-Length: 0\r\nConnection: close\r\n\r\n";
+            channel.exchange->writes++;
             if (!client.connection->Send(
                         &client.write, std::move(response),
                         [this, &channel](bool ok) {
+                            channel.exchange->writes--;
                             channel.exchange->response_complete = true;
                             if (channel.exchange->client) {
                                 if (ok)
@@ -452,6 +448,7 @@ private:
                             }
                             End(channel);
                         })) {
+                channel.exchange->writes--;
                 channel.exchange->response_complete = true;
                 client.connection->Abort();
                 End(channel);
@@ -591,7 +588,7 @@ private:
             else {
                 LOG("The channel " << channel.number
                                     << " has been opened for the image '"
-                                    << EscapeForLog(Target(channel)) << "'");
+                                    << server::EscapeForLog(Target(channel)) << "'");
                 // Opening has its own timeout; start a full interval for the
                 // first response chunk.
                 channel.exchange->client->connection->BlockRequests();
@@ -683,18 +680,22 @@ private:
         Client *client = channel.exchange->client;
         BeginTermination(channel);
         if (client && !channel.exchange->headers_sent) {
+            channel.exchange->headers_sent = true;
             client->connection->StartResponse();
+            channel.exchange->writes++;
             if (!client->connection->Send(
                         &client->write,
                         ErrorResponse(code, reason, message,
                                       &channel.exchange->request),
                         [this, &channel](bool) {
+                            channel.exchange->writes--;
                             channel.exchange->response_complete = true;
                             if (channel.exchange->client)
                                 channel.exchange->client->connection->CloseGracefully();
                             StartCleanup(channel);
                             FinishChannel(channel);
                         })) {
+                channel.exchange->writes--;
                 channel.exchange->response_complete = true;
                 client->connection->Abort();
             }
