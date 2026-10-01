@@ -441,13 +441,15 @@ namespace jpip {
 
     bool DataBinServer::GenerateChunk(SourceProvider &sources, char *buf,
                                       int *len, bool *last) {
-        if (target == NULL || *len < DataBinWriter::EOR_LENGTH) {
+        int capacity = *len;
+        *len = 0;
+        *last = false;
+        if (target == NULL || capacity < DataBinWriter::EOR_LENGTH) {
             error = target == NULL ? "No request" : "Output buffer cannot hold EOR";
-            *len = 0;
             return false;
         }
         ImageIndex *image_index = target;
-        data_writer.SetBuffer(buf, min(pending, *len));
+        data_writer.SetBuffer(buf, min(pending, capacity));
 
         if (pending > 0 && has_woi) {
             bool empty = true;
@@ -485,10 +487,8 @@ namespace jpip {
                 int written = data_writer.Finalize();
                 // A request budget may finish with EOR alone. A smaller caller
                 // buffer must allow progress while that budget remains.
-                if (written == 0 && *len < pending) {
+                if (written == 0 && capacity < pending) {
                     error = "Output buffer too small for the next contribution";
-                    *len = 0;
-                    *last = false;
                     return false;
                 }
                 pending -= written;

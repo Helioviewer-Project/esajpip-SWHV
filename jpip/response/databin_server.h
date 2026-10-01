@@ -189,8 +189,9 @@ namespace jpip {
          * the last chunk of data associated to the last request.
          * @return <code>true</code> if successful.
          */
-        // Success produces bytes or completes the response. Failure supplies
-        // a nonempty GetError() diagnostic and terminates use of this session.
+        // Success produces bytes or completes the response. Failure sets len
+        // to zero and last to false, supplies a nonempty GetError() diagnostic,
+        // and terminates use of this session.
         bool GenerateChunk(SourceProvider &sources, char *buf, int *len,
                            bool *last);
 

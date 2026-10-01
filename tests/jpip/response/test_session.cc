@@ -230,8 +230,8 @@ static void verify_jp2(int capacity, int limit = 256) {
     check(suffix.bins == received.bins && suffix.complete == received.complete, "partial cache changed reconstructed bins");
     jpip::DataBinServer small;
     check(small.SetRequest(image,r), "small-buffer setup failed");
-    char buffer[2]; int size=2; bool last=false;
-    check(!small.GenerateChunk(sources,buffer,&size,&last) && size==0 && !small.GetError().empty(), "small buffer not diagnosed");
+    char buffer[2]; int size=2; bool last=true;
+    check(!small.GenerateChunk(sources,buffer,&size,&last) && size==0 && !last && !small.GetError().empty(), "small buffer not diagnosed");
 }
 
 static void verify_zoom_and_links() {
@@ -317,9 +317,10 @@ static void verify_deferred_error() {
     check(session.SetRequest(image, request(4096, 64000)), "PLT request rejected");
     char buffer[64000];
     int length = sizeof(buffer);
-    bool last = false;
+    bool last = true;
     check(!session.GenerateChunk(sources, buffer, &length, &last),
           "malformed PLT produced a successful response");
+    check(length == 0 && !last, "PLT failure left chunk outputs set");
     check(image.GetError().find("plt.coverage") != std::string::npos &&
           session.GetError() == image.GetError(), "deferred PLT diagnostic was lost");
 }
@@ -411,10 +412,11 @@ static void verify_source_failures() {
         sources.bytes.erase(path);
         sources.bytes.erase("./jpx-linked-frame1.jp2");
         const std::string missing = phase == 0 ? root : image.GetPathName(0);
-        char buffer[64000]; int length = sizeof buffer; bool last = false;
+        char buffer[64000]; int length = sizeof buffer; bool last = true;
         check(!session.GenerateChunk(sources, buffer, &length, &last) &&
               session.GetError().find(missing) != std::string::npos,
               "source acquisition failure lost its source identity");
+        check(length == 0 && !last, "Source acquisition failure left chunk outputs set");
     }
 
     // A linked source that opens but fails validation must also be released.
@@ -649,8 +651,8 @@ static void verify_tiny_budgets() {
     check(image.Open(*sources.GetSource(image.GetPathName()),sources,false),image.GetError().c_str());
     {
         jpip::DataBinServer uninitialized;
-        char buffer[60];int length=sizeof buffer;bool last=false;
-        check(!uninitialized.GenerateChunk(sources,buffer,&length,&last) && length==0 &&
+        char buffer[60];int length=sizeof buffer;bool last=true;
+        check(!uninitialized.GenerateChunk(sources,buffer,&length,&last) && length==0 && !last &&
               uninitialized.GetError()=="No request", "missing request was not diagnosed");
     }
     jpip::DataBinServer fresh;
@@ -666,11 +668,11 @@ static void verify_tiny_budgets() {
               "EOR-only response changed subsequent data or cache state");
     }
     for(int budget : {4,60,61,100,INT_MAX}) {
-        for(int capacity : {2,3,60}) {
+        for(int capacity : {-1,0,1,2,3,60}) {
             if(capacity>=budget)continue;
             jpip::DataBinServer session;
             check(session.SetRequest(image,request(4096,budget)),"small-buffer request rejected");
-            char buffer[60];int length=capacity;bool last=false;
+            char buffer[60];int length=capacity;bool last=true;
             check(!session.GenerateChunk(sources,buffer,&length,&last) &&
                   length==0 && !last && !session.GetError().empty(),
                   "undersized output buffer was not diagnosed");
@@ -712,10 +714,11 @@ static void verify_interleaved_sessions() {
         check(calls < 1000, "interleaved generation stalled");
         if (calls == 1) {
             check(!second_last, "Fixture did not keep a response active through failure");
-            char buffer[128]; int length = sizeof buffer; bool last = false;
+            char buffer[128]; int length = sizeof buffer; bool last = true;
             check(!failing.GenerateChunk(failing_sources, buffer, &length, &last) &&
                   failing.GetError().find(path) != std::string::npos,
                   "controlled failure in another session lost its identity");
+            check(length == 0 && !last, "Interleaved failure left chunk outputs set");
         }
         for (int which : {0,1}) {
             bool &last = which == 0 ? first_last : second_last;
