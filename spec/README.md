@@ -146,9 +146,8 @@ files. That is the "linked JPX" form and the production workload.
 
 The formal references are ITU-T T.800 (JPEG 2000 Part 1: Annex A is the
 codestream, Annex I is the JP2 file format) and T.801 (Part 2: Annex M has
-the JPX boxes). The model files cite the relevant table or clause on every
-field, so you rarely need the standards themselves. Local copies live in
-`standards/`, which is outside Git.
+the JPX boxes). The model files cite the relevant table or clause for each
+field.
 
 The standard layer requires the Reader Requirements box that T.801 M.11.1
 places immediately after `ftyp`, and the `MinV` a writer must set (0 for

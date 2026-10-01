@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits.h>
+#include <unordered_map>
 #include <vector>
 
 #include "jpip/jpip.h"
@@ -14,7 +15,7 @@ namespace jpip {
         struct Codestream {
             int header = 0;
             int tile_header = 0;
-            std::vector<int> precincts;
+            std::unordered_map<int, int> precincts;
             int min_precinct = 0;
         };
 
@@ -49,18 +50,15 @@ namespace jpip {
         static int *Slot(Codestream &codestream, int id) {
             if (id < codestream.min_precinct)
                 return NULL;
-            int index = id - codestream.min_precinct;
-            if (index >= static_cast<int>(codestream.precincts.size()))
-                codestream.precincts.resize(index + 1, 0);
-            return &codestream.precincts[index];
+            return &codestream.precincts[id];
         }
 
         static int GetPrecinct(const Codestream &codestream, int id) {
             if (id < codestream.min_precinct)
                 return INT_MAX;
-            size_t index = static_cast<size_t>(id - codestream.min_precinct);
-            return index < codestream.precincts.size()
-                    ? codestream.precincts[index] : 0;
+            std::unordered_map<int, int>::const_iterator it =
+                    codestream.precincts.find(id);
+            return it == codestream.precincts.end() ? 0 : it->second;
         }
 
         static int AddToPrecinct(Codestream &codestream, int id, int amount,
@@ -70,17 +68,15 @@ namespace jpip {
         }
 
         static void Pack(Codestream &codestream) {
-            size_t count = 0;
-            while (count < codestream.precincts.size() &&
-                   codestream.precincts[count] == INT_MAX)
-                ++count;
-            if (count == 0)
-                return;
-            codestream.precincts.erase(codestream.precincts.begin(),
-                                       codestream.precincts.begin() + count);
-            codestream.min_precinct += static_cast<int>(count);
+            std::unordered_map<int, int>::iterator it;
+            while ((it = codestream.precincts.find(codestream.min_precinct)) !=
+                           codestream.precincts.end() &&
+                   it->second == INT_MAX) {
+                codestream.precincts.erase(it);
+                codestream.min_precinct++;
+            }
             if (codestream.precincts.empty())
-                std::vector<int>().swap(codestream.precincts);
+                std::unordered_map<int, int>().swap(codestream.precincts);
         }
 
     public:

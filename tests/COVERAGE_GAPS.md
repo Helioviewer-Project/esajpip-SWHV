@@ -77,12 +77,11 @@ production checks. No mutation score was recomputed for these additions.
 
 ## Diagnostic Checks Run
 
-- ASan/UBSan: host CTest passed in `/private/tmp/esajpip-profile-asan`.
+- ASan/UBSan: CTest passed.
 - Extended sanitizer: focused `protocol` passed after explicit byte conversions
   were added for sanitizer-reported narrowing. The full host suite was not
   completed in that pass because `server` produced no progress after about 90 s.
-- Optimized build: `protocol` and replay smoke checks passed in
-  `/private/tmp/esajpip-profile-optimized`.
+- Optimized build: `protocol` and replay smoke checks passed.
 - Fuzz build: all five libFuzzer targets built with Homebrew LLVM and passed
   seeded smoke runs, plus deterministic replay over the generated corpora. No
   long fuzz campaign result is recorded here.

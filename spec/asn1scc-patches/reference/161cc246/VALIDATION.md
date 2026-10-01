@@ -112,8 +112,6 @@ copied corpus and `-max_total_time=300 -seed=417 -print_final_stats=1`.
 The local C and Rust reproducer runs used the sources and scripts retained
 in esajpip commit `b78568c`; the Rust scripts require Cargo and the pinned
 compiler. Those files were removed after retirement.
-Raw logs, corpora and campaign summaries from this run are retained under
-`/private/tmp/esajpip-asn1scc-417/`.
 
 Ada and Python backend execution was not independently repeated here.
 Upstream records remaining Ada limitations in issue #417; esajpip uses C.
