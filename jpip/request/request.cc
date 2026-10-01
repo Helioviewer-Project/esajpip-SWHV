@@ -93,10 +93,6 @@ namespace jpip {
             return true;
         }
 
-        int Clamp(int value, int minimum, int maximum) {
-            return value < minimum ? minimum : (value > maximum ? maximum : value);
-        }
-
         bool IsScheme(const string &uri, size_t length) {
             if (length == 0 ||
                 !((uri[0] >= 'A' && uri[0] <= 'Z') ||
@@ -169,14 +165,15 @@ namespace jpip {
             return !suffix->empty();
         }
 
-        bool ParseRange(const char **position, uint64_t *first, uint64_t *last) {
-            if (!ParseUnsignedInteger(position, UINT64_MAX, first))
+        bool ParseRange(const char **position, uint64_t *first, uint64_t *last,
+                        uint64_t maximum = UINT64_MAX) {
+            if (!ParseUnsignedInteger(position, maximum, first))
                 return false;
             *last = *first;
             if (**position == '-') {
                 ++*position;
                 if (**position >= '0' && **position <= '9') {
-                    if (!ParseUnsignedInteger(position, UINT64_MAX, last) ||
+                    if (!ParseUnsignedInteger(position, maximum, last) ||
                         *last < *first)
                         return false;
                 } else {
@@ -276,21 +273,12 @@ namespace jpip {
                 }
                 if (*position == '[') {
                     ++position;
-                    if (!ParseInteger(&position, &minimum_codestream))
+                    uint64_t first, last;
+                    if (!ParseRange(&position, &first, &last,
+                                    ResponseRequest::MAX_CODESTREAM_INDEX))
                         return false;
-                    minimum_codestream = Clamp(minimum_codestream, 0, ResponseRequest::MAX_CODESTREAM_INDEX);
-                    maximum_codestream = minimum_codestream;
-                    if (*position == '-') {
-                        ++position;
-                        if (*position == ']')
-                            maximum_codestream = INT_MAX;
-                        else {
-                            if (!ParseInteger(&position, &maximum_codestream))
-                                return false;
-                            maximum_codestream = Clamp(maximum_codestream,
-                                                       minimum_codestream, ResponseRequest::MAX_CODESTREAM_INDEX);
-                        }
-                    }
+                    minimum_codestream = static_cast<int>(first);
+                    maximum_codestream = last == UINT64_MAX ? INT_MAX : static_cast<int>(last);
                     if (*position++ != ']')
                         return false;
                     has_codestream_qualifier = true;

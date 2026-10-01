@@ -451,6 +451,55 @@ static void CheckFrameSizeState() {
           "An invalid duplicate frame size overwrote an earlier valid value");
 }
 
+static void CheckModelRanges() {
+    struct Case { const char *range; int first, last; };
+    const Case valid[] = {
+        {"0", 0, 0},
+        {"0-0", 0, 0},
+        {"3-9", 3, 9},
+        {"9-9", 9, 9},
+        {"0-", 0, INT_MAX},
+        {"100000", 100000, 100000},
+        {"99999-100000", 99999, 100000},
+        {"100000-", 100000, INT_MAX}
+    };
+    for (const Case &test : valid) {
+        jpip::Request request;
+        Check(request.ParseTarget(string("/jpip?model=[") + test.range + "]P0&cid=7") &&
+                      request.has.model && request.model.size() == 1 &&
+                      request.model[0].has_codestream_qualifier &&
+                      request.model[0].first_codestream == test.first &&
+                      request.model[0].last_codestream == test.last,
+              "A valid cache-model range changed its endpoints");
+    }
+    const char *invalid[] = {
+        "-5-9", "9-3", "-1", "-1-", "0--1", "-0", "+1", "",
+        "100001", "100001-", "0-100001", "100001-100000",
+        "2147483647", "0-2147483647", "18446744073709551615",
+        "0-18446744073709551615", "18446744073709551616",
+        "1-2-3", "1-junk"
+    };
+    for (const char *range : invalid) {
+        jpip::Request request;
+        string error;
+        Check(!request.ParseTarget(string("/jpip?model=[") + range + "]P0&cid=7", &error),
+              "Accepted an invalid cache-model range");
+        Check(!request.has.model && request.model.empty(),
+              "An invalid range produced a cache-model update");
+        Check(error == "Invalid or unsupported JPIP model parameter" &&
+                      request.routing.cid && request.channel == "7",
+              "Cache-model range rejection lost its diagnostic or following route");
+    }
+    Check(RejectRequest("/jpip?model=%5B-5-9%5DP0&cid=7") &&
+                  RejectRequest("/jpip?model=%5B9-3%5DP0&cid=7"),
+          "Accepted an encoded invalid cache-model range");
+    jpip::Request repeated;
+    Check(repeated.ParseTarget("/jpip?model=[0]P0&model=[1]Hm&cid=7") &&
+                  repeated.model.size() == 1 && repeated.model[0].first_codestream == 1 &&
+                  repeated.model[0].bin_class == jpip::DataBinClass::MAIN_HEADER,
+          "A repeated cache-model parameter stopped using its last value");
+}
+
 static void CheckDiagnostics() {
     struct Case { const char *model; const char *error; };
     const Case cases[] = {
@@ -473,6 +522,7 @@ int main() {
     CheckOpenContextRanges();
     CheckLayers();
     CheckFrameSizeState();
+    CheckModelRanges();
     CheckDiagnostics();
     return EXIT_SUCCESS;
 }
