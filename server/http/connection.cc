@@ -67,7 +67,8 @@ void Connection::FinishResponse() {
     if (IsClosing())
         return;
     SetDeadline(Deadline::READ, connection_timeout);
-    StartReading();
+    if (!StartReading())
+        Abort();
 }
 
 void Connection::SetDeadline(Deadline reason, int seconds) {
@@ -103,18 +104,21 @@ void Connection::Read(uv_stream_t *stream, ssize_t length,
 }
 
 bool Connection::StartReading() {
-    if (reading || requests_blocked || IsClosing())
+    if (reading || requests_blocked || response_active || IsClosing())
         return true;
+
     if (retained_size > 0) {
         size_t size = retained_size;
         retained_size = 0;
         Consume(retained_input, size);
-        if (requests_blocked || IsClosing())
-            return true;
     }
-    int result = uv_read_start(GetStream(), Allocate, Read);
-    if (result != 0)
+
+    if (requests_blocked || response_active || IsClosing())
+        return true;
+
+    if (uv_read_start(GetStream(), Allocate, Read) != 0)
         return false;
+
     reading = true;
     return true;
 }

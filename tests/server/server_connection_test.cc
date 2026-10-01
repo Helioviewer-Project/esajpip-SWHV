@@ -31,6 +31,7 @@ void Check(bool condition, const char *message) {
 struct Exchange {
     uv_loop_t loop;
     uv_tcp_t listener;
+    uv_timer_t response_timer;
     unique_ptr<server::Connection> connection;
     server::Connection::Write writes[3];
     vector<string> requests;
@@ -38,6 +39,7 @@ struct Exchange {
     uint16_t port = 0;
     atomic<bool> failed{false};
     bool closed = false;
+    bool response_paused_reads = false;
 
     static void Accepted(uv_stream_t *listener, int status) {
         Exchange *self = static_cast<Exchange *>(listener->data);
@@ -53,8 +55,7 @@ struct Exchange {
                        server::RequestHead &&request) {
                     self->requests.push_back(request.target);
                     connection.StartResponse();
-                    size_t index = self->requests.size() == 1 ? 0 : 2;
-                    if (index == 0) {
+                    if (self->requests.size() == 1) {
                         bool first = connection.Send(
                                 &self->writes[0], "one",
                                 [self](bool ok) {
@@ -71,15 +72,9 @@ struct Exchange {
                         if (!first || !second)
                             self->failed.store(true);
                     } else {
-                        bool sent = connection.Send(
-                                &self->writes[index], "three",
-                                [self](bool ok) {
-                                    if (!ok)
-                                        self->failed.store(true);
-                                    if (ok)
-                                        self->connection->CloseGracefully();
-                                });
-                        if (!sent)
+                        // Leave no write pending while checking the read state.
+                        if (uv_timer_start(&self->response_timer, RespondSecond,
+                                           0, 0) != 0)
                             self->failed.store(true);
                     }
                 },
@@ -94,6 +89,8 @@ struct Exchange {
                 },
                 [self](server::Connection &connection) {
                     self->closed = true;
+                    uv_close(reinterpret_cast<uv_handle_t *>(&self->response_timer),
+                             NULL);
                     uv_close(reinterpret_cast<uv_handle_t *>(&self->listener),
                              NULL);
                 }));
@@ -105,8 +102,35 @@ struct Exchange {
         }
     }
 
+    static void RespondSecond(uv_timer_t *timer) {
+        Exchange *self = static_cast<Exchange *>(timer->data);
+        // Both writes of the first response have completed. The second
+        // response is active, but has not submitted a write yet, so an active
+        // connection socket here means reads have been restarted.
+        uv_walk(&self->loop, [](uv_handle_t *handle, void *data) {
+            Exchange *self = static_cast<Exchange *>(data);
+            if (handle->type == UV_TCP &&
+                handle->data == self->connection.get())
+                self->response_paused_reads = uv_is_active(handle) == 0;
+        }, self);
+        bool sent = self->connection->Send(
+                &self->writes[2], "three", [self](bool ok) {
+                    if (!ok)
+                        self->failed.store(true);
+                    if (ok)
+                        self->connection->CloseGracefully();
+                });
+        if (!sent) {
+            self->failed.store(true);
+            self->connection->Abort();
+        }
+    }
+
     void Run() {
         Check(uv_loop_init(&loop) == 0, "Could not initialize the test loop");
+        Check(uv_timer_init(&loop, &response_timer) == 0,
+              "Could not initialize the response timer");
+        response_timer.data = this;
         Check(uv_tcp_init(&loop, &listener) == 0,
               "Could not initialize the test listener");
         listener.data = this;
@@ -338,6 +362,8 @@ int main() {
     exchange.Run();
     Check(!exchange.failed.load(), "The libuv connection exchange failed");
     Check(exchange.closed, "The libuv connection did not close");
+    Check(exchange.response_paused_reads,
+          "Reads resumed during the retained request's response");
     Check(exchange.requests.size() == 2 &&
                   exchange.requests[0] == "/first?cnew=http" &&
                   exchange.requests[1] == "/second?cnew=http",
