@@ -223,7 +223,7 @@ int hv_geometry_packets(const hv_geometry *g, hv_packet **packets, size_t *count
                 r = lrcp ? inner : outer;
                 for (c = 0; c < g->ncomps; c++) {
                     size_t ri = (size_t)c * (g->levels + 1) + r;
-                    n = (size_t)(g->res[ri].pw * g->res[ri].ph);
+                    n = (size_t)((uint64_t)g->res[ri].pw * (uint64_t)g->res[ri].ph);
                     for (i = 0; i < n; i++) {
                         out[k].resolution = (uint32_t)ri;
                         out[k].precinct = (uint32_t)i;
@@ -243,7 +243,7 @@ int hv_geometry_packets(const hv_geometry *g, hv_packet **packets, size_t *count
         }
         for (ri = 0; ri < nres; ri++) {
             const hv_resolution *res = &g->res[ri];
-            n = (size_t)(res->pw * res->ph);
+            n = (size_t)((uint64_t)res->pw * (uint64_t)res->ph);
             for (i = 0; i < n; i++) {
                 int64_t px, py;
                 uint64_t ax, ay;
