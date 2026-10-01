@@ -1,14 +1,18 @@
 /* replay: the deterministic counterpart of the fuzz targets, for sanitizer,
  * coverage and Valgrind runs that cannot use libFuzzer.
  *
- * Each target is included here under another name, so a mode *is* its target
- * and cannot drift from it:
+ * C targets are included under another name; C++ targets link their named
+ * entrypoints. Both drivers execute the same target functions:
  *
  *   reader-rewrite   fuzz_reader_rewrite   the reader and hv_rewrite
  *   deferred-plt     fuzz_deferred_plt     deferred PLT consumption
  *   asn1             fuzz_asn1             the generated decoders
  *   transcode-fuzz   fuzz_transcode        codestream transcode
  *   merge-fuzz       fuzz_merge            merging, through a temporary file
+ *   jpip-request     fuzz_jpip_request     request syntax and selection
+ *   jpip-writer      fuzz_jpip_writer      message encoding and buffers
+ *   jpip-cache       fuzz_jpip_cache       cache operation sequences
+ *   jpip-session     fuzz_jpip_session     stateful response generation
  *
  * Usage: replay MODE FILE_OR_DIR...
  *
@@ -53,6 +57,12 @@
 #include "fuzz_merge.c"
 #undef LLVMFuzzerTestOneInput
 
+/* The C++ targets use these same functions in libFuzzer and replay builds. */
+int replay_jpip_request(const uint8_t *data, size_t size);
+int replay_jpip_writer(const uint8_t *data, size_t size);
+int replay_jpip_cache(const uint8_t *data, size_t size);
+int replay_jpip_session(const uint8_t *data, size_t size);
+
 typedef int (*replay_fn)(const uint8_t *data, size_t size);
 
 static replay_fn mode_function(const char *mode) {
@@ -66,13 +76,22 @@ static replay_fn mode_function(const char *mode) {
         return replay_transcode_fuzz;
     if (strcmp(mode, "merge-fuzz") == 0)
         return replay_merge_fuzz;
+    if (strcmp(mode, "jpip-request") == 0)
+        return replay_jpip_request;
+    if (strcmp(mode, "jpip-writer") == 0)
+        return replay_jpip_writer;
+    if (strcmp(mode, "jpip-cache") == 0)
+        return replay_jpip_cache;
+    if (strcmp(mode, "jpip-session") == 0)
+        return replay_jpip_session;
     return NULL;
 }
 
 static void usage(const char *program) {
     fprintf(stderr,
             "usage: %s MODE FILE_OR_DIR...\n"
-            "modes: reader-rewrite deferred-plt asn1 transcode-fuzz merge-fuzz\n",
+            "modes: reader-rewrite deferred-plt asn1 transcode-fuzz merge-fuzz\n"
+            "       jpip-request jpip-writer jpip-cache jpip-session\n",
             program);
 }
 

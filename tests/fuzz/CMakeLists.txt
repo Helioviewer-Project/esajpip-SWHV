@@ -1,8 +1,8 @@
-# The fuzz targets of jpeg2000, hv_transcode and hv_merge, their seed
+# The fuzz targets of jpeg2000, JPIP, hv_transcode and hv_merge, their seed
 # corpora, and their deterministic counterpart.
 #
-# `replay` includes every target under another name, so a replay mode *is* a
-# target and the two cannot drift. It needs no libFuzzer runtime, is built
+# `replay` calls the same target functions as libFuzzer, so the two cannot
+# drift. It needs no libFuzzer runtime, is built
 # always, and is what the sanitizer, coverage and Valgrind runs use:
 #
 #   build/tests-*/tests/fuzz/replay reader-rewrite FILE_OR_DIR...
@@ -63,13 +63,16 @@ set(ESAJPIP_FUZZ_SOURCES
     ${PROJECT_SOURCE_DIR}/transcode/transcode.c
     ${PROJECT_SOURCE_DIR}/transcode/tier2.c
     ${PROJECT_SOURCE_DIR}/merge/merge.c)
+set(ESAJPIP_JPIP_FUZZ_SOURCES
+    fuzz_jpip_request.cc fuzz_jpip_writer.cc fuzz_jpip_cache.cc fuzz_jpip_session.cc)
 set(ESAJPIP_FUZZ_INCLUDES ${CMAKE_CURRENT_BINARY_DIR})
 
 # The deterministic driver: no libFuzzer, so it builds in any configuration.
-add_executable(replay replay.c ${ESAJPIP_FUZZ_SOURCES})
+add_executable(replay replay.c ${ESAJPIP_FUZZ_SOURCES} ${ESAJPIP_JPIP_FUZZ_SOURCES})
 esajpip_configure_target(replay)
 target_include_directories(replay PRIVATE ${ESAJPIP_FUZZ_INCLUDES})
-target_link_libraries(replay PRIVATE jpeg2000)
+target_compile_definitions(replay PRIVATE ESAJPIP_FUZZ_REPLAY)
+target_link_libraries(replay PRIVATE jpip)
 if(TARGET fuzz_corpus)
     add_dependencies(replay fuzz_corpus)
 
@@ -88,6 +91,11 @@ if(TARGET fuzz_corpus)
     esajpip_add_test(fuzz_replay_merge
         COMMAND replay merge-fuzz ${ESAJPIP_FUZZ_CORPUS_DIR}/merge-fuzz
         LABELS fuzz replay)
+    foreach(area request writer cache session)
+        esajpip_add_test(fuzz_replay_jpip_${area}
+            COMMAND replay jpip-${area} ${ESAJPIP_FUZZ_CORPUS_DIR}/jpip-${area}
+            LABELS fuzz replay jpip_fuzz TIMEOUT 30)
+    endforeach()
 endif()
 
 if(NOT ESAJPIP_FUZZ)
@@ -121,6 +129,8 @@ endif()
 # everything that links it the coverage runtime.
 target_compile_options(jpeg2000 PRIVATE -fsanitize=fuzzer-no-link)
 target_link_options(jpeg2000 INTERFACE -fsanitize=fuzzer-no-link)
+target_compile_options(jpip PRIVATE -fsanitize=fuzzer-no-link)
+target_link_options(jpip INTERFACE -fsanitize=fuzzer-no-link)
 
 # esajpip_fuzz_target(<name> <corpus> <sources...>): the shared part of a target.
 function(esajpip_fuzz_target name corpus)
@@ -129,17 +139,29 @@ function(esajpip_fuzz_target name corpus)
     target_include_directories(${name} PRIVATE ${ESAJPIP_FUZZ_INCLUDES})
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
-    target_link_libraries(${name} PRIVATE jpeg2000)
+    set(fuzz_labels fuzz)
+    set(fuzz_timeout)
+    set(fuzz_options)
+    if(name MATCHES "^fuzz_jpip_")
+        target_link_libraries(${name} PRIVATE jpip)
+        list(APPEND fuzz_labels jpip_fuzz)
+        set(fuzz_timeout TIMEOUT 60)
+    else()
+        target_link_libraries(${name} PRIVATE jpeg2000)
+    endif()
+    if(name STREQUAL "fuzz_jpip_request")
+        list(APPEND fuzz_options -dict=${CMAKE_CURRENT_SOURCE_DIR}/jpip.dict)
+    endif()
     if(TARGET fuzz_corpus)
         add_dependencies(${name} fuzz_corpus)
         esajpip_add_test(fuzz_smoke_${name}
-            COMMAND ${name} -runs=20000 -seed=1 -max_len=4096
+            COMMAND ${name} -runs=20000 -seed=1 -max_len=4096 ${fuzz_options}
                     ${ESAJPIP_FUZZ_CORPUS_DIR}/${corpus}
-            LABELS fuzz)
+            LABELS ${fuzz_labels} ${fuzz_timeout})
     else()
         esajpip_add_test(fuzz_smoke_${name}
-            COMMAND ${name} -runs=20000 -seed=1 -max_len=4096
-            LABELS fuzz)
+            COMMAND ${name} -runs=20000 -seed=1 -max_len=4096 ${fuzz_options}
+            LABELS ${fuzz_labels} ${fuzz_timeout})
     endif()
 endfunction()
 
@@ -156,3 +178,10 @@ esajpip_fuzz_target(fuzz_transcode transcode-fuzz fuzz_transcode.c
     ${PROJECT_SOURCE_DIR}/transcode/tier2.c)
 esajpip_fuzz_target(fuzz_merge merge-fuzz fuzz_merge.c
     ${PROJECT_SOURCE_DIR}/merge/merge.c)
+
+# JPIP API sequences and independent semantic checks, without the server runtime.
+foreach(area request writer cache session)
+    esajpip_fuzz_target(fuzz_jpip_${area} jpip-${area} fuzz_jpip_${area}.cc)
+endforeach()
+add_custom_target(jpip_fuzz DEPENDS replay
+    fuzz_jpip_request fuzz_jpip_writer fuzz_jpip_cache fuzz_jpip_session)

@@ -289,7 +289,8 @@ static void CheckIntegerBoundaries() {
                   "A boundary header did not fit its exact buffer");
             Check(writer.Finalize() == static_cast<ptrdiff_t>(expected_length),
                   "A boundary header was not encoded at canonical length");
-            vector<unsigned char> encoded(buffer.begin(), buffer.begin() + expected_length);
+            const unsigned char *bytes = reinterpret_cast<const unsigned char *>(buffer.data());
+            vector<unsigned char> encoded(bytes, bytes + expected_length);
             size_t at = 1;
             unsigned char first = encoded[0];
             Check((first & 0x70) == 0x70, "First header omitted explicit class, stream or final flag");
@@ -363,7 +364,8 @@ static void CheckCoalescedCapacityBoundaries() {
             Check(writer.Finalize() == static_cast<ptrdiff_t>(written) &&
                           writer.Finalize() == static_cast<ptrdiff_t>(written),
                   "Finalizing header growth changed the message length");
-            vector<unsigned char> encoded(buffer.begin() + 1, buffer.begin() + 1 + written);
+            const unsigned char *bytes = reinterpret_cast<const unsigned char *>(buffer.data() + 1);
+            vector<unsigned char> encoded(bytes, bytes + written);
             Check(encoded[0] == (full ? 0x60 : 0x70),
                   "Header growth changed identifiers or the completion flag");
             size_t at = 1;

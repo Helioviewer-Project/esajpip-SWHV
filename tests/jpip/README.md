@@ -76,3 +76,19 @@ use different budgets while their responses are outstanding. A third session's
 source failure must not change either response or its cache. Borrowed sources
 remain alive through each response; remapping is tested between responses, as
 required by the provider contract.
+
+## Fuzz coverage
+
+The request, writer, cache and session fuzz targets link this library directly.
+They share the project's deterministic replay driver and have independent
+semantic checks. See [fuzz targets and replay](../fuzz/README.md) for input
+contracts and campaigns.
+
+```sh
+cmake --build build --target replay
+ctest --test-dir build -L '^jpip_fuzz$' --output-on-failure
+```
+
+`tests/run_baseline.sh` with `ESAJPIP_BASELINE_SPLIT=ON` also writes separate
+`jpip` and `jpip-fuzz` reports, so replay coverage can be compared with the
+ordinary library tests.

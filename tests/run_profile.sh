@@ -5,7 +5,7 @@
 # every host.
 #
 #   tests/run_profile.sh asan|extended|msan|optimized
-#   tests/run_profile.sh fuzz                 (needs the libFuzzer runtime)
+#   tests/run_profile.sh fuzz [CTest options] (needs the libFuzzer runtime)
 #   tests/run_profile.sh valgrind [replay files...]
 #
 # Builds go to build/profile-MODE, or ESAJPIP_TEST_BUILD_DIR.
@@ -88,7 +88,7 @@ case "$mode" in
         # A short deterministic run of every target. For a campaign, point a
         # target at a corpus of its own: tests/vectors/j2k and
         # tests/transcode/fixtures are already useful input.
-        esajpip_ctest "$build" --output-on-failure -L fuzz
+        esajpip_ctest "$build" --output-on-failure -L fuzz "$@"
         ;;
     valgrind)
         if ! command -v valgrind >/dev/null 2>&1; then

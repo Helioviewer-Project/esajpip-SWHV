@@ -147,6 +147,8 @@ if [ "${ESAJPIP_BASELINE_SPLIT:-OFF}" = ON ]; then
     if [ "$ctest_status" -eq 0 ]; then
         run_split normal-no-replay -E '^fuzz_replay_' || split_status=$?
         run_split jpeg2000 -R '^(reader_profile|writer_corpus|output_file|writer|served|reader|geometry)$' || split_status=$?
+        run_split jpip -L '^jpip$' || split_status=$?
+        run_split jpip-fuzz -L '^jpip_fuzz$' || split_status=$?
         run_split merge -R '^(merge|merge_command)$' || split_status=$?
         run_split transcode -R '^(transcode|transcode_command)$' || split_status=$?
         run_split server -R '^(logging|protocol|server|server_connection|jpeg2000)$' || split_status=$?

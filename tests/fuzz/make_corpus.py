@@ -143,7 +143,71 @@ def corpus_paths(repo: Path) -> dict[str, list[Path]]:
     }
 
 
+def jpip_corpora(out: Path) -> None:
+    requests = (
+        b"", b"/jpip?cid=7", b"/movie.jpx?cnew=http&type=jpp-stream&len=512",
+        b"/jpip?fsiz=1024,1024,closest&stream=0-&layers=1&cid=7",
+        b"/jpip?fsiz=4096,4096,round-up&roff=-2,1&rsiz=9,3&cid=7",
+        b"/jpip?fsiz=12,34,sideways&cid=8", b"/jpip?context=jpxl%3C0-%3E&cid=7",
+        b"/jpip?stream=1-9:2,0-3&context=jpxl<0->&model=P0&cid=7",
+        b"/jpip?model=%5B1-2%5DHm:3,H0:5,P6:7,M0:9&tid=0&cid=7",
+        b"/jpip?model=[-5-9]P0&cid=7", b"/jpip?model=[9-3]P0&cid=7",
+        b"/jpip?model=[0-]P0&cid=7", b"/jpip?model=M0%00M1&cid=7",
+        b"/jpip?model=-M0&cid=7", b"/jpip?model=P0:L1&cid=7",
+        b"/jpip?model=X0&cid=7", b"/jpip?model=M0%&cid=7",
+        b"/jpip?len=2147483648&layers=18446744073709551616&cid=7",
+        b"/jpip?cid=7&cid=8&model=M0&tid=1", b"/jpip?cnew=http&cclose=7",
+    )
+    for request in requests:
+        write_unique(out / "jpip-request", "query", request)
+    # Writer input: capacity selector, then flags/class/stream/bin/offset/length/source-offset.
+    # High capacity selectors carry a two-byte capacity. Boundary selectors below
+    # 128 select the table in jpip_support.h; high ones carry a uint64.
+    for capacity in (134, 135, 16410, 32784):
+        for length in (4, 8):  # 126 and 16382 bytes, then two adjacent bytes.
+            body = bytes([1, 2, 0, 0, 0, length, 0]) + bytes([17, 2, 0, 0, 0, 1, 0]) * 2
+            write_unique(out / "jpip-writer", "coalesce", b"\x80" + struct.pack(">H", capacity) + body)
+    for capacity in range(17):
+        for boundary in range(15):
+            body = bytes([1, 0, 255, boundary, boundary, boundary % 11, 0,
+                          97, 3, 0, 0, 0, 7, 0, 7, 1, 2, 0])
+            write_unique(out / "jpip-writer", "boundaries", bytes([capacity]) + body)
+    # Cache operations: opcode/class/stream/id/amount/complete.
+    for stream in range(4):
+        body = b"".join(bytes([4, 3, stream, i, 1, 1]) for i in reversed(range(32)))
+        body += bytes([0, 3, stream, 0, 0, 0, 4, 3, stream, 32, 1, 0])
+        write_unique(out / "jpip-cache", "complete-prefix", body)
+    for cls in range(7):
+        for amount in range(7):
+            body = bytes([4, cls, 1, 255, amount, 0, 3, cls, 1, 255, 6, 0,
+                          0, cls, 1, 255, 0, 0, 1, 0, 0, 0, 0, 0])
+            write_unique(out / "jpip-cache", "update", body)
+    # Session header: progression/JPX/padding. Each request then has eleven
+    # controls: mode/selector/fsiz-x/fsiz-y/roff-x/roff-y/rsiz-x/rsiz-y/layers/len/capacity.
+    viewport = bytes([1, 0, 2, 1, 2, 2, 0, 0, 1, 9, 0])
+    zoom = bytes([65, 9, 4, 2, 2, 2, 5, 3, 3, 11, 1])
+    crop = bytes([9, 0, 4, 2, 6, 2, 1, 3, 2, 8, 2])
+    reconnect = bytes([33, 9, 4, 2, 2, 2, 5, 3, 3, 12, 3])
+    for progression in range(5):
+        for jpx in range(2):
+            for padding in (0, 7):
+                header = bytes([progression, jpx, padding])
+                write_unique(out / "jpip-session", "full", header)
+                write_unique(out / "jpip-session", "history", header + viewport + crop + zoom + reconnect)
+                for budget in range(13):
+                    write_unique(out / "jpip-session", "budget", header +
+                                 bytes([1, 0, 4, 2, 2, 2, 5, 3, 3, budget, 0]))
+    for mode in range(8):
+        record = bytes([17 + mode * 2, 0, 4, 2, 2, 2, 5, 3, 3, 12, 0])
+        write_unique(out / "jpip-session", "invalid-model", b"\x00\x01\x00" + record)
+    write_unique(out / "jpip-session", "invalid-window", b"\x00\x01\x00" +
+                 bytes([129, 0, 4, 2, 2, 2, 5, 3, 3, 12, 0]))
+    for mode in ("jpip-request", "jpip-writer", "jpip-cache", "jpip-session"):
+        write_unique(out / mode, "empty", b"")
+
+
 def build_corpora(repo: Path, out: Path) -> None:
+    jpip_corpora(out)
     paths = corpus_paths(repo)
     # Campaigns add inputs here too. Refresh seeds without deleting discoveries.
     out.mkdir(parents=True, exist_ok=True)
