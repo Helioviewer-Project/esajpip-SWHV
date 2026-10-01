@@ -27,7 +27,8 @@ int hv_codeblocks_init(hv_codeblocks *cb, size_t nblocks, size_t max_contributio
     size_t i;
     memset(cb, 0, sizeof *cb);
     cb->max_contributions = max_contributions;
-    if ((cb->blocks = malloc((nblocks ? nblocks : 1) * sizeof *cb->blocks)) == NULL)
+    if (nblocks > SIZE_MAX / sizeof *cb->blocks ||
+        (cb->blocks = malloc((nblocks ? nblocks : 1) * sizeof *cb->blocks)) == NULL)
         return -1;
     cb->nblocks = nblocks;
     for (i = 0; i < nblocks; i++) {
@@ -152,6 +153,10 @@ static void put_byte(bit_writer *wr, unsigned byte) {
     if (wr->failed)
         return;
     if (wr->size == wr->capacity) {
+        if (wr->capacity > SIZE_MAX / 2) {
+            wr->failed = 1;
+            return;
+        }
         size_t n = wr->capacity ? 2 * wr->capacity : 256;
         uint8_t *grown = realloc(wr->out, n);
         if (grown == NULL) {
@@ -748,6 +753,10 @@ int hv_write_packets(const hv_geometry *g, const hv_packet *packets, size_t npac
                     s.lblock[n] += inc;
                     put_bits(&wr, c->length, (int)s.lblock[n] + log_passes);
                     if (nbody == body_cap) {
+                        if (body_cap > SIZE_MAX / sizeof *body / 2) {
+                            wr.failed = 1;
+                            continue;
+                        }
                         size_t cap = body_cap ? 2 * body_cap : 64;
                         size_t *grown = realloc(body, cap * sizeof *grown);
                         if (grown == NULL) {

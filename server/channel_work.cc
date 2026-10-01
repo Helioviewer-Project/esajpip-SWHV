@@ -122,7 +122,7 @@ void ChannelWork::Complete(int status) {
     try {
         completed(*this, owner);
     } catch (const exception &failure) {
-        ERROR("Channel completion failed: " << failure.what());
+        ERROR("Channel completion failed: " << EscapeForLog(failure.what()));
     } catch (...) {
         ERROR("Channel completion failed with an unknown exception");
     }

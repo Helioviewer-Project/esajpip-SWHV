@@ -557,7 +557,7 @@ private:
         bool queued = ending ? channel.work.Close() : channel.work.Finish();
         if (!queued) {
             ERROR("Channel cleanup could not be queued: "
-                  << channel.work.GetResult().error);
+                  << server::EscapeForLog(channel.work.GetResult().error));
             if (!ending)
                 End(channel);
         }

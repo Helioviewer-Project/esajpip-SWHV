@@ -56,6 +56,11 @@ public:
     bool HasJPIPRoute() const;
     const std::string &GetTarget() const;
     RequestHead TakeRequest();
+
+    RequestHeadParser(const RequestHeadParser &) = delete;
+    RequestHeadParser &operator=(const RequestHeadParser &) = delete;
+    RequestHeadParser(RequestHeadParser &&) = delete;
+    RequestHeadParser &operator=(RequestHeadParser &&) = delete;
 };
 
 }
