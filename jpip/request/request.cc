@@ -429,24 +429,26 @@ namespace jpip {
                 has_metareq = true;
             } else if (name == "fsiz") {
                 string round;
-                if (ParsePair(value, &x, &y, &round)) {
-                    resolution_size = Size(x, y);
-                    has.fsiz = true;
-                    if (round.empty() || round == "round-down") {
-                        round_direction = ROUNDDOWN;
-                        continue;
-                    }
-                    if (round == "round-up") {
-                        round_direction = ROUNDUP;
-                        continue;
-                    }
-                    if (round == "closest") {
-                        round_direction = CLOSEST;
-                        continue;
-                    }
+                bool parsed = ParsePair(value, &x, &y, &round);
+                RoundDirection direction = ROUNDDOWN;
+                if (parsed) {
+                    if (round.empty() || round == "round-down")
+                        direction = ROUNDDOWN;
+                    else if (round == "round-up")
+                        direction = ROUNDUP;
+                    else if (round == "closest")
+                        direction = CLOSEST;
+                    else
+                        parsed = false;
                 }
-                valid = false;
-                SetError(error_message, "Invalid JPIP fsiz parameter");
+                if (parsed) {
+                    resolution_size = Size(x, y);
+                    round_direction = direction;
+                    has.fsiz = true;
+                } else {
+                    valid = false;
+                    SetError(error_message, "Invalid JPIP fsiz parameter");
+                }
             } else if (name == "roff") {
                 if (ParsePair(value, &x, &y)) {
                     woi_position = Point(x, y);

@@ -400,6 +400,57 @@ static void CheckLayers() {
               "Accepted malformed layers");
 }
 
+static void CheckFrameSizeState() {
+    struct Case {
+        const char *value;
+        jpip::ResponseRequest::RoundDirection direction;
+    };
+    const Case valid[] = {
+        {"640,480,round-up", jpip::ResponseRequest::ROUNDUP},
+        {"640,480,closest", jpip::ResponseRequest::CLOSEST},
+        {"640,480", jpip::ResponseRequest::ROUNDDOWN},
+        {"640,480,round-down", jpip::ResponseRequest::ROUNDDOWN}
+    };
+    jpip::Request request;
+    for (const Case &test : valid) {
+        Check(request.ParseTarget(string("/jpip?fsiz=") + test.value + "&cid=7") &&
+                      request.has.fsiz && request.resolution_size == jpip::Size(640, 480) &&
+                      request.round_direction == test.direction,
+              "A valid frame size did not commit its dimensions and rounding mode");
+    }
+    const char *invalid[] = {"abc", "2147483648,1", "12,34,sideways",
+                             "12,34,round-up,extra"};
+    for (const char *value : invalid) {
+        jpip::Request fresh;
+        string error;
+        Check(!fresh.ParseTarget(string("/jpip?fsiz=") + value + "&cid=8", &error),
+              "Accepted an invalid frame size");
+        Check(!fresh.has.fsiz && fresh.resolution_size == jpip::Size() &&
+                      fresh.round_direction == jpip::ResponseRequest::ROUNDDOWN,
+              "An invalid frame size changed the initial window state");
+        Check(error == "Invalid JPIP fsiz parameter" &&
+                      fresh.routing.cid && fresh.channel == "8",
+              "Frame-size rejection lost its diagnostic or following route");
+
+        Check(request.ParseTarget("/jpip?fsiz=640,480,round-up&cid=7"),
+              "Could not initialize an existing frame size");
+        Check(!request.ParseTarget(string("/jpip?fsiz=") + value + "&cid=8", &error),
+              "Accepted an invalid replacement frame size");
+        Check(request.has.fsiz && request.resolution_size == jpip::Size(640, 480) &&
+                      request.round_direction == jpip::ResponseRequest::ROUNDUP,
+              "An invalid frame size replaced previously parsed window state");
+        Check(error == "Invalid JPIP fsiz parameter" && request.channel == "8",
+              "Invalid replacement frame size stopped route parsing");
+    }
+    jpip::Request repeated;
+    Check(!repeated.ParseTarget(
+                  "/jpip?fsiz=640,480,closest&fsiz=12,34,sideways&cid=8") &&
+                  repeated.has.fsiz && repeated.resolution_size == jpip::Size(640, 480) &&
+                  repeated.round_direction == jpip::ResponseRequest::CLOSEST &&
+                  repeated.channel == "8",
+          "An invalid duplicate frame size overwrote an earlier valid value");
+}
+
 static void CheckDiagnostics() {
     struct Case { const char *model; const char *error; };
     const Case cases[] = {
@@ -421,6 +472,7 @@ int main() {
     CheckRouteClassification();
     CheckOpenContextRanges();
     CheckLayers();
+    CheckFrameSizeState();
     CheckDiagnostics();
     return EXIT_SUCCESS;
 }
