@@ -323,7 +323,72 @@ static void CheckIntegerBoundaries() {
     }
 }
 
+static void CheckCoalescedCapacityBoundaries() {
+    struct Case {
+        int prefix;
+        size_t header_before, header_after;
+    };
+    const Case cases[] = {{126, 5, 6}, {16382, 6, 7}};
+    for (const Case &test : cases) {
+        vector<char> payload(test.prefix + 2, static_cast<char>(0xa5));
+        jpip::Source source(payload.data(), payload.size());
+        size_t exact = test.header_after + payload.size();
+        for (int spare : {-1, 0, 3}) {
+            int capacity = static_cast<int>(exact) + spare;
+            vector<char> buffer(capacity + 2, 0x55);
+            jpip::DataBinWriter writer;
+            writer.SetBuffer(buffer.data() + 1, capacity);
+            Check(writer.Write(jpip::MAIN_HEADER, 0, 0, 0, source,
+                               jpip::FileSegment(0, test.prefix)) ==
+                          jpip::DataBinWriter::Result::WRITTEN &&
+                          writer.Write(jpip::MAIN_HEADER, 0, 0, test.prefix, source,
+                                       jpip::FileSegment(test.prefix, 1)) ==
+                          jpip::DataBinWriter::Result::WRITTEN,
+                  "Could not write contributions below a length transition");
+            jpip::DataBinWriter::Result result = writer.Write(
+                    jpip::MAIN_HEADER, 0, 0, test.prefix + 1, source,
+                    jpip::FileSegment(test.prefix + 1, 1), true);
+            bool full = spare < 0;
+            Check(result == (full ? jpip::DataBinWriter::Result::FULL
+                                 : jpip::DataBinWriter::Result::WRITTEN),
+                  "Coalescing did not reserve the additional header byte");
+            size_t payload_length = test.prefix + (full ? 1 : 2);
+            size_t header_length = full ? test.header_before : test.header_after;
+            size_t written = header_length + payload_length;
+            if (spare == 3) {
+                Check(writer.WriteEOR(jpip::EOR::WINDOW_DONE),
+                      "Header growth used the reserved EOR space");
+                written += 3;
+            }
+            Check(writer.Finalize() == static_cast<ptrdiff_t>(written) &&
+                          writer.Finalize() == static_cast<ptrdiff_t>(written),
+                  "Finalizing header growth changed the message length");
+            vector<unsigned char> encoded(buffer.begin() + 1, buffer.begin() + 1 + written);
+            Check(encoded[0] == (full ? 0x60 : 0x70),
+                  "Header growth changed identifiers or the completion flag");
+            size_t at = 1;
+            Check(DecodeInteger(encoded, at) == jpip::MAIN_HEADER &&
+                          DecodeInteger(encoded, at) == 0 &&
+                          DecodeInteger(encoded, at) == 0 &&
+                          DecodeInteger(encoded, at) == payload_length &&
+                          at == header_length,
+                  "Header growth changed the decoded fields");
+            for (size_t i = 0; i < payload_length; ++i)
+                Check(encoded[at + i] == 0xa5, "Moving a growing header corrupted payload");
+            if (spare == 3)
+                Check(encoded[written - 3] == 0 &&
+                              encoded[written - 2] == jpip::EOR::WINDOW_DONE &&
+                              encoded[written - 1] == 0,
+                      "Finalizing a growing header corrupted the EOR");
+            Check(buffer[0] == 0x55, "A growing header wrote before the buffer");
+            for (size_t i = written + 1; i < buffer.size(); ++i)
+                Check(buffer[i] == 0x55, "Header growth wrote beyond the finalized message");
+        }
+    }
+}
+
 int main() {
+    CheckCoalescedCapacityBoundaries();
     CheckIntegerBoundaries();
     CheckJPIPMessages();
     CheckDataBinCapacity();

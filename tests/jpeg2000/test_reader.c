@@ -1946,6 +1946,11 @@ static void check_codestreams(void) {
         check(hv_codestream_next(&cs, &item) == -1 && cs.error_at == 2 &&
               strcmp(cs.error, "SOC is not followed by SIZ") == 0, "next after a failed open",
               cs.error);
+        check(hv_codestream_open(&cs, p, 0, b.n, 0) == 0 && cs.error == NULL &&
+              cs.error_at == 0 && hv_codestream_siz(&cs) != NULL &&
+              hv_codestream_cod(&cs) == NULL && hv_codestream_qcd(&cs) == NULL,
+              "open after closing a failed open", cs.error);
+        hv_codestream_close(&cs);
     }
     free(p);
     release(&b);

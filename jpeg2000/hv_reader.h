@@ -343,7 +343,10 @@ typedef struct {
  * than HV_ACCEPT_PLT_PADDING with HV_PROFILE, which it refuses.
  * HV_DEFER_PLT requires HV_PROFILE. start after end is an error too.
  * 0 on success, -1 on error (cs->error, cs->error_at).
- * Call hv_codestream_close in both cases. */
+ * cs may be uninitialized on its first use. Call hv_codestream_close after
+ * every open attempt, successful or failed, before opening it again or
+ * discarding it. open initializes cs; it does not release allocations from
+ * a previous open. */
 int hv_codestream_open(hv_codestream *cs, const uint8_t *buf, size_t start, size_t end,
                        unsigned flags);
 
