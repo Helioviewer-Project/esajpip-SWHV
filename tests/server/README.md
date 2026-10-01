@@ -7,7 +7,7 @@ are tested independently under [tests/jpip](../jpip/README.md).
 | --- | --- |
 | `server_storage` | FileManager acceptance against the corpus, linked sources, real mapped-source responses, deferred packet errors, stable acquisitions, release, reacquisition and failed-open retry |
 | `server_engine` | ChannelEngine thread migration and byte-equivalent plain/gzip output, including one-byte compressed output buffers |
-| `server_worker` | Serialized worker operations, deterministic queued cancellation, completion after an open has started, cleanup and reuse |
+| `server_worker` | Serialized worker operations, deterministic queued cancellation, completion after an open has started, response finishing and reuse, worker closure and rejection of later work |
 | `server_http` | Every split point and bytewise HTTP parsing, pipelined bytes left unconsumed, parser reset, Host/body rules and exact line/head limits |
 | `server_connection` | Direct libuv connection callbacks, ordered writes, read/write deadlines and graceful closure |
 | `server` | Live HTTP/JPIP routing, source acceptance, limits, independent bin reconstruction, gzip, cache continuation and shutdown while a worker is blocked |

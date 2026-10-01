@@ -48,13 +48,19 @@ struct PooledResponse {
                     self->failed = true;
             } else if (result.generation ==
                        server::ChannelEngine::GenerateResult::COMPLETE) {
-                if (!work.Cleanup())
+                if (!work.Finish())
                     self->failed = true;
             } else {
                 self->failed = true;
             }
             break;
-        case server::ChannelWork::Kind::CLEANUP:
+        case server::ChannelWork::Kind::FINISH:
+            if (!work.Close())
+                self->failed = true;
+            break;
+        case server::ChannelWork::Kind::CLOSE:
+            if (!work.IsClosed())
+                self->failed = true;
             break;
         }
     }
@@ -77,8 +83,8 @@ struct PooledResponse {
         Check(!work->Open("image.jp2"),
               "Queued concurrent work for one channel");
         uv_run(&loop, UV_RUN_DEFAULT);
-        Check(!failed && !work->IsActive(),
-              "The pooled channel response failed");
+        Check(!failed && !work->IsActive() && work->IsClosed(),
+              "The pooled channel response or terminal cleanup failed");
         work = NULL;
         Check(uv_loop_close(&loop) == 0,
               "The channel-work test loop retained handles");
@@ -141,7 +147,7 @@ static void CheckQueuedCancellation(const string &directory) {
     Blockers blockers;
     blockers.Start(loop);
     Check(work.Open("image.jp2"), "Could not queue the canceled open");
-    Check(!work.Open("image.jp2") && !work.Cleanup(),
+    Check(!work.Open("image.jp2") && !work.Finish() && !work.Close(),
           "Active work accepted a second operation");
     work.CancelQueued();
     blockers.Release();
@@ -149,21 +155,24 @@ static void CheckQueuedCancellation(const string &directory) {
     Check(completion.calls == 1 && blockers.completed == 2 &&
                   work.GetResult().open == server::FileManager::OpenResult::INVALID,
           "Queued cancellation executed the open or lost its completion");
-    Check(work.Cleanup(), "Could not clean up after queued cancellation");
+    Check(work.Finish(), "Could not clean up after queued cancellation");
     work.CancelQueued(); // Cleanup must remain queued, even when canceled.
     uv_run(&loop, UV_RUN_DEFAULT);
     Check(completion.calls == 2 &&
-                  work.GetResult().kind == server::ChannelWork::Kind::CLEANUP,
+                  work.GetResult().kind == server::ChannelWork::Kind::FINISH,
           "Cleanup cancellation lost its completion");
     Check(work.Open("image.jp2"), "Canceled worker could not be reused");
     uv_run(&loop, UV_RUN_DEFAULT);
     Check(completion.calls == 3 &&
                   work.GetResult().open == server::FileManager::OpenResult::OPENED,
           "Open after cancellation did not complete");
-    Check(work.Cleanup(), "Could not finish reused worker");
+    Check(work.Close(), "Could not close reused worker");
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 4 && uv_loop_close(&loop) == 0,
-          "Canceled worker retained requests or loop handles");
+    Check(completion.calls == 4 && work.IsInitialized() && work.IsClosed() &&
+                  work.GetResult().kind == server::ChannelWork::Kind::CLOSE &&
+                  !work.Open("image.jp2") && !work.Finish() &&
+                  !work.Close() && uv_loop_close(&loop) == 0,
+          "Closed worker accepted work or retained loop handles");
 }
 
 static void CheckCleanupCancellation(const string &directory) {
@@ -206,7 +215,7 @@ static void CheckCleanupCancellation(const string &directory) {
           "Cleanup fixture did not leave compression active");
     Blockers blockers;
     blockers.Start(loop);
-    Check(work.Cleanup(), "Could not queue compression cleanup");
+    Check(work.Finish(), "Could not queue compression cleanup");
     work.CancelQueued();
     blockers.Release();
     uv_run(&loop, UV_RUN_DEFAULT);
@@ -225,9 +234,19 @@ static void CheckCleanupCancellation(const string &directory) {
     }
     Check(channel_test::Gunzip(compressed) == expected,
           "Canceling queued cleanup preserved stale compression or changed the cache");
-    Check(work.Cleanup(), "Could not finish cleanup test");
+    Blockers closing_blockers;
+    closing_blockers.Start(loop);
+    int calls = completion.calls;
+    Check(work.Close() && !work.IsClosed(),
+          "Could not queue terminal cleanup or closed before its completion");
+    work.CancelQueued();
+    closing_blockers.Release();
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(uv_loop_close(&loop) == 0, "Cleanup test retained loop handles");
+    Check(completion.calls == calls + 1 && work.IsClosed() &&
+                  !work.Begin(request, false, buffer, sizeof buffer) &&
+                  !work.Generate(buffer, sizeof buffer) &&
+                  uv_loop_close(&loop) == 0,
+          "Terminal cleanup was canceled or accepted further generation");
 }
 
 static void CheckRunningCancellation(const string &directory) {
@@ -256,10 +275,30 @@ static void CheckRunningCancellation(const string &directory) {
     Check(completion.calls == 1 &&
                   work.GetResult().open == server::FileManager::OpenResult::INVALID,
           "Running cancellation did not drain the failed FIFO open");
-    Check(work.Cleanup(), "Could not clean up running canceled work");
+    Check(work.Close(), "Could not close running canceled work");
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 2 && uv_loop_close(&loop) == 0,
+    Check(completion.calls == 2 && work.IsClosed() &&
+                  uv_loop_close(&loop) == 0,
           "Running canceled work retained loop handles");
+}
+
+static void CheckIdleCleanup(const string &directory) {
+    uv_loop_t loop;
+    Check(uv_loop_init(&loop) == 0, "Could not initialize idle cleanup loop");
+    Completion completion;
+    server::ChannelWork work(&loop, 128, directory, Completion::Done, &completion);
+    Check(work.Open("image.jp2"), "Could not open idle cleanup source");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    Check(work.GetResult().open == server::FileManager::OpenResult::OPENED &&
+                  work.Finish(),
+          "Could not queue idle response cleanup");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    Check(work.IsInitialized() && !work.IsClosed() && work.Close(),
+          "Response cleanup lost the engine or blocked terminal cleanup");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    Check(completion.calls == 3 && work.IsClosed() &&
+                  !work.IsActive() && uv_loop_close(&loop) == 0,
+          "Idle engine was not closed exactly once");
 }
 
 int main() {
@@ -269,6 +308,7 @@ int main() {
     CheckQueuedCancellation(fixture.directory);
     CheckRunningCancellation(fixture.directory);
     CheckCleanupCancellation(fixture.directory);
+    CheckIdleCleanup(fixture.directory);
     PooledResponse pooled(128);
     vector<char> response = pooled.Generate(fixture.directory);
     server::ChannelEngine engine(128);

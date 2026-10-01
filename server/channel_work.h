@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <string>
 
 #include <uv.h>
@@ -16,7 +17,8 @@ public:
         OPEN,
         BEGIN,
         GENERATE,
-        CLEANUP
+        FINISH,
+        CLOSE
     };
 
     struct Result {
@@ -35,7 +37,7 @@ public:
 private:
     uv_loop_t *loop;
     uv_work_t work;
-    ChannelEngine engine;
+    std::unique_ptr<ChannelEngine> engine;
     Completed completed;
     void *owner;
     jpip::ResponseRequest request;
@@ -44,7 +46,7 @@ private:
     char *buffer = NULL;
     int capacity = 0;
     bool gzip = false;
-    bool initialized = false;
+    const bool initialized;
     bool active = false;
 
     static void Run(uv_work_t *work);
@@ -64,11 +66,15 @@ public:
     bool Begin(jpip::ResponseRequest image_request, bool use_gzip,
                char *output, int output_capacity);
     bool Generate(char *output, int output_capacity);
-    bool Cleanup();
+    // Release response resources while preserving the image and cache.
+    bool Finish();
+    // Destroy the engine on a worker and prevent further operations.
+    bool Close();
     void CancelQueued();
 
     bool IsInitialized() const;
     bool IsActive() const;
+    bool IsClosed() const;
     const Result &GetResult() const;
 
     ChannelWork(const ChannelWork &) = delete;

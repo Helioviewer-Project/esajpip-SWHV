@@ -12,9 +12,10 @@ namespace server {
 ChannelWork::ChannelWork(uv_loop_t *_loop, int chunk_size,
                          const string &image_directory, Completed _completed,
                          void *_owner)
-    : loop(_loop), engine(chunk_size), completed(_completed), owner(_owner),
+    : loop(_loop), engine(new ChannelEngine(chunk_size)),
+      completed(_completed), owner(_owner),
       initialized(loop != NULL && completed != NULL &&
-                  engine.Init(image_directory)) {
+                  engine->Init(image_directory)) {
     work.data = this;
 }
 
@@ -44,12 +45,16 @@ bool ChannelWork::Generate(char *output, int output_capacity) {
     return Queue(Kind::GENERATE);
 }
 
-bool ChannelWork::Cleanup() {
-    return Queue(Kind::CLEANUP);
+bool ChannelWork::Finish() {
+    return Queue(Kind::FINISH);
+}
+
+bool ChannelWork::Close() {
+    return Queue(Kind::CLOSE);
 }
 
 bool ChannelWork::Queue(Kind operation) {
-    if (!initialized || active)
+    if (active || !initialized || !engine)
         return false;
     result = Result();
     result.kind = operation;
@@ -70,11 +75,11 @@ void ChannelWork::Perform() {
     try {
         switch (result.kind) {
         case Kind::OPEN:
-            result.open = engine.Open(target);
+            result.open = engine->Open(target);
             break;
         case Kind::BEGIN: {
             jpip::ResponseRequest current = std::move(request);
-            if (engine.Begin(current, gzip, &result.error))
+            if (engine->Begin(current, gzip, &result.error))
                 GenerateChunk();
             else
                 result.request_rejected = true;
@@ -83,8 +88,11 @@ void ChannelWork::Perform() {
         case Kind::GENERATE:
             GenerateChunk();
             break;
-        case Kind::CLEANUP:
-            engine.Finish();
+        case Kind::FINISH:
+            engine->Finish();
+            break;
+        case Kind::CLOSE:
+            engine.reset();
             break;
         }
     } catch (const exception &failure) {
@@ -97,9 +105,9 @@ void ChannelWork::Perform() {
 void ChannelWork::GenerateChunk() {
     if (!result.error.empty())
         return;
-    result.generation = engine.Generate(buffer, capacity, &result.length);
+    result.generation = engine->Generate(buffer, capacity, &result.length);
     if (result.generation == ChannelEngine::GenerateResult::FAILED)
-        result.error = engine.GetError();
+        result.error = engine->GetError();
 }
 
 void ChannelWork::Done(uv_work_t *work, int status) {
@@ -121,7 +129,7 @@ void ChannelWork::Complete(int status) {
 }
 
 void ChannelWork::CancelQueued() {
-    if (active && result.kind != Kind::CLEANUP)
+    if (active && result.kind != Kind::FINISH && result.kind != Kind::CLOSE)
         (void) uv_cancel(reinterpret_cast<uv_req_t *>(&work));
 }
 
@@ -131,6 +139,12 @@ bool ChannelWork::IsInitialized() const {
 
 bool ChannelWork::IsActive() const {
     return active;
+}
+
+bool ChannelWork::IsClosed() const {
+    // The worker may reset the engine while active. Read it only after work
+    // has completed and libuv has synchronized its result with the loop.
+    return !active && !engine;
 }
 
 const ChannelWork::Result &ChannelWork::GetResult() const {

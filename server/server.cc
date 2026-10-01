@@ -98,7 +98,7 @@ struct Exchange {
     bool headers_sent = false;
     bool generation_complete = false;
     bool response_complete = false;
-    bool cleanup_complete = false;
+    bool response_cleaned = false;
 };
 
 struct Buffer {
@@ -435,8 +435,7 @@ private:
         Client &client = *channel.exchange->client;
 
         if (channel.exchange->request.routing.cclose) {
-            channel.state = Channel::OPEN;
-            channel.exchange->cleanup_complete = true;
+            BeginTermination(channel);
             client.connection->StartResponse();
             string response = "HTTP/1.1 200 OK\r\n" +
                     OptionalHeaders(channel.exchange->request) + COMMON_HEADERS +
@@ -457,6 +456,8 @@ private:
                 client.connection->Abort();
                 End(channel);
             }
+            StartCleanup(channel);
+            FinishChannel(channel);
         } else if (!channel.exchange->request.routing.cnew) {
             Begin(channel);
         }
@@ -563,11 +564,17 @@ private:
     }
 
     void StartCleanup(Channel &channel) {
-        if (channel.exchange->cleanup_complete || channel.work.IsActive())
+        if (channel.work.IsActive() || channel.work.IsClosed())
             return;
-        if (!channel.work.Cleanup()) {
-            channel.exchange->cleanup_complete = true;
-            channel.state = Channel::ENDING;
+        bool ending = channel.state == Channel::ENDING;
+        if (!ending && channel.exchange->response_cleaned)
+            return;
+        bool queued = ending ? channel.work.Close() : channel.work.Finish();
+        if (!queued) {
+            ERROR("Channel cleanup could not be queued: "
+                  << channel.work.GetResult().error);
+            if (!ending)
+                End(channel);
         }
     }
 
@@ -592,8 +599,15 @@ private:
             }
             return;
         }
-        if (result.kind == server::ChannelWork::Kind::CLEANUP) {
-            channel.exchange->cleanup_complete = true;
+        if (result.kind == server::ChannelWork::Kind::FINISH) {
+            channel.exchange->response_cleaned = true;
+            // Finish preserves the engine, even if the channel ended meanwhile.
+            if (channel.state == Channel::ENDING)
+                StartCleanup(channel);
+            FinishChannel(channel);
+            return;
+        }
+        if (result.kind == server::ChannelWork::Kind::CLOSE) {
             FinishChannel(channel);
             return;
         }
@@ -731,15 +745,17 @@ private:
     }
 
     void FinishChannel(Channel &channel) {
-        if (!channel.exchange->cleanup_complete ||
-            !channel.exchange->response_complete ||
-            channel.exchange->writes != 0)
+        if (!channel.exchange->response_complete || channel.exchange->writes != 0)
             return;
+        if (channel.state == Channel::ENDING) {
+            if (!channel.work.IsClosed() || !channel.timer_closed)
+                return;
+        } else if (!channel.exchange->response_cleaned) {
+            return;
+        }
         Client *client = channel.exchange->Detach();
         bool close_connection = channel.exchange->head.close;
         if (channel.state == Channel::ENDING) {
-            if (!channel.timer_closed)
-                return;
             dead_channels.push_back(channel.id);
             uv_async_send(&reaper);
         } else {
