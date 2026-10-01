@@ -2,9 +2,13 @@
 
 using namespace server_test;
 
+enum class WaitingRequest { RESPONSE, DISCONNECT, CLOSE };
+
 static void CheckOverlap(uint16_t port, const string &directory,
-                         const jpp_test::Expected &expected, bool disconnect_waiter) {
-    test_case = disconnect_waiter ? "overlap/waiting-disconnect" : "overlap/queued-response";
+                         const jpp_test::Expected &expected, WaitingRequest mode) {
+    test_case = mode == WaitingRequest::CLOSE ? "overlap/queued-close" :
+            mode == WaitingRequest::DISCONNECT ? "overlap/waiting-disconnect" :
+                                                "overlap/queued-response";
     int active = Connect(port);
     Check(active >= 0, "Could not connect active client");
     int receive_size = 64 * 1024;
@@ -23,7 +27,9 @@ static void CheckOverlap(uint16_t port, const string &directory,
 
     int waiting = Connect(port);
     Check(waiting >= 0, "Could not connect waiting client");
-    string waiting_target = "/jpip?cid=" + cid + "&stream=0&fsiz=260,1&len=61&handled";
+    string waiting_target = mode == WaitingRequest::CLOSE
+            ? "/jpip?cclose=" + cid + "&handled"
+            : "/jpip?cid=" + cid + "&stream=0&fsiz=260,1&len=61&handled";
     SendRequest(waiting, waiting_target);
     // Logging happens in Route. Once its record is visible, a subsequent
     // request cannot overtake this one's placement in the waiting slot.
@@ -36,7 +42,7 @@ static void CheckOverlap(uint16_t port, const string &directory,
                   refused.body == "JPIP channel is busy", "Third concurrent request was not refused as busy");
     CheckClosed(busy, 1000, "Busy response retained its connection");
     close(busy);
-    if (disconnect_waiter) {
+    if (mode == WaitingRequest::DISCONNECT) {
         shutdown(waiting, SHUT_RDWR);
         close(waiting);
     }
@@ -47,7 +53,26 @@ static void CheckOverlap(uint16_t port, const string &directory,
     jpp_test::Cache cache(expected);
     Check(cache.Read(generated.body) == 2 && cache.Complete(),
           "Overlapping requests changed active response bytes or completion");
-    if (!disconnect_waiter) {
+    if (mode == WaitingRequest::CLOSE) {
+        Response closed = ReadResponse(waiting);
+        Check(closed.headers.find("200 OK") != string::npos &&
+                      closed.headers.find("JPIP-handled:") != string::npos &&
+                      closed.headers.find("Connection: close") != string::npos &&
+                      closed.body.empty(),
+              "Queued channel close did not deliver its complete control reply");
+        CheckClosed(waiting, 1000, "Queued channel close retained its connection");
+        close(waiting);
+        SendRequest(active, "/jpip?cid=" + cid);
+        Response ended = ReadResponse(active, &active_input);
+        Check(ended.headers.find("503 Service Unavailable") != string::npos &&
+                      (ended.body == "JPIP channel has ended" ||
+                       ended.body == "JPIP channel does not exist"),
+              "Queued close left its channel serving requests");
+        CheckClosed(active, 1000, "Ended channel response retained its connection");
+        close(active);
+        return;
+    }
+    if (mode == WaitingRequest::RESPONSE) {
         Response queued = ReadResponse(waiting);
         Check(queued.headers.find("200 OK") != string::npos &&
                       queued.headers.find("JPIP-handled:") != string::npos &&
@@ -207,8 +232,9 @@ int main() {
     Check(config.Load((directory + "/server.ini").c_str(), error), "Could not load overlap config");
     pid_t pid = StartServer(config, directory + "/server-overlap");
     try {
-        CheckOverlap(port, directory, expected, false);
-        CheckOverlap(port, directory, expected, true);
+        CheckOverlap(port, directory, expected, WaitingRequest::RESPONSE);
+        CheckOverlap(port, directory, expected, WaitingRequest::DISCONNECT);
+        CheckOverlap(port, directory, expected, WaitingRequest::CLOSE);
         CheckActiveDisconnect(port, directory);
         CheckGenerationFailures(port);
     } catch (const exception &failure) { Fail(failure.what()); }
