@@ -21,7 +21,7 @@ packet access order does not change indexed ranges or deferred errors.
 
 The session tests deliberately combine layers of the library. They complement
 the focused tests. File mapping, HTTP extraction, channel lifecycle, gzip and
-worker scheduling remain integration tests under `tests/server/`.
+connection handling remain integration tests under `tests/server/`.
 
 ## Build and select
 

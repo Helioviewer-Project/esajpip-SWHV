@@ -66,6 +66,45 @@ static void siz_boundaries(void) {
     }
 }
 
+/* T.800:2019 Table A.10: recognized declarations are distinguished from
+ * reserved values without claiming to validate unimplemented profiles. */
+static void rsiz_boundaries(void) {
+    SizFixed f = {0};
+    Component component = {0};
+    hv_siz siz = {&f, &component, 1};
+    static const unsigned supported[] = {0, 1, 2, 0x8000, 0x8100, 0xC000};
+    static const unsigned unvalidated[] = {
+        3, 4, 5, 6, 7, 0x0100, 0x010B, 0x0200, 0x020B,
+        0x0306, 0x0307, 0x0400, 0x0411, 0x0413, 0x0424,
+        0x049B, 0x0500, 0x0600, 0x0700, 0x0800, 0x0900, 0x099B, 0x0FFF
+    };
+    static const unsigned reserved[] = {
+        8, 0x00FF, 0x010C, 0x0110, 0x020C, 0x0305, 0x0308,
+        0x0421, 0x0434, 0x04AB, 0x040C, 0x0A00, 0x0FFE, 0x1000
+    };
+    size_t i;
+    f.xsiz = f.ysiz = f.xtsiz = f.ytsiz = 8;
+    f.csiz = 1;
+    component.xrsiz = component.yrsiz = 1;
+    for (i = 0; i < sizeof supported / sizeof *supported; i++) {
+        f.rsiz = supported[i];
+        rule(hv_rule_siz(&siz, NULL, 0), NULL, "implemented Rsiz declaration");
+    }
+    for (i = 0; i < sizeof unvalidated / sizeof *unvalidated; i++) {
+        f.rsiz = unvalidated[i];
+        rule(hv_rule_siz(&siz, NULL, 0), "siz.unsupported-profile", "unvalidated Part 1 profile");
+        rule(hv_rule_siz(&siz, NULL, 1), NULL, "server preserves unvalidated profile");
+    }
+    for (i = 0; i < sizeof reserved / sizeof *reserved; i++) {
+        f.rsiz = reserved[i];
+        rule(hv_rule_siz(&siz, NULL, 0), "siz.rsiz", "reserved Rsiz declaration");
+        rule(hv_rule_siz(&siz, NULL, 1), NULL, "server preserves other declarations");
+    }
+    f.rsiz = 0x4000;
+    rule(hv_rule_siz(&siz, NULL, 0), "siz.unsupported-capabilities", "CAP capabilities unvalidated");
+    rule(hv_rule_siz(&siz, NULL, 1), NULL, "server preserves CAP signalling");
+}
+
 static void plt_boundaries(void) {
     SizFixed f = {0};
     hv_siz s = {0};
@@ -486,6 +525,7 @@ static void tile_grid_limits(void) {
 
 int main(void) {
     siz_boundaries();
+    rsiz_boundaries();
     tile_grid_limits();
     plt_boundaries();
     fragment_boundaries();

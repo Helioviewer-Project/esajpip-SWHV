@@ -187,7 +187,9 @@ typedef struct {
      * form hv_writer's hv_write_* take (for PLT, the entries through
      * hv_plt_next; the accessors below give the COD and QCD bodies, the
      * form hv_rules and hv_geometry take). Valid until the next
-     * hv_codestream_next call; siz as long as hv_codestream_siz. */
+     * hv_codestream_next call; siz as long as hv_codestream_siz.
+     * With HV_PROFILE, QCD and COM bodies stay opaque and their pointers
+     * are NULL. */
     const hv_siz *siz;
     const CodSegment *cod;
     const QcdSegment *qcd;
@@ -207,7 +209,8 @@ typedef struct {
  *
  * HV_PROFILE is HV_PROFILE_HEADERS | 4. The bit 4 alone does nothing: the
  * whole profile applies only when both bits, 2 and 4, are set. The flags
- * only add rules, except HV_ACCEPT_PLT_PADDING and HV_DEFER_PLT.
+ * add rules, except HV_ACCEPT_PLT_PADDING, HV_DEFER_PLT and the opaque
+ * QCD and COM bodies under HV_PROFILE.
  * A marker out of place is
  * main.marker-code or tile.marker-code, and a tile-part header without
  * SOD "tile-part header without SOD", whatever the flags; but the
@@ -366,7 +369,8 @@ const char *hv_codestream_check(const uint8_t *buf, size_t start, size_t end, un
  * SIZ is accepted), and the bodies of its COD and QCD once the reader has
  * reported them: NULL before, for a segment the reader rejected, and after
  * hv_codestream_close. hv_rules and hv_geometry take these; the items
- * give the whole COD and QCD segments, for hv_writer. */
+ * give the whole COD and QCD segments, for hv_writer. The QCD accessor
+ * returns NULL under HV_PROFILE, which leaves its body opaque. */
 const hv_siz *hv_codestream_siz(const hv_codestream *cs);
 const Cod *hv_codestream_cod(const hv_codestream *cs);
 const Qcd *hv_codestream_qcd(const hv_codestream *cs);

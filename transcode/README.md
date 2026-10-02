@@ -151,8 +151,8 @@ inside superboxes are copied as read with the superbox.
 ## Build and test
 
 With the rest of the repository, so configuring needs the server's
-dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
-llhttp and libuv before it adds `jpeg2000/`, `transcode/` and `merge/`.
+dependencies too: the top-level `CMakeLists.txt` also adds `server/`, which
+requires zlib, glib and llhttp.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]

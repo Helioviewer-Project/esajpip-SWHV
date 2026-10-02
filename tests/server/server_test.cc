@@ -1,3 +1,5 @@
+#include <sys/resource.h>
+
 #include "server_fixture.h"
 
 using namespace server_test;
@@ -35,6 +37,9 @@ int main() {
     }
     Check(cod_found, "Could not prepare SOP source fixture");
     WriteFile(directory + "/sop.jp2", sop_image.data(), sop_image.size());
+    // A link to itself can not be opened, whatever the user's privileges.
+    Check(symlink("loop.jp2", (directory + "/loop.jp2").c_str()) == 0,
+          "Could not create the unreadable source fixture");
 
     uint16_t port = ReservePort();
     string config_text =
@@ -110,6 +115,19 @@ int main() {
     CheckClosed(missing_image, 1000,
                 "Missing-image response retained its connection");
     close(missing_image);
+
+    int unreadable = Connect(port);
+    Check(unreadable >= 0, "Could not connect for the unreadable-image test");
+    SendRequest(unreadable, "/loop.jp2?cnew=http");
+    Response unreadable_response = ReadResponse(unreadable);
+    Check(unreadable_response.headers.find("500 Internal Server Error") !=
+                      string::npos &&
+                  unreadable_response.body ==
+                      "The requested image could not be read",
+          "Unreadable image did not return 500 with an explanation");
+    CheckClosed(unreadable, 1000,
+                "Unreadable-image response retained its connection");
+    close(unreadable);
 
     int bad_image = Connect(port);
     Check(bad_image >= 0, "Could not connect for the bad-image test");
@@ -218,6 +236,24 @@ int main() {
                       ChannelId(selected_transport.headers),
           "A pooled connection could not create a second channel");
     close(duplicate);
+
+    int unrelated = Connect(port);
+    Check(unrelated >= 0, "Could not connect for the unrelated-request test");
+    SendRequest(unrelated, "/image.jp2?cnew=http&len=128");
+    Response unrelated_created = ReadResponse(unrelated);
+    Check(unrelated_created.headers.find("HTTP/1.1 200 OK") == 0,
+          "Unrelated-request channel creation failed");
+    SendRequest(unrelated, "/favicon.ico");
+    CheckClosed(unrelated, 1000,
+                "A later request without a JPIP route was answered or retained");
+    close(unrelated);
+    unrelated = Connect(port);
+    Check(unrelated >= 0, "Could not reconnect after the unrelated request");
+    SendRequest(unrelated,
+                "/jpip?cclose=" + ChannelId(unrelated_created.headers));
+    Check(ReadResponse(unrelated).headers.find("HTTP/1.1 200 OK") == 0,
+          "A request without a JPIP route ended a channel it did not name");
+    close(unrelated);
 
     int channel = Connect(port);
     Check(channel >= 0, "Could not connect for channel creation");
@@ -428,7 +464,8 @@ int main() {
     uint16_t channel_limit_port = ReservePort();
     string channel_limit_text =
             "[listen]\nport = " + to_string(channel_limit_port) +
-            "\naddress = 127.0.0.1\n"
+            // A host name, so that this server resolves its listen address.
+            "\naddress = localhost\n"
             "[jpip]\nimage_directory = " + directory + "\nchunk_size = 128\n"
             "[connections]\ninitial_timeout = 1\ntimeout = 1\nlimit = 1\n"
             "[channels]\nlimit = 2\n"
@@ -465,13 +502,63 @@ int main() {
     Check(WIFEXITED(status) && WEXITSTATUS(status) == 0,
           "SIGINT did not stop the channel-limit server cleanly");
 
+    // A server that runs out of descriptors keeps its listener and accepts
+    // again once connections have closed. The idle clients below outnumber
+    // its descriptors, and each is closed by the identification deadline
+    // only after it has been accepted.
+    uint16_t descriptor_port = ReservePort();
+    string descriptor_text =
+            "[listen]\nport = " + to_string(descriptor_port) +
+            "\naddress = 127.0.0.1\n"
+            "[jpip]\nimage_directory = " + directory + "\nchunk_size = 128\n"
+            "[connections]\ninitial_timeout = 1\ntimeout = 1\nlimit = 256\n"
+            "[channels]\nlimit = 2\n"
+            "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
+    WriteFile(directory + "/descriptors.ini", descriptor_text.data(),
+              descriptor_text.size());
+    server::Config descriptor_config;
+    Check(descriptor_config.Load((directory + "/descriptors.ini").c_str(), error),
+          "Could not load the descriptor-limit configuration");
+    rlimit descriptors;
+    Check(getrlimit(RLIMIT_NOFILE, &descriptors) == 0,
+          "Could not read the descriptor limit");
+    rlimit reduced = descriptors;
+    reduced.rlim_cur = 64;
+    Check(setrlimit(RLIMIT_NOFILE, &reduced) == 0,
+          "Could not reduce the descriptor limit");
+    pid_t descriptor_server = StartServer(
+            descriptor_config, directory + "/server-descriptors", 2);
+    Check(setrlimit(RLIMIT_NOFILE, &descriptors) == 0,
+          "Could not restore the descriptor limit");
+    vector<int> idle_clients;
+    for (int i = 0; i < 100; ++i) {
+        idle_clients.push_back(Connect(descriptor_port));
+        Check(idle_clients.back() >= 0, "Could not connect an idle client");
+    }
+    for (int idle_client : idle_clients) {
+        CheckClosed(idle_client, 5000,
+                    "A client beyond the descriptor limit was never accepted");
+        close(idle_client);
+    }
+    int after_exhaustion = Connect(descriptor_port);
+    Check(after_exhaustion >= 0, "Could not connect after descriptor exhaustion");
+    SendRequest(after_exhaustion, "/image.jp2?cnew=http&len=128");
+    Check(ReadResponse(after_exhaustion).headers.find("HTTP/1.1 200 OK") == 0,
+          "The server did not serve after descriptor exhaustion");
+    close(after_exhaustion);
+    Check(kill(descriptor_server, SIGTERM) == 0,
+          "Could not stop the descriptor-limit server");
+    status = WaitForServer(descriptor_server);
+    Check(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "The descriptor-limit server did not stop cleanly");
+
     string blocked_image = directory + "/blocked.jp2";
     Check(mkfifo(blocked_image.c_str(), 0600) == 0,
           "Could not create the blocking image FIFO");
     uint16_t open_timeout_port = ReservePort();
     string open_timeout_text =
-            "[listen]\nport = " + to_string(open_timeout_port) +
-            "\naddress = 127.0.0.1\n"
+            // No address: this server listens on every interface.
+            "[listen]\nport = " + to_string(open_timeout_port) + "\naddress =\n"
             "[jpip]\nimage_directory = " + directory + "\nchunk_size = 128\n"
             "[connections]\ninitial_timeout = 1\ntimeout = 1\nlimit = 2\n"
             "[channels]\nlimit = 2\n"
@@ -522,6 +609,32 @@ int main() {
     status = WaitForServer(failing_server);
     Check(WIFEXITED(status) && WEXITSTATUS(status) != 0,
           "Server startup failure did not return an error");
+
+    // A label over 63 characters can not be sent in a DNS query, so this
+    // name fails to resolve without waiting for a name server.
+    string unresolved_text =
+            "[listen]\nport = " + to_string(port) +
+            "\naddress = " + string(80, 'x') + "\n"
+            "[jpip]\nimage_directory = " + directory + "\nchunk_size = 128\n"
+            "[connections]\ninitial_timeout = 1\ntimeout = 1\nlimit = 2\n"
+            "[channels]\nlimit = 4\n"
+            "[logging]\ndirectory =\nfile_enabled = false\nrequests = false\n";
+    WriteFile(directory + "/unresolved.ini", unresolved_text.data(),
+              unresolved_text.size());
+    server::Config unresolved_config;
+    Check(unresolved_config.Load((directory + "/unresolved.ini").c_str(), error),
+          "Could not load the unresolved-address configuration");
+    pid_t unresolved_server = StartServer(
+            unresolved_config, directory + "/server-unresolved");
+    status = WaitForServer(unresolved_server);
+    Check(WIFEXITED(status) && WEXITSTATUS(status) != 0,
+          "An unresolvable listen address did not prevent startup");
+
+    // One I/O thread leaves this harness no image-open thread to ask for.
+    pid_t threadless_server = StartServer(config, directory + "/server-threads", 1);
+    status = WaitForServer(threadless_server);
+    Check(WIFEXITED(status) && WEXITSTATUS(status) != 0,
+          "A server without image-open threads started");
 
     string logs = ReadLogs(directory);
     Check(logs.find("Server stopping") != string::npos,

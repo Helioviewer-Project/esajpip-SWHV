@@ -362,13 +362,13 @@ typedef struct {
 typedef struct {
     MainMarkerCode_Profile code;
     CodSegment_Profile cod;
-    QcdSegment qcd;
+    OpaqueSegment qcd;
     OpaqueSegment qcc;
     OpaqueSegment rgn;
     OpaqueSegment tlm;
     OpaqueSegment plm;
     OpaqueSegment crg;
-    ComSegment com;
+    OpaqueSegment com;
     TilePart_Profile tilePart;
     OpaqueSegment other;
 

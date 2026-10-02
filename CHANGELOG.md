@@ -5,11 +5,12 @@
 Version 2.0 rearchitects the server. Where 1.x used a parent and a serving
 child, passed accepted sockets between them, created a detached thread per
 client, and tied a JPIP channel to one TCP connection, 2.0 is a single
-foreground process: a libuv event loop owns connections, HTTP parsing, channel
-routing, deadlines, signals, and non-blocking writes, and a bounded worker pool
-does the JPEG 2000 work. Each channel keeps private image, cache, and traversal
-state and is handled by one worker at a time, which isolates JPEG 2000 state
-while letting HTTP connections be pooled or replaced independently of channels.
+foreground process built on Asio: a control thread owns admission, channel
+routing, and signals; each connection parses its requests and generates and
+writes its responses on a bounded set of I/O threads; and a separate pool opens
+images. Each channel keeps private image, cache, and traversal state and is
+used by one thread at a time, which isolates JPEG 2000 state while letting
+HTTP connections be pooled or replaced independently of channels.
 
 ### Added
 
@@ -86,8 +87,9 @@ while letting HTTP connections be pooled or replaced independently of channels.
 - Identify JPIP traffic before allocating JPEG 2000 state. Silent or unrelated
   connections retain only their sockets and expire at the short initial
   timeout. Physical connections and JPIP channels have independent limits.
-- Pipeline response generation through bounded chunk buffers, so workers can
-  continue while earlier chunks await non-blocking socket writes.
+- Generate each response chunk on the thread that writes it, and only once
+  the socket has accepted the previous one, so responses for different
+  connections use different cores and a slow client throttles generation.
 - Reduce per-channel indexing memory. On the 4,014-frame linked-JPX fixture,
   resident memory at the same held point fell from 13,040 KiB to 8,976 KiB
   (31%), with CPU and elapsed time unchanged within measurement noise.
@@ -96,7 +98,7 @@ while letting HTTP connections be pooled or replaced independently of channels.
 - Replace `server.cfg` and libconfig with `server.ini`, parsed by GLib. Existing
   configurations must be rewritten for 2.0.
 - Replace log4cpp with bounded asynchronous logging. Log-file I/O does not run
-  on the event loop or worker pool. Logs retain timestamps, optional request
+  on the serving threads. Logs retain timestamps, optional request
   lines, 1 GiB rotation, and one backup.
 - Leave process restart to the host process manager or container runtime. The
   supervisor, `status` command, and shared-memory process registry are removed.
@@ -142,7 +144,7 @@ while letting HTTP connections be pooled or replaced independently of channels.
   resolved filesystem paths through `JPIP-tid`. Trusted links stored inside JPX
   files may still refer to sources outside the image directory.
 - Improve cleanup and diagnosis. Logs identify a linked JP2 file that prevents
-  its JPX from loading, parser and worker failures release owned resources, and
+  its JPX from loading, parser and response failures release owned resources, and
   orderly shutdown drains queued logs.
 
 ## 1.9.0-rc1 - 2026-09-14

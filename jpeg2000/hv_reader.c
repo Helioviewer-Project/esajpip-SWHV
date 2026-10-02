@@ -1312,7 +1312,7 @@ const Cod *hv_codestream_cod(const hv_codestream *cs) {
     return cs->cods ? &cs->cod.body : NULL;
 }
 const Qcd *hv_codestream_qcd(const hv_codestream *cs) {
-    return cs->qcds ? &cs->qcd.body : NULL;
+    return cs->qcds && !profile_full(cs) ? &cs->qcd.body : NULL;
 }
 
 /* Reads the marker segment at cs->pos: *code, and *end just past it. The
@@ -1451,14 +1451,18 @@ static int main_segment(hv_codestream *cs, uint16_t code, size_t end, hv_item *i
     case HV_QCD:
         if (cs->qcds > 0)
             return fail(cs, "codestream.one-qcd-before-sot", pos);
-        if (HV_DECODE(QcdSegment, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
-            return fail(cs, "invalid QCD", pos);
-        item->qcd = &cs->qcd;
+        if (!profile_full(cs)) {
+            if (HV_DECODE(QcdSegment, &cs->qcd, cs->buf, pos + MARKER, len) != 0)
+                return fail(cs, "invalid QCD", pos);
+            item->qcd = &cs->qcd;
+        }
         break;
     case HV_COM:
-        if (decode_com(cs, pos, end) != 0)
-            return -1;
-        item->com = &cs->com;
+        if (!profile_full(cs)) {
+            if (decode_com(cs, pos, end) != 0)
+                return -1;
+            item->com = &cs->com;
+        }
         break;
     default:
         break;                        /* unknown: reported and skipped */

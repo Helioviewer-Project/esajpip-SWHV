@@ -55,9 +55,12 @@ typedef struct {
  * the image area and the tile grid. Given the Sgcod of a COD (NULL before
  * there is one), also what the multiple component transform requires of
  * the first three components (A.6.1, G.2). The standard layer checks Rsiz
- * too: 0, 1 or 2 (Table A.10), or a value T.801 Table A.2 gives a Part 2
- * codestream, 1x00 xxxx xxxx xxxx (siz.rsiz; hv_rule_codestream_header
- * keeps those out of a JP2 file); the server preserves any Rsiz. The
+ * too: it validates 0, 1 and 2 and the existing Part 2 declarations
+ * (hv_rule_codestream_header keeps the latter out of a JP2 file).
+ * Other recognized Part 1 profiles return siz.unsupported-profile;
+ * unhandled CAP signalling returns siz.unsupported-capabilities. These
+ * mean validation is incomplete, not that the declaration is reserved.
+ * Remaining values fail siz.rsiz. The server preserves any Rsiz. The
  * standard also requires at most 65,535 tiles (B.11, Table A.5;
  * siz.tile-count). The profile adds zero origins, unit sampling and a
  * single tile. */

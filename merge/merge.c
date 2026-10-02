@@ -476,9 +476,11 @@ static int write_headers(writer *w, const source *s, const source *first) {
  * (linked codestreams), each needed for both the Fully Understand and the
  * Display expressions: feature i sets mask bit i, FUAM and DCM all of
  * them. Rsiz 1 (Profile 0) needs no feature: 3, its own, is deprecated.
- * An input's Rsiz is 0, 1 or 2, as a JP2 file's codestream (T.800 I.5.4,
- * Table A.10; jp2.rsiz), so feature 1 always holds. At most 7 features, so
- * every mask is one byte (ML 1), and no vendor features. 0, or -1 with
+ * This merger validates inputs only with Rsiz 0, 1 or 2; the broader
+ * T.800 profiles are unvalidated (siz.unsupported-profile), and Part 2
+ * declarations in JP2 are rejected (jp2.rsiz), so feature 1 always holds.
+ * At most 7 features, so every mask is one byte (ML 1), and no vendor
+ * features. 0, or -1 with
  * w->out.error set. */
 static int write_rreq(writer *w, const source *s, size_t n, int links) {
     RreqStandardFeature standard[8];      /* 1, 2, 4, 5, 9, 10 and 15 at most */

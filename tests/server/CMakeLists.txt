@@ -33,9 +33,8 @@ server_add_test(file_manager_test server_storage storage file_manager_test.cc)
 target_compile_definitions(file_manager_test PRIVATE
     JPEG2000_VECTOR_DIRECTORY="${PROJECT_SOURCE_DIR}/tests/vectors/j2k")
 server_add_test(channel_engine_test server_engine channel channel_engine_test.cc)
-server_add_test(channel_work_test server_worker channel channel_work_test.cc)
 server_add_test(server_overlap_test server_overlap live server_overlap_test.cc)
-foreach(target channel_engine_test channel_work_test server_overlap_test)
+foreach(target channel_engine_test server_overlap_test)
     target_compile_definitions(${target} PRIVATE
         VECTORS="${PROJECT_SOURCE_DIR}/tests/vectors/j2k")
 endforeach()

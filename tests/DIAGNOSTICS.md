@@ -129,6 +129,8 @@ sh tests/run_profile.sh extended
 sh tests/run_profile.sh msan
 sh tests/run_profile.sh optimized
 sh tests/run_profile.sh fuzz
+sh tests/run_profile.sh fuzz-asan
+sh tests/run_profile.sh fuzz-extended
 sh tests/run_profile.sh valgrind tests/vectors/j2k/jp2.jp2
 ```
 
@@ -149,15 +151,23 @@ Not every profile works on every host:
 - `msan`: the whole suite under MemorySanitizer with origins; needs a Linux
   Clang target, the Darwin one has no MSan runtime.
 - `optimized`: the whole suite in `Release`.
-- `fuzz`: builds the five libFuzzer targets under `tests/fuzz` and runs their
+- `fuzz`: builds the libFuzzer targets under `tests/fuzz` and runs their
   seeded CTest smoke runs (`ctest -L fuzz`). Needs the libFuzzer runtime:
   Homebrew's LLVM has it, the Apple Command Line Tools do not. Set
-  `LLVM_PREFIX`, or let the script use `brew --prefix llvm`. Running a
-  campaign is a target away:
-  `build/profile-fuzz/tests/fuzz/fuzz_reader_rewrite -jobs=8 -workers=8 build/profile-fuzz/tests/fuzz/corpus/reader-rewrite`.
+  `LLVM_PREFIX`, or let the script use `brew --prefix llvm`.
+- `fuzz-asan`: bounded libFuzzer mutation campaigns under ASan and UBSan.
+- `fuzz-extended`: bounded libFuzzer mutation campaigns under ASan, UBSan,
+  `unsigned-integer-overflow`, `implicit-conversion` and `local-bounds`. This
+  profile is supplied by `tests/instrumentation.sh`; it is not a CMake option.
 - `valgrind`: builds `replay` in a non-sanitized debug build and runs
   `reader-rewrite` under Memcheck for the files given, or for `jp2.jp2` and
   `jp2-precincts.jp2` when none are.
+
+The local fuzz campaign defaults match the Linux runner: 60 seconds per target
+and 8 workers, over `fuzz_reader_rewrite`, `fuzz_deferred_plt`, `fuzz_asn1`,
+`fuzz_transcode` and `fuzz_merge`. Override with `ESAJPIP_FUZZ_SECONDS`,
+`ESAJPIP_FUZZ_WORKERS` and `ESAJPIP_FUZZ_TARGETS`. Results stay in
+`build/profile-fuzz-*/fuzz-results/PROFILE/TARGET/`.
 
 ## Linux Docker Profiles
 

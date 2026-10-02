@@ -37,6 +37,7 @@ private:
                              bool *last);
     bool GenerateRawChunk();
     GenerateResult Fail(const char *message);
+    void Finish();
 
 public:
     explicit ChannelEngine(int _chunk_size);
@@ -46,8 +47,9 @@ public:
     server::FileManager::OpenResult Open(const std::string &target);
     bool Begin(const jpip::ResponseRequest &request, bool use_gzip,
                std::string *request_error);
+    // COMPLETE also releases what the response held: its sources and gzip
+    // state.
     GenerateResult Generate(char *buffer, int capacity, int *length);
-    void Finish();
 
     const std::string &GetError() const {
         return error_message;

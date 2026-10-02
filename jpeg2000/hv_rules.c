@@ -46,12 +46,32 @@ static int part2_rsiz(uint64_t rsiz) {
     return (rsiz & 0xB000) == 0x8000;
 }
 
+/* Recognized Part 1 declarations whose profile restrictions are not
+ * implemented here (T.800:2019 Tables A.10, A.49, A.50, A.53 and A.54). */
+static int other_part1_profile(uint64_t rsiz) {
+    unsigned main = (unsigned)(rsiz & 15), sub = (unsigned)((rsiz >> 4) & 15);
+    unsigned family = (unsigned)(rsiz >> 8);
+    if ((rsiz >= 3 && rsiz <= 7) || rsiz == 0x0FFF)
+        return 1;
+    if ((family == 1 || family == 2) && sub == 0 && main <= 11)
+        return 1;
+    if (rsiz == 0x0306 || rsiz == 0x0307)
+        return 1;
+    if (family >= 4 && family <= 9 && main <= 11 && sub <= 9)
+        return main == 0 || sub <= (main <= 3 ? 1 : main - 2);
+    return 0;
+}
+
 const char *hv_rule_siz(const hv_siz *siz, const Sgcod *sgcod, int profile) {
     const SizFixed *s = siz->fixed;
     const Component *k = siz->components;
     size_t i;
     if (s->csiz != siz->ncomponents) return "siz.csiz-count";
-    if (!profile && s->rsiz > 2 && !part2_rsiz(s->rsiz)) return "siz.rsiz";
+    if (!profile && s->rsiz > 2 && !part2_rsiz(s->rsiz)) {
+        if (other_part1_profile(s->rsiz)) return "siz.unsupported-profile";
+        if (s->rsiz & 0x4000) return "siz.unsupported-capabilities";
+        return "siz.rsiz";
+    }
     if (!(s->xosiz < s->xsiz && s->yosiz < s->ysiz)) return "siz.origin-inside";
     if (!(s->xtosiz <= s->xosiz && s->ytosiz <= s->yosiz)) return "siz.tile-origin";
     if (!(s->xtosiz + s->xtsiz > s->xosiz && s->ytosiz + s->ytsiz > s->yosiz))

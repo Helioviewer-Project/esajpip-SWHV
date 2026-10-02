@@ -61,7 +61,7 @@ jp2-after-eoc-65.jp2	jp2	invalid	invalid	decode	codestream.extent	bytes after EO
 jp2-siz.rsiz-2.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-	-
 jp2-siz.rsiz-32768.jp2	jp2	invalid	valid	jp2.rsiz	siz.rsiz	T.801 extensions (Table A.2): not in a JP2 file (T.800 I.5.4, Table A.10)	-	-
 jp2-siz.rsiz-1.jp2	jp2	valid	valid	-	siz.rsiz	table A.10 value 1 (profile 0)	-	-
-jp2-siz.rsiz-3.jp2	jp2	invalid	valid	siz.rsiz	siz.rsiz	reserved (Table A.10); the server keeps any Rsiz	-	-
+jp2-siz.rsiz-3.jp2	jp2	invalid	valid	siz.unsupported-profile	siz.rsiz	2k cinema profile: unvalidated; base also has one component, not three (Table A.46)	-	-
 jp2-siz.xsiz-0.jp2	jp2	invalid	invalid	decode	siz.xsiz	min-1	-	decode
 jp2-siz.xsiz-2147483648.jp2	jp2	invalid	invalid	siz.tile-count	siz.xsiz	profile max+1; too many tiles (B.11)	-	decode
 jp2-siz.xsiz-4294967295.jp2	jp2	invalid	invalid	siz.tile-count	siz.xsiz	standard max; too many tiles (B.11)	-	decode
@@ -485,7 +485,7 @@ jpx-embedded-header-rreq.extent.jpx	jpx	invalid	valid	rreq.extent	rreq.extent	a 
 jpx-embedded-siz.rsiz-2.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 2 (profile 1)	-	-
 jpx-embedded-siz.rsiz-32768.jpx	jpx	valid	valid	-	siz.rsiz	T.801 extensions (Table A.2): valid in a JPX file	-	-
 jpx-embedded-siz.rsiz-1.jpx	jpx	valid	valid	-	siz.rsiz	table A.10 value 1 (profile 0)	-	-
-jpx-embedded-siz.rsiz-3.jpx	jpx	invalid	valid	siz.rsiz	siz.rsiz	reserved (Table A.10); the server keeps any Rsiz	-	-
+jpx-embedded-siz.rsiz-3.jpx	jpx	invalid	valid	siz.unsupported-profile	siz.rsiz	2k cinema profile: unvalidated; base also has one component, not three (Table A.46)	-	-
 jpx-embedded-siz.xsiz-0.jpx	jpx	invalid	invalid	decode	siz.xsiz	min-1	-	decode
 jpx-embedded-siz.xsiz-2147483648.jpx	jpx	invalid	invalid	siz.tile-count	siz.xsiz	profile max+1; too many tiles (B.11)	-	decode
 jpx-embedded-siz.xsiz-4294967295.jpx	jpx	invalid	invalid	siz.tile-count	siz.xsiz	standard max; too many tiles (B.11)	-	decode

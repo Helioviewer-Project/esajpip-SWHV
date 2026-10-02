@@ -44,7 +44,22 @@ embedded merge replay, and the new rule/mutation diagnostics. What remains:
   A focused `server` run produced separate parent and child profiles and
   measured 84.09% line coverage and 66.02% branch coverage for `server.cc`.
   This verifies collection; the whole-suite snapshot above has not been
-  refreshed.
+  refreshed. Those figures are for the libuv `server.cc`, which the Asio
+  transport has since replaced.
+- `server/server.cc` and `server/http/connection.cc` after the Asio port: a
+  GCC/gcov run of the `server` label on Linux (2026-10-02) measured 94% and
+  98% line coverage. This is not comparable with the LLVM figures
+  above. The lines left are:
+  - failures the tests cannot provoke: no entropy for a channel ID, an empty
+    image directory (which configuration loading rejects), and a socket
+    option that fails on an accepted connection;
+  - one race: a blocked-deadline report that arrives after its answer was
+    sent;
+  - branches no current caller reaches: a request on a connection that
+    already has an exchange, a response for an exchange without a client,
+    `Fail` during a response, a closed connection that still has an
+    exchange, a second `Stop`, `SetDeadline(NONE)`, and a graceful close of
+    a closing connection.
 - `tools/hv_file.c`: the read and map error paths, and the signal handler,
   whose process is killed before it writes its profile.
 - `transcode/`: the command's option and I/O error paths.

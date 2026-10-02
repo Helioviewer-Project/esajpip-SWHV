@@ -96,9 +96,10 @@ As hvJP2K writes it:
   `RreqStandardFeature`, and no vendor features; T.801 M.11.1, Table
   M.14: feature 1, 2 for more than one codestream, 4 and 5 from the
   codestreams' Rsiz (Profile 1, a T.800 codestream without profile; an
-  input's Rsiz is 0, 1 or 2, as T.800 I.5.4 and Table A.10 require of a
-  JP2 file: `jp2.rsiz`), 9 and 10 for opacity channels in `cdef`, 15 when
-  linked);
+  input's Rsiz is restricted to 0, 1 or 2 by this merger's implemented
+  profile validation, not by the full T.800 Table A.10; other recognized
+  profiles are unvalidated: `siz.unsupported-profile`), 9 and 10 for opacity
+  channels in `cdef`, 15 when linked);
 - `jp2h`, the first input's, with each `colr`'s APPROX of 0 written as 1
   (T.801 has no 0);
 - for each input, a `jpch` and a `jplh`: when its `jp2h` is the first
@@ -171,8 +172,8 @@ them and keeps the IPR 1 that announces them.
 ## Build and test
 
 With the rest of the repository, so configuring needs the server's
-dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
-llhttp and libuv before it adds `jpeg2000/`, `transcode/` and `merge/`.
+dependencies too: the top-level `CMakeLists.txt` also adds `server/`, which
+requires zlib, glib and llhttp.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]

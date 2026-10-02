@@ -8,7 +8,7 @@ header and records where each payload starts and ends.
 
 Nothing in the reader, rules, writer, geometry, `hv_rewrite` or
 `hv_served` keeps mutable static or global state (the generated code's
-static bit patterns are only read), so server workers can use them at the
+static bit patterns are only read), so server threads can use them at the
 same time on different files. Command-specific output replacement and signal
 handling live in `../tools/hv_file`, compiled directly into the two commands
 and its test, outside `jpeg2000`.
@@ -37,8 +37,8 @@ and its test, outside `jpeg2000`.
 ## Build
 
 With the rest of the repository, so configuring needs the server's
-dependencies too: the top-level `CMakeLists.txt` requires zlib, glib,
-llhttp and libuv before it adds `jpeg2000/`, `transcode/` and `merge/`.
+dependencies too: the top-level `CMakeLists.txt` also adds `server/`, which
+requires zlib, glib and llhttp.
 
 ```sh
 cmake -S . -B build [-DESAJPIP_SANITIZE=ON]
@@ -193,6 +193,16 @@ file's `mdat` boxes (16 bytes each).
 
 ## What the reader checks
 
+The standard validator covers Rsiz 0, 1 and 2 and the existing Part 2
+checks. Recognized cinema, broadcast, IMF and PRF-based declarations return
+`siz.unsupported-profile`; unhandled CAP signalling returns
+`siz.unsupported-capabilities`. These are validation limits, not claims
+that T.800 reserves those declarations. CAP and PRF main-header segments
+are preserved as opaque segments; their syntax and ordering are not fully
+validated. The serving profile continues to preserve Rsiz and checks its
+own packet-layout requirements independently.
+
+
 - Boxes: LBox, and XLBox when LBox = 1, within the container; LBox = 0 only
   for the last box, and inside a superbox only if the superbox also runs to
   the end of the file.
@@ -200,10 +210,15 @@ file's `mdat` boxes (16 bytes each).
   marker placement per Table A.2; tile-part order, TPsot and TNsot; Psot, or
   up to the final EOC when Psot = 0; nothing after EOC. A tile-part header
   that reaches SOT or EOC is "tile-part header without SOD" with any flags.
-  The accessors give the main header's SIZ, COD and QCD bodies once read,
+  The accessors give the main header's SIZ, COD and (outside `HV_PROFILE`)
+  QCD bodies once read,
   and NULL before, for a segment the reader rejected, and after
   `hv_codestream_close`.
-- Bodies, by the generated decoders: COD and QCD whole, SIZ, PLT and COM
+- Under `HV_PROFILE`, QCD and COM bodies remain opaque. Their segment
+  boundaries and placement are checked, and QCD must occur exactly once
+  in the main header. The QCD accessor and QCD/COM item pointers are NULL.
+- Bodies, by the generated decoders outside that exception: COD and QCD
+  whole, SIZ, PLT and COM
   one element at a time, and at the standard layer the bodies above, plus
   the model's cross-field rules (`hv_rules.c`): SIZ, COD, zero packet
   lengths, PLT sums against the tile-part data, and at the standard layer

@@ -161,14 +161,13 @@ After identification, the complete HTTP request head is limited to 4 KiB.
 `connections.timeout` sets an absolute deadline to complete that head. After a
 response, it also bounds the wait for the next request, including its head.
 Incoming bytes do not restart either deadline. The same setting limits
-response-write progress, a busy-channel wait, and channel idle time; write
-callbacks restart only the write-progress wait. Both timeout settings must be
-positive.
+response-write progress, a busy-channel wait, and channel idle time; each
+completed write restarts only the write-progress wait. Both timeout settings
+must be positive.
 
-For `cnew`, one deadline covers the full queue and image-open time. Once the
-image opens, a fresh interval covers generation of the first response chunk.
-If that interval expires before response headers are sent, the server returns
-`503` and ends the channel.
+For `cnew`, one deadline covers the full queue and image-open time. Generating
+a response has no deadline of its own; the write-progress wait starts with its
+first chunk.
 
 `connections.limit` limits physical HTTP connections.
 `channels.limit` separately limits active JPIP channels. A channel
@@ -188,28 +187,36 @@ state could make a later response incomplete from the client's point of view.
 
 ## Ownership
 
-One libuv loop owns the listener, signals, every connection, parser, timer,
-channel route, and pending write. Socket state is never accessed by workers.
+One control thread owns the listener, signals, admission, the channel table,
+and every channel's routing state. It never reads or writes a connected socket.
+
+Each connection owns its socket, request-head parser, deadline timer, and the
+response in flight. That state is used only on the connection's strand, which
+runs on one of the server's I/O threads at a time. The control thread and the
+connections exchange messages and share no state.
 
 Each channel owns its `FileManager`, `ImageIndex`, linked-JPX graph,
-`DataBinServer`, cache model, and traversal state. The state is processed by at
-most one libuv worker at a time and is never shared with another channel. Work
-may move between pool threads only at chunk boundaries. Completed response
-buffers return to the event loop, which queues the socket writes.
+`DataBinServer`, cache model, and traversal state. The control thread lends
+that state to one user at a time: the pool thread that opens the image, then
+the connection generating each response, and finally the thread that destroys
+it. It is never shared with another channel. A response is generated on the
+strand of the connection that receives it, and each chunk is written as soon
+as it is generated, so the work may move between I/O threads only at chunk
+boundaries.
 
 ## Admission and dispatch
 
 ```text
-TCP accept
+TCP accept on the control thread
     |
     v
-libuv loop: connection + absolute identification deadline
+connection strand: absolute identification deadline
     |
     +-- no complete request line before deadline -----> close
     +-- unsupported or unrelated traffic -------------> close
     |
     v
-bounded HTTP parsing and cnew/cid/cclose routing
+bounded HTTP parsing, then cnew/cid/cclose routing on the control thread
     |
     v
 selected channel: active slot or one waiting slot
@@ -219,24 +226,26 @@ llhttp consumes each request head once. A 2 KiB request-line limit and 4 KiB
 complete-head limit bound parser storage. Rejected and expired connections do
 not allocate JPEG 2000 state.
 
-For `cnew`, the loop reserves an opaque channel ID and places image opening in
-a bounded FIFO. At most half of the configured worker pool opens images
-concurrently, leaving the other half available to established channels. For
-`cid` or `cclose`, the loop routes the parsed request to the channel without
-transferring the socket. Each channel serializes its worker items and has one
-active and one waiting request slot.
+For `cnew`, the control thread reserves an opaque channel ID and queues the
+image open on a separate pool of eight threads. That pool's queue is the FIFO
+of pending opens, and opening never occupies an I/O thread. For `cid` or
+`cclose`, the control thread routes the parsed request to the channel; the
+connection keeps its socket. Each channel has one active and one waiting
+request slot.
 
 ## Termination
 
-When a channel terminates, the loop cancels queued work where possible, waits
-for active work and writes to return, then releases the channel state. A waiting
-request receives `503` immediately. An incomplete response closes its connection
-without inventing an HTTP terminator or JPIP end-of-response marker.
+When a channel terminates, the control thread cancels its image open if that
+is still queued, aborts the connection of a response in progress, waits for
+the channel state to be returned, then releases it. A waiting request receives
+`503` immediately. An incomplete response closes its connection without
+inventing an HTTP terminator or JPIP end-of-response marker.
 
-Libuv handles `SIGINT` and `SIGTERM`. The server stops admission, ends its
-channels, closes its connections, drains the log, and exits. A host process
-manager or container runtime may restart it, but accepted sockets and channel
-state are not preserved. Clients must create new channels after a restart.
+The control thread handles `SIGINT` and `SIGTERM`. The server stops admission,
+ends its channels, closes its connections, drains the log, and exits. A host
+process manager or container runtime may restart it, but accepted sockets and
+channel state are not preserved. Clients must create new channels after a
+restart.
 
 ## Deliberate limits
 
@@ -258,8 +267,8 @@ The source responsibilities are (paths under `server/`):
 | Source | Responsibility |
 | --- | --- |
 | `main.cc` | Configuration and server startup |
-| `server.cc` | Listener, signals, event loop, admission, routing, channel lifetime, and response writes |
-| `http/connection.cc` | Loop-owned libuv connection, deadlines, parsing, and ordered writes |
+| `server.cc` | Listener, signals, control thread, admission, routing, and channel lifetime |
+| `http/connection.cc` | Connection strand: parsing, deadlines, and generated, ordered response writes |
 | `http/request_head.cc` | Bounded llhttp request-head parser |
-| `channel_work.cc` | Serialized transfer between the loop and worker pool |
 | `channel_engine.cc` | Socket-free JPIP and JPEG 2000 processing for one channel |
+| `vendor/asio/` | Vendored Asio headers; see its README |

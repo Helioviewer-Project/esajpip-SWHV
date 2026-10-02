@@ -1471,9 +1471,9 @@ int main() {
           "Rejected a main-header COM marker");
     for (const char *name : {"qcd-length-3.jp2", "qcd-length-198.jp2",
                              "com-length-4.jp2", "com-rcom-2.jp2"}) {
-        server::FileManager marker_length_manager;
-        Check(!OpenImage(directory, name, &marker_length_manager),
-              "Accepted a QCD or COM marker outside T.800's ranges");
+        server::FileManager opaque_marker_manager;
+        Check(OpenImage(directory, name, &opaque_marker_manager),
+              "Rejected an opaque QCD or COM payload with valid segment framing");
     }
 
     for (const char *name : {"main-coc.jp2", "main-poc.jp2"}) {

@@ -7,20 +7,19 @@ are tested independently under [tests/jpip](../jpip/README.md).
 | --- | --- |
 | `server_storage` | FileManager acceptance against the corpus, linked sources, real mapped-source responses, deferred packet errors, stable acquisitions, release, reacquisition and failed-open retry |
 | `server_engine` | ChannelEngine thread migration and byte-equivalent plain/gzip output, including one-byte compressed output buffers |
-| `server_worker` | Serialized worker operations, deterministic queued cancellation, completion after an open has started, response finishing and reuse, worker closure and rejection of later work |
 | `server_http` | Every split point and bytewise HTTP parsing, pipelined bytes left unconsumed, parser reset, Host/body rules and exact line/head limits |
-| `server_connection` | Direct libuv connection callbacks, ordered writes, read/write deadlines and graceful closure |
-| `server` | Live HTTP/JPIP routing, source acceptance, limits, independent bin reconstruction, gzip, cache continuation and shutdown while a worker is blocked |
-| `server_overlap` | Live active/waiting/busy exchanges, both disconnect paths, cache preservation and generation failure before/after HTTP headers |
-| `server_support`, `logging` | Configuration/address/storage support and logging behavior |
+| `server_connection` | Direct connection reports with scripted responses: request order, read/write/blocked deadlines, chunk framing, backpressure and its recovery, a final chunk finished by the write callback, failure before/after headers, a peer reset, an interrupted reply, abort and closure |
+| `server` | Live HTTP/JPIP routing, source acceptance including an unreadable source, limits, independent bin reconstruction, gzip, cache continuation, a later request without a JPIP route, descriptor exhaustion, a queued image open that times out, shutdown while an image open is blocked, and startup failures |
+| `server_overlap` | Live active/waiting/busy exchanges, both disconnect paths, cache preservation, generation failure before/after HTTP headers, an invalid request for a busy channel, a waiting request that expires, and shutdown with a response, a waiting request and an image open pending |
+| `server_support`, `logging` | Configuration/storage support and logging behavior |
 
 The former `jpeg2000` server test is now `server_storage`. Its file and response
-adapter assertions remain intact. Engine and worker assertions moved into their
-own executables. Progression bijection checks moved to `jpip_packet_layout`.
+adapter assertions remain intact. Engine assertions moved into their own
+executable. Progression bijection checks moved to `jpip_packet_layout`.
 Parser-only assertions moved out of the connection tests into `server_http`.
 
 `channel_fixture.h` copies a checked-in source into a temporary directory for
-the two channel adapter tests. `server_fixture.h` shares the live-server and
+the channel engine test. `server_fixture.h` shares the live-server and
 independent HTTP/JPP decoding harness. The JPP oracle remains independent of
 production encoder code and checks exact source bytes, offsets and final flags.
 
@@ -29,7 +28,27 @@ active while its client does not drain the socket. It does not model a JHV movie
 request pattern or benchmark response generation. Server request logs synchronize
 placement of the waiting exchange. No fixed sleep determines which client won
 that slot. The shutdown case waits for the stop log before releasing a blocked
-open. Queued worker cancellation occupies the two libuv workers with barriers.
+open. That server is started with one image-open thread, so the second open
+stays queued behind the blocked one.
+
+Three live servers cover the listen address: the channel-limit server listens
+on `localhost`, the open-timeout server has no address and listens on every
+interface, and one configured with an unresolvable name must not start. That
+name is a single 80-character label, which no resolver can put in a query, so
+the failure does not wait for a name server.
+
+The descriptor case lowers the descriptor limit to 64 for one server and
+connects 100 idle clients. The server cannot accept them all at once; each is
+closed by the identification deadline only after it has been accepted, so the
+case passes only if the server resumes accepting.
+
+The waiting-timeout case does not depend on how fast the sockets move data.
+A waiting request and a response in progress both expire after
+`connections.timeout`, two seconds on that server, and the response's wait
+restarts whenever it writes. The client leaves the response stalled, sends the
+waiting request, and one second later reads 4 MiB of the response, which is
+more than the socket buffers hold, so the server must have written again. The
+waiting request then expires a second before the response would.
 
 ## Run
 

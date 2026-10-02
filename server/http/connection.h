@@ -1,37 +1,68 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
-#include <uv.h>
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+#include <asio/steady_timer.hpp>
+#include <asio/strand.hpp>
 
 #include "request_head.h"
 
 namespace server {
 
-class Connection {
+// One HTTP connection: its socket, request-head parser, deadlines, and the
+// response in flight. All of this is used only on the connection's strand.
+// The commands post to that strand and may be called from any thread.
+class Connection : public std::enable_shared_from_this<Connection> {
 public:
     enum class ReadFailure {
         MALFORMED,
-        TOO_LARGE,
-        CLOSED,
-        IO_ERROR
+        TOO_LARGE
     };
 
-    struct Write {
-        uv_write_t request;
-        Connection *connection = NULL;
-        std::string first;
-        std::string last;
-        std::function<void(bool)> completed;
-        bool active = false;
+    // One step of a generated response.
+    struct Chunk {
+        enum Status { MORE, COMPLETE, FAILED };
+
+        Status status;
+        int length;           // Payload bytes placed in the buffer.
+        // FAILED: the complete HTTP response to send instead, used only if
+        // the generated response has not started.
+        std::string failure;
     };
 
-    typedef std::function<void(Connection &, RequestHead &&)> RequestReady;
-    typedef std::function<void(Connection &, ReadFailure)> ReadFailed;
-    typedef std::function<void(Connection &)> DeadlineReached;
-    typedef std::function<void(Connection &)> Closed;
+    // A chunked response whose body is generated on the connection's strand,
+    // a chunk at a time, and written while the socket accepts data.
+    struct Response {
+        std::string headers;  // Sent with the first chunk.
+        // Must not throw. Not called again after COMPLETE or FAILED.
+        std::function<Chunk(char *buffer, int capacity)> generate;
+        // Called exactly once, when `generate` will not be called again and
+        // before the peer can observe the outcome of a failed response.
+        // True only if the whole response was handed to the socket.
+        std::function<void(bool complete)> done;
+        bool close;           // Close the connection after the response.
+    };
+
+    // Reports, called on the connection's strand. After `request` or
+    // `read_failed` the connection reads nothing more until it is answered
+    // with Reply(), Respond() or Abort().
+    struct Events {
+        std::function<void(RequestHead &&)> request;
+        // An invalid head of a request that named a JPIP route.
+        std::function<void(ReadFailure, const std::string &target)> read_failed;
+        // No answer arrived within the connection timeout.
+        std::function<void()> blocked;
+        // Called once, before the socket closes.
+        std::function<void()> closed;
+    };
 
 private:
     enum class Deadline {
@@ -42,75 +73,67 @@ private:
         BLOCKED
     };
 
-    uv_tcp_t socket;
-    uv_timer_t timer;
+    typedef std::chrono::steady_clock Clock;
+
+    asio::ip::tcp::socket socket;
+    asio::strand<asio::io_context::executor_type> strand;
+    asio::steady_timer timer;
     RequestHeadParser parser;
-    RequestReady request_ready;
-    ReadFailed read_failed;
-    DeadlineReached deadline_reached;
-    Closed closed;
-    int initial_timeout;
-    int connection_timeout;
+    const Events events;
+    const int initial_timeout;
+    const int connection_timeout;
+    const int chunk_size;
     char incoming[4096];
-    char retained_input[4096];
-    std::size_t retained_size = 0;
+    // The bytes of `incoming` after a complete request head. They are parsed
+    // when its response has finished; nothing is read until then.
+    std::size_t unparsed_offset = 0;
+    std::size_t unparsed_size = 0;
     Deadline deadline = Deadline::NONE;
-    std::size_t pending_writes = 0;
-    int open_handles = 0;
-    bool requests_paused = false;
+    Clock::time_point deadline_at;
+    Clock::time_point timer_at;
+    std::uint64_t timer_epoch = 0;
+    bool timer_armed = false;
+    bool paused = false;
     bool reading = false;
-    bool graceful_close = false;
-    bool shutdown_active = false;
-    bool notified_closed = false;
-    bool socket_initialized = false;
-    bool timer_initialized = false;
-    uv_shutdown_t shutdown;
+    bool replying = false;
+    bool closing = false;
 
-    static void Allocate(uv_handle_t *handle, std::size_t suggested_size,
-                         uv_buf_t *buffer) noexcept;
-    static void Read(uv_stream_t *stream, ssize_t length,
-                     const uv_buf_t *buffer) noexcept;
-    static void TimerExpired(uv_timer_t *timer) noexcept;
-    static void WriteCompleted(uv_write_t *request, int status) noexcept;
-    static void ShutdownCompleted(uv_shutdown_t *request, int status) noexcept;
-    static void HandleClosed(uv_handle_t *handle) noexcept;
+    std::unique_ptr<Response> response;
+    std::vector<char> payload;
+    std::string first;
+    std::string last;
+    bool headers_sent = false;
+    bool final = false;
 
-    bool StartReading();
-    void StopReading();
-    void ReportReadFailure(ReadFailure failure);
-    void Consume(const char *data, std::size_t size);
-    void Dispatch(RequestHead &&request);
+    void DoStart();
+    void DoReply(std::string text);
+    void DoRespond(Response next);
+    void DoAbort();
     void SetDeadline(Deadline reason);
-    void StartShutdown();
-    void CloseHandles();
-    void HandleWriteCompleted(Write *write, int status);
-    void NotifyClosed();
-    uv_stream_t *GetStream();
+    void ArmTimer();
+    void TimerExpired(std::uint64_t epoch);
+    void StartReading();
+    void Consume(std::size_t offset, std::size_t size);
+    void Produce();
+    void Substitute(std::string text);
+    void EndResponse(bool complete);
+    void ResponseCompleted();
+    void CloseGracefully();
 
 public:
-    Connection(int initial_timeout, int connection_timeout,
-               RequestReady request_ready,
-               ReadFailed read_failed, DeadlineReached deadline_reached,
-               Closed closed);
+    Connection(asio::io_context &io, int initial_timeout, int connection_timeout,
+               int chunk_size, Events events);
 
-    bool Initialize(uv_loop_t *loop);
-    bool Accept(uv_stream_t *listener);
-    bool Start();
-    void BlockRequests();
-    void StartResponse();
-    void FinishResponse();
-    // The payload must remain valid until the completion callback runs.
-    bool Send(Write *write, std::string data,
-              std::function<void(bool)> completed);
-    bool Send(Write *write, std::string first, const char *payload,
-              std::size_t payload_size, std::string last,
-              std::function<void(bool)> completed);
-    void CloseGracefully();
+    // For accepting into; not to be used after Start().
+    asio::ip::tcp::socket &Socket() {
+        return socket;
+    }
+
+    void Start();
+    // Send a complete HTTP response, then close the connection.
+    void Reply(std::string text);
+    void Respond(Response next);
     void Abort();
-
-    bool IsClosing() const;
-    bool HasJPIPRoute() const;
-    const std::string &GetRequestTarget() const;
 
     Connection(const Connection &) = delete;
     Connection &operator=(const Connection &) = delete;

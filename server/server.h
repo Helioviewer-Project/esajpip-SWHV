@@ -5,10 +5,10 @@
 namespace server {
 
 class Config;
-class InetAddress;
 
-int RunServer(const Config &cfg, const server::InetAddress &listen_address,
-              const std::string &log_name, const std::string &description,
-              unsigned int worker_threads);
+// Serve until SIGINT or SIGTERM. An empty log name logs to standard output.
+int RunServer(const Config &cfg, const std::string &log_name,
+              const std::string &description, unsigned int io_threads,
+              unsigned int open_threads);
 
 } // namespace server

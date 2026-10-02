@@ -38,13 +38,16 @@ With a Clang toolchain providing libFuzzer:
 
 ```sh
 tests/run_profile.sh fuzz -L '^jpip_fuzz$'
+tests/run_profile.sh fuzz-extended
 ```
 
 The profile runner locates Homebrew LLVM when available. In a fuzz build,
 `jpip_fuzz` builds only the four JPIP fuzz executables and the common replay
 driver. Both `jpip` and `jpeg2000` receive coverage-guided instrumentation.
 Each smoke test uses a fixed seed and 20,000 executions, with a 60-second CTest
-timeout. The request target also uses `jpip.dict`.
+timeout. The request target also uses `jpip.dict`. The `fuzz-asan` and
+`fuzz-extended` profile modes run bounded mutation campaigns and keep corpora,
+logs and artifacts under the build tree.
 
 For a longer campaign, copy a target's generated seed directory into a separate
 corpus directory and run its executable, for example:

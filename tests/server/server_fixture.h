@@ -30,7 +30,6 @@
 #include <zlib.h>
 
 #include "server/config.h"
-#include "server/http/address.h"
 #include "server/server.h"
 
 #ifdef ESAJPIP_COVERAGE
@@ -296,8 +295,9 @@ void WaitForLog(const string &directory, const string &message,
     Fail("Expected server log record did not appear before the deadline");
 }
 
+// The server opens half as many images at once as it has I/O threads.
 pid_t StartServer(const server::Config &config, const string &log_name,
-                  unsigned int worker_threads = 16) {
+                  unsigned int io_threads = 16) {
     pid_t pid = fork();
     Check(pid >= 0, "Could not create the test server");
     if (pid == 0) {
@@ -313,13 +313,8 @@ pid_t StartServer(const server::Config &config, const string &log_name,
         __llvm_profile_reset_counters();
 #endif
         setpgid(0, 0);
-        server::InetAddress address = config.address().empty()
-                                           ? server::InetAddress(config.port())
-                                           : server::InetAddress(
-                                                     config.address().c_str(),
-                                                     config.port());
-        int result = server::RunServer(config, address, log_name,
-                               "esajpip server test", worker_threads);
+        int result = server::RunServer(config, log_name, "esajpip server test",
+                                       io_threads, io_threads / 2);
 #ifdef ESAJPIP_COVERAGE
         // _exit skips the profiling runtime's normal exit handler.
         if (__llvm_profile_write_file() != 0) {

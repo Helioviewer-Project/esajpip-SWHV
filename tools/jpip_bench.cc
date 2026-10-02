@@ -70,7 +70,6 @@ int main(int argc,char **argv) {
             for(int i=0;i<length;++i)hash=(hash^static_cast<unsigned char>(buffer[i]))*1099511628211ULL;
             if(result==server::ChannelEngine::GenerateResult::COMPLETE)break;
         }
-        engine.Finish();
         double time=elapsed(start);
         if(phase)std::cout<<',';
         std::cout << "{\"phase\":" << phase << ",\"ms\":" << time

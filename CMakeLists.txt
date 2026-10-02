@@ -7,8 +7,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-find_package(Threads REQUIRED)
-
 option(ESAJPIP_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 if(ESAJPIP_SANITIZE AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
@@ -56,12 +54,6 @@ function(esajpip_configure_target target)
             -fsanitize=address,undefined)
     endif()
 endfunction()
-
-find_package(PkgConfig REQUIRED)
-find_package(ZLIB REQUIRED)
-pkg_check_modules(PKG REQUIRED IMPORTED_TARGET glib-2.0>=2.36)
-pkg_check_modules(LLHTTP REQUIRED IMPORTED_TARGET libllhttp)
-pkg_check_modules(LIBUV REQUIRED IMPORTED_TARGET libuv>=1.50)
 
 set(ESAJPIP_IMAGE_DIRECTORY "images" CACHE STRING
     "Image directory written to server.ini")

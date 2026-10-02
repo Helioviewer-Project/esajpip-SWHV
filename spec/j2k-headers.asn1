@@ -68,9 +68,9 @@ Siz ::= SEQUENCE {
 -- The fixed part of SIZ, which the reader decodes on its own before the
 -- components, one at a time (jpeg2000-io.asn1).
 SizFixed ::= SEQUENCE {
-    rsiz        INTEGER (0..65535),           -- Table A.10: 0, 1 or 2; T.801 Table A.2 in
-                                              -- a JPX file (siz.rsiz, jp2.rsiz); the server
-                                              -- preserves any value for the client
+    rsiz        INTEGER (0..65535),           -- T.800:2019 Table A.10; supported declarations
+                                              -- and validation limits are checked by the
+                                              -- cross-field rules; the server preserves it
     xsiz        INTEGER (1..4294967295),      -- reference grid width
     ysiz        INTEGER (1..4294967295),      -- reference grid height
     xosiz       INTEGER (0..4294967294),      -- image horizontal offset
@@ -358,10 +358,12 @@ END
 --         has exactly spcod.levels + 1 entries
 --         PPx and PPy are non-zero in entries above resolution 0 (A.6.1)
 --         spcod.cbWidthExp + spcod.cbHeightExp <= 8
---   Siz:  rsiz is 0, 1 or 2 (Table A.10), or a value T.801 Table A.2 gives
---         a Part 2 codestream, 1x00 xxxx xxxx xxxx (siz.rsiz; a JP2 file
---         holds none, jp2.rsiz in jp2-boxes.asn1). The profile preserves
---         any Rsiz.
+--   Siz:  the standard layer validates rsiz 0, 1 and 2, or the existing
+--         Part 2 declarations (a JP2 file holds none: jp2.rsiz).
+--         Other recognized Part 1 profiles are unvalidated, not reserved
+--         (siz.unsupported-profile). Unhandled CAP signalling is likewise
+--         a validation limit (siz.unsupported-capabilities); other values
+--         fail siz.rsiz. The serving profile preserves any Rsiz.
 --   Plt:  the Zplt of a tile-part header's PLT segments are unique,
 --         with gaps allowed, in any order (A.7.3: the entries are
 --         "concatenated, in order of increasing Zplt"; A.1.3: marker

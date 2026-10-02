@@ -46,9 +46,6 @@ static vector<char> GenerateEngineResponse(const string &directory,
               "Could not generate data on a migrated engine thread");
         response.insert(response.end(), output.begin(), output.begin() + length);
     } while (result != server::ChannelEngine::GenerateResult::COMPLETE);
-
-    thread finish([&] { engine.Finish(); });
-    finish.join();
     return response;
 }
 

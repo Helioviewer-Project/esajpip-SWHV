@@ -28,14 +28,14 @@ These terms recur here and in the other documents.
 
 ## Build and install
 
-The build requires C11 and C++11 compilers, CMake, pkg-config, GLib, libuv,
-llhttp, zlib, and POSIX threads. Debian 13 is the minimum supported Debian
-release; install the packages there with:
+The build requires C11 and C++11 compilers, CMake, pkg-config, GLib, llhttp,
+zlib, and POSIX threads. The Asio networking library is included in the source
+tree under `server/vendor/asio`, so no system copy is used. Debian 13 is the
+minimum supported Debian release; install the packages there with:
 
 ```sh
 sudo apt-get install \
-    build-essential cmake pkg-config libglib2.0-dev libllhttp-dev \
-    libuv1-dev zlib1g-dev
+    build-essential cmake pkg-config libglib2.0-dev libllhttp-dev zlib1g-dev
 ```
 
 Build outside the source tree. This example installs the server under
@@ -107,7 +107,7 @@ section and setting below is required. Restart the server after changing it.
 | `jpip.image_directory` | `images` | non-empty path | Base directory from which requested JP2 and JPX paths are opened. The server resolves a relative path from its working directory. |
 | `jpip.chunk_size` | `131072` | 128 to 262144 | Response working-buffer size, and the maximum HTTP chunk payload, in bytes. The final chunk of a response may be smaller. |
 | `connections.initial_timeout` | `3` | positive seconds | Time a newly accepted connection has to send a request the server recognizes as JPIP. Sending part of one does not extend the deadline. |
-| `connections.timeout` | `60` | positive seconds | Absolute time to complete an identified request head or wait for the next request, and the limits for response-write progress, a busy-channel wait, channel opening, first response generation, and channel idle time. |
+| `connections.timeout` | `60` | positive seconds | Absolute time to complete an identified request head or wait for the next request, and the limits for response-write progress, a busy-channel wait, channel opening, and channel idle time. |
 | `connections.limit` | `128` | positive | Maximum number of HTTP connections open at once. |
 | `channels.limit` | `256` | positive | Maximum number of active JPIP channels. It may exceed the connection limit, because pooled connections can serve several channels. |
 | `logging.directory` | empty | existing writable path | Directory for log files when file logging is enabled. CMake fills this in and enables file logging when `ESAJPIP_LOG_DIRECTORY` is set. |
@@ -233,29 +233,31 @@ waiting for a request, progress on a response, queuing behind another request,
 and idle time.
 
 Each channel owns its index of the target, its cache model of what the client
-holds, and its position in the current window. It allocates up to
-four `jpip.chunk_size` output buffers as it needs them and keeps them until the
-channel closes; a channel that has served a compressed response keeps one more
-buffer of the same size. At the shipped settings that is at most 512 KiB
-per channel, or 640 KiB once gzip has been used. At the maximum chunk
-size those bounds become 1 MiB and 1.25 MiB. Size `channels.limit` from these
-figures and the memory available on the host, and `connections.limit` from the
-browser and proxy connection use you expect.
+holds, and its position in the current window. Output memory belongs to
+responses, not channels: a response in progress holds one `jpip.chunk_size`
+buffer, and a compressed response a second one of the same size, and both are
+released when the response ends. At the shipped settings that is 128 KiB per
+response in progress, or 256 KiB with gzip; at the maximum chunk size those
+figures become 256 KiB and 512 KiB. A connection carries one response at a
+time, so `connections.limit` bounds this memory. Size `channels.limit` from
+the index and cache-model memory of your targets and the memory available on
+the host, and `connections.limit` from the browser and proxy connection use
+you expect.
 
-Those buffers form a bounded pipeline: the server generates the next chunk
-while earlier ones await non-blocking socket writes, and stalls once all four
-are occupied, so a slow client throttles generation rather than accumulating
-memory. Completing a response unmaps every source it read, which keeps
+The server writes each chunk as soon as it is generated. When the socket is
+full it waits for the client before generating more, so a slow client
+throttles generation rather than accumulating memory. Completing a response
+unmaps every source it read, which keeps
 address-space use predictable at the cost of remapping a source that a later
 response needs. Descriptors close as soon as a file is mapped, so the server
 holds few of them.
 
-JPEG 2000 work runs on libuv's worker-thread pool, so one slow target cannot
-stall the event loop. esajpip sets `UV_THREADPOOL_SIZE` to 16 when the variable
-is absent and honors an explicit value from 2 through 1024; a malformed or
-out-of-range value prevents startup. At most half the workers may open new
-targets concurrently, leaving the rest for channels already serving. This is an
-environment variable, not an INI setting.
+Each connection generates and writes its response on one of the server's I/O
+threads, so responses on different connections use different cores. There is
+one I/O thread per hardware thread. Reading a part of a mapped image that is
+not in memory blocks the I/O thread that touches it. A separate control thread
+accepts connections and routes requests, and a pool of eight threads opens new
+targets, so neither waits for a response in progress.
 
 See [Connections and JPIP channels](CHANNELS.md) for request examples, HTTP
 responses, connection replacement, timeouts, recovery, and server ownership.
@@ -296,3 +298,7 @@ Git history.
 
 The ESA JPIP server is licensed under the Common Development and Distribution
 License 1.0. See [LICENSE](LICENSE).
+
+The vendored Asio library in [server/vendor/asio](server/vendor/asio) is
+distributed under the Boost Software License 1.0; see its
+[README](server/vendor/asio/README.md).

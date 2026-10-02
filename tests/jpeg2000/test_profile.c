@@ -636,11 +636,76 @@ static void check_codestream_lifetime(const char *dir) {
     check(siz_ok, "hv_item.siz: the accessor's, with Csiz components", NULL);
     check(plts > 0 && plt_ok && plt_sum == data, "hv_item.plt: the entries cover the data",
           NULL);
-    check(hv_codestream_cod(&cs) != NULL && hv_codestream_qcd(&cs) != NULL,
-          "COD and QCD accessors after the main header", NULL);
+    check(hv_codestream_cod(&cs) != NULL && hv_codestream_qcd(&cs) == NULL,
+          "profile exposes COD and keeps QCD opaque", NULL);
     hv_codestream_close(&cs);
     check(hv_codestream_siz(&cs) == NULL && hv_codestream_cod(&cs) == NULL &&
           hv_codestream_qcd(&cs) == NULL, "accessors after close", NULL);
+    free(buf);
+}
+
+/* Opaque profile bodies still have checked segment boundaries. */
+static void check_opaque_main(const char *dir) {
+    size_t size, at = 0, qstart = 0, qend = 0;
+    uint8_t *buf = vector(dir, "jp2.jp2", &size);
+    hv_box box;
+    hv_codestream cs;
+    hv_item item;
+    if (buf == NULL) return;
+    if (hv_check_jp2(buf, size, &box, &at) != NULL) {
+        check(0, "opaque bodies base", NULL);
+        free(buf);
+        return;
+    }
+    hv_codestream_open(&cs, buf, box.payload, box.end, 0);
+    while (hv_codestream_next(&cs, &item) == 1)
+        if (item.code == HV_QCD) { qstart = item.start; qend = item.end; }
+    hv_codestream_close(&cs);
+    check(qend > qstart + 4, "opaque QCD base", NULL);
+    if (qend > qstart + 4) {
+        unsigned flags[] = {0, HV_PROFILE_HEADERS, HV_PROFILE, HV_PROFILE | HV_DEFER_PLT};
+        size_t i;
+        /* Remove the QCD body; insert COM with no registration or text. */
+        size_t n = box.end - box.payload - (qend - qstart - 4) + 4;
+        uint8_t *data = malloc(box.end - box.payload + 4);
+        size_t q = qstart - box.payload;
+        memcpy(data, buf + box.payload, q + 4);
+        data[q + 2] = 0; data[q + 3] = 2;
+        memcpy(data + q + 4, "\xff\x64\x00\x02", 4);
+        memcpy(data + q + 8, buf + qend, box.end - qend);
+        for (i = 0; i < sizeof flags / sizeof *flags; i++) {
+            int status, opaque = 1, seen = 0;
+            hv_codestream_open(&cs, data, 0, n, flags[i]);
+            while ((status = hv_codestream_next(&cs, &item)) == 1)
+                if (item.code == HV_QCD || item.code == HV_COM) {
+                    seen++;
+                    opaque &= item.qcd == NULL && item.com == NULL;
+                }
+            check(i < 2 ? status < 0 && cs.error != NULL &&
+                  strcmp(cs.error, "invalid QCD") == 0 : status == 0 && seen == 2 && opaque &&
+                  hv_codestream_qcd(&cs) == NULL, "opaque QCD/COM scope", cs.error);
+            hv_codestream_close(&cs);
+        }
+        /* Restore QCD so standard and header-only modes reach invalid COM. */
+        n = box.end - box.payload + 4;
+        memcpy(data, buf + box.payload, q);
+        memcpy(data + q, "\xff\x64\x00\x02", 4);
+        memcpy(data + q + 4, buf + qstart, box.end - qstart);
+        for (i = 0; i < 2; i++) {
+            int status;
+            hv_codestream_open(&cs, data, 0, n, flags[i]);
+            while ((status = hv_codestream_next(&cs, &item)) == 1) ;
+            check(status < 0 && cs.error != NULL && strcmp(cs.error, "invalid COM") == 0,
+                  "COM remains validated outside served profile", cs.error);
+            hv_codestream_close(&cs);
+        }
+        data[q + 3] = 1;
+        hv_codestream_open(&cs, data, 0, n, HV_PROFILE);
+        while (hv_codestream_next(&cs, &item) == 1) ;
+        check(cs.error != NULL, "opaque COM rejects invalid segment length", NULL);
+        hv_codestream_close(&cs);
+        free(data);
+    }
     free(buf);
 }
 
@@ -1091,6 +1156,7 @@ int main(int argc, char **argv) {
     check_offsets(argv[1]);
     check_second_jp2h(argv[1]);
     check_codestream_lifetime(argv[1]);
+    check_opaque_main(argv[1]);
     check_plt_next();
     check_link_paths();
     check_url_rule();

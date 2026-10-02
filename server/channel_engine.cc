@@ -102,8 +102,11 @@ ChannelEngine::GenerateResult ChannelEngine::GenerateGzip(
 ChannelEngine::GenerateResult ChannelEngine::Generate(
         char *buffer, int capacity, int *length) {
     error_message.clear();
-    return gzip ? GenerateGzip(buffer, capacity, length)
-                : GeneratePlain(buffer, capacity, length);
+    GenerateResult result = gzip ? GenerateGzip(buffer, capacity, length)
+                                 : GeneratePlain(buffer, capacity, length);
+    if (result == GenerateResult::COMPLETE)
+        Finish();
+    return result;
 }
 
 void ChannelEngine::Finish() {

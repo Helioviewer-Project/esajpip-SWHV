@@ -42,7 +42,7 @@ not Annex J conformance.
 | Stateless requests | Not supported | Requests require `cnew`, `cid`, or a usable `cclose`. All cache and image state belongs to one channel. |
 | Concurrent requests | Not supported | Responses are not preempted by a newer request and requests are not served concurrently within a channel. `qid`, `wait`, and window-change cancellation are not implemented. Serial service avoids shared JPEG 2000 state and is compatible with JHelioviewer. |
 | Compression | Reduced | If a request contains `metareq` and `Accept-Encoding` contains `gzip`, the JPP response is gzip encoded. Other content codings and general HTTP content negotiation are not implemented. |
-| Errors | Reduced | Identified requests receive `400` for malformed supported fields, `404` for a missing, invalidly named, unsupported, or profile-excluded target, `431` for a request head over 4 KiB, `501` for an unsupported channel transport, `503` for an invalid or conflicting channel state, or `500` for an unreadable source and other server failures. The event loop also returns `503` when the channel is unknown, has ended, or already has a request waiting. Each HTTP error response has a short plain-text body identifying the failure. An error terminates the connection and any referenced channel; routing rejections leave an existing channel unchanged. The rejected request does not modify the channel cache before termination. Traffic rejected before JPIP identification is closed without an HTTP response. The complete JPIP correction-header model is not implemented. |
+| Errors | Reduced | Identified requests receive `400` for malformed supported fields, `404` for a missing, invalidly named, unsupported, or profile-excluded target, `431` for a request head over 4 KiB, `501` for an unsupported channel transport, `503` for an invalid or conflicting channel state, or `500` for an unreadable source and other server failures. The server also returns `503` when the channel is unknown, has ended, or already has a request waiting. Each HTTP error response has a short plain-text body identifying the failure. An error terminates the connection and any referenced channel; routing rejections leave an existing channel unchanged. The rejected request does not modify the channel cache before termination. Traffic rejected before JPIP identification is closed without an HTTP response. The complete JPIP correction-header model is not implemented. |
 
 The HTTP parser accepts at most a 2 KiB request line and passes the complete
 request target to the JPIP parser. Request paths and `target` values are not
@@ -149,6 +149,8 @@ expectations, not that it conforms completely to JP2 or JPX.
   lowest resolution.
 - The main header must contain exactly one `SIZ`, one `COD`, and one `QCD`
   marker and must contain all information needed to decode every tile-part.
+  Main-header QCD and COM bodies are forwarded unchanged without decoding
+  their quantization or comment fields. Their segment boundaries are checked.
   `COD`, `COC`, `QCD`, and other non-`PLT` marker segments in tile-part headers,
   `PPT` included, are rejected because tile-part headers are not delivered to
   the client. Main-header `COC` and `POC` markers are rejected because packet
@@ -237,8 +239,8 @@ precinct windows. Serving that layout directly avoids decoding or rewriting the
 source data and keeps each client's memory inside its own channel.
 
 Each channel exclusively owns its file index, linked-JPX graph, cache model,
-and traversal state. One worker operates on that state at a time; sockets and
-routing stay on the libuv loop. Broader standard support should preserve this
+and traversal state. One thread operates on that state at a time; routing
+stays on the control thread. Broader standard support should preserve this
 ownership rule. New syntax or file-model behavior belongs inside a channel and
 must not introduce shared JPEG 2000 state between channels.
 

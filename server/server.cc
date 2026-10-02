@@ -1,24 +1,33 @@
 #include "server.h"
 
-#include <array>
+#include <atomic>
+#include <chrono>
 #include <csignal>
-#include <cstdio>
 #include <cstdint>
-#include <deque>
+#include <exception>
 #include <map>
 #include <memory>
-#include <new>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <sys/random.h>
+#endif
 
-#include <uv.h>
+#include <asio/executor_work_guard.hpp>
+#include <asio/io_context.hpp>
+#include <asio/ip/tcp.hpp>
+#include <asio/post.hpp>
+#include <asio/signal_set.hpp>
+#include <asio/steady_timer.hpp>
+#include <asio/thread_pool.hpp>
 
+#include "channel_engine.h"
 #include "config.h"
 #include "jpip/request/request.h"
-#include "server/http/address.h"
-#include "channel_work.h"
 #include "server/http/connection.h"
 #include "server/http/request_head.h"
 #include "trace.h"
@@ -27,109 +36,28 @@ using namespace std;
 
 namespace {
 
-const unsigned int RESPONSE_BUFFERS = 4;
+using asio::ip::tcp;
+using server::Connection;
+typedef server::FileManager::OpenResult OpenResult;
+typedef server::ChannelEngine::GenerateResult GenerateResult;
+
 const char JPIP_HANDLED_HEADER[] =
         "JPIP-handled: tid,cid,cnew=http,stream,len,handled\r\n";
 const char COMMON_HEADERS[] =
         "Access-Control-Allow-Origin: *\r\n"
         "Cache-Control: no-cache\r\n";
 
-int GenerateChannelId(string *id) {
-    uint8_t random[16];
-    int result = uv_random(NULL, NULL, random, sizeof random, 0, NULL);
-    if (result != 0)
-        return result;
-
+bool GenerateChannelId(string *id) {
+    unsigned char random[16];
+    if (getentropy(random, sizeof random) != 0)
+        return false;
     static const char hex[] = "0123456789abcdef";
     id->resize(sizeof random * 2);
     for (size_t i = 0; i < sizeof random; ++i) {
         (*id)[i * 2] = hex[random[i] >> 4];
         (*id)[i * 2 + 1] = hex[random[i] & 15];
     }
-    return 0;
-}
-
-class Server;
-struct Channel;
-struct Exchange;
-struct Buffer;
-void WorkDone(server::ChannelWork &, void *owner);
-
-struct Client {
-    Client(Server *_server, uint64_t _id, const server::Config &cfg);
-
-    Server *server;
-    uint64_t id;
-    server::Connection connection;
-    server::Connection::Write write;
-    Exchange *exchange = NULL;
-    bool counted = false;
-};
-
-struct Exchange {
-    Exchange(Channel *_channel, Client *_client, jpip::Request _request,
-             const server::RequestHead &_head)
-        : channel(_channel), client(_client), request(std::move(_request)),
-          accepts_gzip(_head.accepts_gzip), close_connection(_head.close) {}
-
-    ~Exchange() { Detach(); }
-
-    Client *Detach() {
-        Client *attached = client;
-        if (attached && attached->exchange == this)
-            attached->exchange = NULL;
-        client = NULL;
-        return attached;
-    }
-
-    Channel *channel;
-    Client *client;
-    jpip::Request request;
-    const bool accepts_gzip;
-    const bool close_connection;
-    Buffer *work_buffer = NULL;
-    unsigned int writes = 0;
-    bool headers_sent = false;
-    bool generation_complete = false;
-};
-
-struct Buffer {
-    Buffer() = default;
-
-    vector<char> data;
-    server::Connection::Write write;
-
-    Buffer(const Buffer &) = delete;
-    Buffer &operator=(const Buffer &) = delete;
-};
-
-struct Channel {
-    enum State { OPEN_QUEUED, OPENING, OPEN, ENDING };
-
-    Channel(Server *_server, string _id, uint64_t _number,
-            uv_loop_t *loop, const server::Config &cfg);
-
-    Server *server;
-    string id;
-    uint64_t number;
-    server::ChannelWork work;
-    uv_timer_t timer;
-    array<Buffer, RESPONSE_BUFFERS> buffers;
-    unique_ptr<Exchange> waiting;
-    unique_ptr<Exchange> exchange;
-    State state = OPEN_QUEUED;
-    bool timer_initialized = false;
-    bool timer_closed = false;
-};
-
-const string &Target(const Channel &channel) {
-    return channel.exchange->request.routing.target
-            ? channel.exchange->request.target : channel.exchange->request.object;
-}
-
-bool UseGzip(const Channel &channel) {
-    return channel.exchange->request.has_metareq &&
-            channel.exchange->accepts_gzip;
+    return true;
 }
 
 string OptionalHeaders(const jpip::Request &request, bool cnew = false) {
@@ -159,10 +87,9 @@ string OptionalHeaders(const jpip::Request &request, bool cnew = false) {
 }
 
 string ErrorResponse(int code, const char *reason, const string &message,
-                     const jpip::Request *request = NULL) {
+                     const string &optional_headers) {
     string result = "HTTP/1.1 " + to_string(code) + " " + reason + "\r\n";
-    if (request)
-        result += OptionalHeaders(*request);
+    result += optional_headers;
     result += COMMON_HEADERS;
     result += "Content-Type: text/plain\r\nContent-Length: ";
     result += to_string(message.size());
@@ -171,142 +98,193 @@ string ErrorResponse(int code, const char *reason, const string &message,
     return result;
 }
 
+struct Channel;
+struct Exchange;
+
+struct Client {
+    uint64_t id;
+    shared_ptr<Connection> connection;
+    Exchange *exchange;
+};
+
+// One request on a channel, from its routing to the end of its response.
+struct Exchange {
+    Exchange(Channel *_channel, Client *_client, jpip::Request _request,
+             const server::RequestHead &head)
+        : channel(_channel), client(_client), request(std::move(_request)),
+          accepts_gzip(head.accepts_gzip), close_connection(head.close) {
+        client->exchange = this;
+    }
+
+    ~Exchange() { Detach(); }
+
+    Client *Detach() {
+        Client *attached = client;
+        if (attached && attached->exchange == this)
+            attached->exchange = NULL;
+        client = NULL;
+        return attached;
+    }
+
+    Channel *channel;
+    Client *client;
+    jpip::Request request;
+    const bool accepts_gzip;
+    const bool close_connection;
+    bool responding = false;  // Its connection is generating the response.
+};
+
+struct Channel {
+    enum State { OPENING, OPEN, ENDING };
+
+    Channel(asio::io_context &control, string _id, uint64_t _number,
+            int chunk_size)
+        : id(std::move(_id)), number(_number),
+          engine(new server::ChannelEngine(chunk_size)), timer(control) {}
+
+    string id;
+    uint64_t number;
+    unique_ptr<server::ChannelEngine> engine;
+    asio::steady_timer timer;
+    uint64_t timer_epoch = 0;
+    atomic<bool> open_cancelled{false};
+    unique_ptr<Exchange> waiting;
+    unique_ptr<Exchange> exchange;
+    State state = OPENING;
+    // The engine is lent to an open, a response, or its destruction. Nothing
+    // else may use it, and the channel outlives the loan.
+    bool engine_lent = false;
+};
+
+const string &Target(const Exchange &exchange) {
+    return exchange.request.routing.target ? exchange.request.target
+                                           : exchange.request.object;
+}
+
+bool UseGzip(const Exchange &exchange) {
+    return exchange.request.has_metareq && exchange.accepts_gzip;
+}
+
 string SuccessHeaders(const Channel &channel, bool gzip) {
+    const Exchange &exchange = *channel.exchange;
     string result = "HTTP/1.1 200 OK\r\n";
-    if (channel.exchange->request.routing.cnew) {
+    if (exchange.request.routing.cnew) {
         result += "JPIP-cnew: cid=" + channel.id +
                 ",path=jpip,transport=http\r\nJPIP-tid: 0\r\n";
-        result += OptionalHeaders(channel.exchange->request, true);
+        result += OptionalHeaders(exchange.request, true);
     } else {
-        result += OptionalHeaders(channel.exchange->request);
+        result += OptionalHeaders(exchange.request);
     }
     result += COMMON_HEADERS;
     result += "Transfer-Encoding: chunked\r\nContent-Type: image/jpp-stream\r\n";
     if (gzip)
         result += "Content-Encoding: gzip\r\n";
-    if (channel.exchange->close_connection)
+    if (exchange.close_connection)
         result += "Connection: close\r\n";
     result += "\r\n";
     return result;
 }
 
-string ChunkHeader(size_t size) {
-    char text[2 * sizeof(size_t) + 3];
-    int length = snprintf(text, sizeof text, "%zx\r\n", size);
-    return string(text, static_cast<size_t>(length));
-}
-
+// Three sets of threads:
+//   - the control thread runs `control` and owns every member below it:
+//     admission, routing, channels and their lifetime. It never touches a
+//     connected socket;
+//   - the I/O threads run `io`, on which each connection parses, generates
+//     and writes on its own strand;
+//   - the `opens` pool runs blocking image opens, so its size is the number
+//     of images opened at once.
+// They communicate only by posting. An exception leaving a handler ends the
+// process: the shared state can not be recovered after one.
 class Server {
-private:
     const server::Config &cfg;
-    const server::InetAddress &listen_address;
-    uv_loop_t loop;
-    uv_tcp_t listener;
-    uv_signal_t stop_signals[2];
-    uv_async_t reaper;
-    map<uint64_t, unique_ptr<Client> > clients;
+    const tcp::endpoint endpoint;
+    const unsigned int io_threads;
+    asio::io_context control;
+    asio::io_context io;
+    asio::thread_pool opens;
+    asio::executor_work_guard<asio::io_context::executor_type> control_work;
+    asio::executor_work_guard<asio::io_context::executor_type> io_work;
+    tcp::acceptor acceptor;
+    asio::signal_set signals;
+    asio::steady_timer accept_retry;
+    map<uint64_t, Client> clients;
     map<string, unique_ptr<Channel> > channels;
-    deque<string> open_queue;
-    vector<uint64_t> dead_clients;
-    vector<string> dead_channels;
     uint64_t next_client = 1;
     uint64_t next_channel = 1;
-    const unsigned int max_concurrent_opens;
-    unsigned int active_opens = 0;
-    unsigned int num_connections = 0;
-    int open_handles = 0;
     bool stopping = false;
 
-    // The loop cannot safely recover partially modified global state after an
-    // allocation failure. No exception may cross libuv's C callback boundary.
-    static void Listen(uv_stream_t *handle, int status) noexcept {
-        static_cast<Server *>(handle->data)->Accept(status);
-    }
-    static void Signal(uv_signal_t *handle, int) noexcept {
-        static_cast<Server *>(handle->data)->Stop();
-    }
-    static void HandleClosed(uv_handle_t *handle) noexcept {
-        Server *server = static_cast<Server *>(handle->data);
-        server->open_handles--;
-        server->FinishStop();
+    Client *Find(uint64_t id) {
+        auto found = clients.find(id);
+        return found == clients.end() ? NULL : &found->second;
     }
 
-    static void CloseHandle(uv_handle_t *handle, void *) noexcept {
-        if (!uv_is_closing(handle))
-            uv_close(handle, NULL);
+    // Connections report on their own strands; forward to the control thread.
+    Connection::Events ConnectionEvents(uint64_t id) {
+        Connection::Events events;
+        events.request = [this, id](server::RequestHead &&head) {
+            shared_ptr<server::RequestHead> data =
+                    make_shared<server::RequestHead>(std::move(head));
+            asio::post(control, [this, id, data] {
+                if (Client *client = Find(id))
+                    Route(*client, std::move(*data));
+            });
+        };
+        events.read_failed = [this, id](Connection::ReadFailure failure,
+                                        const string &target) {
+            asio::post(control, [this, id, failure, target] {
+                if (Client *client = Find(id))
+                    ReadFailed(*client, failure, target);
+            });
+        };
+        events.blocked = [this, id] {
+            asio::post(control, [this, id] {
+                if (Client *client = Find(id))
+                    Blocked(*client);
+            });
+        };
+        events.closed = [this, id] {
+            asio::post(control, [this, id] {
+                if (Client *client = Find(id))
+                    Closed(*client);
+            });
+        };
+        return events;
     }
 
-    int InitializationFailed(int result) {
-        int close_result;
-        do {
-            uv_walk(&loop, CloseHandle, NULL);
-            uv_run(&loop, UV_RUN_NOWAIT);
-            close_result = uv_loop_close(&loop);
-        } while (close_result == UV_EBUSY);
-        return result;
-    }
-    static void Reap(uv_async_t *handle) noexcept {
-        static_cast<Server *>(handle->data)->ReapObjects();
-    }
-    static void ChannelExpired(uv_timer_t *timer) noexcept {
-        Channel *channel = static_cast<Channel *>(timer->data);
-        LOG("The channel " << channel->number << " timed out");
-        channel->server->End(*channel);
-    }
-    static void ChannelTimerClosed(uv_handle_t *handle) noexcept {
-        Channel *channel = static_cast<Channel *>(handle->data);
-        channel->timer_closed = true;
-        channel->server->AdvanceChannel(*channel);
-    }
-
-    void Accept(int status) {
-        if (status != 0 || stopping)
-            return;
-        if (num_connections >= static_cast<unsigned int>(cfg.max_connections())) {
-            uv_tcp_t *rejected = new (nothrow) uv_tcp_t;
-            if (!rejected) {
-                ERROR("A rejected connection can not be allocated");
-                Stop();
+    void Accept() {
+        uint64_t id = next_client++;
+        shared_ptr<Connection> connection = make_shared<Connection>(
+                io, cfg.initial_timeout(), cfg.connection_timeout(),
+                cfg.max_chunk_size(), ConnectionEvents(id));
+        acceptor.async_accept(connection->Socket(),
+                              [this, connection, id](error_code error) {
+            if (stopping)
+                return;
+            if (error) {
+                // Out of descriptors, most likely: do not spin on it.
+                accept_retry.expires_after(chrono::milliseconds(100));
+                accept_retry.async_wait([this](error_code cancelled) {
+                    if (!cancelled && !stopping)
+                        Accept();
+                });
                 return;
             }
-            int result = uv_tcp_init(&loop, rejected);
-            if (result == 0) {
-                rejected->data = rejected;
-                (void) uv_accept(reinterpret_cast<uv_stream_t *>(&listener),
-                                 reinterpret_cast<uv_stream_t *>(rejected));
-                uv_close(reinterpret_cast<uv_handle_t *>(rejected),
-                         [](uv_handle_t *handle) {
-                             delete static_cast<uv_tcp_t *>(handle->data);
-                         });
+            if (clients.size() >= static_cast<size_t>(cfg.max_connections())) {
+                error_code ignored;
+                connection->Socket().close(ignored);
             } else {
-                delete rejected;
-                ERROR("A rejected connection can not be initialized: "
-                      << uv_strerror(result));
-                Stop();
+                clients[id] = Client{id, connection, NULL};
+                LOG("Accepted connection [" << id << "]");
+                connection->Start();
             }
-            return;
-        }
-
-        unique_ptr<Client> client(new Client(this, next_client++, cfg));
-        uint64_t id = client->id;
-        clients[id] = std::move(client);
-        if (!clients[id]->connection.Initialize(&loop) ||
-            !clients[id]->connection.Accept(
-                    reinterpret_cast<uv_stream_t *>(&listener))) {
-            clients[id]->connection.Abort();
-            return;
-        }
-        LOG("Accepted connection [" << id << "]");
-        clients[id]->counted = true;
-        num_connections++;
-        if (!clients[id]->connection.Start())
-            clients[id]->connection.Abort();
+            Accept();
+        });
     }
 
     void Route(Client &client, server::RequestHead &&head) {
         if (client.exchange) {
             ERROR("An HTTP connection is already attached to a JPIP exchange");
-            client.connection.Abort();
+            client.connection->Abort();
             return;
         }
         jpip::Request request;
@@ -320,7 +298,7 @@ private:
             return;
         }
         if (!request.routing.cnew && !request.routing.cid && !request.routing.cclose) {
-            client.connection.Abort();
+            client.connection->Abort();
             return;
         }
         if (head.unsupported_body) {
@@ -345,20 +323,18 @@ private:
             return;
         }
         Channel &channel = *found->second;
-        bool start = channel.exchange->client == NULL &&
-                channel.state == Channel::OPEN;
+        bool start = !channel.exchange && channel.state == Channel::OPEN;
         if (!start && channel.waiting) {
             SendError(client, 503, "Service Unavailable",
                       "JPIP channel is busy", &request);
             return;
         }
-        unique_ptr<Exchange> exchange = CreateExchange(
-                channel, client, std::move(request), head);
-        if (start) {
+        unique_ptr<Exchange> exchange(new Exchange(
+                &channel, &client, std::move(request), head));
+        if (start)
             StartRequest(channel, std::move(exchange));
-        } else {
+        else
             channel.waiting = std::move(exchange);
-        }
     }
 
     void NewChannel(Client &client, jpip::Request request,
@@ -375,359 +351,254 @@ private:
             return;
         }
         string id;
-        int result = GenerateChannelId(&id);
-        if (result != 0) {
-            ERROR("A secure JPIP channel ID can not be generated: "
-                  << uv_strerror(result));
+        if (!GenerateChannelId(&id) || channels.count(id) != 0) {
+            ERROR("A secure JPIP channel ID can not be generated");
             SendError(client, 500, "Internal Server Error",
                       "Could not create JPIP channel", &request);
             return;
         }
-        if (channels.count(id) != 0) {
-            ERROR("A generated JPIP channel ID collides with an active channel");
-            SendError(client, 500, "Internal Server Error",
-                      "Could not create JPIP channel", &request);
-            return;
-        }
-        unique_ptr<Channel> created(new Channel(this, id, next_channel++,
-                                                 &loop, cfg));
-        if (!created->work.IsInitialized() || !created->timer_initialized) {
+        unique_ptr<Channel> created(new Channel(
+                control, id, next_channel++, cfg.max_chunk_size()));
+        if (!created->engine->Init(cfg.image_directory())) {
             SendError(client, 500, "Internal Server Error",
                       "The JPIP channel could not be initialized", &request);
             return;
         }
         Channel *channel = created.get();
-        unique_ptr<Exchange> exchange = CreateExchange(
-                *channel, client, std::move(request), head);
+        channel->exchange.reset(new Exchange(
+                channel, &client, std::move(request), head));
         channels[id] = std::move(created);
-        StartRequest(*channel, std::move(exchange));
-        channel->state = Channel::OPEN_QUEUED;
-        open_queue.push_back(channel->id);
-        StartOpens();
+
+        // The pool's queue is the FIFO of pending image opens.
+        channel->engine_lent = true;
+        server::ChannelEngine *engine = channel->engine.get();
+        string target = Target(*channel->exchange);
+        asio::post(opens, [this, channel, engine, target] {
+            OpenResult result = OpenResult::INVALID;
+            if (!channel->open_cancelled.load()) {
+                try {
+                    result = engine->Open(target);
+                } catch (...) {
+                }
+            }
+            asio::post(control, [this, channel, result] {
+                Opened(*channel, result);
+            });
+        });
     }
 
-    unique_ptr<Exchange> CreateExchange(Channel &channel, Client &client,
-                                        jpip::Request request,
-                                        const server::RequestHead &head) {
-        unique_ptr<Exchange> exchange(new Exchange(
-                &channel, &client, std::move(request), head));
-        client.exchange = exchange.get();
-        client.connection.BlockRequests();
-        return exchange;
-    }
-
-    void SendChannelReply(Channel &channel, string response) {
-        Exchange &exchange = *channel.exchange;
-        Client &client = *exchange.client;
-        exchange.headers_sent = true;
-        client.connection.StartResponse();
-        exchange.writes++;
-        if (!client.connection.Send(
-                    &client.write, std::move(response),
-                    [this, &channel](bool ok) {
-                        channel.exchange->writes--;
-                        if (channel.exchange->client) {
-                            if (ok)
-                                channel.exchange->client->connection.CloseGracefully();
-                            else
-                                channel.exchange->client->connection.Abort();
-                        }
-                        AdvanceChannel(channel);
-                    })) {
-            exchange.writes--;
-            client.connection.Abort();
+    void Opened(Channel &channel, OpenResult result) {
+        channel.engine_lent = false;
+        if (channel.state == Channel::ENDING) {
+            Release(channel);
+            return;
         }
-        AdvanceChannel(channel);
+        switch (result) {
+        case OpenResult::OPENED:
+            LOG("The channel " << channel.number
+                                << " has been opened for the image '"
+                                << server::EscapeForLog(Target(*channel.exchange))
+                                << "'");
+            channel.state = Channel::OPEN;
+            Respond(channel);
+            return;
+        case OpenResult::NOT_FOUND:
+            Fail(channel, 404, "Not Found", "The requested image was not found");
+            return;
+        case OpenResult::INVALID_PATH:
+            Fail(channel, 404, "Not Found", "The requested image path is invalid");
+            return;
+        case OpenResult::UNSUPPORTED:
+            Fail(channel, 404, "Not Found",
+                 "The requested image type is not supported");
+            return;
+        case OpenResult::UNREADABLE:
+            Fail(channel, 500, "Internal Server Error",
+                 "The requested image could not be read");
+            return;
+        case OpenResult::INVALID:
+            Fail(channel, 404, "Not Found",
+                 "The requested image is not a valid supported JPEG 2000 source");
+            return;
+        }
     }
 
     void StartRequest(Channel &channel, unique_ptr<Exchange> exchange) {
-        if (channel.timer_initialized)
-            uv_timer_stop(&channel.timer);
+        StopIdleTimer(channel);
         channel.exchange = std::move(exchange);
-        if (channel.exchange->request.routing.cclose) {
-            BeginTermination(channel);
-            string response = "HTTP/1.1 200 OK\r\n" +
-                    OptionalHeaders(channel.exchange->request) + COMMON_HEADERS +
-                    "Content-Length: 0\r\nConnection: close\r\n\r\n";
-            SendChannelReply(channel, std::move(response));
-        } else if (!channel.exchange->request.routing.cnew) {
-            AdvanceChannel(channel);
-        }
-    }
-
-    void StartOpens() {
-        while (!stopping && active_opens < max_concurrent_opens &&
-               !open_queue.empty()) {
-            string id = std::move(open_queue.front());
-            open_queue.pop_front();
-            auto found = channels.find(id);
-            if (found == channels.end())
-                continue;
-            Channel *channel = found->second.get();
-            if (channel->state != Channel::OPEN_QUEUED)
-                continue;
-            channel->state = Channel::OPENING;
-            active_opens++;
-            if (!channel->work.Open(Target(*channel))) {
-                active_opens--;
-                Fail(*channel, 500, "Internal Server Error",
-                     "The JPIP channel could not be scheduled");
-            }
-        }
-    }
-
-    Buffer *AcquireBuffer(Channel &channel) {
-        for (Buffer &buffer : channel.buffers) {
-            if (buffer.write.active || channel.exchange->work_buffer == &buffer)
-                continue;
-            if (buffer.data.empty())
-                buffer.data.resize(static_cast<size_t>(cfg.max_chunk_size()));
-            channel.exchange->work_buffer = &buffer;
-            return &buffer;
-        }
-        return NULL;
-    }
-
-    void Generate(Channel &channel) {
-        Buffer *buffer = AcquireBuffer(channel);
-        if (buffer == NULL)
+        if (!channel.exchange->request.routing.cclose) {
+            Respond(channel);
             return;
-        bool begin = !channel.exchange->headers_sent;
-        bool queued = begin
-                ? channel.work.Begin(channel.exchange->request, UseGzip(channel),
-                                     buffer->data.data(), buffer->data.size())
-                : channel.work.Generate(buffer->data.data(), buffer->data.size());
-        if (!queued)
-            Fail(channel, 500, "Internal Server Error",
-                 "The JPIP response could not be scheduled");
+        }
+        Client *client = channel.exchange->client;
+        string response = "HTTP/1.1 200 OK\r\n" +
+                OptionalHeaders(channel.exchange->request) + COMMON_HEADERS +
+                "Content-Length: 0\r\nConnection: close\r\n\r\n";
+        BeginTermination(channel);
+        channel.exchange.reset();
+        if (client)
+            client->connection->Reply(std::move(response));
+        Release(channel);
     }
 
-    void SendChunk(Channel &channel, Buffer &buffer, int length, bool final) {
-        string first;
-        if (!channel.exchange->headers_sent) {
-            channel.exchange->headers_sent = true;
-            channel.exchange->client->connection.StartResponse();
-            first = SuccessHeaders(channel, UseGzip(channel));
-        }
-        string last;
-        if (length > 0) {
-            first += ChunkHeader(static_cast<size_t>(length));
-            last = final ? "\r\n0\r\n\r\n" : "\r\n";
-        } else if (final) {
-            first += "0\r\n\r\n";
-        }
-        channel.exchange->writes++;
-        if (!channel.exchange->client->connection.Send(
-                    &buffer.write, std::move(first), buffer.data.data(),
-                    static_cast<size_t>(length), std::move(last),
-                    [this, &channel](bool ok) {
-                        channel.exchange->writes--;
-                        if (!ok) {
-                            End(channel);
-                            return;
-                        }
-                        AdvanceChannel(channel);
-                    })) {
-            channel.exchange->writes--;
+    // Lend the engine to the exchange's connection for one response.
+    void Respond(Channel &channel) {
+        Exchange &exchange = *channel.exchange;
+        if (!exchange.client) {
             End(channel);
-        }
-    }
-
-    void StartEngineClose(Channel &channel) {
-        if (channel.work.IsActive() || channel.work.IsClosed())
             return;
-        if (!channel.work.Close())
-            ERROR("Channel cleanup could not be queued: "
-                  << server::EscapeForLog(channel.work.GetResult().error));
+        }
+        server::ChannelEngine *engine = channel.engine.get();
+        jpip::ResponseRequest request = exchange.request;
+        bool gzip = UseGzip(exchange);
+        string optional_headers = OptionalHeaders(exchange.request);
+        bool begun = false;
+        Channel *responding = &channel;
+
+        Connection::Response response;
+        response.headers = SuccessHeaders(channel, gzip);
+        response.close = exchange.close_connection;
+        response.generate = [engine, request, gzip, optional_headers, begun](
+                char *buffer, int capacity) mutable {
+            Connection::Chunk chunk = {Connection::Chunk::MORE, 0, string()};
+            int code = 500;
+            string error;
+            try {
+                if (!begun) {
+                    begun = engine->Begin(request, gzip, &error);
+                    if (!begun)
+                        code = 400;
+                }
+                if (begun) {
+                    GenerateResult result =
+                            engine->Generate(buffer, capacity, &chunk.length);
+                    if (result == GenerateResult::MORE)
+                        return chunk;
+                    if (result == GenerateResult::COMPLETE) {
+                        chunk.status = Connection::Chunk::COMPLETE;
+                        return chunk;
+                    }
+                    error = engine->GetError();
+                }
+            } catch (const exception &failure) {
+                code = 500;
+                error = failure.what();
+            } catch (...) {
+                code = 500;
+                error = "Channel processing failed with an unknown exception";
+            }
+            chunk.status = Connection::Chunk::FAILED;
+            chunk.length = 0;
+            chunk.failure = ErrorResponse(
+                    code, code == 400 ? "Bad Request" : "Internal Server Error",
+                    error, optional_headers);
+            return chunk;
+        };
+        response.done = [this, responding](bool complete) {
+            asio::post(control, [this, responding, complete] {
+                Responded(*responding, complete);
+            });
+        };
+        channel.engine_lent = true;
+        exchange.responding = true;
+        exchange.client->connection->Respond(std::move(response));
     }
 
-    void AdvanceChannel(Channel &channel,
-                        const server::ChannelWork::Result *completed = NULL) {
-        if (completed) {
-            const server::ChannelWork::Result &result = *completed;
-            switch (result.kind) {
-            case server::ChannelWork::Kind::OPEN:
-                if (active_opens > 0)
-                    active_opens--;
-                StartOpens();
-                if (channel.state == Channel::ENDING)
-                    break;
-                if (result.open != server::FileManager::OpenResult::OPENED) {
-                    OpenFailed(channel, result.open);
-                    return;
-                }
-                LOG("The channel " << channel.number
-                                    << " has been opened for the image '"
-                                    << server::EscapeForLog(Target(channel)) << "'");
-                // Opening has its own timeout; restart it for the response.
-                channel.exchange->client->connection.BlockRequests();
-                channel.state = Channel::OPEN;
-                break;
-            case server::ChannelWork::Kind::CLOSE:
-                break;
-            case server::ChannelWork::Kind::BEGIN:
-            case server::ChannelWork::Kind::GENERATE: {
-                Buffer *buffer = channel.exchange->work_buffer;
-                channel.exchange->work_buffer = NULL;
-                if (buffer == NULL) {
-                    Fail(channel, 500, "Internal Server Error",
-                         "The JPIP response lost its output buffer");
-                    return;
-                }
-                if (channel.state == Channel::ENDING)
-                    break;
-                if (!result.error.empty()) {
-                    int code = result.request_rejected ? 400 : 500;
-                    Fail(channel, code,
-                         code == 400 ? "Bad Request" : "Internal Server Error",
-                         result.error);
-                    return;
-                }
-                bool final = result.generation ==
-                        server::ChannelEngine::GenerateResult::COMPLETE;
-                channel.exchange->generation_complete = final;
-                SendChunk(channel, *buffer, result.length, final);
-                break;
-            }
-            }
-        }
-
-        // Consume the completed result before queuing work, which replaces it.
+    // The connection has already resumed, replied, or closed on its own.
+    void Responded(Channel &channel, bool complete) {
+        channel.engine_lent = false;
+        if (channel.state != Channel::ENDING && !complete)
+            BeginTermination(channel);
+        channel.exchange.reset();
         if (channel.state == Channel::ENDING) {
-            StartEngineClose(channel);
-            if (!channel.work.IsClosed() || !channel.timer_closed)
-                return;
+            Release(channel);
+        } else if (channel.waiting) {
+            unique_ptr<Exchange> waiting = std::move(channel.waiting);
+            StartRequest(channel, std::move(waiting));
         } else {
-            if (channel.state != Channel::OPEN)
-                return;
-            if (!channel.exchange->generation_complete) {
-                if (!channel.work.IsActive())
-                    Generate(channel);
-                return;
-            }
-        }
-        if (channel.exchange->writes != 0)
-            return;
-
-        // Generation, cleanup, and writes have finished; no payload is in use.
-        for (Buffer &buffer : channel.buffers)
-            vector<char>().swap(buffer.data);
-        Client *client = channel.exchange->Detach();
-        bool close_connection = channel.exchange->close_connection;
-        if (channel.state == Channel::ENDING) {
-            dead_channels.push_back(channel.id);
-            uv_async_send(&reaper);
-        } else {
-            if (channel.waiting) {
-                unique_ptr<Exchange> waiting = std::move(channel.waiting);
-                StartRequest(channel, std::move(waiting));
-            } else if (channel.timer_initialized) {
-                uv_timer_start(&channel.timer, ChannelExpired,
-                               static_cast<uint64_t>(cfg.connection_timeout()) * 1000,
-                               0);
-            }
-        }
-        // FinishResponse can synchronously dispatch a retained request.
-        if (client && !client->connection.IsClosing()) {
-            if (close_connection)
-                client->connection.CloseGracefully();
-            else
-                client->connection.FinishResponse();
+            StartIdleTimer(channel);
         }
     }
 
-    void OpenFailed(Channel &channel, server::FileManager::OpenResult result) {
-        switch (result) {
-            case server::FileManager::OpenResult::OPENED:
-                Fail(channel, 500, "Internal Server Error",
-                     "The image-open operation returned an inconsistent result");
+    void StartIdleTimer(Channel &channel) {
+        uint64_t epoch = ++channel.timer_epoch;
+        string id = channel.id;
+        channel.timer.expires_after(chrono::seconds(cfg.connection_timeout()));
+        channel.timer.async_wait([this, id, epoch](error_code) {
+            auto found = channels.find(id);
+            if (found == channels.end() || found->second->timer_epoch != epoch)
                 return;
-            case server::FileManager::OpenResult::NOT_FOUND:
-                Fail(channel, 404, "Not Found",
-                     "The requested image was not found");
-                return;
-            case server::FileManager::OpenResult::INVALID_PATH:
-                Fail(channel, 404, "Not Found",
-                     "The requested image path is invalid");
-                return;
-            case server::FileManager::OpenResult::UNSUPPORTED:
-                Fail(channel, 404, "Not Found",
-                     "The requested image type is not supported");
-                return;
-            case server::FileManager::OpenResult::UNREADABLE:
-                Fail(channel, 500, "Internal Server Error",
-                     "The requested image could not be read");
-                return;
-            case server::FileManager::OpenResult::INVALID:
-                Fail(channel, 404, "Not Found",
-                     "The requested image is not a valid supported JPEG 2000 source");
-                return;
-        }
+            LOG("The channel " << found->second->number << " timed out");
+            End(*found->second);
+        });
+    }
+
+    void StopIdleTimer(Channel &channel) {
+        ++channel.timer_epoch;
+        channel.timer.cancel();
     }
 
     void BeginTermination(Channel &channel) {
         channel.state = Channel::ENDING;
-        CloseChannelTimer(channel);
-        channel.work.CancelQueued();
-        RejectWaiting(channel, "JPIP channel has ended");
-    }
-
-    void Fail(Channel &channel, int code, const char *reason,
-              const string &message) {
-        Client *client = channel.exchange->client;
-        BeginTermination(channel);
-        if (client && !channel.exchange->headers_sent) {
-            SendChannelReply(channel, ErrorResponse(
-                    code, reason, message, &channel.exchange->request));
-            return;
-        }
-        if (client)
-            client->connection.Abort();
-        AdvanceChannel(channel);
-    }
-
-    void End(Channel &channel) {
-        if (channel.state == Channel::ENDING) {
-            CloseChannelTimer(channel);
-            AdvanceChannel(channel);
-            return;
-        }
-        BeginTermination(channel);
-        if (channel.exchange->client &&
-            !channel.exchange->client->connection.IsClosing())
-            channel.exchange->client->connection.Abort();
-        AdvanceChannel(channel);
-    }
-
-    void CloseChannelTimer(Channel &channel) {
-        if (channel.timer_initialized && !channel.timer_closed &&
-            !uv_is_closing(reinterpret_cast<uv_handle_t *>(&channel.timer))) {
-            uv_timer_stop(&channel.timer);
-            uv_close(reinterpret_cast<uv_handle_t *>(&channel.timer),
-                     ChannelTimerClosed);
-        }
-    }
-
-    void RejectWaiting(Channel &channel, const char *message) {
+        StopIdleTimer(channel);
+        channel.open_cancelled.store(true);
         if (!channel.waiting)
             return;
         unique_ptr<Exchange> waiting = std::move(channel.waiting);
-        Client *client = waiting->Detach();
-        if (!client) {
-            ERROR("Waiting JPIP exchange has no HTTP connection");
+        if (Client *client = waiting->Detach())
+            SendError(*client, 503, "Service Unavailable",
+                      "JPIP channel has ended", &waiting->request);
+    }
+
+    // Destroy an ending channel once nothing holds its engine. The channel
+    // is erased from a later handler, never inside a caller still using it.
+    void Release(Channel &channel) {
+        if (channel.engine_lent)
             return;
+        channel.engine_lent = true;
+        server::ChannelEngine *engine = channel.engine.release();
+        string id = channel.id;
+        asio::post(io, [this, engine, id] {
+            delete engine;
+            asio::post(control, [this, id] {
+                channels.erase(id);
+                FinishStop();
+            });
+        });
+    }
+
+    // End a channel whose client can still be told why.
+    void Fail(Channel &channel, int code, const char *reason,
+              const string &message) {
+        Exchange *exchange = channel.exchange.get();
+        Client *client = exchange ? exchange->client : NULL;
+        BeginTermination(channel);
+        if (client && exchange->responding)
+            client->connection->Abort();
+        else if (client)
+            SendError(*client, code, reason, message, &exchange->request);
+        if (exchange && !exchange->responding)
+            channel.exchange.reset();
+        Release(channel);
+    }
+
+    void End(Channel &channel) {
+        if (channel.state != Channel::ENDING) {
+            Exchange *exchange = channel.exchange.get();
+            BeginTermination(channel);
+            if (exchange && exchange->client)
+                exchange->client->connection->Abort();
+            if (exchange && !exchange->responding)
+                channel.exchange.reset();
         }
-        SendError(*client, 503, "Service Unavailable", message,
-                  &waiting->request);
+        Release(channel);
     }
 
     void SendError(Client &client, int code, const char *reason,
-                   const string &message, const jpip::Request *request = NULL) {
-        client.connection.StartResponse();
-        if (!client.connection.Send(
-                    &client.write, ErrorResponse(code, reason, message, request),
-                    [&client](bool) { client.connection.CloseGracefully(); }))
-            client.connection.Abort();
+                   const string &message, const jpip::Request *request) {
+        client.connection->Reply(ErrorResponse(
+                code, reason, message,
+                request ? OptionalHeaders(*request) : string()));
     }
 
     void EndRequestedChannel(const jpip::Request &request) {
@@ -738,83 +609,49 @@ private:
             End(*found->second);
     }
 
-    void ReadFailed(Client &client, server::Connection::ReadFailure failure) {
-        if (!client.connection.HasJPIPRoute()) {
-            ClientDisconnected(client);
-            client.connection.Abort();
-            return;
-        }
+    void ReadFailed(Client &client, Connection::ReadFailure failure,
+                    const string &target) {
         jpip::Request request;
         string error;
-        request.ParseTarget(client.connection.GetRequestTarget(), &error);
-        if (failure == server::Connection::ReadFailure::TOO_LARGE)
+        request.ParseTarget(target, &error);
+        if (failure == Connection::ReadFailure::TOO_LARGE)
             SendError(client, 431, "Request Header Fields Too Large",
                       "HTTP request head is too large", &request);
-        else if (failure == server::Connection::ReadFailure::MALFORMED)
+        else
             SendError(client, 400, "Bad Request", "Invalid HTTP request head",
                       &request);
-        else {
-            ClientDisconnected(client);
-            client.connection.Abort();
-            return;
-        }
         EndRequestedChannel(request);
     }
 
-    void Deadline(Client &client) {
+    // A connection has waited a full timeout for its request to be answered.
+    void Blocked(Client &client) {
         Exchange *exchange = client.exchange;
-        Channel *channel = exchange ? exchange->channel : NULL;
-        if (exchange && channel->waiting.get() == exchange) {
+        if (!exchange || exchange->responding)
+            return;  // An answer is already on its way to the connection.
+        Channel *channel = exchange->channel;
+        if (channel->waiting.get() == exchange) {
             unique_ptr<Exchange> waiting = std::move(channel->waiting);
             waiting->Detach();
             SendError(client, 503, "Service Unavailable",
-                      "JPIP channel request timed out",
-                      &waiting->request);
-        } else if (exchange &&
-                   (channel->state == Channel::OPEN_QUEUED ||
-                    channel->state == Channel::OPENING)) {
+                      "JPIP channel request timed out", &waiting->request);
+        } else if (channel->state == Channel::OPENING) {
             Fail(*channel, 503, "Service Unavailable",
                  "JPIP channel creation timed out");
-        } else if (exchange && channel->state == Channel::OPEN &&
-                   !exchange->headers_sent) {
-            Fail(*channel, 503, "Service Unavailable",
-                 "JPIP response generation timed out");
-        } else {
-            ClientDisconnected(client);
-            client.connection.Abort();
-        }
-    }
-
-    void ClientDisconnected(Client &client) {
-        Exchange *exchange = client.exchange;
-        if (!exchange)
-            return;
-        Channel *channel = exchange->channel;
-        if (channel->waiting.get() == exchange) {
-            channel->waiting.reset();
-        } else {
-            exchange->Detach();
-            End(*channel);
         }
     }
 
     void Closed(Client &client) {
-        ClientDisconnected(client);
-        if (client.counted) {
-            client.counted = false;
-            num_connections--;
+        if (Exchange *exchange = client.exchange) {
+            Channel *channel = exchange->channel;
+            if (channel->waiting.get() == exchange) {
+                channel->waiting.reset();
+            } else {
+                exchange->Detach();
+                End(*channel);
+            }
         }
-        dead_clients.push_back(client.id);
-        uv_async_send(&reaper);
-    }
-
-    void ReapObjects() {
-        for (uint64_t id : dead_clients)
-            clients.erase(id);
-        dead_clients.clear();
-        for (const string &id : dead_channels)
-            channels.erase(id);
-        dead_channels.clear();
+        uint64_t id = client.id;
+        clients.erase(id);
         FinishStop();
     }
 
@@ -823,145 +660,115 @@ private:
             return;
         stopping = true;
         LOG("Server stopping");
-        uv_close(reinterpret_cast<uv_handle_t *>(&listener), HandleClosed);
-        for (uv_signal_t &signal : stop_signals) {
-            uv_signal_stop(&signal);
-            uv_close(reinterpret_cast<uv_handle_t *>(&signal), HandleClosed);
-        }
+        error_code ignored;
+        acceptor.close(ignored);
+        accept_retry.cancel();
+        signals.cancel(ignored);
         for (auto &entry : clients)
-            entry.second->connection.Abort();
+            entry.second.connection->Abort();
         for (auto &entry : channels)
             End(*entry.second);
-        open_queue.clear();
         FinishStop();
     }
 
     void FinishStop() {
-        if (!stopping || !clients.empty() || !channels.empty() ||
-            open_handles != 1)
+        if (!stopping || !clients.empty() || !channels.empty())
             return;
-        uv_close(reinterpret_cast<uv_handle_t *>(&reaper), HandleClosed);
+        io_work.reset();
+        control_work.reset();
     }
 
 public:
-    Server(const server::Config &_cfg, const server::InetAddress &_listen_address,
-           unsigned int worker_threads)
-        : cfg(_cfg), listen_address(_listen_address),
-          max_concurrent_opens(worker_threads / 2) {}
+    Server(const server::Config &_cfg, const tcp::endpoint &_endpoint,
+           unsigned int _io_threads, unsigned int open_threads)
+        : cfg(_cfg), endpoint(_endpoint), io_threads(_io_threads),
+          control(1), io(static_cast<int>(_io_threads)), opens(open_threads),
+          control_work(asio::make_work_guard(control)),
+          io_work(asio::make_work_guard(io)), acceptor(control),
+          signals(control), accept_retry(control) {}
 
-    int Initialize() {
-        int result = uv_loop_init(&loop);
-        if (result != 0)
-            return result;
-        result = uv_tcp_init(&loop, &listener);
-        if (result != 0)
-            return InitializationFailed(result);
-        listener.data = this;
-        open_handles++;
-        result = uv_tcp_bind(&listener, listen_address.GetSockAddr(), 0);
-        if (result != 0)
-            return InitializationFailed(result);
-        for (uv_signal_t &signal : stop_signals) {
-            result = uv_signal_init(&loop, &signal);
-            if (result != 0)
-                return InitializationFailed(result);
-            signal.data = this;
-            open_handles++;
+    bool Initialize(string *failure) {
+        error_code error;
+        acceptor.open(tcp::v4(), error);
+        if (!error)
+            acceptor.set_option(tcp::acceptor::reuse_address(true), error);
+        if (!error)
+            acceptor.bind(endpoint, error);
+        if (!error)
+            acceptor.listen(asio::socket_base::max_listen_connections, error);
+        if (!error)
+            signals.add(SIGINT, error);
+        if (!error)
+            signals.add(SIGTERM, error);
+        if (error) {
+            *failure = error.message();
+            return false;
         }
-        result = uv_async_init(&loop, &reaper, Reap);
-        if (result != 0)
-            return InitializationFailed(result);
-        reaper.data = this;
-        open_handles++;
-        const int signal_numbers[] = {SIGINT, SIGTERM};
-        for (size_t i = 0; i < 2; ++i) {
-            result = uv_signal_start(&stop_signals[i], Signal,
-                                     signal_numbers[i]);
-            if (result != 0)
-                return InitializationFailed(result);
-        }
-        result = uv_listen(reinterpret_cast<uv_stream_t *>(&listener),
-                           SOMAXCONN, Listen);
-        return result == 0 ? 0 : InitializationFailed(result);
+        signals.async_wait([this](error_code cancelled, int) {
+            if (!cancelled)
+                Stop();
+        });
+        Accept();
+        return true;
     }
 
-    int Run() {
-        int run_result = uv_run(&loop, UV_RUN_DEFAULT);
-        int close_result = uv_loop_close(&loop);
-        if (run_result != 0)
-            ERROR("The serving event loop stopped with active work");
-        if (close_result != 0)
-            ERROR("The serving event loop could not be closed: "
-                  << uv_strerror(close_result));
-        return run_result == 0 && close_result == 0 ? 0 : -1;
+    void Run() {
+        vector<thread> threads;
+        for (unsigned int i = 0; i < io_threads; ++i)
+            threads.emplace_back([this] { io.run(); });
+        control.run();
+        for (thread &io_thread : threads)
+            io_thread.join();
+        opens.join();
     }
-
-    void OnRequest(Client &client, server::RequestHead &&head) {
-        Route(client, std::move(head));
-    }
-    void OnReadFailure(Client &client, server::Connection::ReadFailure failure) {
-        ReadFailed(client, failure);
-    }
-    void OnDeadline(Client &client) { Deadline(client); }
-    void OnClosed(Client &client) { Closed(client); }
-
-    friend void WorkDone(server::ChannelWork &, void *owner);
 };
 
-Client::Client(Server *_server, uint64_t _id, const server::Config &cfg)
-    : server(_server), id(_id), connection(
-            cfg.initial_timeout(), cfg.connection_timeout(),
-            [this](server::Connection &, server::RequestHead &&head) {
-                server->OnRequest(*this, std::move(head));
-            },
-            [this](server::Connection &, server::Connection::ReadFailure failure) {
-                server->OnReadFailure(*this, failure);
-            },
-            [this](server::Connection &) {
-                server->OnDeadline(*this);
-            },
-            [this](server::Connection &) { server->OnClosed(*this); }) {}
-
-Channel::Channel(Server *_server, string _id, uint64_t _number,
-                 uv_loop_t *loop, const server::Config &cfg)
-    : server(_server), id(std::move(_id)), number(_number),
-      work(loop, cfg.max_chunk_size(), cfg.image_directory(), WorkDone, this) {
-    timer_initialized = work.IsInitialized() && uv_timer_init(loop, &timer) == 0;
-    if (timer_initialized)
-        timer.data = this;
-    timer_closed = !timer_initialized;
-}
-
-void WorkDone(server::ChannelWork &, void *owner) {
-    Channel *channel = static_cast<Channel *>(owner);
-    channel->server->AdvanceChannel(*channel, &channel->work.GetResult());
+// The configured listen address; empty means every IPv4 interface.
+bool ListenEndpoint(const server::Config &cfg, tcp::endpoint *endpoint) {
+    unsigned short port = static_cast<unsigned short>(cfg.port());
+    if (cfg.address().empty()) {
+        *endpoint = tcp::endpoint(tcp::v4(), port);
+        return true;
+    }
+    asio::io_context io;
+    tcp::resolver resolver(io);
+    error_code error;
+    tcp::resolver::results_type found = resolver.resolve(
+            tcp::v4(), cfg.address(), "", tcp::resolver::flags(), error);
+    if (error || found.empty())
+        return false;
+    *endpoint = tcp::endpoint(found.begin()->endpoint().address(), port);
+    return true;
 }
 
 } // namespace
 
 namespace server {
 
-int RunServer(const Config &cfg, const InetAddress &listen_address,
-              const string &log_name, const string &description,
-              unsigned int worker_threads) {
-    if (worker_threads < 2)
-        return CERR("The worker-pool size must be at least 2");
+int RunServer(const Config &cfg, const string &log_name,
+              const string &description, unsigned int io_threads,
+              unsigned int open_threads) {
+    if (io_threads == 0 || open_threads == 0)
+        return CERR("The thread counts must be positive");
+    tcp::endpoint endpoint;
+    if (!ListenEndpoint(cfg, &endpoint))
+        return CERR("The listen address '" << cfg.address()
+                                           << "' can not be resolved");
     if (!trace::Initialize(log_name))
         return -1;
     LOG(description << " started (PID = " << getpid() << ")");
 
-    Server server(cfg, listen_address, worker_threads);
-    int initialize_result = server.Initialize();
-    if (initialize_result != 0) {
-        ERROR("The server can not be initialized: "
-              << uv_strerror(initialize_result));
-        uv_library_shutdown();
-        trace::Drain();
-        return -1;
+    int result = -1;
+    {
+        Server server(cfg, endpoint, io_threads, open_threads);
+        string failure;
+        if (server.Initialize(&failure)) {
+            server.Run();
+            result = 0;
+        } else {
+            ERROR("The server can not be initialized: " << failure);
+        }
     }
-    int result = server.Run();
-    if (result == 0)
-        uv_library_shutdown();
     trace::Drain();
     return result;
 }

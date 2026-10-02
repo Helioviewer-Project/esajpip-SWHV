@@ -9,7 +9,6 @@
 #include "server/config.h"
 #include "server/storage/file.h"
 #include "jpip/response/databin_writer.h"
-#include "server/http/address.h"
 
 using namespace std;
 
@@ -140,21 +139,6 @@ static void CheckConfig() {
     }
 }
 
-static void CheckInetAddress() {
-    server::InetAddress address("127.0.0.1", 8099);
-    Check(address.IsValid(), "A numeric Internet address was not resolved");
-    Check(address.GetPath() == "127.0.0.1", "Wrong numeric Internet address");
-    Check(address.GetPort() == 8099, "Wrong Internet port");
-
-    server::InetAddress hostname("localhost", 8900);
-    Check(hostname.IsValid(), "A local hostname was not resolved");
-    Check(!hostname.GetPath().empty(), "Resolved hostname has no numeric address");
-    Check(hostname.GetPort() == 8900, "Resolved hostname has the wrong port");
-
-    server::InetAddress invalid("", 8099);
-    Check(!invalid.IsValid(), "An empty Internet address was resolved");
-}
-
 static void CheckMappedSource() {
     server::File file;
     jpip::DataBinWriter writer;
@@ -179,7 +163,6 @@ static void CheckMappedSource() {
 
 int main() {
     CheckConfig();
-    CheckInetAddress();
     CheckMappedSource();
     return EXIT_SUCCESS;
 }

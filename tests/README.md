@@ -72,6 +72,7 @@ toolchain, and are described in [DIAGNOSTICS.md](DIAGNOSTICS.md):
 | `tests/run.sh [normal\|sanitize]` | The suite, normally or under ASan and UBSan. |
 | `tests/run_profile.sh asan\|extended\|msan\|optimized` | The suite under that sanitizer or in `Release`. |
 | `tests/run_profile.sh fuzz` | The fuzz targets under `tests/fuzz`, then seeded `ctest -L fuzz`. |
+| `tests/run_profile.sh fuzz-asan\|fuzz-extended` | Local libFuzzer mutation runs under sanitizer profiles. |
 | `tests/run_profile.sh valgrind [file...]` | `reader-rewrite` under Memcheck. |
 | `tests/run_baseline.sh` | The suite with Clang source coverage; [COVERAGE_GAPS.md](COVERAGE_GAPS.md) reads its reports. |
 | `tests/run_linux_docker.sh valgrind\|msan\|all` | The replay modes under Valgrind and MSan, in Debian 13. |
@@ -93,6 +94,10 @@ ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 \
 ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh asan
 ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh extended
 ESAJPIP_JOBS=8 ESAJPIP_CTEST_JOBS=8 sh tests/run_profile.sh optimized
+
+# Local fuzz campaigns, using Homebrew LLVM on macOS when present.
+ESAJPIP_JOBS=8 ESAJPIP_FUZZ_SECONDS=60 ESAJPIP_FUZZ_WORKERS=8 \
+  sh tests/run_profile.sh fuzz-extended
 
 # Linux fuzz campaigns in Docker.
 ESAJPIP_JOBS=8 ESAJPIP_FUZZ_SECONDS=300 ESAJPIP_FUZZ_WORKERS=8 \
@@ -170,14 +175,13 @@ build/profile-fuzz/tests/fuzz/fuzz_transcode -jobs=8 -workers=8 \
 | `jpip_window` | Window-to-precinct traversal and resolution boundaries. |
 | `jpip_writer` | Exact JPP writer bytes, coalescing, capacity boundaries and metadata placeholders on memory sources. |
 | `jpip_library` | Stateful response generation and independent reconstruction of bins across budgets, remapping and repeated windows. |
-| `server_support` | Configuration boundaries and missing keys, address resolution and mapped-source integration. |
+| `server_support` | Configuration boundaries and missing keys, and mapped-source integration. |
 | `server_storage` | Every committed source-vector label, declared packet ranges, linked graphs, malformed files, mapped-source responses and acquisition/release/retry ownership. |
 | `server_engine` | Thread migration and exact plain/gzip response equivalence. |
-| `server_worker` | Worker serialization, queued/started cancellation, completion, cleanup and reuse. |
 | `server_http` | Split-point and bytewise HTTP parsing, pipeline boundaries, reset and exact limits. |
-| `server_overlap` | Real overlapping exchanges, busy admission, waiting/active disconnects and generation failures before/after HTTP headers. |
-| `server_connection` | Direct libuv connection callbacks, deadline transitions, ordered writes and graceful closure. |
-| `server` | The real serving loop: HTTP status/headers, admission, limits, channel routing, disconnects and shutdown. Its independent JPP reader reconstructs and verifies source bytes across the full response matrix and stateful scenarios. |
+| `server_overlap` | Real overlapping exchanges, busy admission, waiting/active disconnects, a waiting request that expires, an invalid request for a busy channel, generation failures before/after HTTP headers and shutdown while busy. |
+| `server_connection` | Direct connection reports, deadline transitions, response framing, backpressure, failures before/after headers, peer resets and closure. |
+| `server` | The real server: HTTP status/headers, admission, limits, descriptor exhaustion, channel routing, disconnects, shutdown and startup failures. Its independent JPP reader reconstructs and verifies source bytes across the full response matrix and stateful scenarios. |
 | `fuzz_replay_*` | Deterministic replay of the generated per-target seed corpora through the same assertions used by the libFuzzer targets. |
 
 `reader_profile` and `server_storage` read the same corpus, so a corpus change
@@ -187,8 +191,9 @@ share one response-draining loop. Configuration cases alter one setting in one
 valid INI fixture and identify the setting on failure.
 
 Some overlap is intentional. Writer tests force buffers too small for a header
-and check exact encodings. Connection tests inspect callback order directly.
-Worker tests force thread migration and reject concurrent work on one channel.
+and check exact encodings. Connection tests inspect report order directly
+and script response failures and a client that stops reading. Engine tests
+force thread migration.
 Those properties are not guaranteed to occur in a live-server run. Keep these
 tests rather than replacing them with another successful HTTP request.
 

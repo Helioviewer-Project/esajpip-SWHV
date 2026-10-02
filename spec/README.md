@@ -215,7 +215,9 @@ The shared box-tree validator descends into at most `HV_BOX_DEPTH_MAX`
 all children of the last supported level and returns `box.depth-limit`
 for a deeper superbox. This means validation is incomplete, not that the
 file violates T.800/T.801. The boolean harness label is non-valid with that
-reason; it must not be interpreted as a standards defect. This recursion
+reason; it must not be interpreted as a standards defect. The same applies
+to `siz.unsupported-profile` and `siz.unsupported-capabilities`: the
+validator has not established conformance for that declaration. The recursion
 limit is separate from the ASN.1 whole-file model's corpus bounds on list
 and opaque-payload sizes. Depth-boundary regressions are constructed in
 `tests/jpeg2000/test_reader.c`, outside the conformance-vector manifest.
@@ -397,7 +399,8 @@ Conventions worth knowing before you edit:
   not define, which is skipped by its length: in `MainSegment` and
   `TileSegment` at layer 1 and in `MainSegment-Profile` at layer 2
   (`*-main-unknown` is valid at both layers). The profile also keeps
-  opaque what the server does not interpret (`jp2h`, `jplh`, `rreq` and
+  main-header QCD and COM bodies opaque, as well as what the server does
+  not interpret (`jp2h`, `jplh`, `rreq` and
   `asoc` in a .jpx, and the contents of the children of `jpch`), so the
   header-box rules, the placement of boxes in those superboxes and the
   `rreq` contents are checked at layer 1 only, and it omits the standard
@@ -916,19 +919,32 @@ the model goes and where its layers differ:
 - Required EPH markers after every packet header (T.800 A.8.2) are not
   checked: packet headers are opaque to the framing model and reader.
   `transcode/tier2.c` checks them when transcoding.
-- The Profile-1 multi-tile rule (`Rsiz = 2`) follows T.800 (08/2002 and
-  11/2015), Table A.45: `XTsiz / min(XRsiz_i, YRsiz_i) >= 1024`.
+- The Profile-1 multi-tile rule (`Rsiz = 2`) follows T.800 (08/2002,
+  11/2015 and 06/2019), Table A.45: `XTsiz / min(XRsiz_i, YRsiz_i) >= 1024`.
   Equality passes, and the bound does not apply to a single tile. The
   official T.803 (02/2024) streams `p1_04`, `p1_05` and `p1_06` conflict
   with this bound and fail `codestream.profile-1`. This discrepancy remains
   unresolved; the comparison and original conformance files are preserved.
   The current T.800 (2024) wording has not been verified. This has no
   effect on supported server sources, which must use a single tile.
-- `Rsiz` is 0, 1 or 2 (T.800 Table A.10), or a Part 2 value (T.801 Table
-  A.2) in a JPX file, at layer 1; the profile preserves any Rsiz for the
-  client and validates packet-layout features separately. The standard
-  model decodes one level of `asoc` children and requires at least two;
-  the box tree rules read a nested `asoc` (`jpx-asoc-nested`). The profile
+- The standard layer validates `Rsiz` 0, 1 and 2 and the existing Part 2
+  declarations in JPX. T.800:2019 Table A.10 also defines cinema, broadcast,
+  IMF and PRF-based profile declarations; their restrictions are not
+  implemented here (`siz.unsupported-profile`). CAP-signalled capabilities
+  outside the accepted Part 2 declarations are unvalidated
+  (`siz.unsupported-capabilities`). Neither diagnostic means that the
+  declaration itself is reserved. The serving profile preserves any Rsiz
+  and validates packet-layout features separately.
+- CAP (0xFF50, T.800:2019 A.5.2) and PRF (0xFF56, A.5.3) are length-framed
+  opaque main-header segments. Their bodies, ordering, duplicate counts
+  and placement are not semantically validated at the standard layer;
+  the serving profile rejects every non-PLT tile-header segment. Their
+  preservation does not establish support for the capabilities they signal.
+  The Scod and code-block-style constraints enforce the Part 1 encoder
+  zero-bit requirements (Tables A.13 and A.19), not the conditional decoder
+  handling of extension bits.
+- The standard model decodes one level of `asoc` children and requires at
+  least two; the box tree rules read a nested `asoc` (`jpx-asoc-nested`). The profile
   treats `asoc` contents as opaque metadata, like the server. `flst` and
   `url` at the top level fail to decode at both layers of a JPX file, as
   the server rejects them there; the other boxes that belong inside another

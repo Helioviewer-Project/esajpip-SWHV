@@ -1,7 +1,7 @@
 # JPIP requests, indexed targets and responses
 
 `jpip` is a C++ library built alongside `jpeg2000`. It has no server,
-HTTP runtime, libuv, gzip, GLib, or logging dependency. Its public operations are:
+HTTP runtime, Asio, gzip, GLib, or logging dependency. Its public operations are:
 
 - `jpip::Request::ParseTarget`: parse the request target extracted by the HTTP
   caller into the supported JPIP fields and channel-operation values. Parsing
@@ -77,8 +77,8 @@ Generated ASN.1 headers retain their existing names and configured include path.
 The shared data-bin classes and end-of-response codes remain in `jpip.h`.
 The server extracts the target from HTTP and uses the library's `Request`.
 It owns channel identifiers and lookup, target opening, admission limits,
-scheduling, cancellation and connection lifetime. Its worker and response
-adapter accept only `ResponseRequest`; routing fields stay with the caller.
+scheduling, cancellation and connection lifetime. Its response
+adapter accepts only `ResponseRequest`; routing fields stay with the caller.
 `server/storage/` supplies mapped sources, while `server/http/` owns HTTP
 request-head parsing and connections. The C format tools continue to link
 only `jpeg2000`.
