@@ -150,6 +150,8 @@ static void CheckMappedSource() {
     close(fd);
 
     Check(file.Open(path), "Could not open short payload file");
+    Check(file.Open(path, 1024) == server::File::OpenResult::FAILED,
+          "Opened a file over an open mapping");
     remove(path);
     char payload = 0;
     Check(file.Read(0, &payload, 1) && payload == 'x',

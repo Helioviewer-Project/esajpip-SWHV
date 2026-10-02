@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cassert>
 #include <errno.h>
 #include <cstdint>
 #include <cstring>
@@ -43,7 +42,11 @@ namespace server {
          * @return Detailed open result.
          */
         OpenResult Open(const char *file_name, uint64_t maximum_size) {
-            assert(address == MAP_FAILED);
+            if (address != MAP_FAILED) {
+                ERROR("File already open, not opening '"
+                      << EscapeForLog(file_name) << "'");
+                return OpenResult::FAILED;
+            }
 
             int fd = open(file_name, O_RDONLY);
             if (fd == -1) {
