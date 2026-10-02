@@ -56,6 +56,7 @@ add_subdirectory(jpip)
 add_subdirectory(transcode)
 add_subdirectory(merge)
 add_subdirectory(server)
+add_subdirectory(client)
 
 # The fuzz targets and their deterministic replay driver. The driver builds
 # in every configuration; the targets themselves are gated by ESAJPIP_FUZZ

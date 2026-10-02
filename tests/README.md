@@ -54,8 +54,9 @@ Options:
   libFuzzer runtime).
 - `BUILD_TESTING` (default ON) gates every test.
 
-CTest labels: `tools` (jpeg2000, jpip and the two tools), `server`, `cli` (the two
-command-line tests), `model` (`model_static`) and `fuzz` (the fuzz targets).
+CTest labels: `tools` (jpeg2000, jpip and the two tools), `server`, `client`,
+`cli` (the two command-line tests), `model` (`model_static`) and `fuzz` (the
+fuzz targets).
 The JPIP library also has the `jpip` label and responsibility labels described
 in [its test guide](jpip/README.md). The server has `server_tests` and
 responsibility labels described in [its test guide](server/README.md).

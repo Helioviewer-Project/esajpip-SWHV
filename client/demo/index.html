@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>esajpip client</title>
+<style>
+    body { font: 14px system-ui, sans-serif; margin: 1rem; }
+    fieldset { border: 0; margin: 0; padding: 0; }
+    input[name] { width: 20rem; max-width: 100%; }
+    label, button { margin-right: .5rem; }
+    #track { display: inline-block; width: 30rem; max-width: 100%; vertical-align: middle; }
+    #track, #position { margin-right: .5rem; }
+    #track input, #cached { display: block; width: 100%; margin: 0; }
+    #cached { height: 4px; image-rendering: pixelated; }
+    pre { white-space: pre-wrap; max-height: 20rem; overflow: auto; }
+    #canvas { display: block; margin-top: 1rem; max-width: 100%; }
+</style>
+<fieldset id="controls">
+    <form id="open">
+        <label>Server <input name="server"></label>
+        <label>Image <input name="image"></label>
+        <button>Open</button>
+    </form>
+    <p id="sizes"></p>
+    <p id="frames" hidden>
+        <button id="play" type="button">Play</button>
+        <label for="frame">Frame</label>
+        <span id="track">
+            <input id="frame" type="range" min="0" value="0">
+            <canvas id="cached" width="1" height="1"></canvas>
+        </span>
+        <span id="position"></span>
+        <label><input id="ahead" type="checkbox"> Fetch ahead</label>
+    </p>
+</fieldset>
+<p id="status"></p>
+<details>
+    <summary>XML metadata</summary>
+    <pre id="xml"></pre>
+</details>
+<canvas id="canvas" width="0" height="0"></canvas>
+<script type="module">
+// A demonstration of source.mjs: shows an image or a movie of an esajpip
+// server on a 2D canvas. ?server=...&image=... opens it at once.
+import { JpipSource } from "./source.mjs";
+
+const controls = document.getElementById("controls");
+const form = document.getElementById("open");
+const sizes = document.getElementById("sizes");
+const frames = document.getElementById("frames");
+const slider = document.getElementById("frame");
+const play = document.getElementById("play");
+const position = document.getElementById("position");
+const strip = document.getElementById("cached");
+const ahead = document.getElementById("ahead");
+const status = document.getElementById("status");
+const xml = document.getElementById("xml");
+const canvas = document.getElementById("canvas");
+let source = null;
+let target = null;      // { reduce, frame } as last asked for
+let shown = null;       // the target on the canvas
+let updating = false;
+let cached = [];        // frame -> the least `reduce` it is cached at, Infinity
+                        // for none of it
+let fetching = false;
+let playing = 0;        // the run of the play loop under way, 0 when paused
+let runs = 0;
+const FRAME_TIME = 100; // milliseconds a frame stays up when playing, at least
+
+// The canvas wants RGBA; an application with its own shaders would hand
+// frame.pixels to a texture as they are, and the color table to another.
+function draw(frame, text, palette) {
+    const { width, height, components, pixels } = frame;
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    const colors = components === 1 && palette?.channels === 3 ? palette.table : null;
+    for (let from = 0, to = 0; to < rgba.length; from += components, to += 4) {
+        if (colors !== null) {
+            const index = Math.min(pixels[from], palette.entries - 1);
+            rgba.set(colors.subarray(3 * index, 3 * index + 3), to);
+        } else {
+            rgba[to] = pixels[from];
+            rgba[to + 1] = pixels[components === 3 ? from + 1 : from];
+            rgba[to + 2] = pixels[components === 3 ? from + 2 : from];
+        }
+        rgba[to + 3] = 255;
+    }
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").putImageData(new ImageData(rgba, width, height), 0, 0);
+    position.textContent = `${frame.index + 1} of ${source.frames}`;
+    status.textContent = `${width}x${height} of ${frame.fullWidth}x${frame.fullHeight}, ` +
+        `${source.received.toLocaleString("en")} bytes received`;
+    xml.textContent = text ?? "(none)";
+}
+
+// The strip under the slider: dark where a frame is cached at the `reduce`
+// asked for, pale where only at a greater one.
+function mark() {
+    strip.width = source.frames;
+    const context = strip.getContext("2d");
+    for (let frame = 0; frame < source.frames; frame++) {
+        context.fillStyle = cached[frame] === Infinity ? "#ddd"
+            : cached[frame] <= target.reduce ? "#283" : "#ad9";
+        context.fillRect(frame, 0, 1, 1);
+    }
+}
+
+// Fetches the frames not cached at the `reduce` asked for, from the one
+// after the frame asked for: one at a time, so that a frame to show waits
+// for one of them at most.
+async function fetchAhead() {
+    if (fetching)
+        return;
+    fetching = true;
+    const from = source;
+    try {
+        while (source === from && ahead.checked) {
+            const { frame, reduce } = target;
+            let next = 1;
+            while (next < from.frames && cached[(frame + next) % from.frames] <= reduce)
+                next++;
+            if (next === from.frames)
+                break;
+            next = (frame + next) % from.frames;
+            const now = await from.fetch(next, reduce);
+            if (source === from) {
+                cached[next] = now;
+                mark();
+            }
+        }
+    } catch (error) {
+        if (source === from)
+            status.textContent = error.message;
+    }
+    fetching = false;
+}
+
+// While a frame is on its way, only the last thing asked for is kept, so a
+// dragged slider skips frames. Returns once the canvas shows what was last
+// asked for, or false if that failed.
+async function show(change) {
+    target = { ...target, ...change };
+    mark();
+    if (updating)
+        return true;
+    updating = true;
+    let done = true;
+    try {
+        while (shown !== target) {
+            const next = target;
+            const [frame, text, palette] = await Promise.all(
+                [source.frame(next.frame, next.reduce), source.xml(next.frame),
+                 source.palette(next.frame)]);
+            draw(frame, text, palette);
+            cached[next.frame] = Math.min(cached[next.frame], frame.reduce);
+            mark();
+            shown = next;
+        }
+        fetchAhead();
+    } catch (error) {
+        status.textContent = error.message;
+        done = false;
+    }
+    updating = false;
+    return done;
+}
+
+function pause() {
+    playing = 0;
+    play.textContent = "Play";
+}
+
+// Steps through the frames, round and round, from where the slider is: the
+// next frame once the last one is drawn and has had its time.
+async function start() {
+    const run = playing = ++runs;
+    play.textContent = "Pause";
+    while (playing === run) {
+        const began = performance.now();
+        slider.value = (Number(slider.value) + 1) % source.frames;
+        if (!await show({ frame: Number(slider.value) }) && playing === run)
+            pause();
+        await new Promise(resume => setTimeout(resume, began + FRAME_TIME - performance.now()));
+    }
+}
+
+async function open() {
+    pause();
+    controls.disabled = true;
+    try {
+        sizes.replaceChildren();
+        frames.hidden = true;
+        const old = source;
+        source = null;
+        await old?.close().catch(() => {});
+        source = await JpipSource.open({
+            wasm: new URL("esajpip_client.wasm", location.href),
+            server: form.server.value, image: form.image.value,
+        });
+        const [first, text, palette] = await Promise.all(
+            [source.frame(0, Infinity), source.xml(0), source.palette(0)]);
+        target = shown = { reduce: first.reduce, frame: 0 };
+        draw(first, text, palette);
+        cached = new Array(source.frames).fill(Infinity);
+        cached[0] = first.reduce;
+        mark();
+        for (let reduce = first.resolutions - 1; reduce >= 0; reduce--) {
+            const button = document.createElement("button");
+            button.textContent = reduce === 0 ? "Full size" : `1/${2 ** reduce}`;
+            button.addEventListener("click", () => show({ reduce }));
+            sizes.append(button);
+        }
+        frames.hidden = source.frames < 2;
+        slider.max = source.frames - 1;
+        slider.value = 0;
+        fetchAhead();
+    } catch (error) {
+        status.textContent = error.message;
+    }
+    controls.disabled = false;
+}
+
+const query = new URLSearchParams(location.search);
+form.server.value = query.get("server") ?? "http://localhost:8900";
+form.image.value = query.get("image") ?? "";
+form.addEventListener("submit", event => {
+    event.preventDefault();
+    open();
+});
+slider.addEventListener("input", () => show({ frame: Number(slider.value) }));
+play.addEventListener("click", () => playing ? pause() : start());
+ahead.addEventListener("change", fetchAhead);
+if (form.image.value !== "")
+    open();
+</script>
+</html>

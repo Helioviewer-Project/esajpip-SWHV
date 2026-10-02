@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 project(esajpip LANGUAGES C CXX)
 
@@ -72,6 +72,7 @@ add_subdirectory(jpip)
 add_subdirectory(transcode)
 add_subdirectory(merge)
 add_subdirectory(server)
+add_subdirectory(client)
 
 # Explicit benchmark target; excluded from normal builds and installation.
 add_executable(jpip_bench EXCLUDE_FROM_ALL tools/jpip_bench.cc)

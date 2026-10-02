@@ -28,8 +28,8 @@ These terms recur here and in the other documents.
 
 ## Build and install
 
-The build requires C11 and C++11 compilers, CMake, pkg-config, GLib, llhttp,
-zlib, and POSIX threads. The Asio networking library is included in the source
+The build requires C11 and C++11 compilers, CMake 3.20 or newer, pkg-config,
+GLib, llhttp, zlib, and POSIX threads. The Asio networking library is included in the source
 tree under `server/vendor/asio`, so no system copy is used. Debian 13 is the
 minimum supported Debian release; install the packages there with:
 
@@ -86,6 +86,7 @@ are in [`spec/`](spec/README.md).
 | [`jpip/`](jpip/README.md) | `jpip` | C++ JPIP request parsing, indexed targets and response generation |
 | `server/` | `esajpip_server`, `esajpip` | File mapping, HTTP, channels, scheduling and logging |
 | `merge/`, `transcode/` | `hv_merge`, `hv_transcode` | Format tools using the C library |
+| [`client/`](client/README.md) | `esajpip_client`, `hv_jpp2j2k`, `esajpip_client_wasm` | C client side for JP2 images and JPX movies: JPP-stream reading, data-bin store, codestream reconstruction, frame count, XML and color table from the metadata, what is held of each frame, decoding with the vendored OpenJPEG, and a WebAssembly build with a JavaScript interface for web applications |
 | [`tests/`](tests/README.md) | Test executables | Independent library tests and server integration |
 
 Each production component owns its CMake definition. The `jpip` library links
