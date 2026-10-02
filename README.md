@@ -105,7 +105,7 @@ section and setting below is required. Restart the server after changing it.
 | `listen.port` | `8900` | 1 to 65535 | TCP port on which the server listens. |
 | `listen.address` | empty | IPv4 address or hostname | Local address to listen on. Empty listens on every IPv4 interface. |
 | `jpip.image_directory` | `images` | non-empty path | Base directory from which requested JP2 and JPX paths are opened. The server resolves a relative path from its working directory. |
-| `jpip.chunk_size` | `64000` | 128 to 262144 | Response working-buffer size, and the maximum HTTP chunk payload, in bytes. The final chunk of a response may be smaller. |
+| `jpip.chunk_size` | `131072` | 128 to 262144 | Response working-buffer size, and the maximum HTTP chunk payload, in bytes. The final chunk of a response may be smaller. |
 | `connections.initial_timeout` | `3` | positive seconds | Time a newly accepted connection has to send a request the server recognizes as JPIP. Sending part of one does not extend the deadline. |
 | `connections.timeout` | `60` | positive seconds | Absolute time to complete an identified request head or wait for the next request, and the limits for response-write progress, a busy-channel wait, channel opening, first response generation, and channel idle time. |
 | `connections.limit` | `128` | positive | Maximum number of HTTP connections open at once. |
@@ -236,8 +236,8 @@ Each channel owns its index of the target, its cache model of what the client
 holds, and its position in the current window. It allocates up to
 four `jpip.chunk_size` output buffers as it needs them and keeps them until the
 channel closes; a channel that has served a compressed response keeps one more
-buffer of the same size. At the shipped settings that is at most 256,000
-bytes per channel, or 320,000 once gzip has been used. At the maximum chunk
+buffer of the same size. At the shipped settings that is at most 512 KiB
+per channel, or 640 KiB once gzip has been used. At the maximum chunk
 size those bounds become 1 MiB and 1.25 MiB. Size `channels.limit` from these
 figures and the memory available on the host, and `connections.limit` from the
 browser and proxy connection use you expect.

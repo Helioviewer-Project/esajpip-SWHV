@@ -17,7 +17,6 @@ public:
         OPEN,
         BEGIN,
         GENERATE,
-        FINISH,
         CLOSE
     };
 
@@ -66,8 +65,6 @@ public:
     bool Begin(jpip::ResponseRequest image_request, bool use_gzip,
                char *output, int output_capacity);
     bool Generate(char *output, int output_capacity);
-    // Release response resources while preserving the image and cache.
-    bool Finish();
     // Destroy the engine on a worker and prevent further operations.
     bool Close();
     void CancelQueued();

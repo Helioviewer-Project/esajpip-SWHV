@@ -24,6 +24,7 @@ server::FileManager::OpenResult ChannelEngine::Open(const string &target) {
 
 bool ChannelEngine::Begin(const jpip::ResponseRequest &request, bool use_gzip,
                           string *request_error) {
+    Finish();
     error_message.clear();
     gzip = use_gzip;
     raw_last = false;

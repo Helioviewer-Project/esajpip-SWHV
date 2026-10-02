@@ -40,6 +40,9 @@ struct PooledResponse {
             break;
         case server::ChannelWork::Kind::BEGIN:
         case server::ChannelWork::Kind::GENERATE:
+            Check(result.length >= 0 &&
+                          result.length <= static_cast<int>(self->output.size()),
+                  "Worker returned an invalid chunk length");
             self->response.insert(self->response.end(), self->output.begin(),
                                   self->output.begin() + result.length);
             if (result.generation ==
@@ -48,15 +51,11 @@ struct PooledResponse {
                     self->failed = true;
             } else if (result.generation ==
                        server::ChannelEngine::GenerateResult::COMPLETE) {
-                if (!work.Finish())
+                if (!work.Close())
                     self->failed = true;
             } else {
                 self->failed = true;
             }
-            break;
-        case server::ChannelWork::Kind::FINISH:
-            if (!work.Close())
-                self->failed = true;
             break;
         case server::ChannelWork::Kind::CLOSE:
             if (!work.IsClosed())
@@ -65,8 +64,7 @@ struct PooledResponse {
         }
     }
 
-    explicit PooledResponse(int output_size) : output(output_size) {
-    }
+    explicit PooledResponse(int output_size) : output(output_size) {}
 
     vector<char> Generate(const string &directory) {
         Check(uv_loop_init(&loop) == 0,
@@ -147,7 +145,7 @@ static void CheckQueuedCancellation(const string &directory) {
     Blockers blockers;
     blockers.Start(loop);
     Check(work.Open("image.jp2"), "Could not queue the canceled open");
-    Check(!work.Open("image.jp2") && !work.Finish() && !work.Close(),
+    Check(!work.Open("image.jp2") && !work.Close(),
           "Active work accepted a second operation");
     work.CancelQueued();
     blockers.Release();
@@ -155,98 +153,50 @@ static void CheckQueuedCancellation(const string &directory) {
     Check(completion.calls == 1 && blockers.completed == 2 &&
                   work.GetResult().open == server::FileManager::OpenResult::INVALID,
           "Queued cancellation executed the open or lost its completion");
-    Check(work.Finish(), "Could not clean up after queued cancellation");
-    work.CancelQueued(); // Cleanup must remain queued, even when canceled.
-    uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 2 &&
-                  work.GetResult().kind == server::ChannelWork::Kind::FINISH,
-          "Cleanup cancellation lost its completion");
     Check(work.Open("image.jp2"), "Canceled worker could not be reused");
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 3 &&
+    Check(completion.calls == 2 &&
                   work.GetResult().open == server::FileManager::OpenResult::OPENED,
           "Open after cancellation did not complete");
     Check(work.Close(), "Could not close reused worker");
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 4 && work.IsInitialized() && work.IsClosed() &&
+    Check(completion.calls == 3 && work.IsInitialized() && work.IsClosed() &&
                   work.GetResult().kind == server::ChannelWork::Kind::CLOSE &&
-                  !work.Open("image.jp2") && !work.Finish() &&
+                  !work.Open("image.jp2") &&
                   !work.Close() && uv_loop_close(&loop) == 0,
           "Closed worker accepted work or retained loop handles");
 }
 
-static void CheckCleanupCancellation(const string &directory) {
+static void CheckPartialGzipClose(const string &directory) {
     jpip::Request request;
     Check(request.ParseTarget("/jpip?stream=0&metareq=[*]!!&fsiz=1,1&cid=0"),
-          "Could not parse cleanup request");
-    server::ChannelEngine reference(128);
-    string error;
-    Check(reference.Init(directory) &&
-                  reference.Open("image.jp2") == server::FileManager::OpenResult::OPENED &&
-                  reference.Begin(request, false, &error), "Could not prepare cleanup reference");
-    char buffer[128]; int length = 0;
-    Check(reference.Generate(buffer, sizeof buffer, &length) == server::ChannelEngine::GenerateResult::MORE,
-          "Cleanup fixture did not span multiple raw chunks");
-    reference.Finish();
-    Check(reference.Begin(request, false, &error), "Could not restart cleanup reference");
-    vector<char> expected;
-    for (;;) {
-        server::ChannelEngine::GenerateResult result = reference.Generate(buffer, sizeof buffer, &length);
-        Check(result != server::ChannelEngine::GenerateResult::FAILED, "Cleanup reference generation failed");
-        expected.insert(expected.end(), buffer, buffer + length);
-        if (result == server::ChannelEngine::GenerateResult::COMPLETE) break;
-    }
-
+          "Could not parse partial gzip request");
     uv_loop_t loop;
-    Check(uv_loop_init(&loop) == 0, "Could not initialize cleanup loop");
+    Check(uv_loop_init(&loop) == 0, "Could not initialize partial gzip loop");
     Completion completion;
     server::ChannelWork work(&loop, 128, directory, Completion::Done, &completion);
-    Check(work.Open("image.jp2"), "Could not open cleanup source");
+    Check(work.Open("image.jp2"), "Could not open partial gzip source");
     uv_run(&loop, UV_RUN_DEFAULT);
     Check(work.GetResult().open == server::FileManager::OpenResult::OPENED,
-          "Cleanup source did not open");
-    // This starts compression and advances one raw chunk's cache state, but
-    // leaves its gzip stream unfinished. Canceling cleanup would preserve that
-    // compression state and corrupt the next response.
-    Check(work.Begin(request, true, buffer, 8), "Could not start partial gzip response");
+          "Partial gzip source did not open");
+    char buffer[8];
+    Check(work.Begin(request, true, buffer, sizeof buffer),
+          "Could not start partial gzip response");
     uv_run(&loop, UV_RUN_DEFAULT);
     Check(work.GetResult().error.empty() && work.GetResult().length == 8 &&
                   work.GetResult().generation == server::ChannelEngine::GenerateResult::MORE,
-          "Cleanup fixture did not leave compression active");
+          "Partial gzip fixture did not leave compression active");
     Blockers blockers;
     blockers.Start(loop);
-    Check(work.Finish(), "Could not queue compression cleanup");
+    Check(work.Close() && !work.IsClosed(),
+          "Could not queue terminal cleanup or closed before completion");
     work.CancelQueued();
     blockers.Release();
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(work.GetResult().error.empty() && completion.calls == 3,
-          "Canceled cleanup did not complete exactly once");
-    Check(work.Begin(request, true, buffer, sizeof buffer), "Could not begin gzip after cleanup");
-    vector<char> compressed;
-    for (;;) {
-        uv_run(&loop, UV_RUN_DEFAULT);
-        const server::ChannelWork::Result &result = work.GetResult();
-        Check(result.error.empty() && result.generation != server::ChannelEngine::GenerateResult::FAILED,
-              "Gzip generation after cleanup failed");
-        compressed.insert(compressed.end(), buffer, buffer + result.length);
-        if (result.generation == server::ChannelEngine::GenerateResult::COMPLETE) break;
-        Check(work.Generate(buffer, sizeof buffer), "Could not continue gzip after cleanup");
-    }
-    Check(channel_test::Gunzip(compressed) == expected,
-          "Canceling queued cleanup preserved stale compression or changed the cache");
-    Blockers closing_blockers;
-    closing_blockers.Start(loop);
-    int calls = completion.calls;
-    Check(work.Close() && !work.IsClosed(),
-          "Could not queue terminal cleanup or closed before its completion");
-    work.CancelQueued();
-    closing_blockers.Release();
-    uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == calls + 1 && work.IsClosed() &&
+    Check(completion.calls == 3 && work.IsClosed() &&
                   !work.Begin(request, false, buffer, sizeof buffer) &&
-                  !work.Generate(buffer, sizeof buffer) &&
-                  uv_loop_close(&loop) == 0,
-          "Terminal cleanup was canceled or accepted further generation");
+                  !work.Generate(buffer, sizeof buffer) && uv_loop_close(&loop) == 0,
+          "Partial gzip cleanup was canceled or accepted further generation");
 }
 
 static void CheckRunningCancellation(const string &directory) {
@@ -290,15 +240,63 @@ static void CheckIdleCleanup(const string &directory) {
     Check(work.Open("image.jp2"), "Could not open idle cleanup source");
     uv_run(&loop, UV_RUN_DEFAULT);
     Check(work.GetResult().open == server::FileManager::OpenResult::OPENED &&
-                  work.Finish(),
-          "Could not queue idle response cleanup");
+                  work.Close(), "Could not queue idle engine cleanup");
     uv_run(&loop, UV_RUN_DEFAULT);
-    Check(work.IsInitialized() && !work.IsClosed() && work.Close(),
-          "Response cleanup lost the engine or blocked terminal cleanup");
-    uv_run(&loop, UV_RUN_DEFAULT);
-    Check(completion.calls == 3 && work.IsClosed() &&
+    Check(completion.calls == 2 && work.IsClosed() &&
                   !work.IsActive() && uv_loop_close(&loop) == 0,
           "Idle engine was not closed exactly once");
+}
+
+static void CheckCompletedGzip(const string &directory) {
+    jpip::Request request;
+    Check(request.ParseTarget("/jpip?stream=0&metareq=[*]!!&fsiz=1,1&cid=0"),
+          "Could not parse repeated gzip request");
+    uv_loop_t loop;
+    Check(uv_loop_init(&loop) == 0, "Could not initialize repeated gzip loop");
+    Completion completion;
+    server::ChannelWork work(&loop, 128, directory, Completion::Done, &completion);
+    server::ChannelEngine reference(128);
+    Check(reference.Init(directory) &&
+                  reference.Open("image.jp2") == server::FileManager::OpenResult::OPENED &&
+                  work.Open("image.jp2"), "Could not open repeated gzip sources");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    char buffer[8];
+    for (int pass = 0; pass < 2; ++pass) {
+        string error;
+        Check(reference.Begin(request, false, &error), "Could not begin gzip reference");
+        vector<char> expected;
+        char raw[128];
+        for (;;) {
+            int length = 0;
+            server::ChannelEngine::GenerateResult result = reference.Generate(raw, sizeof raw, &length);
+            Check(result != server::ChannelEngine::GenerateResult::FAILED,
+                  "Repeated gzip reference failed");
+            expected.insert(expected.end(), raw, raw + length);
+            if (result == server::ChannelEngine::GenerateResult::COMPLETE) break;
+        }
+        reference.Finish();
+        Check(work.Begin(request, true, buffer, sizeof buffer),
+              "Could not begin repeated gzip");
+        vector<char> compressed;
+        for (;;) {
+            uv_run(&loop, UV_RUN_DEFAULT);
+            const server::ChannelWork::Result &result = work.GetResult();
+            Check(result.error.empty() &&
+                          result.generation != server::ChannelEngine::GenerateResult::FAILED,
+                  "Repeated gzip failed");
+            compressed.insert(compressed.end(), buffer, buffer + result.length);
+            if (result.generation == server::ChannelEngine::GenerateResult::COMPLETE) break;
+            Check(result.generation == server::ChannelEngine::GenerateResult::MORE &&
+                          work.Generate(buffer, sizeof buffer),
+                  "Could not continue repeated gzip");
+        }
+        Check(channel_test::Gunzip(compressed) == expected,
+              "Final-worker cleanup retained gzip state or changed the cache");
+    }
+    Check(work.Close(), "Could not close repeated gzip worker");
+    uv_run(&loop, UV_RUN_DEFAULT);
+    Check(work.IsClosed() && uv_loop_close(&loop) == 0,
+          "Repeated gzip worker retained handles");
 }
 
 int main() {
@@ -307,7 +305,7 @@ int main() {
     channel_test::Fixture fixture;
     CheckQueuedCancellation(fixture.directory);
     CheckRunningCancellation(fixture.directory);
-    CheckCleanupCancellation(fixture.directory);
+    CheckPartialGzipClose(fixture.directory);
     CheckIdleCleanup(fixture.directory);
     PooledResponse pooled(128);
     vector<char> response = pooled.Generate(fixture.directory);
@@ -331,5 +329,6 @@ int main() {
         if (result == server::ChannelEngine::GenerateResult::COMPLETE) break;
     }
     Check(response == expected, "Pool scheduling changed the generated response");
+    CheckCompletedGzip(fixture.directory);
     return EXIT_SUCCESS;
 }

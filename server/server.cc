@@ -91,7 +91,6 @@ struct Exchange {
     unsigned int writes = 0;
     bool headers_sent = false;
     bool generation_complete = false;
-    bool response_cleaned = false;
 };
 
 struct Buffer {
@@ -534,19 +533,12 @@ private:
         }
     }
 
-    void StartCleanup(Channel &channel) {
+    void StartEngineClose(Channel &channel) {
         if (channel.work.IsActive() || channel.work.IsClosed())
             return;
-        bool ending = channel.state == Channel::ENDING;
-        if (!ending && channel.exchange->response_cleaned)
-            return;
-        bool queued = ending ? channel.work.Close() : channel.work.Finish();
-        if (!queued) {
+        if (!channel.work.Close())
             ERROR("Channel cleanup could not be queued: "
                   << server::EscapeForLog(channel.work.GetResult().error));
-            if (!ending)
-                End(channel);
-        }
     }
 
     void AdvanceChannel(Channel &channel,
@@ -570,9 +562,6 @@ private:
                 // Opening has its own timeout; restart it for the response.
                 channel.exchange->client->connection.BlockRequests();
                 channel.state = Channel::OPEN;
-                break;
-            case server::ChannelWork::Kind::FINISH:
-                channel.exchange->response_cleaned = true;
                 break;
             case server::ChannelWork::Kind::CLOSE:
                 break;
@@ -605,7 +594,7 @@ private:
 
         // Consume the completed result before queuing work, which replaces it.
         if (channel.state == Channel::ENDING) {
-            StartCleanup(channel);
+            StartEngineClose(channel);
             if (!channel.work.IsClosed() || !channel.timer_closed)
                 return;
         } else {
@@ -616,9 +605,6 @@ private:
                     Generate(channel);
                 return;
             }
-            StartCleanup(channel);
-            if (!channel.exchange->response_cleaned)
-                return;
         }
         if (channel.exchange->writes != 0)
             return;

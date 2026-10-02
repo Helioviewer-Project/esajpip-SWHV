@@ -45,10 +45,6 @@ bool ChannelWork::Generate(char *output, int output_capacity) {
     return Queue(Kind::GENERATE);
 }
 
-bool ChannelWork::Finish() {
-    return Queue(Kind::FINISH);
-}
-
 bool ChannelWork::Close() {
     return Queue(Kind::CLOSE);
 }
@@ -88,9 +84,6 @@ void ChannelWork::Perform() {
         case Kind::GENERATE:
             GenerateChunk();
             break;
-        case Kind::FINISH:
-            engine->Finish();
-            break;
         case Kind::CLOSE:
             engine.reset();
             break;
@@ -106,8 +99,14 @@ void ChannelWork::GenerateChunk() {
     if (!result.error.empty())
         return;
     result.generation = engine->Generate(buffer, capacity, &result.length);
-    if (result.generation == ChannelEngine::GenerateResult::FAILED)
+    if (result.generation == ChannelEngine::GenerateResult::FAILED) {
         result.error = engine->GetError();
+        return;
+    }
+    if (result.generation == ChannelEngine::GenerateResult::COMPLETE) {
+        engine->Finish();
+        return;
+    }
 }
 
 void ChannelWork::Done(uv_work_t *work, int status) {
@@ -129,7 +128,7 @@ void ChannelWork::Complete(int status) {
 }
 
 void ChannelWork::CancelQueued() {
-    if (active && result.kind != Kind::FINISH && result.kind != Kind::CLOSE)
+    if (active && result.kind != Kind::CLOSE)
         (void) uv_cancel(reinterpret_cast<uv_req_t *>(&work));
 }
 
