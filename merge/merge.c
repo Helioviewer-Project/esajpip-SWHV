@@ -488,7 +488,6 @@ static int write_rreq(writer *w, const source *s, size_t n, int links) {
     int has[16] = {0}, i;
     size_t j, k = 0;
 
-    memset(standard, 0, sizeof standard);
     memset(&header, 0, sizeof header);
     has[1] = 1;
     for (j = 0; j < n; j++) {
@@ -503,9 +502,9 @@ static int write_rreq(writer *w, const source *s, size_t n, int links) {
     for (i = 0; i < 16; i++) {
         if (!has[i])
             continue;
-        standard[k].sf = (FeatureCode)i;
-        standard[k].sm.nCount = 1;
-        standard[k].sm.arr[0] = (byte)(0x80 >> k);
+        standard[k] = (RreqStandardFeature){
+            .sf = (FeatureCode)i, .sm = {.nCount = 1, .arr = {(byte)(0x80 >> k)}}
+        };
         header.fuam.arr[0] |= (byte)(0x80 >> k);
         k++;
     }
