@@ -77,13 +77,13 @@ struct hv_metadata_frame {
 };
 
 /* Associates the first XML following a number list with its named frames. */
-static int association(const hv_bin *bin, hv_metadata *metadata,
+static int association(const uint8_t *data, size_t size, hv_metadata *metadata,
                        char *error, size_t error_size) {
     hv_boxes boxes;
     hv_box box;
     size_t at;
     int status;
-    hv_boxes_file(&boxes, bin->data, bin->length);
+    hv_boxes_file(&boxes, data, size);
     while ((status = next_box(&boxes, &box, error, error_size)) == 1) {
         if (box.type == HV_BOX_NLST) {
             hv_boxes following = boxes;
@@ -95,11 +95,11 @@ static int association(const hv_bin *bin, hv_metadata *metadata,
             if (found < 0) return -1;
             if (found == 0) continue;
             for (at = box.payload; at + 4 <= box.end; at += 4) {
-                uint32_t name = (uint32_t)big_endian(bin->data + at, 4);
+                uint32_t name = (uint32_t)big_endian(data + at, 4);
                 uint32_t kind = name & 0xFF000000u, index = name & 0xFFFFFFu;
                 if ((kind == NLST_CODESTREAM || kind == NLST_LAYER) && index < metadata->count &&
                     metadata->frames[index].xml == NULL) {
-                    metadata->frames[index].xml = bin->data + xml.payload;
+                    metadata->frames[index].xml = data + xml.payload;
                     metadata->frames[index].xml_size = xml.end - xml.payload;
                 }
             }
@@ -175,12 +175,19 @@ int hv_metadata_open(const hv_cache *cache, hv_metadata *metadata,
         } else if (box.type == HV_BOX_XML && file_xml == NULL) {
             file_xml = payload;
             file_size = box.end - box.payload;
+        } else if (box.type == HV_BOX_ASOC) {
+            /* Classical servers keep association contents in metadata bin 0.
+             * TODO: When JHV drops classical esajpip support, remove this branch,
+             * tests/client/test_classical_metadata.cc and its CMake test entry. */
+            if (association(payload, box.end - box.payload, metadata, error, error_size) != 0)
+                goto fail;
         } else if (box.type == PHLD && box.end - box.payload >= PHLD_HEADER + 8 &&
                    (big_endian(payload, 4) & PHLD_ORIGINAL) &&
                    big_endian(payload + PHLD_HEADER + 4, 4) == HV_BOX_ASOC) {
             const hv_bin *contents = metadata_bin(cache, big_endian(payload + 4, 8), error,
                                                   error_size);
-            if (contents == NULL || association(contents, metadata, error, error_size) != 0)
+            if (contents == NULL || association(contents->data, contents->length, metadata,
+                                                error, error_size) != 0)
                 goto fail;
         }
     }
