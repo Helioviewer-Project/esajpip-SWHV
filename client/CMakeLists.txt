@@ -16,6 +16,7 @@ target_include_directories(esajpip_openjpeg SYSTEM PUBLIC
 target_link_libraries(esajpip_openjpeg PUBLIC m)
 
 add_library(esajpip_client STATIC
+    hv_client.c
     hv_jpp.c
     hv_cache.c
     hv_frame.c
@@ -62,7 +63,7 @@ endfunction()
 
 # Our sources and what hv_reconstruct takes of the jpeg2000 library, with
 # the project's warnings; OpenJPEG without.
-foreach(source hv_wasm.c hv_jpp.c hv_cache.c hv_frame.c hv_reconstruct.c hv_metadata.c hv_image.c)
+foreach(source hv_wasm.c hv_client.c hv_jpp.c hv_cache.c hv_frame.c hv_reconstruct.c hv_metadata.c hv_image.c)
     esajpip_wasm_object(${CMAKE_CURRENT_SOURCE_DIR}/${source}
         -std=c11 -Wall -Wextra -Wno-unused-parameter)
 endforeach()

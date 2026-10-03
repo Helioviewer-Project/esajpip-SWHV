@@ -55,12 +55,6 @@ function header(value) {
     }));
 }
 
-// The `reduce` asked for, within what an image of `resolutions` levels
-// has: at least the lowest remains.
-function clamp(reduce, resolutions) {
-    return Math.min(reduce, resolutions - 1);
-}
-
 function checkOptions(options) {
     if (options === null || typeof options !== "object" || Array.isArray(options) ||
         Object.keys(options).some(key => key !== "fit" && key !== "reduce" && key !== "layers") ||
@@ -77,29 +71,6 @@ function checkOptions(options) {
     }
     if ("layers" in options && (!Number.isSafeInteger(options.layers) || options.layers < 1))
         throw new RangeError("layers must be a positive safe integer");
-}
-
-function resolution({ fullWidth, fullHeight, resolutions }, options) {
-    if (!("fit" in options))
-        return clamp(options.reduce ?? 0, resolutions);
-    const scale = Math.min(options.fit[0] / fullWidth, options.fit[1] / fullHeight);
-    let reduce = 0;
-    while (reduce + 1 < resolutions &&
-           Math.ceil(fullWidth / 2 ** (reduce + 1)) >= fullWidth * scale &&
-           Math.ceil(fullHeight / 2 ** (reduce + 1)) >= fullHeight * scale)
-        reduce++;
-    return reduce;
-}
-
-// The view-window fields for a frame without its `reduce` highest
-// resolutions: the frame size of that resolution exactly (T.800 B.5), so
-// that the server sends those resolutions whatever its rounding.
-function view(index, { fullWidth, fullHeight, resolutions }, reduce) {
-    const scale = 2 ** clamp(reduce, resolutions);
-    return {
-        stream: index,
-        fsiz: [Math.ceil(fullWidth / scale), Math.ceil(fullHeight / scale), "closest"],
-    };
 }
 
 export class JpipChannel {
@@ -169,8 +140,9 @@ export class JpipChannel {
     // Null until the frame's header is present.
     cached(index, options = {}) {
         checkOptions(options);
-        const status = this.#status(index);
-        return status.resolutions === 0 ? null : this.#describe(index, status, options);
+        const status = this.#view(index, options);
+        const { request, requestedLayers, ...description } = status;
+        return status.resolutions === 0 ? null : description;
     }
 
     // The XML that describes a frame (for a FITS image, its header), or
@@ -338,59 +310,45 @@ export class JpipChannel {
             throw new RangeError(`no frame ${index}: the image has ${this.frames}`);
     }
 
-    #status(index) {
+    #view(index, options, prepare = false) {
         this.#checkIndex(index);
-        const at = this.#wasm.hv_wasm_status(index);
+        const at = this.#wasm.hv_wasm_view(index,
+            Math.min(options.reduce ?? 0, 2147483647),
+            options.fit?.[0] ?? 0, options.fit?.[1] ?? 0,
+            Math.min(options.layers ?? 0, 2147483647), prepare ? 1 : 0);
         if (at === 0)
             throw new Error(this.#error());
         const [fullWidth, fullHeight, components, resolutions, , totalLayers] =
             new Uint32Array(this.#wasm.memory.buffer, at, 6);
         const quality = Array.from(new Uint32Array(this.#wasm.memory.buffer, at + 24, resolutions));
-        return { fullWidth, fullHeight, components, resolutions, totalLayers, quality };
-    }
-
-    #describe(index, { fullWidth, fullHeight, components, resolutions, totalLayers, quality }, options) {
-        const reduce = resolution({ fullWidth, fullHeight, resolutions }, options);
-        const layers = Math.min(...quality.slice(0, resolutions - reduce));
-        const scale = 2 ** reduce;
+        const [reduce, width, height, layers, ready, request, requestedLayers] =
+            new Uint32Array(this.#wasm.memory.buffer, at + 156, 7);
         return {
-            index, reduce, width: Math.ceil(fullWidth / scale), height: Math.ceil(fullHeight / scale),
-            components: components >= 3 ? 3 : 1,
+            index, reduce, width, height, components: components >= 3 ? 3 : 1,
             fullWidth, fullHeight, resolutions, layers, totalLayers, quality,
-            complete: layers === totalLayers,
-            ready: layers >= Math.min(options.layers ?? totalLayers, totalLayers),
+            complete: resolutions > 0 && layers === totalLayers,
+            ready: Boolean(ready), request, requestedLayers,
         };
     }
 
-    // Obtains the geometry before choosing a resolution, then requests
-    // only the levels missing from the cache.
+    // The C client chooses each request and confirms its successful response.
     async #fetch(index, options) {
         checkOptions(options);
-        let status = this.#status(index);
-        if (status.resolutions === 0) {
-            await this.#request({ stream: index, layers: 0 });
-            status = this.#status(index);
+        if (this.#failed !== null) {
+            const { request, requestedLayers, ...status } = this.#view(index, options);
+            if (status.ready) return status;
+            throw this.#failed;
         }
-        if (status.resolutions === 0)
-            throw new Error(`the server did not send frame ${index}'s header`);
-        let result = this.#describe(index, status, options);
-        const layers = Math.min(options.layers ?? status.totalLayers, status.totalLayers);
-        if (!result.ready) {
-            const fields = view(index, status, result.reduce);
-            if ("layers" in options) fields.layers = layers;
+        for (;;) {
+            const { request, requestedLayers, ...status } = this.#view(index, options, true);
+            if (request === 0) return status;
+            const fields = request === 1 ? { stream: index, layers: 0 }
+                : { stream: index, fsiz: [status.width, status.height, "closest"] };
+            if (request === 2 && "layers" in options) fields.layers = requestedLayers;
             const reason = await this.#request(fields);
             if (reason !== 1 && reason !== 2)
                 throw new Error("the server did not complete the requested quality layers");
-            // Full bins carry their own completion flag; partial ones need
-            // the whole-layer boundary confirmed from this completed window.
-            if (layers < status.totalLayers &&
-                this.#wasm.hv_wasm_confirm(index, result.reduce, layers) !== 0)
-                throw new Error(this.#error());
-            result = this.#describe(index, this.#status(index), options);
-            if (!result.ready)
-                throw new Error(`the server did not send frame ${index} whole`);
         }
-        return result;
     }
 
     // Decodes a frame from the cache. The pixels are copied out of the

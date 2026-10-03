@@ -390,30 +390,106 @@ this build, `target_link_libraries(app PRIVATE esajpip_client)` is enough. The
 library does no I/O: the program sends the requests and passes each response
 body to the library.
 
-### What the program does
+### Source API
 
-1. Prepare a store with `hv_cache_begin`. A store belongs to one source.
-2. Send the first request and read the channel from its response.
-3. Pass every response body through `hv_jpp_next` into `hv_cache_apply`.
-4. After the first response, index the metadata with `hv_metadata_open`. That
-   gives the number of frames, and each frame's XML and color table.
-5. For a frame, ask `hv_reconstruct_status` what resolution and quality levels
-   are cached. Request missing data. For layer-limited windows, confirm the
-   delivery with `hv_reconstruct_confirm` after ingesting a normally completed
-   response, as described below.
-6. Write the frame as a codestream with `hv_reconstruct`, and decode it with
-   `hv_image_decode` or another decoder.
-7. At the end, close the channel on the server, then `hv_metadata_close` and
-   `hv_cache_release`.
+Use `hv_client.h` for one source. It owns the data-bin cache, metadata and
+pending frame request. The same API drives the WebAssembly client.
 
-For channel recovery, keep the store and metadata. Use `hv_cache_model` to
-declare retained bins in batches while selecting no codestreams (`stream` equal
-to the frame count, `layers=0`). Start a new channel on the original target with
-the first batch, and send the remaining batches on that channel. Validate any
-repeated metadata through `hv_cache_match_metadata`, rather than applying it.
-Each restoration response must end normally before proceeding. Then resume the
-original request using normal `hv_cache_apply`. Do this only after a successful
-initial metadata exchange, for the same immutable target.
+```text
+Create source
+    ↓
+Host opens channel and submits the initial response
+    ↓
+Read frame count, XML and palette
+    ↓
+Prepare frame with viewport fit or reduction, and quality
+    ├─ HEADER → host requests stream=frame,layers=0
+    ├─ FRAME  → host requests stream=frame,fsiz=width,height,closest,layers=k
+    │               ↓
+    │          Submit response, then prepare again
+    └─ READY  → reconstruct codestream → host decodes and displays
+    ↓
+Host closes channel; destroy source
+```
+
+`hv_client_options` initialized to zero selects full resolution and quality.
+Set both `fit_width` and `fit_height` to the physical viewport dimensions to
+select a resolution for an aspect-ratio-preserving fit, or set `reduce` to
+remove highest resolution levels. `INT_MAX` selects the lowest resolution.
+Do not combine a fit with a nonzero reduction. `layers=0` means all source
+layers; positive values are clamped to the frame's layer count.
+
+`hv_client_status` inspects readiness without preparing a request.
+`hv_client_prepare` also remembers the exact request to confirm after its
+response. A missing header produces `HV_CLIENT_HEADER`; its geometry is zero.
+Once the header is cached, `HV_CLIENT_FRAME` supplies exact dimensions and
+`requested_layers`. `HV_CLIENT_READY` needs no request. `view.source` describes
+the original components and geometry; `view.layers` is the minimum cached
+quality across the selected resolution levels.
+
+The host retains HTTP, channel routing, scheduling and decoding. Submit the
+opening response with `hv_client_response`, then use `hv_client_frames` to
+read the frame count. Keep one request outstanding per source, serialize all
+calls, and do not add `len` or a region to prepared requests. After each
+response, prepare again until the requested frame is ready. This handles
+heterogeneous movies using each frame's own header. Successful completed
+responses confirm whole-packet layer boundaries automatically.
+
+```c
+hv_client *source = hv_client_create();
+if (source == NULL)
+    return fail("out of memory");
+
+/* The host supplies the initial response body. */
+if (hv_client_response(source, body, body_size) < 0 || !hv_client_frames(source))
+    goto failed;
+
+hv_client_options options = {0};
+options.fit_width = viewport_width;
+options.fit_height = viewport_height;
+options.layers = 1;
+hv_client_view view;
+for (;;) {
+    if (hv_client_prepare(source, frame, &options, &view) != 0)
+        goto failed;
+    if (view.request == HV_CLIENT_READY)
+        break;
+    /* Host sends HEADER or FRAME fields described above, obtains body/size. */
+    if (hv_client_response(source, body, body_size) < 0)
+        goto failed;
+}
+size_t size = hv_client_reconstruct(source, frame, NULL, 0);
+/* Allocate size bytes, reconstruct into them, then pass them to the decoder.
+ * The host owns that buffer; the source does not allocate a decoded image. */
+/* ... */
+hv_client_destroy(source);
+return 0;
+
+failed:
+/* Report hv_client_error(source), close the host's channel, then destroy. */
+hv_client_destroy(source);
+return -1;
+```
+
+For channel recovery, keep the source. `hv_client_model` writes retained-bin
+declarations in bounded batches; start its cursor at zero and stop at an empty
+batch. Select no codestreams (`stream` equal to the frame count, `layers=0`).
+The first batch opens a replacement channel on the original target; later
+batches use its `cid`. Submit these responses with `hv_client_restore_response`,
+which checks repeated metadata and requires a normal EOR. Then retry the
+original pending request. Restoration retains geometry, quality and metadata
+pointers and does not complete the pending frame request. Use it only after a
+successful initial metadata exchange, for the same immutable target.
+
+A response ending before window completion retains its bytes without
+confirming quality; the host can prepare another request. A rejected response
+may have applied valid preceding messages. Its pending
+request remains available for retry, but protocol errors require closing the
+channel. Destroying the source releases its metadata and cache in the correct
+order. The XML returned by `hv_client_xml` remains valid until destruction;
+`hv_client_palette` copies into a host buffer. `hv_client_reconstruct` preserves
+sample precision and uses the same size-query/caller-buffer convention as
+`hv_reconstruct`.
 
 ### Requests
 
@@ -445,7 +521,7 @@ GET /<path>?cid=<cid>&cclose=<cid>
   accepts, and [`../CHANNELS.md`](../CHANNELS.md) its channels, status codes
   and timeouts.
 
-### Calls
+### Low-level calls
 
 | Call | Header | Result |
 | --- | --- | --- |
@@ -462,70 +538,11 @@ GET /<path>?cid=<cid>&cclose=<cid>
 | `hv_reconstruct` | `hv_reconstruct.h` | A frame as a JPEG 2000 codestream |
 | `hv_image_decode` | `hv_image.h` | A codestream decoded to pixels |
 
-Each header documents its calls' results. Calls that take `error` and
+The low-level APIs remain available for programs that need direct message or
+data-bin access. Each header documents its calls' results. Calls that take `error` and
 `error_size` write a message there when they fail.
 
-```c
-hv_cache cache;
-hv_cache_begin(&cache);
-
-/* Each response body. */
-hv_jpp_reader reader;
-hv_jpp_message message;
-int next;
-hv_jpp_begin(&reader, body, body_size);
-while ((next = hv_jpp_next(&reader, &message)) == HV_JPP_MESSAGE)
-    if (!hv_cache_apply(&cache, &message))
-        return fail(hv_cache_error(&cache));
-if (next == HV_JPP_ERROR)
-    return fail(hv_jpp_error(&reader));
-
-/* The metadata, after the first response. */
-char error[256];
-hv_metadata metadata = {0};
-if (hv_metadata_open(&cache, &metadata, error, sizeof error) != 0)
-    return fail(error);
-/* metadata.count frames. */
-
-const uint8_t *xml;                     /* NULL if the frame has none */
-size_t xml_size;
-if (hv_metadata_xml(&metadata, frame, &xml, &xml_size,
-                    error, sizeof error) != 0)
-    return fail(error);
-
-uint8_t *table = malloc(HV_PALETTE_MAX);
-int channels;                           /* entries is 0 if it has none */
-int entries = hv_metadata_palette(&metadata, frame, &channels, table,
-                                  HV_PALETTE_MAX, error, sizeof error);
-if (entries < 0)
-    return fail(error);
-
-/* A frame at its highest cached resolution level. */
-hv_status status;
-if (hv_reconstruct_status(&cache, frame, &status, error, sizeof error) != 0)
-    return fail(error);
-if (status.complete == 0)
-    return 0;                           /* request it first */
-size_t size = hv_reconstruct(&cache, frame, NULL, 0, error, sizeof error);
-uint8_t *codestream = malloc(size);
-hv_reconstruct(&cache, frame, codestream, size, error, sizeof error);
-
-hv_image image;
-int reduce = status.resolutions - status.complete;
-hv_image_mode mode = entries ? HV_IMAGE_INDICES : HV_IMAGE_SAMPLES;
-if (hv_image_decode(codestream, size, reduce, mode, &image,
-                    error, sizeof error) != 0)
-    return fail(error);
-/* image.pixels: image.width * image.height * image.components bytes. */
-
-free(image.pixels);
-free(codestream);
-free(table);
-hv_metadata_close(&metadata);
-hv_cache_release(&cache);
-```
-
-### Notes
+### Low-level notes
 
 - **`hv_status`.** `complete` counts cached resolution levels from the lowest,
   so the lowest usable `reduce` is `resolutions - complete`, and 0 means
@@ -564,7 +581,7 @@ shortest complete example.
 - **Whole-frame windows only.** No regions or decoding during response
   arrival. Layer-limited previews decode after the window completes; arbitrary
   byte-limited partial delivery is not supported.
-- **No eviction.** The cache grows until the channel is closed.
+- **No eviction.** The cache grows until the source is destroyed.
 - **Bounded recovery.** An operation attempts one replacement channel. There
   is no background keepalive or retry loop while a server remains unavailable.
 - **This server's files.** The client reads what esajpip sends for the files
@@ -627,6 +644,7 @@ The tests are in `../tests/client/` and need no network.
 | `client_jpp_malformed` | Damaged messages, all refused |
 | `client_reconstruct` | Every codestream of the corpus, the transcoder's reference images and the merger's reference movie, served by the server's own code at each resolution: the written codestream, the cached levels, the decoded pixels, and the movie's frame count, XML and color tables |
 | `client_image` | Sample scaling at several precisions, and unchanged color table indices |
+| `client_source` | The higher-level native API: header requests, per-frame geometry and viewport fit, preview confirmation, refinement, rejected responses, pending-request preservation during restoration, metadata replay and decoded pixel equality |
 
 The JavaScript is checked by a script that needs Node.js, the built module and
 a running server:
@@ -679,8 +697,9 @@ JP2 Header box or, in a JPX, from the frame's own codestream header box
 
 | File | Responsibility |
 | --- | --- |
+| `hv_client.c` | Source ownership, response ingestion, frame request planning and automatic quality confirmation, shared by native callers and WASM |
 | `hv_jpp.c` | JPP-stream messages (T.808 A.2 and D.3) |
-| `hv_cache.c` | The data-bins received on one channel |
+| `hv_cache.c` | One source's data-bins, retained across channel replacement |
 | `hv_frame.c` | Geometry and reconstruction header prepared once per frame, owned by its main-header bin |
 | `hv_reconstruct.c` | One codestream of the store as a JPEG 2000 codestream; its cached resolution levels |
 | `hv_metadata.c` | Frame count, XML and color tables, from the metadata bins |

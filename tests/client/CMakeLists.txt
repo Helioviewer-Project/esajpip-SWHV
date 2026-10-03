@@ -1,5 +1,5 @@
-# Tests of the JPIP client (client/). All but test_cache link jpip, so that
-# the client is checked against what the server's own code writes.
+# Tests of the JPIP client (client/). Protocol, reconstruction and source
+# tests link jpip to check the client against what the server writes.
 #
 #   client_cache         the store's append and completeness rules
 #   client_jpp           bytes from jpip::DataBinWriter read back by the client
@@ -33,3 +33,11 @@ target_compile_definitions(test_client_reconstruct PRIVATE
     IMAGES="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu"
     MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
 esajpip_add_test(client_reconstruct COMMAND test_client_reconstruct LABELS client TIMEOUT 60)
+
+add_executable(test_client_source test_client.cc)
+esajpip_configure_target(test_client_source)
+target_link_libraries(test_client_source PRIVATE esajpip_client jpip)
+target_compile_definitions(test_client_source PRIVATE
+    IMAGE="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2"
+    MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
+esajpip_add_test(client_source COMMAND test_client_source LABELS client TIMEOUT 60)
