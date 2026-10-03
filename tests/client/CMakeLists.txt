@@ -10,37 +10,33 @@
 #                        codestreams and, the images, decoded; the movie's
 #                        frame count, XML and color tables
 
-add_executable(test_client_cache test_cache.c)
-esajpip_configure_target(test_client_cache)
-target_link_libraries(test_client_cache PRIVATE esajpip_client)
-esajpip_add_test(client_cache COMMAND test_client_cache LABELS client)
+add_custom_target(client_tests)
 
-add_executable(test_client_image test_image.c)
-esajpip_configure_target(test_client_image)
-target_link_libraries(test_client_image PRIVATE esajpip_client esajpip_openjpeg)
-esajpip_add_test(client_image COMMAND test_client_image LABELS client)
+function(client_add_test target name)
+    cmake_parse_arguments(ARG "" "TIMEOUT" "SOURCES;LIBRARIES" ${ARGN})
+    add_executable(${target} ${ARG_SOURCES})
+    esajpip_configure_target(${target})
+    target_link_libraries(${target} PRIVATE esajpip_client ${ARG_LIBRARIES})
+    if(ARG_TIMEOUT)
+        esajpip_add_test(${name} COMMAND ${target} LABELS client TIMEOUT ${ARG_TIMEOUT})
+    else()
+        esajpip_add_test(${name} COMMAND ${target} LABELS client)
+    endif()
+    add_dependencies(client_tests ${target})
+endfunction()
 
-foreach(name jpp_roundtrip jpp_malformed reconstruct)
-    add_executable(test_client_${name} test_${name}.cc)
-    esajpip_configure_target(test_client_${name})
-    target_link_libraries(test_client_${name} PRIVATE esajpip_client jpip)
-endforeach()
-esajpip_add_test(client_jpp COMMAND test_client_jpp_roundtrip LABELS client)
-esajpip_add_test(client_jpp_malformed COMMAND test_client_jpp_malformed LABELS client)
+client_add_test(test_client_cache client_cache SOURCES test_cache.c)
+client_add_test(test_client_image client_image SOURCES test_image.c LIBRARIES esajpip_openjpeg)
+client_add_test(test_client_jpp_roundtrip client_jpp SOURCES test_jpp_roundtrip.cc LIBRARIES jpip)
+client_add_test(test_client_jpp_malformed client_jpp_malformed SOURCES test_jpp_malformed.cc LIBRARIES jpip)
+client_add_test(test_client_reconstruct client_reconstruct SOURCES test_reconstruct.cc LIBRARIES jpip TIMEOUT 60)
 
 target_compile_definitions(test_client_reconstruct PRIVATE
     VECTORS="${PROJECT_SOURCE_DIR}/tests/vectors/j2k"
     IMAGES="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu"
-    MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
-esajpip_add_test(client_reconstruct COMMAND test_client_reconstruct LABELS client TIMEOUT 60)
+    MOVIE="${ESAJPIP_CLIENT_MOVIE_FIXTURE}")
 
-add_executable(test_client_source test_client.cc)
-esajpip_configure_target(test_client_source)
-target_link_libraries(test_client_source PRIVATE esajpip_client jpip)
+client_add_test(test_client_source client_source SOURCES test_client.cc LIBRARIES jpip TIMEOUT 60)
 target_compile_definitions(test_client_source PRIVATE
-    IMAGE="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2"
-    MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
-esajpip_add_test(client_source COMMAND test_client_source LABELS client TIMEOUT 60)
-
-add_custom_target(client_tests DEPENDS test_client_cache test_client_image
-    test_client_jpp_roundtrip test_client_jpp_malformed test_client_reconstruct test_client_source)
+    IMAGE="${ESAJPIP_CLIENT_RGB_FIXTURE}"
+    MOVIE="${ESAJPIP_CLIENT_MOVIE_FIXTURE}")

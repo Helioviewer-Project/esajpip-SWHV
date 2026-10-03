@@ -24,6 +24,12 @@ endif()
 # A sanitizer report fails every test, and every test is registered through
 # this one helper, so labels and environment cannot drift between groups.
 set(ESAJPIP_TEST_ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
+set(ESAJPIP_CLIENT_RGB_FIXTURE
+    ${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2)
+set(ESAJPIP_CLIENT_GRAY_FIXTURE
+    ${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/solo_fsi174_127x129_RLCP_PLT.jp2)
+set(ESAJPIP_CLIENT_MOVIE_FIXTURE
+    ${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx)
 
 # esajpip_add_test(<name> COMMAND <command...> LABELS <label...>
 #                  [WORKING_DIRECTORY <dir>] [TIMEOUT <seconds>])
@@ -44,6 +50,13 @@ function(esajpip_add_test name)
         endif()
         set_tests_properties(${name} PROPERTIES TIMEOUT "${ARG_TIMEOUT}")
     endif()
+endfunction()
+
+function(esajpip_client_response_fixtures target)
+    target_compile_definitions(${target} PRIVATE
+        CLIENT_RGB="${ESAJPIP_CLIENT_RGB_FIXTURE}"
+        CLIENT_GRAY="${ESAJPIP_CLIENT_GRAY_FIXTURE}"
+        CLIENT_MOVIE="${ESAJPIP_CLIENT_MOVIE_FIXTURE}")
 endfunction()
 
 # The model's own checks that need no compiler (spec/check-model.sh --static).
