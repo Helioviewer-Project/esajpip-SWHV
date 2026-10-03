@@ -67,25 +67,64 @@ try {
         }
         for (const reduce of [-1, 0.5, NaN, "1"])
             for (const method of ["frame", "fetch"])
-                await assert.rejects(channel[method](0, reduce), RangeError);
+                await assert.rejects(channel[method](0, { reduce }), RangeError);
+        for (const options of [null, 2, [], { reduce: null }, { reduce: undefined },
+                               { fit: [1, 1], reduce: 0 }, { size: [1, 1] },
+                               { fit: [0, 1] }, { fit: [-1, 1] }, { fit: [NaN, 1] },
+                               { fit: [Infinity, 1] }, { fit: [1] }, { fit: [1, 2, 3] },
+                               { fit: [, 1] }, { fit: ["1", 1] }])
+            for (const method of ["frame", "fetch"])
+                await assert.rejects(channel[method](channel.frames - 1, options), RangeError);
+        assert.equal(requests.length, 0, "invalid calls sent a request");
         assert.equal(channel.received, received, "invalid calls sent a request");
-        const first = await channel.frame(0, Infinity);
+        const first = await channel.frame(0, { reduce: Infinity });
         assert.equal(first.reduce, channel.cached(0));
         assert.equal(channel.received, received, "cached frame sent a request");
 
         console.log(`${channel.frames} frame(s)`);
         for (let reduce = first.reduce; reduce >= 0; reduce--)
-            report(channel, await channel.frame(0, reduce));
+            report(channel, await channel.frame(0, { reduce }));
+        const full = await channel.frame(0);
+        const beforeFit = requests.length;
+        for (let reduce = 0; reduce < full.resolutions; reduce++) {
+            const width = Math.ceil(full.fullWidth / 2 ** reduce);
+            const height = Math.ceil(full.fullHeight / 2 ** reduce);
+            // One limiting dimension; the other has ample unused space.
+            // Covering the raw rectangle would wrongly select a finer level.
+            for (const fit of [[width, full.fullHeight * 4], [full.fullWidth * 4, height]]) {
+                const frame = await channel.frame(0, { fit });
+                assert.equal(frame.reduce, reduce, `wrong fit level for ${fit}`);
+                const explicit = await channel.frame(0, { reduce });
+                assert.deepEqual(frame.pixels, explicit.pixels);
+            }
+            if (reduce > 0 && width < full.fullWidth) {
+                const frame = await channel.frame(0, { fit: [width + 0.25, full.fullHeight * 4] });
+                assert.equal(frame.reduce, reduce - 1, "fit did not cross a resolution boundary");
+            }
+        }
+        assert.equal((await channel.frame(0, { fit: [full.fullWidth * 2, full.fullHeight * 2] })).reduce, 0);
+        assert.equal((await channel.frame(0, { fit: [0.25, 0.25] })).reduce, full.resolutions - 1);
+        assert.equal(requests.length, beforeFit, "fit requested already cached levels");
         for (let index = 1; index < channel.frames; index++) {
             const start = requests.length;
-            const cached = await channel.fetch(index, Infinity);
+            const options = { fit: [20, 30] };
+            const cached = await channel.fetch(index, options);
             assert.equal(requests.length - start, 2, `frame ${index} needs a header and pixel request`);
             const header = requests[start].searchParams;
             assert.equal(header.get("stream"), String(index));
             assert.equal(header.get("layers"), "0");
             assert.equal(header.has("fsiz"), false);
             const received = channel.received;
-            const frame = await channel.frame(index, Infinity);
+            const frame = await channel.frame(index, options);
+            const scale = Math.min(20 / frame.fullWidth, 30 / frame.fullHeight);
+            if (frame.reduce > 0) {
+                assert.ok(frame.width >= frame.fullWidth * scale);
+                assert.ok(frame.height >= frame.fullHeight * scale);
+            }
+            if (frame.reduce + 1 < frame.resolutions)
+                assert.ok(Math.ceil(frame.fullWidth / 2 ** (frame.reduce + 1)) < frame.fullWidth * scale ||
+                          Math.ceil(frame.fullHeight / 2 ** (frame.reduce + 1)) < frame.fullHeight * scale,
+                          "fit did not select the coarsest usable level");
             const pixels = requests[start + 1].searchParams;
             assert.equal(pixels.get("stream"), String(index));
             assert.equal(pixels.has("layers"), false);
@@ -108,14 +147,22 @@ try {
     try {
         for (const method of ["cached", "xml", "palette", "frame", "fetch"])
             await assert.rejects(source[method](source.frames), RangeError);
-        await assert.rejects(source.frame(0, NaN), RangeError);
-        const first = await source.frame(0, Infinity);
+        await assert.rejects(source.frame(0, { reduce: NaN }), RangeError);
+        await assert.rejects(source.fetch(0, { fit: [0, 1] }), RangeError);
+        const first = await source.frame(0, { reduce: Infinity });
         assert.equal(first.reduce, await source.cached(0));
         assert.equal(first.pixels.length, first.width * first.height * first.components);
         const received = source.received;
-        const repeated = await source.frame(0, Infinity);
+        const repeated = await source.frame(0, { fit: [first.width, first.height] });
+        assert.equal(repeated.reduce, first.reduce);
         assert.deepEqual(repeated.pixels, first.pixels);
         assert.equal(source.received, received);
+        const cached = await source.fetch(0, { fit: [first.fullWidth, first.fullHeight] });
+        assert.equal(cached, 0);
+        const afterFetch = source.received;
+        const full = await source.frame(0, { fit: [first.fullWidth, first.fullHeight] });
+        assert.equal(full.reduce, 0);
+        assert.equal(source.received, afterFetch);
         await source.xml(0);
         await source.palette(0);
     } finally {

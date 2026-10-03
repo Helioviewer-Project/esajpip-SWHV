@@ -122,7 +122,7 @@ async function fetchAhead() {
             if (next === from.frames)
                 break;
             next = (frame + next) % from.frames;
-            const now = await from.fetch(next, reduce);
+            const now = await from.fetch(next, { reduce });
             if (source === from) {
                 cached[next] = now;
                 mark();
@@ -149,7 +149,7 @@ async function show(change) {
         while (shown !== target) {
             const next = target;
             const [frame, text, palette] = await Promise.all(
-                [source.frame(next.frame, next.reduce), source.xml(next.frame),
+                [source.frame(next.frame, { reduce: next.reduce }), source.xml(next.frame),
                  source.palette(next.frame)]);
             draw(frame, text, palette);
             cached[next.frame] = Math.min(cached[next.frame], frame.reduce);
@@ -198,7 +198,7 @@ async function open() {
             server: form.server.value, image: form.image.value,
         });
         const [first, text, palette] = await Promise.all(
-            [source.frame(0, Infinity), source.xml(0), source.palette(0)]);
+            [source.frame(0, { reduce: Infinity }), source.xml(0), source.palette(0)]);
         target = shown = { reduce: first.reduce, frame: 0 };
         draw(first, text, palette);
         cached = new Array(source.frames).fill(Infinity);

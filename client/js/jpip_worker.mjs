@@ -14,13 +14,13 @@ const calls = {
         return [{ frames: channel.frames, received: channel.received }, []];
     },
     // The arguments of JpipChannel.frame.
-    async frame(index, reduce) {
-        const frame = await channel.frame(index, reduce);
+    async frame(index, options) {
+        const frame = await channel.frame(index, options);
         return [{ frame, received: channel.received }, [frame.pixels.buffer]];
     },
     // The arguments of JpipChannel.fetch.
-    async fetch(index, reduce) {
-        return [{ cached: await channel.fetch(index, reduce), received: channel.received }, []];
+    async fetch(index, options) {
+        return [{ cached: await channel.fetch(index, options), received: channel.received }, []];
     },
     cached(index) {
         return [channel.cached(index), []];

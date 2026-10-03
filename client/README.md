@@ -90,7 +90,7 @@ const source = await JpipSource.open({
     server: "http://localhost:8900",
     image: "movie.jpx" });               // a path below the image directory
 
-const frame = await source.frame(3, 1);  // frame 3 at half size
+const frame = await source.frame(3, { fit: [1024, 768] });
 
 // One byte per pixel: rows are not padded to 4 bytes.
 gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -105,41 +105,62 @@ await source.close();
 | Field | Meaning |
 | --- | --- |
 | `index` | The frame number |
-| `reduce` | The `reduce` used: the one asked for, or the highest the frame has |
+| `reduce` | The resolution reduction selected for this frame |
 | `width`, `height` | The size of the decoded image |
 | `components` | 1 or 3 |
 | `pixels` | A `Uint8Array` of `width * height * components` bytes, top row first, components interleaved. It is a copy that belongs to the caller |
 | `fullWidth`, `fullHeight` | The size at `reduce` 0 |
 | `resolutions` | The number of resolution levels: `reduce` runs from 0 to `resolutions - 1` |
 
-`reduce` is a nonnegative integer or `Infinity`, which means the lowest
-resolution. `source.frames` is the number of frames.
+`{ fit: [width, height] }` gives the available display area in physical
+pixels. The client fits the image into it, preserving aspect ratio, and
+chooses the coarsest available resolution that covers the drawn image.
+For example, a 4096x4096 image in a 1000x800 area needs an 800x800 image,
+so the client decodes at 1024x1024 (`reduce` 2).
+
+The application supplies its CSS display size multiplied by the device
+pixel ratio. For zoom, supply the area the whole image would occupy,
+including the part outside the viewport. Requests still fetch whole frames.
+
+For explicit control, use `{ reduce: n }`: a nonnegative integer, or
+`Infinity` for the lowest resolution. Omitting options gives full resolution.
+`fit` and `reduce` cannot be combined. `source.frames` is the number of frames.
 
 ### API flow
 
 ```text
-Application                         Client
------------                         ------
-JpipSource.open(...)  ------------>  Open channel; receive metadata
-                                    and frame 0's lowest resolution
-                     <------------  Return source
-
-source.frame(index, reduce)  ------>  Obtain frame header if missing
-                                    Prepare geometry/header once
-                                    Fetch missing resolution levels
-                                    Reconstruct codestream and decode
-                     <------------  Return pixels and frame dimensions
-
-Upload pixels and display
-Repeat frame(...) for another frame or resolution
-
-source.close()  ------------------>  Close channel; release cache and worker
+source = await JpipSource.open(...)
+    |
+    v
+Choose frame index and display area in physical pixels <----+
+    |                                                       |
+    v                                                       |
+frame = await source.frame(index, { fit: [width, height] }) |
+    |                                                       |
+    v                                                       |
+Upload frame.pixels and draw at the desired display size    |
+    |                                                       |
+    v                                                       |
+Finished with source? -- no: wait for next display change --+
+    |
+    yes
+    |
+    v
+await source.close() when finished with the source
 ```
 
-The application currently chooses `reduce`. The client clamps it to the
-frame's available levels. A frame whose data is already cached needs no
-request, but each `frame` call decodes again. The header-only request is
-needed only when that frame's main header has not arrived.
+`fit` selects the decoding resolution. The application still scales and draws
+the returned pixels at its desired display size. No geometry or cache query
+is required before calling `frame`.
+
+The client obtains the frame header if missing, chooses a resolution from
+that frame's geometry, fetches missing levels, reconstructs the codestream,
+and decodes it. This works independently for each frame, including movies
+with different frame sizes. Cached levels need no request, but each `frame`
+call decodes again.
+
+Optionally, `await source.fetch(index, { fit: [width, height] })` fetches ahead
+without decoding. A later `frame` call with the same options uses that cache.
 
 ### What the pixels are
 
@@ -192,10 +213,10 @@ without decoding it:
 
 ```js
 for (let index = 0; index < source.frames; index++)
-    await source.fetch(index, reduce);
+    await source.fetch(index, { fit: [1024, 768] });
 ```
 
-After that, `frame(index, reduce)` decodes from the cache.
+After that, `frame(index, { fit: [1024, 768] })` decodes from the cache.
 
 - **One at a time.** `frame`, `fetch` and `close` run in the order they were
   called, one after the other. With one `fetch` pending, as in the loop above,
@@ -226,7 +247,7 @@ A call that fails rejects its promise with an `Error` whose message says why.
 
 | Failure | What happens | What to do |
 | --- | --- | --- |
-| `index` is not a frame, or `reduce` is not valid | `RangeError`; no request is made | Fix the call |
+| `index` is not a frame, or the display options are not valid | `RangeError`; no request is made | Fix the call |
 | A request fails: the server is unreachable, answers with an error, or has ended the channel | The call rejects. Every later call that needs a request rejects with the same error. Calls served from the cache still succeed | Close the source and open the image again |
 | "the server did not send frame N whole" | The call rejects; the source is unaffected. A response ended without the data asked for, which this server does not do | |
 | A call after `close()` | Rejects with "the source is closed" | |
@@ -255,8 +276,8 @@ kept once first used, until the source closes.
 | `JpipSource.open({ wasm, server, image })` | A source. `wasm` is the URL of the module, `server` the server's address, `image` a path below its image directory | 1 |
 | `frames` | The number of frames | |
 | `received` | Bytes of response bodies so far, as of the last `frame` or `fetch` | |
-| `frame(index, reduce = 0)` | The decoded frame | For the levels not cached |
-| `fetch(index, reduce = 0)` | `cached(index)` after fetching | For the levels not cached |
+| `frame(index, options = {})` | The decoded frame. Options: `{ fit: [width, height] }` or `{ reduce: n }` | For the levels not cached |
+| `fetch(index, options = {})` | `cached(index)` after fetching, with the same options as `frame` | For the levels not cached |
 | `cached(index)` | The lowest `reduce` that needs no request, or `null` | 0 |
 | `xml(index)` | A string, or `null` | 0 |
 | `palette(index)` | `{ entries, channels, table }`, or `null` | 0 |

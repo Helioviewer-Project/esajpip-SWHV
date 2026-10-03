@@ -61,6 +61,34 @@ function clamp(reduce, resolutions) {
     return Math.min(reduce, resolutions - 1);
 }
 
+function checkOptions(options) {
+    if (options === null || typeof options !== "object" || Array.isArray(options) ||
+        Object.keys(options).some(key => key !== "fit" && key !== "reduce") ||
+        ("fit" in options && "reduce" in options))
+        throw new RangeError("use { fit: [width, height] } or { reduce: n }");
+    if ("fit" in options) {
+        if (!Array.isArray(options.fit) || options.fit.length !== 2 ||
+            Array.from(options.fit).some(size => !Number.isFinite(size) || size <= 0))
+            throw new RangeError("fit must contain two positive finite pixel sizes");
+    } else {
+        const reduce = "reduce" in options ? options.reduce : 0;
+        if (reduce !== Infinity && (!Number.isInteger(reduce) || reduce < 0))
+            throw new RangeError("reduce must be a nonnegative integer or Infinity");
+    }
+}
+
+function resolution({ fullWidth, fullHeight, resolutions }, options) {
+    if (!("fit" in options))
+        return clamp(options.reduce ?? 0, resolutions);
+    const scale = Math.min(options.fit[0] / fullWidth, options.fit[1] / fullHeight);
+    let reduce = 0;
+    while (reduce + 1 < resolutions &&
+           Math.ceil(fullWidth / 2 ** (reduce + 1)) >= fullWidth * scale &&
+           Math.ceil(fullHeight / 2 ** (reduce + 1)) >= fullHeight * scale)
+        reduce++;
+    return reduce;
+}
+
 // The view-window fields for a frame without its `reduce` highest
 // resolutions: the frame size of that resolution exactly (T.800 B.5), so
 // that the server sends those resolutions whatever its rounding.
@@ -100,8 +128,7 @@ export class JpipChannel {
         channel.#server = server.replace(/\/+$/, "");
         channel.#target = image.replace(/^\/+/, "");
         // The metadata comes with the first response, whatever it asks for:
-        // this one asks for the lowest resolution of the first frame, whose
-        // size the later requests start from.
+        // this one asks for the lowest resolution of the first frame.
         await channel.#request({ stream: 0, fsiz: [1, 1, "closest"] });
         channel.frames = channel.#wasm.hv_wasm_codestreams();
         if (channel.frames === 0)
@@ -109,31 +136,32 @@ export class JpipChannel {
         return channel;
     }
 
-    // A frame without its `reduce` highest resolutions (0 for the whole
-    // image; each halves the size; Infinity for the lowest), fetching what
+    // A frame fitted into options.fit [width, height] in physical pixels,
+    // preserving aspect ratio, or without options.reduce highest resolutions
+    // (0 for the whole image, Infinity for the lowest), fetching what
     // the channel lacks of it: { index, reduce, width, height, components,
     // pixels, fullWidth, fullHeight, resolutions }. `pixels` is the
     // caller's: a Uint8Array of `components` (1 gray, 3 RGB) values per
     // pixel, rows from the top. Calls are served one at a time, in order.
-    frame(index, reduce = 0) {
+    frame(index, options = {}) {
         return this.#turn(
-            async () => this.#decode(index, await this.#fetch(index, reduce), reduce));
+            async () => this.#decode(index, await this.#fetch(index, options)));
     }
 
-    // Fetches what the channel lacks of a frame without its `reduce`
-    // highest resolutions, and does not decode it: a later frame() of it
+    // Fetches with the same options as frame(), and does not decode it:
+    // a later frame() with those options
     // costs no request. Gives cached(index) as it is then. Served in turn
     // with the calls of frame(): to fetch a movie ahead, wait for each
     // frame before asking for the next, so that a frame to show waits for
     // one of them at most.
-    fetch(index, reduce = 0) {
+    fetch(index, options = {}) {
         return this.#turn(async () => {
-            const { resolutions, complete } = await this.#fetch(index, reduce);
+            const { resolutions, complete } = await this.#fetch(index, options);
             return resolutions - complete;
         });
     }
 
-    // The least `reduce` that frame(index, reduce) costs no request for: 0
+    // The least `reduce` that frame(index, { reduce }) costs no request for: 0
     // when the whole frame is cached, null when no level of it is.
     cached(index) {
         const { resolutions, complete } = this.#status(index);
@@ -254,34 +282,33 @@ export class JpipChannel {
         return { fullWidth, fullHeight, resolutions, complete };
     }
 
-    // Requests what the channel lacks of a frame without its `reduce`
-    // highest resolutions; gives its status then.
-    async #fetch(index, reduce) {
-        if (reduce !== Infinity && (!Number.isInteger(reduce) || reduce < 0))
-            throw new RangeError("reduce must be a nonnegative integer or Infinity");
-        const lacks = ({ resolutions, complete }) =>
-            complete === 0 || resolutions - complete > clamp(reduce, resolutions);
+    // Obtains the geometry before choosing a resolution, then requests
+    // only the levels missing from the cache.
+    async #fetch(index, options) {
+        checkOptions(options);
         let status = this.#status(index);
+        if (status.resolutions === 0) {
+            await this.#request({ stream: index, layers: 0 });
+            status = this.#status(index);
+        }
+        if (status.resolutions === 0)
+            throw new Error(`the server did not send frame ${index}'s header`);
+        const reduce = resolution(status, options);
+        const lacks = ({ resolutions, complete }) =>
+            complete === 0 || resolutions - complete > reduce;
         if (lacks(status)) {
-            if (status.resolutions === 0) {
-                await this.#request({ stream: index, layers: 0 });
-                status = this.#status(index);
-            }
-            if (status.resolutions === 0)
-                throw new Error(`the server did not send frame ${index}'s header`);
             await this.#request(view(index, status, reduce));
             status = this.#status(index);
             if (lacks(status))
                 throw new Error(`the server did not send frame ${index} whole`);
         }
-        return status;
+        return { ...status, reduce };
     }
 
     // Decodes a frame from the cache. The pixels are copied out of the
     // module, which keeps its own until the next decode.
-    #decode(index, { fullWidth, fullHeight, resolutions }, reduce) {
+    #decode(index, { fullWidth, fullHeight, resolutions, reduce }) {
         const wasm = this.#wasm;
-        reduce = clamp(reduce, resolutions);
         if (wasm.hv_wasm_decode(index, reduce) !== 0)
             throw new Error(this.#error());
         const width = wasm.hv_wasm_width(), height = wasm.hv_wasm_height();

@@ -4,7 +4,7 @@
 // so a page may have several sources open, and none holds it up.
 //
 //   const source = await JpipSource.open({ wasm, server, image });
-//   const frame = await source.frame(3);        // source.frames of them
+//   const frame = await source.frame(3, { fit: [1024, 768] });
 //   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, frame.width, frame.height, 0,
 //                 gl.RED, gl.UNSIGNED_BYTE, frame.pixels);
 //   const xml = await source.xml(3);
@@ -60,32 +60,32 @@ export class JpipSource {
         return source;
     }
 
-    // A frame (0 to frames - 1) without its `reduce` highest resolutions
-    // (0 for the whole image; each halves the size; Infinity for the
-    // lowest), fetching what the channel lacks of it: { index, reduce,
-    // width, height, components, pixels, fullWidth, fullHeight,
+    // A frame (0 to frames - 1) fitted into options.fit [width, height]
+    // in physical pixels, preserving aspect ratio, or with options.reduce
+    // (0 for full size, Infinity for the lowest), fetching what is missing:
+    // { index, reduce, width, height, components, pixels, fullWidth, fullHeight,
     // resolutions }. `pixels` is the caller's: a Uint8Array of `components`
     // (1 gray, 3 RGB) values per pixel, rows from the top. Calls are served
     // one at a time, in order.
-    async frame(index, reduce = 0) {
-        const { frame, received } = await this.#call("frame", index, reduce);
+    async frame(index, options = {}) {
+        const { frame, received } = await this.#call("frame", index, options);
         this.received = received;
         return frame;
     }
 
-    // Fetches what the channel lacks of a frame without its `reduce`
-    // highest resolutions, and does not decode it: a later frame() of it
+    // Fetches with the same options as frame(), and does not decode it:
+    // a later frame() with those options
     // costs no request. Gives cached(index) as it is then. Served in turn
     // with the calls of frame(): to fetch a movie ahead, wait for each
     // frame before asking for the next, so that a frame to show waits for
     // one of them at most.
-    async fetch(index, reduce = 0) {
-        const { cached, received } = await this.#call("fetch", index, reduce);
+    async fetch(index, options = {}) {
+        const { cached, received } = await this.#call("fetch", index, options);
         this.received = received;
         return cached;
     }
 
-    // The least `reduce` that frame(index, reduce) costs no request for: 0
+    // The least `reduce` that frame(index, { reduce }) costs no request for: 0
     // when the whole frame is cached, null when no level of it is.
     cached(index) {
         return this.#call("cached", index);
