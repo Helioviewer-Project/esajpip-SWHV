@@ -41,3 +41,6 @@ target_compile_definitions(test_client_source PRIVATE
     IMAGE="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2"
     MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
 esajpip_add_test(client_source COMMAND test_client_source LABELS client TIMEOUT 60)
+
+add_custom_target(client_tests DEPENDS test_client_cache test_client_image
+    test_client_jpp_roundtrip test_client_jpp_malformed test_client_reconstruct test_client_source)

@@ -58,7 +58,7 @@ set -eu
 profile=${ESAJPIP_LINUX_PROFILE:-all}
 fuzz_seconds=${ESAJPIP_FUZZ_SECONDS:-60}
 fuzz_workers=${ESAJPIP_FUZZ_WORKERS:-8}
-fuzz_targets=${ESAJPIP_FUZZ_TARGETS:-"fuzz_reader_rewrite fuzz_deferred_plt fuzz_asn1 fuzz_transcode fuzz_merge"}
+fuzz_targets=${ESAJPIP_FUZZ_TARGETS:-"fuzz_reader_rewrite fuzz_deferred_plt fuzz_asn1 fuzz_transcode fuzz_merge fuzz_client_response fuzz_client_source"}
 build_jobs=${ESAJPIP_JOBS:-}
 
 build_parallel() {
@@ -137,6 +137,8 @@ fuzz_corpus() {
         fuzz_asn1) echo asn1 ;;
         fuzz_transcode) echo transcode-fuzz ;;
         fuzz_merge) echo merge-fuzz ;;
+        fuzz_client_response) echo client-response ;;
+        fuzz_client_source) echo client-source ;;
         *)
             echo "unknown fuzz target: $1" >&2
             return 2
@@ -196,10 +198,15 @@ run_fuzz_profile() {
 if [ "$profile" = valgrind ] || [ "$profile" = all ]; then
     cmake -S /src -B /tmp/esajpip-linux-valgrind \
         -DBUILD_TESTING=ON \
-        -DCMAKE_BUILD_TYPE=Debug
-    build_parallel /tmp/esajpip-linux-valgrind --target replay support_test jpip_tests
+        -DESAJPIP_TEST_TIMEOUT=300 \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    build_parallel /tmp/esajpip-linux-valgrind --target replay support_test jpip_tests client_tests
     ctest --test-dir /tmp/esajpip-linux-valgrind --output-on-failure -L '^jpip$'
     /tmp/esajpip-linux-valgrind/tests/server/support_test
+    ctest -S /src/tests/client/memcheck.cmake \
+        -DCLIENT_BUILD=/tmp/esajpip-linux-valgrind \
+        -DCLIENT_RESULTS=/results/client-valgrind -V
     run_matrix /tmp/esajpip-linux-valgrind/tests/fuzz/corpus/asn1 valgrind \
         --tool=memcheck \
         --leak-check=full \

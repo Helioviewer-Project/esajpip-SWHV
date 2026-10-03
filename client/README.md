@@ -637,6 +637,24 @@ ctest --test-dir build -L client --output-on-failure
 
 The tests are in `../tests/client/` and need no network.
 
+The native client and vendored OpenJPEG are both instrumented with
+`ESAJPIP_SANITIZE=ON`. Build the client targets and run their tests with:
+
+```sh
+ESAJPIP_TEST_TARGETS='client_tests replay' tests/run.sh sanitize -L '^(client|client_fuzz)$'
+```
+
+The existing extended profile also supplies integer/conversion checks.
+Linux Valgrind runs include all client tests and both client seed replays:
+`sh tests/run_linux_docker.sh valgrind`. They preserve memory-check reports.
+
+The response and source fuzz targets use real server-generated seeds and the
+same harnesses for mutation and deterministic replay. See
+[`../tests/fuzz/README.md`](../tests/fuzz/README.md#client) for their input
+contracts, bounds and focused run commands. These native diagnostics cover the
+C code shared with WASM; JavaScript transport and workers still need the live
+checks below.
+
 | Test | What it checks |
 | --- | --- |
 | `client_cache` | The store: appending, completion, refusals, many bins, cache-model batching and exact metadata replay |

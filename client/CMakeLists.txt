@@ -10,6 +10,7 @@ set(esajpip_openjpeg_sources
     tcd.c tgt.c thread.c)
 list(TRANSFORM esajpip_openjpeg_sources PREPEND vendor/openjpeg/)
 add_library(esajpip_openjpeg STATIC ${esajpip_openjpeg_sources})
+esajpip_configure_target(esajpip_openjpeg)
 target_compile_options(esajpip_openjpeg PRIVATE -w)
 target_include_directories(esajpip_openjpeg SYSTEM PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/openjpeg)

@@ -1,0 +1,20 @@
+# Run the registered client tests and seed replays under Valgrind. No
+# dashboard configuration or manually maintained executable list is needed.
+if(NOT CLIENT_BUILD OR NOT CLIENT_RESULTS)
+    message(FATAL_ERROR "Pass CLIENT_BUILD and CLIENT_RESULTS to ctest -S")
+endif()
+get_filename_component(CTEST_SOURCE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+set(CTEST_BINARY_DIRECTORY "${CLIENT_BUILD}")
+set(CTEST_SITE "Linux")
+set(CTEST_BUILD_NAME "client-valgrind")
+set(CTEST_TEST_TIMEOUT 300)
+find_program(CTEST_MEMORYCHECK_COMMAND valgrind REQUIRED)
+set(CTEST_MEMORYCHECK_COMMAND_OPTIONS
+    "--tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=99")
+ctest_start(Experimental)
+ctest_memcheck(INCLUDE_LABEL "^(client|client_fuzz)$" RETURN_VALUE result DEFECT_COUNT defects)
+file(MAKE_DIRECTORY "${CLIENT_RESULTS}")
+file(COPY "${CLIENT_BUILD}/Testing" DESTINATION "${CLIENT_RESULTS}")
+if(NOT result EQUAL 0 OR NOT defects EQUAL 0)
+    message(FATAL_ERROR "Client Valgrind checks failed: result=${result}, defects=${defects}")
+endif()

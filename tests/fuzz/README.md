@@ -92,3 +92,53 @@ generation instead of repeatedly failing the file parser.
 Use production-file line/branch coverage to measure reach. Fuzzer counters also
 include harnesses and standard-library code. High executed-line coverage alone
 does not establish that semantic checks would catch an incorrect result.
+
+## Client
+
+Two targets cover the C client shared by native callers and WASM:
+
+| Target / replay mode | Input | Checks |
+| --- | --- | --- |
+| `fuzz_client_response` / `client-response` | Raw JPP response body | Parser/cache acceptance versus source ingestion, EOR, metadata/XML/palette agreement, bounded status and reconstruction agreement |
+| `fuzz_client_source` / `client-source` | Four selector bytes followed by a response body | Prepared request completion, quality preservation during metadata replay, stable model batches, reconstruction guard bytes and repeatability, decoder dimensions |
+
+`client_fuzz_seeds` generates valid responses using `DataBinServer`, from a
+small RGB image, a gray image and the eight-frame mixed-size JPX fixture.
+It seeds lowest/full resolution and preview/full quality, plus truncated
+responses. These are valid starting points, not independent expected-output
+oracles. Pixel correctness remains checked by the native reconstruction tests.
+
+The source target's first four bytes select fixture, frame, reduction and
+layers. Fixture selection is modulo three, frame selection modulo its frame
+count; reduction 255 selects the lowest level and layers zero selects full
+quality. Each iteration starts with that immutable fixture's complete headers
+and metadata, then applies the mutated response to a prepared frame request.
+This reaches precinct ingestion, quality confirmation, reconstruction and
+OpenJPEG without requiring mutations to preserve a valid main header first.
+It also exercises model batching and exact metadata replay, including after
+failed ingestion. Fixtures are loaded once per process.
+
+Both targets reject inputs larger than 1 MiB. The raw-response target parses
+arbitrary headers but only traverses geometry with at most 4,096 precincts,
+1,048,576 pixels, four components and 32 layers, and inspects at most 16 frames.
+Reconstruction buffers are capped at 2 MiB. The source target uses fixed fixture
+geometry and decodes only selected resolutions with at most 1,048,576 pixels
+and four components. Larger frames still exercise cache and reconstruction.
+These are harness work bounds, not production limits.
+
+```sh
+cmake --build build --target replay
+ctest --test-dir build -L '^client_fuzz$' --output-on-failure
+build/tests/fuzz/replay client-source INPUT_OR_DIRECTORY
+
+# With Homebrew LLVM (or another Clang with libFuzzer):
+ESAJPIP_FUZZ_TARGETS='fuzz_client_response fuzz_client_source' \
+ESAJPIP_FUZZ_SECONDS=30 ESAJPIP_FUZZ_WORKERS=1 \
+    sh tests/run_profile.sh fuzz-asan
+```
+
+In a fuzz build, `client_fuzz` builds both executables and replay. The C client
+and OpenJPEG receive coverage-guided instrumentation, as do the JPEG 2000 and
+JPIP libraries. Each client CTest smoke run uses 1,000 executions, a fixed seed,
+a 256 KiB maximum input size and a 60-second timeout. Campaigns copy the seed
+corpus and retain discoveries separately from the generated seeds.

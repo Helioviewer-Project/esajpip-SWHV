@@ -67,12 +67,46 @@ set(ESAJPIP_JPIP_FUZZ_SOURCES
     fuzz_jpip_request.cc fuzz_jpip_writer.cc fuzz_jpip_cache.cc fuzz_jpip_session.cc)
 set(ESAJPIP_FUZZ_INCLUDES ${CMAKE_CURRENT_BINARY_DIR})
 
+set(ESAJPIP_CLIENT_FUZZ_SOURCES fuzz_client_response.cc fuzz_client_source.cc)
+set(ESAJPIP_CLIENT_FIXTURES
+    ${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2
+    ${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/solo_fsi174_127x129_RLCP_PLT.jp2
+    ${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx)
+function(esajpip_client_fixtures target)
+    target_compile_definitions(${target} PRIVATE
+        CLIENT_RGB="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/synthetic_rgb_129x129_CPRL_SOP_EPH.jp2"
+        CLIENT_GRAY="${PROJECT_SOURCE_DIR}/tests/transcode/fixtures/kakadu/solo_fsi174_127x129_RLCP_PLT.jp2"
+        CLIENT_MOVIE="${PROJECT_SOURCE_DIR}/tests/merge/fixtures/expected/merged.jpx")
+endfunction()
+
+# Generate real responses independently of the Python format/vector corpus.
+add_executable(client_fuzz_seeds client_seeds.cc)
+esajpip_configure_target(client_fuzz_seeds)
+esajpip_client_fixtures(client_fuzz_seeds)
+target_link_libraries(client_fuzz_seeds PRIVATE esajpip_client jpip)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/client-corpus.stamp
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${ESAJPIP_FUZZ_CORPUS_DIR}/client-response ${ESAJPIP_FUZZ_CORPUS_DIR}/client-source
+    COMMAND client_fuzz_seeds
+        ${ESAJPIP_FUZZ_CORPUS_DIR}/client-response ${ESAJPIP_FUZZ_CORPUS_DIR}/client-source
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/client-corpus.stamp
+    DEPENDS client_fuzz_seeds ${ESAJPIP_CLIENT_FIXTURES})
+add_custom_target(client_fuzz_corpus DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/client-corpus.stamp)
+
 # The deterministic driver: no libFuzzer, so it builds in any configuration.
-add_executable(replay replay.c ${ESAJPIP_FUZZ_SOURCES} ${ESAJPIP_JPIP_FUZZ_SOURCES})
+add_executable(replay replay.c ${ESAJPIP_FUZZ_SOURCES} ${ESAJPIP_JPIP_FUZZ_SOURCES} ${ESAJPIP_CLIENT_FUZZ_SOURCES})
 esajpip_configure_target(replay)
 target_include_directories(replay PRIVATE ${ESAJPIP_FUZZ_INCLUDES})
 target_compile_definitions(replay PRIVATE ESAJPIP_FUZZ_REPLAY)
-target_link_libraries(replay PRIVATE jpip)
+target_link_libraries(replay PRIVATE jpip esajpip_client)
+esajpip_client_fixtures(replay)
+add_dependencies(replay client_fuzz_corpus)
+foreach(area response source)
+    esajpip_add_test(fuzz_replay_client_${area}
+        COMMAND replay client-${area} ${ESAJPIP_FUZZ_CORPUS_DIR}/client-${area}
+        LABELS fuzz replay client_fuzz TIMEOUT 60)
+endforeach()
 if(TARGET fuzz_corpus)
     add_dependencies(replay fuzz_corpus)
 
@@ -127,9 +161,13 @@ endif()
 
 # Instrument the library too, so the targets' coverage sees into it, and give
 # everything that links it the coverage runtime.
-target_compile_options(jpeg2000 PRIVATE -fsanitize=fuzzer-no-link)
+target_compile_options(jpeg2000 PRIVATE -fsanitize=fuzzer-no-link -fno-sanitize-recover=all)
 target_link_options(jpeg2000 INTERFACE -fsanitize=fuzzer-no-link)
-target_compile_options(jpip PRIVATE -fsanitize=fuzzer-no-link)
+target_compile_options(esajpip_client PRIVATE -fsanitize=fuzzer-no-link -fno-sanitize-recover=all)
+target_link_options(esajpip_client INTERFACE -fsanitize=fuzzer-no-link)
+target_compile_options(esajpip_openjpeg PRIVATE -fsanitize=fuzzer-no-link -fno-sanitize-recover=all)
+target_link_options(esajpip_openjpeg INTERFACE -fsanitize=fuzzer-no-link)
+target_compile_options(jpip PRIVATE -fsanitize=fuzzer-no-link -fno-sanitize-recover=all)
 target_link_options(jpip INTERFACE -fsanitize=fuzzer-no-link)
 
 # esajpip_fuzz_target(<name> <corpus> <sources...>): the shared part of a target.
@@ -138,11 +176,21 @@ function(esajpip_fuzz_target name corpus)
     esajpip_configure_target(${name})
     target_include_directories(${name} PRIVATE ${ESAJPIP_FUZZ_INCLUDES})
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
+    target_compile_options(${name} PRIVATE -fno-sanitize-recover=all)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
     set(fuzz_labels fuzz)
     set(fuzz_timeout)
     set(fuzz_options)
-    if(name MATCHES "^fuzz_jpip_")
+    if(name MATCHES "^fuzz_client_")
+        target_link_libraries(${name} PRIVATE esajpip_client jpip)
+        esajpip_client_fixtures(${name})
+        add_dependencies(${name} client_fuzz_corpus)
+        esajpip_add_test(fuzz_smoke_${name}
+            COMMAND ${name} -runs=1000 -seed=1 -max_len=262144
+                    ${ESAJPIP_FUZZ_CORPUS_DIR}/${corpus}
+            LABELS fuzz client_fuzz TIMEOUT 60)
+        return()
+    elseif(name MATCHES "^fuzz_jpip_")
         target_link_libraries(${name} PRIVATE jpip)
         list(APPEND fuzz_labels jpip_fuzz)
         set(fuzz_timeout TIMEOUT 60)
@@ -185,3 +233,8 @@ foreach(area request writer cache session)
 endforeach()
 add_custom_target(jpip_fuzz DEPENDS replay
     fuzz_jpip_request fuzz_jpip_writer fuzz_jpip_cache fuzz_jpip_session)
+
+foreach(area response source)
+    esajpip_fuzz_target(fuzz_client_${area} client-${area} fuzz_client_${area}.cc)
+endforeach()
+add_custom_target(client_fuzz DEPENDS replay fuzz_client_response fuzz_client_source)

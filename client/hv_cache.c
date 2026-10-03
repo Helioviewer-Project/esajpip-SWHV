@@ -20,10 +20,18 @@ void hv_cache_begin(hv_cache *cache) {
     cache->error = NULL;
 }
 
+/* Unsigned arithmetic that wraps on purpose, which Clang's
+ * -fsanitize=integer would report. */
+#if defined(__clang__)
+#define WRAPS __attribute__((no_sanitize("unsigned-integer-overflow", "unsigned-shift-base")))
+#else
+#define WRAPS
+#endif
+
 /* The table is open-addressed: a bin sits at the first free slot from the one
  * its identity hashes to, and the table is at most half full. */
-static size_t Slot(const hv_bin *bins, size_t capacity, int bin_class,
-                   uint64_t codestream, uint64_t bin_id) {
+WRAPS static size_t Slot(const hv_bin *bins, size_t capacity, int bin_class,
+                         uint64_t codestream, uint64_t bin_id) {
     uint64_t hash = (codestream * 8 + (uint64_t) bin_class) * UINT64_C(0x9E3779B97F4A7C15) ^
                     bin_id;
     size_t index;

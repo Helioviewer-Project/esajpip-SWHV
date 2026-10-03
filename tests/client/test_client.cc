@@ -46,7 +46,8 @@ static Bytes response(jpip::DataBinServer &server, jpip::ImageIndex &image, Sour
         char chunk[997];
         int size = sizeof chunk;
         check(server.GenerateChunk(sources, chunk, &size, &last), server.GetError());
-        body.insert(body.end(), chunk, chunk + size);
+        const uint8_t *payload = reinterpret_cast<const uint8_t *>(chunk);
+        body.insert(body.end(), payload, payload + size);
     }
     return body;
 }
@@ -191,10 +192,12 @@ static void verify(const char *path, bool jpx) {
                   "original container invalid");
             hv_image decoded, reference;
             char error[256];
-            check(hv_image_decode(full.data(), full.size(), 0, HV_IMAGE_SAMPLES,
-                                  &decoded, error, sizeof error) == 0, error);
-            check(hv_image_decode(original->Data() + box.payload, box.end - box.payload, 0,
-                                  HV_IMAGE_SAMPLES, &reference, error, sizeof error) == 0, error);
+            int decoded_result = hv_image_decode(full.data(), full.size(), 0, HV_IMAGE_SAMPLES,
+                                                 &decoded, error, sizeof error);
+            check(decoded_result == 0, error);
+            int reference_result = hv_image_decode(original->Data() + box.payload, box.end - box.payload, 0,
+                                                   HV_IMAGE_SAMPLES, &reference, error, sizeof error);
+            check(reference_result == 0, error);
             size_t size = static_cast<size_t>(decoded.width) * decoded.height * decoded.components;
             check(decoded.width == reference.width && decoded.height == reference.height &&
                   decoded.components == reference.components &&

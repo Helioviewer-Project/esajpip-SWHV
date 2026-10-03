@@ -165,7 +165,8 @@ Not every profile works on every host:
 
 The local fuzz campaign defaults match the Linux runner: 60 seconds per target
 and 8 workers, over `fuzz_reader_rewrite`, `fuzz_deferred_plt`, `fuzz_asn1`,
-`fuzz_transcode` and `fuzz_merge`. Override with `ESAJPIP_FUZZ_SECONDS`,
+`fuzz_transcode`, `fuzz_merge`, `fuzz_client_response` and
+`fuzz_client_source`. Override with `ESAJPIP_FUZZ_SECONDS`,
 `ESAJPIP_FUZZ_WORKERS` and `ESAJPIP_FUZZ_TARGETS`. Results stay in
 `build/profile-fuzz-*/fuzz-results/PROFILE/TARGET/`.
 
@@ -195,6 +196,13 @@ two corpus vectors and on a real transcode fixture, `deferred-plt` on a vector,
 `transcode-fuzz` on a raw codestream extracted from that fixture, `merge-fuzz`
 on a two-file seed, and `asn1` on the generated corpus of selector-prefixed
 PDU inputs.
+
+The Valgrind profile also builds `client_tests` and runs every registered
+`client` test and `client_fuzz` seed replay through `tests/client/memcheck.cmake`.
+The client timeout is 300 seconds to account for Memcheck's execution cost.
+Logs and CTest memory-check reports remain in `client-valgrind/` under the
+run's result directory, including on failure. OpenJPEG is instrumented along
+with the client in sanitizer and coverage builds.
 
 The `fuzz-*` profiles build the libFuzzer targets and run actual mutation
 campaigns, not just replay:

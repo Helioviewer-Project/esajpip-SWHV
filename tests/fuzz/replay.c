@@ -58,6 +58,8 @@
 #undef LLVMFuzzerTestOneInput
 
 /* The C++ targets use these same functions in libFuzzer and replay builds. */
+int replay_client_response(const uint8_t *data, size_t size);
+int replay_client_source(const uint8_t *data, size_t size);
 int replay_jpip_request(const uint8_t *data, size_t size);
 int replay_jpip_writer(const uint8_t *data, size_t size);
 int replay_jpip_cache(const uint8_t *data, size_t size);
@@ -84,6 +86,8 @@ static replay_fn mode_function(const char *mode) {
         return replay_jpip_cache;
     if (strcmp(mode, "jpip-session") == 0)
         return replay_jpip_session;
+    if (strcmp(mode, "client-response") == 0) return replay_client_response;
+    if (strcmp(mode, "client-source") == 0) return replay_client_source;
     return NULL;
 }
 
@@ -91,7 +95,8 @@ static void usage(const char *program) {
     fprintf(stderr,
             "usage: %s MODE FILE_OR_DIR...\n"
             "modes: reader-rewrite deferred-plt asn1 transcode-fuzz merge-fuzz\n"
-            "       jpip-request jpip-writer jpip-cache jpip-session\n",
+            "       jpip-request jpip-writer jpip-cache jpip-session\n"
+            "       client-response client-source\n",
             program);
 }
 
