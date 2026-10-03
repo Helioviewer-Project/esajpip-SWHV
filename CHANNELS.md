@@ -147,8 +147,11 @@ the connection is closed after the response.
 
 A response that ends before its HTTP chunk terminator or JPIP end-of-response
 message is incomplete. The client must discard that response. Since all channel
-state is lost when the server process exits, the safe recovery is to create a
-new channel and rebuild the client cache from its responses.
+state is lost when the server process exits, recovery requires a new channel.
+For the same immutable target, a client can retain its cache and declare its
+complete bins and exact byte prefixes through `model` before resuming requests.
+The [client library](client/README.md#failures) implements bounded recovery;
+otherwise rebuild the client cache from the new channel's responses.
 
 ## Request and connection limits
 

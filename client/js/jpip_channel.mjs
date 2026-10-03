@@ -105,10 +105,12 @@ function view(index, { fullWidth, fullHeight, resolutions }, reduce) {
 export class JpipChannel {
     #wasm;                  // the module's exports
     #server;
-    #target;                // the image, until the channel exists; then its path
+    #image;                 // original target, also used when replacing a channel
+    #target;                // the current channel's routing path
     #cid = null;            // the channel, once the server has assigned it
     #last = Promise.resolve();
     #failed = null;         // why the channel can make no more requests
+    #closing = false;
     frames = 0;             // codestreams of the target: the frames of a movie
     received = 0;           // bytes of response bodies so far
 
@@ -128,7 +130,8 @@ export class JpipChannel {
         const channel = new JpipChannel();
         channel.#wasm = instance.exports;
         channel.#server = server.replace(/\/+$/, "");
-        channel.#target = image.replace(/^\/+/, "");
+        channel.#image = image.replace(/^\/+/, "");
+        channel.#target = channel.#image;
         // The metadata comes with the first response, whatever it asks for:
         // this one asks for the lowest resolution of the first frame.
         await channel.#request({ stream: 0, fsiz: [1, 1, "closest"] });
@@ -204,12 +207,13 @@ export class JpipChannel {
     // Closes the channel on the server, after the calls under way, and
     // forgets its data.
     close() {
+        this.#closing = true;
         const closed = this.#last.then(async () => {
-            const open = this.#failed === null;
             this.#failed = new Error("the channel is closed");
             this.#wasm.hv_wasm_reset();
-            if (open && this.#cid !== null)
+            if (this.#cid !== null)
                 await fetch(this.#url({ cid: this.#cid, cclose: this.#cid }));
+            this.#cid = null;
         });
         this.#last = closed.catch(() => {});
         return closed;
@@ -227,43 +231,102 @@ export class JpipChannel {
         return `${this.#server}/${this.#target}?${query(fields)}`;
     }
 
-    // One request for image data, its response body into the module. The
-    // first asks for a channel on the image; the rest name the channel. A
-    // request that fails is the channel's last: the server has ended it
-    // too, or no longer agrees with the client about what was delivered.
-    // What is cached stays, and is served without a request.
+    // Retry an interrupted operation once, after restoring a replacement
+    // channel. Protocol errors are terminal; cached frames remain usable.
     async #request(fields) {
         if (this.#failed !== null)
             throw this.#failed;
         try {
-            const response = await fetch(this.#url(this.#cid === null
-                ? { cnew: "http", type: "jpp-stream", ...fields }
-                : { cid: this.#cid, ...fields }));
-            const body = new Uint8Array(await response.arrayBuffer());
-            if (!response.ok)
-                throw new Error(`${response.status} ${new TextDecoder().decode(body).trim()}`);
-            const channel = header(response.headers.get("JPIP-cnew"));
-            if (channel.cid !== undefined) {
-                this.#cid = channel.cid;
-                this.#target = channel.path ?? "jpip";
+            try {
+                return await this.#exchange(fields);
+            } catch (error) {
+                if (!error.recoverable || this.frames === 0 || this.#closing)
+                    throw error;
+                await this.#recover();
+                return await this.#exchange(fields);
             }
-            if (this.#cid === null)
-                throw new Error("the server did not assign a channel (JPIP-cnew)");
-            this.received += body.length;
-
-            const wasm = this.#wasm;
-            const at = wasm.hv_wasm_alloc(body.length);
-            if (at === 0)
-                throw new Error("out of memory");
-            new Uint8Array(wasm.memory.buffer, at, body.length).set(body);
-            const reason = wasm.hv_wasm_response(at, body.length);
-            wasm.hv_wasm_free(at);
-            if (reason < 0)
-                throw new Error(this.#error());
-            return reason;
         } catch (error) {
             this.#failed = error;
             throw error;
+        }
+    }
+
+    async #exchange(fields, restoring = false) {
+        let response, body;
+        try {
+            response = await fetch(this.#url(this.#cid === null
+                ? { cnew: "http", type: "jpp-stream", ...fields }
+                : { cid: this.#cid, ...fields }));
+            body = new Uint8Array(await response.arrayBuffer());
+        } catch (cause) {
+            const error = new Error("JPIP transport interrupted", { cause });
+            error.recoverable = true;
+            throw error;
+        }
+        if (!response.ok) {
+            const message = new TextDecoder().decode(body).trim();
+            const error = new Error(`${response.status} ${message}`);
+            error.recoverable = response.status === 503 &&
+                (message === "JPIP channel does not exist" || message === "JPIP channel has ended");
+            throw error;
+        }
+        const channel = header(response.headers.get("JPIP-cnew"));
+        if (channel.cid !== undefined) {
+            this.#cid = channel.cid;
+            this.#target = channel.path ?? "jpip";
+        }
+        if (this.#cid === null)
+            throw new Error("the server did not assign a channel (JPIP-cnew)");
+        this.received += body.length;
+
+        const wasm = this.#wasm;
+        const at = wasm.hv_wasm_alloc(body.length);
+        if (at === 0)
+            throw new Error("out of memory");
+        new Uint8Array(wasm.memory.buffer, at, body.length).set(body);
+        const reason = restoring ? wasm.hv_wasm_restore_response(at, body.length)
+                                 : wasm.hv_wasm_response(at, body.length);
+        wasm.hv_wasm_free(at);
+        if (reason < 0)
+            throw new Error(this.#error());
+        return reason;
+    }
+
+    async #recover() {
+        // The old channel may still exist if only its response was lost.
+        // Closing it is best effort; restoration itself must succeed in full.
+        try {
+            await fetch(this.#url({ cid: this.#cid, cclose: this.#cid }));
+        } catch { }
+        if (this.#closing)
+            throw new Error("the channel is closed");
+        this.#cid = null;
+        this.#target = this.#image;
+        let cursor = 0;
+        for (;;) {
+            if (this.#closing)
+                throw new Error("the channel is closed");
+            // Selecting the first nonexistent stream avoids receiving headers
+            // or precincts before all retained prefixes have been declared.
+            const fields = { stream: this.frames, layers: 0 };
+            const routing = this.#cid === null ? { cnew: "http", type: "jpp-stream" }
+                                               : { cid: this.#cid };
+            const url = new URL(this.#url({ ...routing, ...fields, model: "" }));
+            const line = `GET ${url.pathname}${url.search} HTTP/1.1\r\n`;
+            const capacity = Math.min(1024, 2048 - new TextEncoder().encode(line).length);
+            if (capacity <= 0)
+                throw new Error("target path leaves no room for cache declarations");
+            const at = this.#wasm.hv_wasm_model(cursor, capacity);
+            if (at === 0)
+                throw new Error(this.#error());
+            const bytes = new Uint8Array(this.#wasm.memory.buffer, at);
+            const model = new TextDecoder().decode(bytes.subarray(0, bytes.indexOf(0)));
+            if (model === "" && this.#cid !== null) break;
+            if (model !== "") fields.model = model;
+            const reason = await this.#exchange(fields, true);
+            if (reason !== 1 && reason !== 2)
+                throw new Error("replacement channel did not complete cache restoration");
+            cursor = this.#wasm.hv_wasm_model_next();
         }
     }
 

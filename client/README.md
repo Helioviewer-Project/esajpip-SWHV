@@ -265,7 +265,7 @@ Quality is tracked independently for each resolution, so previewing at a
 larger size does not lose the finer quality already fetched at a smaller size.
 
 This uses the server's existing `layers` support and ordinary JPP messages.
-Byte-limited previews and automatic channel recovery are not supported yet.
+Byte-limited previews are not supported yet.
 
 Prefetching also reports quality without decoding:
 
@@ -298,15 +298,28 @@ A call that fails rejects its promise with an `Error` whose message says why.
 | Failure | What happens | What to do |
 | --- | --- | --- |
 | `index` is not a frame, or the display options are not valid | `RangeError`; no request is made | Fix the call |
-| A request fails: the server is unreachable, answers with an error, or has ended the channel | The call rejects. Every later call that needs a request rejects with the same error. Calls served from the cache still succeed | Close the source and open the image again |
+| A transport interruption, or the server reports that the channel has ended or does not exist | Restore a replacement channel from the retained cache and retry the request once | No application action if recovery succeeds |
+| Recovery fails, another HTTP error occurs, or JPP is malformed | The call rejects. Later calls needing a request reject with the same error; cache hits still succeed | Close the source and open the image again |
 | "the server did not send frame N whole" | The call rejects; the source is unaffected. A response ended without the data asked for, which this server does not do | |
 | A call after `close()` | Rejects with "the source is closed" | |
 
-The idle timeout is the failure to plan for. A source that makes no request
-for `connections.timeout` (60 seconds by default) has lost its channel, and
-its next request fails with `503`. What it cached still decodes, but it cannot
-fetch more, and a new source starts with an empty cache. An application that
-will need more of a movie later should fetch it while the source is active.
+An idle channel expires after `connections.timeout` (60 seconds by default).
+The next request for uncached data restores it automatically. A server restart
+is handled the same way. Metadata, prepared frame headers, preview quality
+records and precinct data-bins remain in the client. Cache hits need no live channel.
+
+Recovery opens the original target with no frame selected and declares retained
+complete bins and exact partial byte prefixes in bounded `model` batches. It
+never declares partial `M0`. Metadata repeated during restoration is checked
+against the retained bytes. Normal responses still must append exactly to each
+bin. Once restoration finishes, the interrupted request resumes; another failure
+ends recovery. Closing a source prevents it from reopening a channel.
+
+This relies on the server's immutable-source contract: the target and its linked
+files must remain unchanged across channel replacement, including server restarts.
+`JPIP-tid: 0` does not establish file identity. If the target changes, close the
+source and open it again. Busy channels, invalid requests, missing targets, and
+internal server errors are not retried.
 
 ### Memory
 
@@ -362,7 +375,7 @@ body to the library.
 
 ### What the program does
 
-1. Prepare a store with `hv_cache_begin`. A store belongs to one channel.
+1. Prepare a store with `hv_cache_begin`. A store belongs to one source.
 2. Send the first request and read the channel from its response.
 3. Pass every response body through `hv_jpp_next` into `hv_cache_apply`.
 4. After the first response, index the metadata with `hv_metadata_open`. That
@@ -375,6 +388,15 @@ body to the library.
    `hv_image_decode` or another decoder.
 7. At the end, close the channel on the server, then `hv_metadata_close` and
    `hv_cache_release`.
+
+For channel recovery, keep the store and metadata. Use `hv_cache_model` to
+declare retained bins in batches while selecting no codestreams (`stream` equal
+to the frame count, `layers=0`). Start a new channel on the original target with
+the first batch, and send the remaining batches on that channel. Validate any
+repeated metadata through `hv_cache_match_metadata`, rather than applying it.
+Each restoration response must end normally before proceeding. Then resume the
+original request using normal `hv_cache_apply`. Do this only after a successful
+initial metadata exchange, for the same immutable target.
 
 ### Requests
 
@@ -410,9 +432,11 @@ GET /<path>?cid=<cid>&cclose=<cid>
 
 | Call | Header | Result |
 | --- | --- | --- |
-| `hv_cache_begin`, `hv_cache_release` | `hv_cache.h` | The store of one channel |
+| `hv_cache_begin`, `hv_cache_release` | `hv_cache.h` | The store of one source |
 | `hv_jpp_begin`, `hv_jpp_next`, `hv_jpp_reason` | `hv_jpp.h` | The messages of a response body, and why the response ended |
 | `hv_cache_apply` | `hv_cache.h` | A message added to the store |
+| `hv_cache_model` | `hv_cache.h` | Retained bins declared in bounded batches for a replacement channel |
+| `hv_cache_match_metadata` | `hv_cache.h` | Repeated metadata checked against complete retained bins during restoration |
 | `hv_reconstruct_confirm` | `hv_reconstruct.h` | Whole-packet prefixes recorded after a completed layer-limited window |
 | `hv_metadata_open`, `hv_metadata_close` | `hv_metadata.h` | An index of the metadata; its `count` is the number of frames |
 | `hv_metadata_xml` | `hv_metadata.h` | A frame's XML, in place in the store |
@@ -524,8 +548,8 @@ shortest complete example.
   arrival. Layer-limited previews decode after the window completes; arbitrary
   byte-limited partial delivery is not supported.
 - **No eviction.** The cache grows until the channel is closed.
-- **No recovery of a channel.** Once a channel is lost, its cache cannot be
-  used with a new one.
+- **Bounded recovery.** An operation attempts one replacement channel. There
+  is no background keepalive or retry loop while a server remains unavailable.
 - **This server's files.** The client reads what esajpip sends for the files
   it accepts ([`../JPIP_PROFILE.md`](../JPIP_PROFILE.md)): one tile, no
   component subsampling. It is not a general JPIP client.
@@ -580,7 +604,7 @@ The tests are in `../tests/client/` and need no network.
 
 | Test | What it checks |
 | --- | --- |
-| `client_cache` | The store: appending, completion, refusals, many bins |
+| `client_cache` | The store: appending, completion, refusals, many bins, cache-model batching and exact metadata replay |
 | `client_jpp` | Messages written by the server's own writer, read back |
 | `client_jpp_malformed` | Damaged messages, all refused |
 | `client_reconstruct` | Every codestream of the corpus, the transcoder's reference images and the merger's reference movie, served by the server's own code at each resolution: the written codestream, the cached levels, the decoded pixels, and the movie's frame count, XML and color tables |
@@ -600,6 +624,19 @@ frame at every resolution and the others at their lowest, and prints for each
 the size, the bytes received, a checksum of the pixels, and the sizes of the
 XML and the color table. The checksums are for comparing runs, not checked
 against a reference.
+
+Recovery has a separate live check that starts and stops its own server with a
+short idle timeout:
+
+```sh
+node tests/client/check_recovery.mjs build/client/web/esajpip_client.wasm \
+  build/esajpip /path/to/images movie.jpx
+```
+
+It checks idle expiry, server restart, interrupted response bodies, retained
+preview pixels and metadata, refinement against an uninterrupted transfer,
+request-line limits, bounded failures, terminal errors, and close during a
+pending request. A large preview also exercises several cache-model batches.
 
 ## How it works
 

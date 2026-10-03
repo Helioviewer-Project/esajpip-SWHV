@@ -217,7 +217,67 @@ static void TestRejectedLeavesNothing(void) {
     hv_cache_release(&cache);
 }
 
+static void TestRecoveryModel(void) {
+    hv_cache cache;
+    hv_jpp_message message;
+    char model[20], all[256] = "";
+    size_t cursor = 0;
+    int batches = 0;
+    hv_cache_begin(&cache);
+    message = Message(HV_BIN_META_DATA, 0, 0, 0, "metadata", 8, 1);
+    Check(hv_cache_apply(&cache, &message), "complete recovery metadata");
+    Check(hv_cache_match_metadata(&cache, &message), "identical metadata replay");
+    Check(!hv_cache_apply(&cache, &message), "normal append still rejects replay");
+    message = Message(HV_BIN_META_DATA, 0, 0, 2, "tada", 4, 0);
+    Check(hv_cache_match_metadata(&cache, &message), "identical metadata subrange");
+    message.data = (const uint8_t *)"xxxx";
+    Check(!hv_cache_match_metadata(&cache, &message), "changed metadata rejected");
+    message = Message(HV_BIN_META_DATA, 0, 0, 2, "tadata", 6, 1);
+    Check(hv_cache_match_metadata(&cache, &message), "metadata final subrange");
+    message.offset = 3;
+    Check(!hv_cache_match_metadata(&cache, &message), "metadata range beyond cache rejected");
+    message = Message(HV_BIN_META_DATA, 0, 0, 0, "meta", 4, 1);
+    Check(!hv_cache_match_metadata(&cache, &message), "early metadata completion rejected");
+    message.bin_id = 1;
+    Check(!hv_cache_match_metadata(&cache, &message), "unknown metadata rejected");
+    message = Message(HV_BIN_MAIN_HEADER, 3, 0, 0, "hdr", 3, 1);
+    Check(hv_cache_apply(&cache, &message), "recovery main header");
+    Check(!hv_cache_match_metadata(&cache, &message), "restoration forbids image data");
+    message = Message(HV_BIN_TILE_HEADER, 3, 0, 0, "", 0, 1);
+    Check(hv_cache_apply(&cache, &message), "recovery empty complete header");
+    message = Message(HV_BIN_PRECINCT, 3, 42, 0, "abc", 3, 0);
+    Check(hv_cache_apply(&cache, &message), "recovery partial precinct");
+    message = Message(HV_BIN_PRECINCT, 3, 43, 0, "abc", 3, 1);
+    Check(hv_cache_apply(&cache, &message), "recovery complete precinct");
+    while (cursor < cache.capacity) {
+        int length = hv_cache_model(&cache, &cursor, model, sizeof model);
+        Check(length >= 0 && length == (int)strlen(model), "model batch length");
+        if (length < 0) break;
+        if (length == 0) continue;
+        if (all[0]) strcat(all, ",");
+        strcat(all, model);
+        batches++;
+    }
+    Check(batches > 1, "model is split into bounded batches");
+    Check(strstr(all, "M0") && strstr(all, "[3]Hm") && strstr(all, "[3]H0") &&
+          strstr(all, "[3]P42:3") && strstr(all, "[3]P43"), "model preserves bin identities and prefixes");
+    Check(!strstr(all, "M0:") && !strstr(all, "P43:"), "complete bins declare no byte count");
+    cursor = 0;
+    Check(hv_cache_model(&cache, &cursor, model, 1) == -1, "undersized model buffer refused");
+    message = Message(HV_BIN_META_DATA, 0, 1, 0, "partial", 7, 0);
+    Check(hv_cache_apply(&cache, &message), "partial metadata seed");
+    Check(!hv_cache_match_metadata(&cache, &message), "incomplete metadata cannot be replayed");
+    cursor = 0;
+    Check(hv_cache_model(&cache, &cursor, all, sizeof all) == -1, "partial metadata not advertised");
+    Check(hv_cache_total_bytes(&cache) == 24, "recovery checks leave cached bytes intact");
+    hv_cache_release(&cache);
+    cursor = 0;
+    Check(hv_cache_model(&cache, &cursor, model, sizeof model) == 0 && model[0] == 0,
+          "empty model terminates");
+}
+
 int main(void) {
+    TestRecoveryModel();
     TestContiguousAppend();
     TestGapsRejected();
     TestDistinctBins();

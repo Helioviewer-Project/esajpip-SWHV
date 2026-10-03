@@ -1,6 +1,6 @@
 /* hv_wasm.c: the WebAssembly module's entry points, for js/jpip_channel.mjs.
  *
- * One module instance is one JPIP channel: its data-bins and the image last
+ * One module instance is one source: its data-bins and the image last
  * decoded. The host does the HTTP exchange and passes each response body
  * in; this file is compiled for WebAssembly only. Sizes and addresses are
  * 32 bits there, so a host passes them as numbers. */
@@ -49,6 +49,40 @@ int EXPORT(hv_wasm_response)(const uint8_t *body, size_t size) {
     }
     return hv_jpp_reason(&reader);
 }
+
+/* Replacement-channel requests select no codestreams. Any repeated metadata
+ * must already be present and identical, not appended a second time. */
+int EXPORT(hv_wasm_restore_response)(const uint8_t *body, size_t size) {
+    hv_jpp_reader reader;
+    hv_jpp_message message;
+    int status;
+    hv_jpp_begin(&reader, body, size);
+    while ((status = hv_jpp_next(&reader, &message)) == HV_JPP_MESSAGE)
+        if (!hv_cache_match_metadata(&cache, &message)) {
+            snprintf(error, sizeof error, "replacement channel metadata differs from the cache");
+            return -1;
+        }
+    if (status == HV_JPP_ERROR) {
+        snprintf(error, sizeof error, "%s", hv_jpp_error(&reader));
+        return -1;
+    }
+    return hv_jpp_reason(&reader);
+}
+
+static char model[1024];
+static size_t model_next;
+
+const char *EXPORT(hv_wasm_model)(size_t cursor, size_t capacity) {
+    model_next = cursor;
+    if (capacity > sizeof model) capacity = sizeof model;
+    if (hv_cache_model(&cache, &model_next, model, capacity) < 0) {
+        snprintf(error, sizeof error, "cache cannot be declared within the request limit");
+        return NULL;
+    }
+    return model;
+}
+
+size_t EXPORT(hv_wasm_model_next)(void) { return model_next; }
 
 /* Indexes the target's complete metadata once: its codestream count, or 0 with
  * hv_wasm_error. */

@@ -1,6 +1,6 @@
 /* hv_cache.h: the client's store of delivered data-bins.
  *
- * One channel owns one store. Each data-bin is identified by its class,
+ * One source owns one store. Each data-bin is identified by its class,
  * codestream and Bin-ID, and arrives in messages that must append without a gap,
  * because the server tracks exactly the same prefixes: if the client and server
  * disagree about a bin's length, every later request is wrong. The store
@@ -8,9 +8,11 @@
  * rather than trying to reconcile the difference.
  *
  * A bin is complete once a message sets the last-byte flag. Bins stay in
- * memory for the life of the channel, complete or not: the server will not
+ * memory for the life of the source, complete or not: the server will not
  * resend what it has sent, and it takes no notice that a client has dropped
  * something (JPIP_PROFILE.md: no subtractive cache model).
+ * A replacement channel for the same immutable target can be synchronized
+ * with hv_cache_model without discarding the store.
  *
  * The store is a hash table on a bin's identity, so it holds the many
  * codestreams of a movie; memory is its only limit.
@@ -78,6 +80,20 @@ size_t hv_cache_length(const hv_cache *cache, int bin_class, uint64_t codestream
 size_t hv_cache_bin_count(const hv_cache *cache);
 size_t hv_cache_total_bytes(const hv_cache *cache);
 size_t hv_cache_complete_count(const hv_cache *cache);
+
+/* Writes a comma-separated explicit JPIP cache model, in batches. Start
+ * *cursor at zero and repeat until it reaches cache->capacity. Do not change
+ * the cache between batches. Returns bytes written (excluding the NUL), or
+ * -1 if a descriptor cannot fit or its bin class or length cannot be declared.
+ * Bin identities must belong to the same supported target on the server.
+ * Metadata must be complete: partial M0 declarations cannot restore the
+ * server's placeholder traversal. */
+int hv_cache_model(const hv_cache *cache, size_t *cursor, char *text, size_t size);
+
+/* Checks a metadata range repeated while establishing a replacement channel.
+ * It must match a complete cached bin exactly over that range. Never modifies
+ * the cache or relaxes hv_cache_apply's append-only contract. */
+int hv_cache_match_metadata(const hv_cache *cache, const hv_jpp_message *message);
 
 /* A nonempty diagnostic after a failed hv_cache_apply(). */
 const char *hv_cache_error(const hv_cache *cache);

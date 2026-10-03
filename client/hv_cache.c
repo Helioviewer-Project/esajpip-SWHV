@@ -4,6 +4,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <stdio.h>
 
 static void Fail(hv_cache *cache, const char *message) {
     cache->error = message;
@@ -167,6 +170,63 @@ size_t hv_cache_complete_count(const hv_cache *cache) {
 
 const char *hv_cache_error(const hv_cache *cache) {
     return cache->error != NULL ? cache->error : "";
+}
+
+int hv_cache_model(const hv_cache *cache, size_t *cursor, char *text, size_t size) {
+    size_t used = 0;
+    if (size == 0) return -1;
+    text[0] = '\0';
+    while (*cursor < cache->capacity) {
+        const hv_bin *bin = &cache->bins[*cursor];
+        char descriptor[128];
+        int length;
+        const char *kind;
+        if (!bin->used || (!bin->complete && bin->length == 0)) {
+            ++*cursor;
+            continue;
+        }
+        switch (bin->bin_class) {
+        case HV_BIN_META_DATA: kind = "M"; break;
+        case HV_BIN_MAIN_HEADER: kind = "Hm"; break;
+        case HV_BIN_TILE_HEADER: kind = "H"; break;
+        case HV_BIN_PRECINCT: kind = "P"; break;
+        default: return -1;
+        }
+        if ((bin->bin_class == HV_BIN_META_DATA && !bin->complete) ||
+            (!bin->complete && bin->length >= INT_MAX) || bin->bin_id > INT_MAX ||
+            ((bin->bin_class == HV_BIN_MAIN_HEADER || bin->bin_class == HV_BIN_TILE_HEADER) &&
+             bin->bin_id != 0)) return -1;
+        if (bin->bin_class == HV_BIN_META_DATA)
+            length = snprintf(descriptor, sizeof descriptor, "M%" PRIu64, bin->bin_id);
+        else if (bin->bin_class == HV_BIN_MAIN_HEADER)
+            length = snprintf(descriptor, sizeof descriptor, "[%" PRIu64 "]Hm", bin->codestream);
+        else
+            length = snprintf(descriptor, sizeof descriptor, "[%" PRIu64 "]%s%" PRIu64,
+                              bin->codestream, kind, bin->bin_id);
+        if (!bin->complete)
+            length += snprintf(descriptor + length, sizeof descriptor - (size_t)length,
+                               ":%zu", bin->length);
+        if (length < 0 || (size_t)length >= sizeof descriptor) return -1;
+        if (used + (used != 0) + (size_t)length >= size)
+            return used ? (int)used : -1;
+        if (used) text[used++] = ',';
+        memcpy(text + used, descriptor, (size_t)length + 1);
+        used += (size_t)length;
+        ++*cursor;
+    }
+    return (int)used;
+}
+
+int hv_cache_match_metadata(const hv_cache *cache, const hv_jpp_message *message) {
+    const hv_bin *bin;
+    if (message->bin_class != HV_BIN_META_DATA) return 0;
+    bin = hv_cache_find(cache, HV_BIN_META_DATA, message->codestream, message->bin_id);
+    if (bin == NULL || !bin->complete || message->offset > bin->length ||
+        message->length > bin->length - (size_t)message->offset ||
+        (message->last_byte && message->offset + message->length != bin->length)) return 0;
+    return message->length == 0 ||
+           memcmp(bin->data + (size_t)message->offset, message->data,
+                  (size_t)message->length) == 0;
 }
 
 void hv_cache_release(hv_cache *cache) {
