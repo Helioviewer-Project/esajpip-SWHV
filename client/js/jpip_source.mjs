@@ -64,7 +64,9 @@ export class JpipSource {
     // in physical pixels, preserving aspect ratio, or with options.reduce
     // (0 for full size, Infinity for the lowest), fetching what is missing:
     // { index, reduce, width, height, components, pixels, fullWidth, fullHeight,
-    // resolutions }. `pixels` is the caller's: a Uint8Array of `components`
+    // resolutions, layers, totalLayers, quality, complete }. options.layers
+    // limits quality, omitted for all. `pixels` is the caller's: a Uint8Array
+    // of `components`
     // (1 gray, 3 RGB) values per pixel, rows from the top. Calls are served
     // one at a time, in order.
     async frame(index, options = {}) {
@@ -85,8 +87,8 @@ export class JpipSource {
         return cached;
     }
 
-    // The least `reduce` that frame(index, { reduce }) costs no request for: 0
-    // when the whole frame is cached, null when no level of it is.
+    // The least `reduce` cached at full quality: 0 when the whole frame is
+    // cached, null when no level is cached at full quality.
     cached(index) {
         return this.#call("cached", index);
     }

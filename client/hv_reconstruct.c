@@ -47,12 +47,15 @@ size_t hv_reconstruct(const hv_cache *cache, uint64_t codestream, uint8_t *out,
         const hv_bin *bin = hv_cache_find(cache, HV_BIN_PRECINCT, codestream, id);
         if (bin != NULL && bin->complete) {
             put(&o, bin->data, bin->length);
-        } else if (bin != NULL && bin->length != 0) {
-            hv_fail(error, error_size, "precinct data-bin %llu is incomplete",
-                    (unsigned long long)id);
-            return 0;
         } else {
-            for (layer = 0; layer < (uint64_t)frame->layers; layer++)
+            int received = bin != NULL ? bin->layers : 0;
+            if (bin != NULL && bin->length != 0 && received == 0) {
+                hv_fail(error, error_size, "precinct data-bin %llu is incomplete",
+                        (unsigned long long)id);
+                return 0;
+            }
+            if (received != 0) put(&o, bin->data, bin->packet_bytes);
+            for (layer = (uint64_t)received; layer < (uint64_t)frame->layers; layer++)
                 put(&o, empty, frame->eph ? 3 : 1);
         }
     }
@@ -60,12 +63,41 @@ size_t hv_reconstruct(const hv_cache *cache, uint64_t codestream, uint8_t *out,
     return o.size;
 }
 
+int hv_reconstruct_confirm(hv_cache *cache, uint64_t codestream, int reduce, int layers,
+                            char *error, size_t error_size) {
+    const hv_frame *frame = hv_frame_get(cache, codestream, error, error_size);
+    uint64_t id, end;
+    if (frame == NULL) return -1;
+    if (reduce < 0 || reduce >= frame->resolutions || layers < 1 || layers > frame->layers) {
+        hv_fail(error, error_size, "invalid resolution or quality-layer count");
+        return -1;
+    }
+    end = frame->precinct_end[frame->resolutions - 1 - reduce];
+    for (id = 0; id < end; id++) {
+        const hv_bin *bin = hv_cache_find(cache, HV_BIN_PRECINCT, codestream, id);
+        if (bin == NULL || (!bin->complete &&
+            (bin->length == 0 || layers == frame->layers))) {
+            hv_fail(error, error_size, "precinct data-bin %llu was not delivered",
+                    (unsigned long long)id);
+            return -1;
+        }
+    }
+    for (id = 0; id < end; id++) {
+        hv_bin *bin = (hv_bin *) hv_cache_find(cache, HV_BIN_PRECINCT, codestream, id);
+        if (layers > bin->layers) {
+            bin->layers = layers;
+            bin->packet_bytes = bin->length;
+        }
+    }
+    return 0;
+}
+
 int hv_reconstruct_status(const hv_cache *cache, uint64_t codestream, hv_status *status,
                           char *error, size_t error_size) {
     const hv_bin *main_header = hv_cache_find(cache, HV_BIN_MAIN_HEADER, codestream, 0);
     const hv_frame *frame;
     uint64_t id = 0;
-    int r;
+    int r, full = 1;
 
     memset(status, 0, sizeof *status);
     if (main_header == NULL || !main_header->complete)
@@ -76,12 +108,19 @@ int hv_reconstruct_status(const hv_cache *cache, uint64_t codestream, hv_status 
     status->height = frame->height;
     status->components = frame->components;
     status->resolutions = frame->resolutions;
+    status->layers = frame->layers;
     for (r = 0; r < frame->resolutions; r++) {
         uint64_t end = frame->precinct_end[r];
-        while (id < end && hv_cache_complete(cache, HV_BIN_PRECINCT, codestream, id))
+        int quality = frame->layers;
+        while (id < end) {
+            const hv_bin *bin = hv_cache_find(cache, HV_BIN_PRECINCT, codestream, id);
+            int layers = bin == NULL ? 0 : bin->complete ? frame->layers : bin->layers;
+            if (layers < quality) quality = layers;
             id++;
-        if (id != end) break;
-        status->complete++;
+        }
+        status->quality[r] = quality;
+        full = full && quality == frame->layers;
+        if (full) status->complete++;
     }
     return 0;
 }

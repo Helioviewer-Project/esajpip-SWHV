@@ -38,6 +38,8 @@ typedef struct {
     size_t   length;
     size_t   capacity;
     int      complete;
+    int      layers;       /* whole precinct packets confirmed by the host */
+    size_t   packet_bytes; /* byte boundary of those packets */
     struct hv_frame *frame; /* Prepared information for a main-header bin. */
 } hv_bin;
 

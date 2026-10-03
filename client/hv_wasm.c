@@ -93,12 +93,16 @@ const uint8_t *EXPORT(hv_wasm_palette_table)(void) {
     return palette;
 }
 
-/* A codestream of the store (hv_reconstruct_status): where the five 32-bit
+/* A codestream of the store (hv_reconstruct_status): where the 32-bit
  * numbers of its hv_status are, or NULL with hv_wasm_error. */
 const hv_status *EXPORT(hv_wasm_status)(uint32_t codestream) {
     static hv_status status;
     int result = hv_reconstruct_status(&cache, codestream, &status, error, sizeof error);
     return result == 0 ? &status : NULL;
+}
+
+int EXPORT(hv_wasm_confirm)(uint32_t codestream, int reduce, int layers) {
+    return hv_reconstruct_confirm(&cache, codestream, reduce, layers, error, sizeof error);
 }
 
 /* Decodes a codestream of the store without its `reduce` highest

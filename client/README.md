@@ -111,6 +111,9 @@ await source.close();
 | `pixels` | A `Uint8Array` of `width * height * components` bytes, top row first, components interleaved. It is a copy that belongs to the caller |
 | `fullWidth`, `fullHeight` | The size at `reduce` 0 |
 | `resolutions` | The number of resolution levels: `reduce` runs from 0 to `resolutions - 1` |
+| `layers`, `totalLayers` | The minimum whole quality layers available across the decoded resolutions, and the source's total |
+| `quality` | Whole quality layers available per resolution, lowest resolution first. A missing resolution has 0 |
+| `complete` | All quality layers are present at the decoded resolution and every lower resolution |
 
 `{ fit: [width, height] }` gives the available display area in physical
 pixels. The client fits the image into it, preserving aspect ratio, and
@@ -223,8 +226,10 @@ After that, `frame(index, { fit: [1024, 768] })` decodes from the cache.
   a `frame` call made meanwhile waits for one request at most. A hundred
   `fetch` calls made at once would all run before it.
 - **Progress.** `fetch` resolves to the lowest `reduce` now cached for that
-  frame. `cached(index)` gives the same value at any time, or `null` when no
-  level is cached; it does not wait for requests under way.
+  frame at full quality. `cached(index)` gives the same value at any time,
+  or `null` when no level is cached at full quality; it does not wait for
+  requests under way. A layer-limited preview can be cached even when this
+  value is `null`.
 - **Other resolutions.** A frame cached at `reduce` 1 also serves `reduce` 2
   and above. Fetching it at `reduce` 0 later brings the one missing level.
 - **Decoding.** Every `frame` call decodes. Decoded frames are not kept: keep
@@ -233,6 +238,33 @@ After that, `frame(index, { fit: [1024, 768] })` decodes from the cache.
   header-only request (`stream=index&layers=0`) obtains its size and resolution
   levels before requesting pixels. This adds one round trip on the first
   visit, and makes the request exact even when movie frames differ in size.
+
+### Preview and refine
+
+Add `layers` to either display option to request a lower-quality preview:
+
+```js
+const preview = await source.frame(index, { fit: [1024, 768], layers: 1 });
+// Upload and display preview.pixels.
+
+const refined = await source.frame(index, { fit: [1024, 768] });
+// Replace the texture with refined.pixels.
+```
+
+`layers` is a positive safe integer, clamped to the frame's total. Omit it
+for all layers. `fetch` accepts the same options, so a movie can be fetched
+first with one layer, then refined. The application chooses when to refine
+and redraw. Layer count is a quality step, not a percentage of final quality.
+
+The client records whole packets only after the requested window ends
+normally. Reconstruction writes those packets and empty packets for missing
+layers. A later request adds data to the same bins. Asking for fewer layers
+does not discard existing data or lower the quality of the returned frame.
+Quality is tracked independently for each resolution, so previewing at a
+larger size does not lose the finer quality already fetched at a smaller size.
+
+This uses the server's existing `layers` support and ordinary JPP messages.
+Byte-limited previews and automatic channel recovery are not supported yet.
 
 ### Several images
 
@@ -276,9 +308,9 @@ kept once first used, until the source closes.
 | `JpipSource.open({ wasm, server, image })` | A source. `wasm` is the URL of the module, `server` the server's address, `image` a path below its image directory | 1 |
 | `frames` | The number of frames | |
 | `received` | Bytes of response bodies so far, as of the last `frame` or `fetch` | |
-| `frame(index, options = {})` | The decoded frame. Options: `{ fit: [width, height] }` or `{ reduce: n }` | For the levels not cached |
+| `frame(index, options = {})` | The decoded frame. Options: `{ fit: [width, height] }` or `{ reduce: n }`, optionally with `layers` | For the resolution and quality levels not cached |
 | `fetch(index, options = {})` | `cached(index)` after fetching, with the same options as `frame` | For the levels not cached |
-| `cached(index)` | The lowest `reduce` that needs no request, or `null` | 0 |
+| `cached(index)` | The lowest `reduce` cached at full quality, or `null` | 0 |
 | `xml(index)` | A string, or `null` | 0 |
 | `palette(index)` | `{ entries, channels, table }`, or `null` | 0 |
 | `close()` | Closes the channel, frees the cache and ends the worker | 1 |
@@ -317,8 +349,10 @@ body to the library.
 3. Pass every response body through `hv_jpp_next` into `hv_cache_apply`.
 4. After the first response, index the metadata with `hv_metadata_open`. That
    gives the number of frames, and each frame's XML and color table.
-5. For a frame, ask `hv_reconstruct_status` what is cached. If the level
-   wanted is not, request it and go back to step 3.
+5. For a frame, ask `hv_reconstruct_status` what resolution and quality levels
+   are cached. Request missing data. For layer-limited windows, confirm the
+   delivery with `hv_reconstruct_confirm` after ingesting a normally completed
+   response, as described below.
 6. Write the frame as a codestream with `hv_reconstruct`, and decode it with
    `hv_image_decode` or another decoder.
 7. At the end, close the channel on the server, then `hv_metadata_close` and
@@ -344,8 +378,11 @@ GET /<path>?cid=<cid>&cclose=<cid>
 - A frame's size and resolution levels are known once its main header has
   arrived. Before that, request `stream=<frame>&layers=0`, then use
   `hv_reconstruct_status` to size the pixel request.
-- Do not use `len` or nonzero `layers` limits for pixel requests: a response
-  cut short leaves partial data that `hv_reconstruct` refuses. `layers=0` is
+- Do not use `len` for pixel requests. For a whole-frame request limited by
+  `layers`, apply its entire response and call `hv_reconstruct_confirm` only
+  after `WINDOW_DONE` or `IMAGE_DONE`, with its exact reduction and clamped
+  layer count. This records the whole-packet prefixes for reconstruction.
+  An unconfirmed partial precinct is refused. `layers=0` is
   used only to obtain headers.
 - [`../JPIP_PROFILE.md`](../JPIP_PROFILE.md) describes the requests the server
   accepts, and [`../CHANNELS.md`](../CHANNELS.md) its channels, status codes
@@ -358,6 +395,7 @@ GET /<path>?cid=<cid>&cclose=<cid>
 | `hv_cache_begin`, `hv_cache_release` | `hv_cache.h` | The store of one channel |
 | `hv_jpp_begin`, `hv_jpp_next`, `hv_jpp_reason` | `hv_jpp.h` | The messages of a response body, and why the response ended |
 | `hv_cache_apply` | `hv_cache.h` | A message added to the store |
+| `hv_reconstruct_confirm` | `hv_reconstruct.h` | Whole-packet prefixes recorded after a completed layer-limited window |
 | `hv_metadata_open`, `hv_metadata_close` | `hv_metadata.h` | An index of the metadata; its `count` is the number of frames |
 | `hv_metadata_xml` | `hv_metadata.h` | A frame's XML, in place in the store |
 | `hv_metadata_palette` | `hv_metadata.h` | A frame's color table, copied out |
@@ -438,9 +476,10 @@ hv_cache_release(&cache);
   packet and decodes nothing.
 - **`hv_reconstruct`.** Called with no buffer, it returns the size; called
   with one, it writes. The codestream has empty packets above the cached
-  levels, so any decoder reads it, provided it is told to leave out
-  `resolutions - complete` levels. A frame with a partly received precinct is
-  refused.
+  levels or quality layers, so any decoder reads it. For full-quality requests,
+  leave out `resolutions - complete` levels. For confirmed previews, use the
+  reduction requested. Unknown partial precincts are refused; confirmed
+  prefixes stay usable if a later refinement appends unfinished packets.
 - **`hv_image_decode`.** `HV_IMAGE_SAMPLES` scales samples to 8 bits.
   `HV_IMAGE_INDICES` keeps them as they are, for a frame with a color table;
   it accepts one unsigned component of at most 8 bits. See [What the pixels
@@ -463,8 +502,9 @@ shortest complete example.
 
 ## Limits
 
-- **Whole frames only.** No regions, and no display of a frame that has partly
-  arrived.
+- **Whole-frame windows only.** No regions or decoding during response
+  arrival. Layer-limited previews decode after the window completes; arbitrary
+  byte-limited partial delivery is not supported.
 - **No eviction.** The cache grows until the channel is closed.
 - **No recovery of a channel.** Once a channel is lost, its cache cannot be
   used with a new one.

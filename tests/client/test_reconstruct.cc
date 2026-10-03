@@ -107,7 +107,7 @@ static hv_status status(const hv_cache &cache, int stream, const std::string &na
 
 // What it must be, from the file alone: `resolutions` of them delivered.
 static Bytes expected(jpip::ImageIndex &image, Sources &sources, int stream, int resolutions,
-                      const std::string &name) {
+                      const std::string &name, const std::vector<int> &quality = {}) {
     const jpip::CodingParameters &p = *image.GetCodingParameters(stream);
     const jpip::Source *source = sources.GetSource(image.GetPathName(stream));
     check(source != NULL, name + ": missing source");
@@ -134,7 +134,7 @@ static Bytes expected(jpip::ImageIndex &image, Sources &sources, int stream, int
             for (int x = 0; x < p.resolutions[r].num_precincts.x; ++x)
                 for (int c = 0; c < p.num_components; ++c)
                     for (int l = 0; l < p.num_layers; ++l) {
-                        if (r >= resolutions) {
+                        if (r >= resolutions || (!quality.empty() && l >= quality[r])) {
                             out.push_back(0);
                             if (eph) { out.push_back(0xFF); out.push_back(0x92); }
                             continue;
@@ -148,6 +148,84 @@ static Bytes expected(jpip::ImageIndex &image, Sources &sources, int stream, int
     out.push_back(0xFF);
     out.push_back(0xD9);
     return out;
+}
+
+static jpip::ResponseRequest whole(int stream, const jpip::CodingParameters &p, int resolutions);
+
+static void verify_quality(jpip::ImageIndex &image, Sources &sources, int stream,
+                           const std::string &name, bool decoded) {
+    const jpip::CodingParameters &p = *image.GetCodingParameters(stream);
+    jpip::DataBinServer server;
+    hv_cache cache;
+    hv_cache_begin(&cache);
+    std::vector<int> quality(p.num_levels + 1, 0);
+    char error[256] = "";
+    for (int resolutions : {1, p.num_levels + 1}) {
+        for (int layers = 1; layers <= p.num_layers; layers++) {
+            jpip::ResponseRequest request = whole(stream, p, resolutions);
+            request.layers = layers;
+            int reason = deliver(server, image, sources, request, &cache, name);
+            check(reason == HV_EOR_WINDOW_DONE || reason == HV_EOR_IMAGE_DONE,
+                  name + ": quality window did not complete");
+            int reduce = p.num_levels + 1 - resolutions;
+            check(hv_reconstruct_confirm(&cache, stream, reduce, layers, error, sizeof error) == 0,
+                  name + ": " + error);
+            for (int r = 0; r < resolutions; r++) quality[r] = std::max(quality[r], layers);
+            hv_status has = status(cache, stream, name);
+            check(has.layers == p.num_layers &&
+                  std::equal(quality.begin(), quality.end(), has.quality),
+                  name + ": quality status differs");
+            int complete = 0;
+            while (complete <= p.num_levels && quality[complete] == p.num_layers) complete++;
+            check(has.complete == complete, name + ": partial quality marked complete");
+            Bytes preview = reconstruct(cache, stream, name);
+            check(preview ==
+                  expected(image, sources, stream, p.num_levels + 1, name, quality),
+                  name + ": progressive packets or empty padding differ");
+            if (decoded) {
+                hv_image pixels;
+                check(hv_image_decode(preview.data(), preview.size(), reduce, HV_IMAGE_SAMPLES,
+                                      &pixels, error, sizeof error) == 0,
+                      name + ": progressive decode: " + error);
+                free(pixels.pixels);
+            }
+            size_t bytes = hv_cache_total_bytes(&cache);
+            deliver(server, image, sources, request, &cache, name);
+            check(hv_cache_total_bytes(&cache) == bytes, name + ": repeated quality resent bytes");
+            check(hv_reconstruct_confirm(&cache, stream, reduce, 1, error, sizeof error) == 0 &&
+                  std::equal(quality.begin(), quality.end(), status(cache, stream, name).quality),
+                  name + ": confirmation reduced cached quality");
+            for (const auto &invalid : std::vector<std::pair<int, int>>{
+                    {-1, layers}, {p.num_levels + 1, layers}, {reduce, 0}, {reduce, p.num_layers + 1}})
+                check(hv_reconstruct_confirm(&cache, stream, invalid.first, invalid.second,
+                                            error, sizeof error) == -1 &&
+                      std::equal(quality.begin(), quality.end(), status(cache, stream, name).quality),
+                      name + ": invalid confirmation changed quality");
+        }
+    }
+    hv_cache_release(&cache);
+
+    if (p.num_layers > 1) {
+        jpip::DataBinServer partial_server;
+        hv_cache_begin(&cache);
+        jpip::ResponseRequest request = whole(stream, p, p.num_levels + 1);
+        request.layers = 1;
+        deliver(partial_server, image, sources, request, &cache, name);
+        check(hv_reconstruct_confirm(&cache, stream, 0, 1, error, sizeof error) == 0, error);
+        Bytes preview = reconstruct(cache, stream, name);
+        const hv_bin *bin = hv_cache_find(&cache, HV_BIN_PRECINCT, stream, 0);
+        const uint8_t unfinished[] = {0xAB};
+        hv_jpp_message message = {HV_BIN_PRECINCT, static_cast<uint64_t>(stream), 0,
+                                 bin->length, sizeof unfinished, 0, unfinished};
+        check(hv_cache_apply(&cache, &message), hv_cache_error(&cache));
+        check(reconstruct(cache, stream, name) == preview,
+              name + ": unconfirmed refinement changed the preview");
+        check(hv_reconstruct_confirm(&cache, stream, 0, p.num_layers, error, sizeof error) == -1,
+              name + ": full quality confirmed incomplete bins");
+        check(reconstruct(cache, stream, name) == preview,
+              name + ": rejected confirmation changed the preview");
+        hv_cache_release(&cache);
+    }
 }
 
 static jpip::ResponseRequest whole(int stream, const jpip::CodingParameters &p, int resolutions) {
@@ -210,6 +288,11 @@ static void verify(const std::string &path, bool jpx, bool standard, bool decode
               name + ": header-only response has wrong geometry or contains precinct data");
         const hv_frame *prepared = hv_cache_find(&cache, HV_BIN_MAIN_HEADER, stream, 0)->frame;
         check(prepared != NULL, name + ": frame information was not prepared");
+        char confirmation_error[256] = "";
+        check(hv_reconstruct_confirm(&cache, stream, p.num_levels, 1,
+                                    confirmation_error, sizeof confirmation_error) == -1 &&
+              status(cache, stream, name).quality[0] == 0,
+              name + ": confirmation accepted missing precincts");
         for (int resolutions = 1; resolutions <= p.num_levels + 1; ++resolutions) {
             int reason = deliver(server, image, sources, whole(stream, p, resolutions), &cache, name);
             check(reason == HV_EOR_WINDOW_DONE || reason == HV_EOR_IMAGE_DONE,
@@ -254,6 +337,7 @@ static void verify(const std::string &path, bool jpx, bool standard, bool decode
             totals->reduced += resolutions <= p.num_levels;
         }
         hv_cache_release(&cache);
+        verify_quality(image, sources, stream, name, decoded);
     }
 }
 

@@ -12,8 +12,8 @@
  *
  * For codestreams of the served profile (JPIP_PROFILE.md): one tile, zero
  * origins, unit sampling, no COC or POC. Every precinct bin held must be
- * complete. A response cut by a byte or layer limit leaves partial bins,
- * and those are refused. */
+ * complete or have whole packets confirmed by hv_reconstruct_confirm.
+ * Unknown partial precincts are refused. */
 #ifndef HV_RECONSTRUCT_H
 #define HV_RECONSTRUCT_H
 
@@ -34,16 +34,27 @@ extern "C" {
 size_t hv_reconstruct(const hv_cache *cache, uint64_t codestream, uint8_t *out,
                       size_t capacity, char *error, size_t error_size);
 
+/* Records delivery of a whole-frame window through `layers` quality layers,
+ * without the `reduce` highest resolutions. Call only after applying an entire
+ * response ending WINDOW_DONE or IMAGE_DONE for that exact window, with no byte
+ * limit. Calls and response ingestion must be serialized. Each covered bin's
+ * current byte length is a whole-packet boundary. Returns 0, or -1 with error;
+ * a rejected confirmation changes no quality records. */
+int hv_reconstruct_confirm(hv_cache *cache, uint64_t codestream, int reduce, int layers,
+                            char *error, size_t error_size);
+
 /* A codestream of a store, from its main header: the image's size and
  * components, its resolution levels, and how many of them, from the
- * lowest, are complete: every precinct bin of theirs is. Those are the
- * levels hv_reconstruct's codestream has the data of. All 0 until the main
- * header is complete. */
+ * lowest, are complete at full quality. `quality` also describes confirmed
+ * previews: the minimum whole layers across the precinct bins of each
+ * resolution. All 0 until the main header is complete. */
 typedef struct {
     uint32_t width, height;
     int components;
     int resolutions;
     int complete;
+    int layers;          /* total source quality layers */
+    int quality[33];     /* whole layers per resolution, lowest first */
 } hv_status;
 
 /* 0, or -1 with a message in error for a main header hv_reconstruct

@@ -72,7 +72,9 @@ try {
                                { fit: [1, 1], reduce: 0 }, { size: [1, 1] },
                                { fit: [0, 1] }, { fit: [-1, 1] }, { fit: [NaN, 1] },
                                { fit: [Infinity, 1] }, { fit: [1] }, { fit: [1, 2, 3] },
-                               { fit: [, 1] }, { fit: ["1", 1] }])
+                               { fit: [, 1] }, { fit: ["1", 1] },
+                               ...[0, -1, 0.5, NaN, Infinity, "1", null, undefined,
+                                   Number.MAX_SAFE_INTEGER + 1].map(layers => ({ layers }))])
             for (const method of ["frame", "fetch"])
                 await assert.rejects(channel[method](channel.frames - 1, options), RangeError);
         assert.equal(requests.length, 0, "invalid calls sent a request");
@@ -107,7 +109,7 @@ try {
         assert.equal(requests.length, beforeFit, "fit requested already cached levels");
         for (let index = 1; index < channel.frames; index++) {
             const start = requests.length;
-            const options = { fit: [20, 30] };
+            const options = { fit: [20, 30], layers: 1 };
             const cached = await channel.fetch(index, options);
             assert.equal(requests.length - start, 2, `frame ${index} needs a header and pixel request`);
             const header = requests[start].searchParams;
@@ -127,14 +129,18 @@ try {
                           "fit did not select the coarsest usable level");
             const pixels = requests[start + 1].searchParams;
             assert.equal(pixels.get("stream"), String(index));
-            assert.equal(pixels.has("layers"), false);
+            assert.equal(pixels.get("layers"), "1");
             assert.equal(pixels.get("fsiz"),
                 `${Math.ceil(frame.fullWidth / 2 ** frame.reduce)},${Math.ceil(frame.fullHeight / 2 ** frame.reduce)},closest`);
             assert.equal(requests.length - start, 2, `cached frame ${index} made another request`);
             assert.equal(cached, channel.cached(index));
-            assert.ok(cached <= frame.reduce, `frame ${index} was not fetched ahead`);
+            if (cached !== null)
+                assert.ok(cached <= frame.reduce, `frame ${index} was not fetched ahead`);
+            assert.ok(frame.layers >= 1, `frame ${index} preview has no confirmed layers`);
             assert.equal(channel.received, received, `frame ${index} sent a request after fetch`);
             report(channel, frame);
+            const refined = await channel.frame(index, { fit: [20, 30] });
+            assert.equal(refined.complete, true, `frame ${index} did not refine to full quality`);
         }
     } finally {
         globalThis.fetch = originalFetch;
@@ -169,6 +175,66 @@ try {
         await source.close();
     }
     await assert.rejects(source.frame(0), /source is closed/);
+
+    const progressive = await JpipSource.open({
+        wasm: `http://127.0.0.1:${host.address().port}/client.wasm`, server, image,
+    });
+    const reference = await JpipChannel.open(wasm, server, image);
+    try {
+        const start = progressive.received;
+        const preview = await progressive.frame(0, { fit: [512, 512], layers: 1 });
+        const previewBytes = progressive.received - start;
+        assert.ok(preview.layers >= 1 && preview.totalLayers >= preview.layers);
+        assert.equal(preview.complete, preview.layers === preview.totalLayers);
+        const repeated = await progressive.frame(0, { fit: [512, 512], layers: 1 });
+        assert.deepEqual(repeated.pixels, preview.pixels);
+        assert.equal(progressive.received - start, previewBytes, "preview repeat requested data");
+        const before = reference.received;
+        await reference.frame(0, { fit: [512, 512] });
+        const fullBytes = reference.received - before;
+        assert.ok(previewBytes <= fullBytes, "preview used more data than full quality");
+
+        await progressive.fetch(0, { fit: [1024, 1024], layers: 1 });
+        const widerBytes = progressive.received;
+        const wider = await progressive.frame(0, { fit: [1024, 1024], layers: 1 });
+        assert.equal(progressive.received, widerBytes, "preview fetch did not populate cache");
+        assert.ok(wider.reduce <= preview.reduce && wider.layers >= 1);
+        const refined = await progressive.frame(0, { fit: [512, 512], layers: 2 });
+        assert.ok(refined.layers >= Math.min(2, refined.totalLayers));
+        const final = await progressive.frame(0, { fit: [1024, 1024] });
+        const expected = await reference.frame(0, { fit: [1024, 1024] });
+        assert.equal(final.complete, true);
+        assert.equal(final.layers, final.totalLayers);
+        assert.deepEqual(final.pixels, expected.pixels, "refinement differs from full transfer");
+        assert.equal(await progressive.cached(0), final.reduce);
+        const finalBytes = progressive.received;
+        await progressive.frame(0, { fit: [1024, 1024], layers: Number.MAX_SAFE_INTEGER });
+        assert.equal(progressive.received, finalBytes, "clamped layers requested cached data");
+        console.log(`512px preview: ${previewBytes} bytes; full quality: ${fullBytes} bytes`);
+    } finally {
+        await progressive.close();
+        await reference.close();
+    }
+
+    const interrupted = await JpipChannel.open(wasm, server, image);
+    let interruptedRequests = 0;
+    globalThis.fetch = async (url, options) => {
+        const response = await originalFetch(url, options);
+        if (++interruptedRequests !== 1) return response;
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        assert.deepEqual(Array.from(bytes.slice(-3)), [0, 2, 0]);
+        bytes[bytes.length - 2] = 4; // Byte limit, not completion of the window.
+        return new Response(bytes, { status: response.status, headers: response.headers });
+    };
+    try {
+        await assert.rejects(interrupted.frame(0, { fit: [512, 512], layers: 1 }),
+                             /did not complete the requested quality layers/);
+        await interrupted.frame(0, { fit: [512, 512], layers: 1 });
+        assert.equal(interruptedRequests, 2, "incomplete response was recorded as delivered quality");
+    } finally {
+        globalThis.fetch = originalFetch;
+        await interrupted.close();
+    }
     console.log("Channel, decoding and worker checks passed");
 } finally {
     host.closeAllConnections();

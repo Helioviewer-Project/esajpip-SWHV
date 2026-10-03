@@ -63,7 +63,7 @@ function clamp(reduce, resolutions) {
 
 function checkOptions(options) {
     if (options === null || typeof options !== "object" || Array.isArray(options) ||
-        Object.keys(options).some(key => key !== "fit" && key !== "reduce") ||
+        Object.keys(options).some(key => key !== "fit" && key !== "reduce" && key !== "layers") ||
         ("fit" in options && "reduce" in options))
         throw new RangeError("use { fit: [width, height] } or { reduce: n }");
     if ("fit" in options) {
@@ -75,6 +75,8 @@ function checkOptions(options) {
         if (reduce !== Infinity && (!Number.isInteger(reduce) || reduce < 0))
             throw new RangeError("reduce must be a nonnegative integer or Infinity");
     }
+    if ("layers" in options && (!Number.isSafeInteger(options.layers) || options.layers < 1))
+        throw new RangeError("layers must be a positive safe integer");
 }
 
 function resolution({ fullWidth, fullHeight, resolutions }, options) {
@@ -140,8 +142,9 @@ export class JpipChannel {
     // preserving aspect ratio, or without options.reduce highest resolutions
     // (0 for the whole image, Infinity for the lowest), fetching what
     // the channel lacks of it: { index, reduce, width, height, components,
-    // pixels, fullWidth, fullHeight, resolutions }. `pixels` is the
-    // caller's: a Uint8Array of `components` (1 gray, 3 RGB) values per
+    // pixels, fullWidth, fullHeight, resolutions, layers, totalLayers,
+    // quality, complete }. options.layers limits quality, omitted for all.
+    // `pixels` is the caller's: a Uint8Array of `components` (1 gray, 3 RGB) values per
     // pixel, rows from the top. Calls are served one at a time, in order.
     frame(index, options = {}) {
         return this.#turn(
@@ -157,12 +160,12 @@ export class JpipChannel {
     fetch(index, options = {}) {
         return this.#turn(async () => {
             const { resolutions, complete } = await this.#fetch(index, options);
-            return resolutions - complete;
+            return complete === 0 ? null : resolutions - complete;
         });
     }
 
-    // The least `reduce` that frame(index, { reduce }) costs no request for: 0
-    // when the whole frame is cached, null when no level of it is.
+    // The least `reduce` cached at full quality: 0 when the whole frame is
+    // cached, null when no level is cached at full quality.
     cached(index) {
         const { resolutions, complete } = this.#status(index);
         return complete === 0 ? null : resolutions - complete;
@@ -258,6 +261,7 @@ export class JpipChannel {
             wasm.hv_wasm_free(at);
             if (reason < 0)
                 throw new Error(this.#error());
+            return reason;
         } catch (error) {
             this.#failed = error;
             throw error;
@@ -277,9 +281,10 @@ export class JpipChannel {
         const at = this.#wasm.hv_wasm_status(index);
         if (at === 0)
             throw new Error(this.#error());
-        const [fullWidth, fullHeight, , resolutions, complete] =
-            new Uint32Array(this.#wasm.memory.buffer, at, 5);
-        return { fullWidth, fullHeight, resolutions, complete };
+        const [fullWidth, fullHeight, , resolutions, complete, totalLayers] =
+            new Uint32Array(this.#wasm.memory.buffer, at, 6);
+        const quality = Array.from(new Uint32Array(this.#wasm.memory.buffer, at + 24, resolutions));
+        return { fullWidth, fullHeight, resolutions, complete, totalLayers, quality };
     }
 
     // Obtains the geometry before choosing a resolution, then requests
@@ -294,10 +299,20 @@ export class JpipChannel {
         if (status.resolutions === 0)
             throw new Error(`the server did not send frame ${index}'s header`);
         const reduce = resolution(status, options);
-        const lacks = ({ resolutions, complete }) =>
-            complete === 0 || resolutions - complete > reduce;
+        const layers = Math.min(options.layers ?? status.totalLayers, status.totalLayers);
+        const lacks = ({ resolutions, quality }) =>
+            quality.slice(0, resolutions - reduce).some(count => count < layers);
         if (lacks(status)) {
-            await this.#request(view(index, status, reduce));
+            const fields = view(index, status, reduce);
+            if ("layers" in options) fields.layers = layers;
+            const reason = await this.#request(fields);
+            if (reason !== 1 && reason !== 2)
+                throw new Error("the server did not complete the requested quality layers");
+            // Full bins carry their own completion flag; partial ones need
+            // the whole-layer boundary confirmed from this completed window.
+            if (layers < status.totalLayers &&
+                this.#wasm.hv_wasm_confirm(index, reduce, layers) !== 0)
+                throw new Error(this.#error());
             status = this.#status(index);
             if (lacks(status))
                 throw new Error(`the server did not send frame ${index} whole`);
@@ -307,17 +322,19 @@ export class JpipChannel {
 
     // Decodes a frame from the cache. The pixels are copied out of the
     // module, which keeps its own until the next decode.
-    #decode(index, { fullWidth, fullHeight, resolutions, reduce }) {
+    #decode(index, { fullWidth, fullHeight, resolutions, reduce, totalLayers, quality }) {
         const wasm = this.#wasm;
         if (wasm.hv_wasm_decode(index, reduce) !== 0)
             throw new Error(this.#error());
         const width = wasm.hv_wasm_width(), height = wasm.hv_wasm_height();
         const components = wasm.hv_wasm_components();
+        const layers = Math.min(...quality.slice(0, resolutions - reduce));
         return {
             index, reduce, width, height, components,
             pixels: new Uint8Array(wasm.memory.buffer, wasm.hv_wasm_pixels(),
                                    width * height * components).slice(),
-            fullWidth, fullHeight, resolutions,
+            fullWidth, fullHeight, resolutions, layers, totalLayers, quality,
+            complete: layers === totalLayers,
         };
     }
 
