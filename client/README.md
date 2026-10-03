@@ -114,6 +114,7 @@ await source.close();
 | `layers`, `totalLayers` | The minimum whole quality layers available across the decoded resolutions, and the source's total |
 | `quality` | Whole quality layers available per resolution, lowest resolution first. A missing resolution has 0 |
 | `complete` | All quality layers are present at the decoded resolution and every lower resolution |
+| `ready` | The requested quality is cached at the selected resolution and every lower resolution. Always true after successful `frame` or `fetch` |
 
 `{ fit: [width, height] }` gives the available display area in physical
 pixels. The client fits the image into it, preserving aspect ratio, and
@@ -225,11 +226,11 @@ After that, `frame(index, { fit: [1024, 768] })` decodes from the cache.
   called, one after the other. With one `fetch` pending, as in the loop above,
   a `frame` call made meanwhile waits for one request at most. A hundred
   `fetch` calls made at once would all run before it.
-- **Progress.** `fetch` resolves to the lowest `reduce` now cached for that
-  frame at full quality. `cached(index)` gives the same value at any time,
-  or `null` when no level is cached at full quality; it does not wait for
-  requests under way. A layer-limited preview can be cached even when this
-  value is `null`.
+- **Progress.** `fetch` returns the frame's display status without `pixels`.
+  `cached(index, options)` returns the same status without fetching or
+  decoding, or `null` if the frame's header is missing. It does not wait for
+  requests under way. `ready` says whether the supplied options are satisfied;
+  `complete` says whether full quality is cached at the selected resolution.
 - **Other resolutions.** A frame cached at `reduce` 1 also serves `reduce` 2
   and above. Fetching it at `reduce` 0 later brings the one missing level.
 - **Decoding.** Every `frame` call decodes. Decoded frames are not kept: keep
@@ -265,6 +266,23 @@ larger size does not lose the finer quality already fetched at a smaller size.
 
 This uses the server's existing `layers` support and ordinary JPP messages.
 Byte-limited previews and automatic channel recovery are not supported yet.
+
+Prefetching also reports quality without decoding:
+
+```js
+const options = { fit: [1024, 768], layers: 1 };
+const status = await source.fetch(index, options);
+// status.ready is true; status.complete may still be false.
+
+const cached = await source.cached(index, options);
+if (cached?.ready) {
+    const frame = await source.frame(index, options); // decode with no request
+}
+```
+
+All three methods accept the same options. Status describes that selection:
+changing the display size or requested layers can change `ready`. Omitting
+options asks about full resolution and full quality.
 
 ### Several images
 
@@ -309,8 +327,8 @@ kept once first used, until the source closes.
 | `frames` | The number of frames | |
 | `received` | Bytes of response bodies so far, as of the last `frame` or `fetch` | |
 | `frame(index, options = {})` | The decoded frame. Options: `{ fit: [width, height] }` or `{ reduce: n }`, optionally with `layers` | For the resolution and quality levels not cached |
-| `fetch(index, options = {})` | `cached(index)` after fetching, with the same options as `frame` | For the levels not cached |
-| `cached(index)` | The lowest `reduce` cached at full quality, or `null` | 0 |
+| `fetch(index, options = {})` | The frame's display status without `pixels`; same options as `frame` | For the resolution and quality levels not cached |
+| `cached(index, options = {})` | Display status for those options, or `null` if the header is missing | 0 |
 | `xml(index)` | A string, or `null` | 0 |
 | `palette(index)` | `{ entries, channels, table }`, or `null` | 0 |
 | `close()` | Closes the channel, frees the cache and ends the worker | 1 |

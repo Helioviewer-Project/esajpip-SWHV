@@ -143,32 +143,31 @@ export class JpipChannel {
     // (0 for the whole image, Infinity for the lowest), fetching what
     // the channel lacks of it: { index, reduce, width, height, components,
     // pixels, fullWidth, fullHeight, resolutions, layers, totalLayers,
-    // quality, complete }. options.layers limits quality, omitted for all.
+    // quality, complete, ready }. options.layers limits quality, omitted for all.
     // `pixels` is the caller's: a Uint8Array of `components` (1 gray, 3 RGB) values per
     // pixel, rows from the top. Calls are served one at a time, in order.
     frame(index, options = {}) {
-        return this.#turn(
-            async () => this.#decode(index, await this.#fetch(index, options)));
+        return this.#turn(async () => this.#decode(await this.#fetch(index, options)));
     }
 
     // Fetches with the same options as frame(), and does not decode it:
     // a later frame() with those options
-    // costs no request. Gives cached(index) as it is then. Served in turn
+    // costs no request. Returns its display status, as cached(index, options).
+    // Served in turn
     // with the calls of frame(): to fetch a movie ahead, wait for each
     // frame before asking for the next, so that a frame to show waits for
     // one of them at most.
     fetch(index, options = {}) {
-        return this.#turn(async () => {
-            const { resolutions, complete } = await this.#fetch(index, options);
-            return complete === 0 ? null : resolutions - complete;
-        });
+        return this.#turn(() => this.#fetch(index, options));
     }
 
-    // The least `reduce` cached at full quality: 0 when the whole frame is
-    // cached, null when no level is cached at full quality.
-    cached(index) {
-        const { resolutions, complete } = this.#status(index);
-        return complete === 0 ? null : resolutions - complete;
+    // Display status for the options, without fetching or decoding. `ready`
+    // says the requested quality is cached; `complete` says full quality is.
+    // Null until the frame's header is present.
+    cached(index, options = {}) {
+        checkOptions(options);
+        const status = this.#status(index);
+        return status.resolutions === 0 ? null : this.#describe(index, status, options);
     }
 
     // The XML that describes a frame (for a FITS image, its header), or
@@ -281,10 +280,23 @@ export class JpipChannel {
         const at = this.#wasm.hv_wasm_status(index);
         if (at === 0)
             throw new Error(this.#error());
-        const [fullWidth, fullHeight, , resolutions, complete, totalLayers] =
+        const [fullWidth, fullHeight, components, resolutions, , totalLayers] =
             new Uint32Array(this.#wasm.memory.buffer, at, 6);
         const quality = Array.from(new Uint32Array(this.#wasm.memory.buffer, at + 24, resolutions));
-        return { fullWidth, fullHeight, resolutions, complete, totalLayers, quality };
+        return { fullWidth, fullHeight, components, resolutions, totalLayers, quality };
+    }
+
+    #describe(index, { fullWidth, fullHeight, components, resolutions, totalLayers, quality }, options) {
+        const reduce = resolution({ fullWidth, fullHeight, resolutions }, options);
+        const layers = Math.min(...quality.slice(0, resolutions - reduce));
+        const scale = 2 ** reduce;
+        return {
+            index, reduce, width: Math.ceil(fullWidth / scale), height: Math.ceil(fullHeight / scale),
+            components: components >= 3 ? 3 : 1,
+            fullWidth, fullHeight, resolutions, layers, totalLayers, quality,
+            complete: layers === totalLayers,
+            ready: layers >= Math.min(options.layers ?? totalLayers, totalLayers),
+        };
     }
 
     // Obtains the geometry before choosing a resolution, then requests
@@ -298,12 +310,10 @@ export class JpipChannel {
         }
         if (status.resolutions === 0)
             throw new Error(`the server did not send frame ${index}'s header`);
-        const reduce = resolution(status, options);
+        let result = this.#describe(index, status, options);
         const layers = Math.min(options.layers ?? status.totalLayers, status.totalLayers);
-        const lacks = ({ resolutions, quality }) =>
-            quality.slice(0, resolutions - reduce).some(count => count < layers);
-        if (lacks(status)) {
-            const fields = view(index, status, reduce);
+        if (!result.ready) {
+            const fields = view(index, status, result.reduce);
             if ("layers" in options) fields.layers = layers;
             const reason = await this.#request(fields);
             if (reason !== 1 && reason !== 2)
@@ -311,30 +321,27 @@ export class JpipChannel {
             // Full bins carry their own completion flag; partial ones need
             // the whole-layer boundary confirmed from this completed window.
             if (layers < status.totalLayers &&
-                this.#wasm.hv_wasm_confirm(index, reduce, layers) !== 0)
+                this.#wasm.hv_wasm_confirm(index, result.reduce, layers) !== 0)
                 throw new Error(this.#error());
-            status = this.#status(index);
-            if (lacks(status))
+            result = this.#describe(index, this.#status(index), options);
+            if (!result.ready)
                 throw new Error(`the server did not send frame ${index} whole`);
         }
-        return { ...status, reduce };
+        return result;
     }
 
     // Decodes a frame from the cache. The pixels are copied out of the
     // module, which keeps its own until the next decode.
-    #decode(index, { fullWidth, fullHeight, resolutions, reduce, totalLayers, quality }) {
+    #decode(status) {
         const wasm = this.#wasm;
-        if (wasm.hv_wasm_decode(index, reduce) !== 0)
+        if (wasm.hv_wasm_decode(status.index, status.reduce) !== 0)
             throw new Error(this.#error());
         const width = wasm.hv_wasm_width(), height = wasm.hv_wasm_height();
         const components = wasm.hv_wasm_components();
-        const layers = Math.min(...quality.slice(0, resolutions - reduce));
         return {
-            index, reduce, width, height, components,
+            ...status, width, height, components,
             pixels: new Uint8Array(wasm.memory.buffer, wasm.hv_wasm_pixels(),
                                    width * height * components).slice(),
-            fullWidth, fullHeight, resolutions, layers, totalLayers, quality,
-            complete: layers === totalLayers,
         };
     }
 

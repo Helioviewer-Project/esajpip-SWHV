@@ -74,13 +74,16 @@ try {
                                { fit: [Infinity, 1] }, { fit: [1] }, { fit: [1, 2, 3] },
                                { fit: [, 1] }, { fit: ["1", 1] },
                                ...[0, -1, 0.5, NaN, Infinity, "1", null, undefined,
-                                   Number.MAX_SAFE_INTEGER + 1].map(layers => ({ layers }))])
+                                   Number.MAX_SAFE_INTEGER + 1].map(layers => ({ layers }))]) {
+            assert.throws(() => channel.cached(channel.frames - 1, options), RangeError);
             for (const method of ["frame", "fetch"])
                 await assert.rejects(channel[method](channel.frames - 1, options), RangeError);
+        }
         assert.equal(requests.length, 0, "invalid calls sent a request");
         assert.equal(channel.received, received, "invalid calls sent a request");
         const first = await channel.frame(0, { reduce: Infinity });
-        assert.equal(first.reduce, channel.cached(0));
+        assert.equal(first.reduce, channel.cached(0, { reduce: Infinity }).reduce);
+        assert.equal(channel.cached(0).ready, first.reduce === 0);
         assert.equal(channel.received, received, "cached frame sent a request");
 
         console.log(`${channel.frames} frame(s)`);
@@ -110,7 +113,10 @@ try {
         for (let index = 1; index < channel.frames; index++) {
             const start = requests.length;
             const options = { fit: [20, 30], layers: 1 };
+            assert.equal(channel.cached(index, options), null, "missing header was fetched by cached()");
             const cached = await channel.fetch(index, options);
+            assert.equal(cached.ready, true);
+            assert.equal("pixels" in cached, false);
             assert.equal(requests.length - start, 2, `frame ${index} needs a header and pixel request`);
             const header = requests[start].searchParams;
             assert.equal(header.get("stream"), String(index));
@@ -133,9 +139,9 @@ try {
             assert.equal(pixels.get("fsiz"),
                 `${Math.ceil(frame.fullWidth / 2 ** frame.reduce)},${Math.ceil(frame.fullHeight / 2 ** frame.reduce)},closest`);
             assert.equal(requests.length - start, 2, `cached frame ${index} made another request`);
-            assert.equal(cached, channel.cached(index));
-            if (cached !== null)
-                assert.ok(cached <= frame.reduce, `frame ${index} was not fetched ahead`);
+            assert.deepEqual(cached, channel.cached(index, options));
+            const { pixels: decoded, ...frameStatus } = frame;
+            assert.deepEqual(cached, frameStatus, `frame ${index} differs from fetch status`);
             assert.ok(frame.layers >= 1, `frame ${index} preview has no confirmed layers`);
             assert.equal(channel.received, received, `frame ${index} sent a request after fetch`);
             report(channel, frame);
@@ -156,7 +162,9 @@ try {
         await assert.rejects(source.frame(0, { reduce: NaN }), RangeError);
         await assert.rejects(source.fetch(0, { fit: [0, 1] }), RangeError);
         const first = await source.frame(0, { reduce: Infinity });
-        assert.equal(first.reduce, await source.cached(0));
+        assert.equal(first.reduce, (await source.cached(0, { reduce: Infinity })).reduce);
+        if (source.frames > 1) assert.equal(await source.cached(1), null);
+        await assert.rejects(source.cached(0, { layers: 0 }), RangeError);
         assert.equal(first.pixels.length, first.width * first.height * first.components);
         const received = source.received;
         const repeated = await source.frame(0, { fit: [first.width, first.height] });
@@ -164,7 +172,9 @@ try {
         assert.deepEqual(repeated.pixels, first.pixels);
         assert.equal(source.received, received);
         const cached = await source.fetch(0, { fit: [first.fullWidth, first.fullHeight] });
-        assert.equal(cached, 0);
+        assert.equal(cached.reduce, 0);
+        assert.equal(cached.ready, true);
+        assert.equal(cached.complete, true);
         const afterFetch = source.received;
         const full = await source.frame(0, { fit: [first.fullWidth, first.fullHeight] });
         assert.equal(full.reduce, 0);
@@ -185,7 +195,13 @@ try {
         const preview = await progressive.frame(0, { fit: [512, 512], layers: 1 });
         const previewBytes = progressive.received - start;
         assert.ok(preview.layers >= 1 && preview.totalLayers >= preview.layers);
+        assert.equal(preview.ready, true);
         assert.equal(preview.complete, preview.layers === preview.totalLayers);
+        const previewStatus = await progressive.cached(0, { fit: [512, 512], layers: 1 });
+        const { pixels: previewPixels, ...shownStatus } = preview;
+        assert.deepEqual(previewStatus, shownStatus);
+        const fullStatus = await progressive.cached(0, { fit: [512, 512] });
+        assert.equal(fullStatus.ready, preview.complete);
         const repeated = await progressive.frame(0, { fit: [512, 512], layers: 1 });
         assert.deepEqual(repeated.pixels, preview.pixels);
         assert.equal(progressive.received - start, previewBytes, "preview repeat requested data");
@@ -194,11 +210,15 @@ try {
         const fullBytes = reference.received - before;
         assert.ok(previewBytes <= fullBytes, "preview used more data than full quality");
 
-        await progressive.fetch(0, { fit: [1024, 1024], layers: 1 });
+        const prefetched = await progressive.fetch(0, { fit: [1024, 1024], layers: 1 });
+        assert.equal(prefetched.ready, true);
+        assert.ok(prefetched.layers >= 1);
         const widerBytes = progressive.received;
         const wider = await progressive.frame(0, { fit: [1024, 1024], layers: 1 });
         assert.equal(progressive.received, widerBytes, "preview fetch did not populate cache");
         assert.ok(wider.reduce <= preview.reduce && wider.layers >= 1);
+        const { pixels: widerPixels, ...widerStatus } = wider;
+        assert.deepEqual(prefetched, widerStatus);
         const refined = await progressive.frame(0, { fit: [512, 512], layers: 2 });
         assert.ok(refined.layers >= Math.min(2, refined.totalLayers));
         const final = await progressive.frame(0, { fit: [1024, 1024] });
@@ -206,7 +226,7 @@ try {
         assert.equal(final.complete, true);
         assert.equal(final.layers, final.totalLayers);
         assert.deepEqual(final.pixels, expected.pixels, "refinement differs from full transfer");
-        assert.equal(await progressive.cached(0), final.reduce);
+        assert.equal((await progressive.cached(0, { fit: [1024, 1024] })).reduce, final.reduce);
         const finalBytes = progressive.received;
         await progressive.frame(0, { fit: [1024, 1024], layers: Number.MAX_SAFE_INTEGER });
         assert.equal(progressive.received, finalBytes, "clamped layers requested cached data");

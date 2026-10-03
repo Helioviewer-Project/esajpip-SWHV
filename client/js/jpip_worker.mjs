@@ -20,10 +20,10 @@ const calls = {
     },
     // The arguments of JpipChannel.fetch.
     async fetch(index, options) {
-        return [{ cached: await channel.fetch(index, options), received: channel.received }, []];
+        return [{ status: await channel.fetch(index, options), received: channel.received }, []];
     },
-    cached(index) {
-        return [channel.cached(index), []];
+    cached(index, options) {
+        return [channel.cached(index, options), []];
     },
     xml(index) {
         return [channel.xml(index), []];

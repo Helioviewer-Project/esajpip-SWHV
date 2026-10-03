@@ -64,7 +64,7 @@ export class JpipSource {
     // in physical pixels, preserving aspect ratio, or with options.reduce
     // (0 for full size, Infinity for the lowest), fetching what is missing:
     // { index, reduce, width, height, components, pixels, fullWidth, fullHeight,
-    // resolutions, layers, totalLayers, quality, complete }. options.layers
+    // resolutions, layers, totalLayers, quality, complete, ready }. options.layers
     // limits quality, omitted for all. `pixels` is the caller's: a Uint8Array
     // of `components`
     // (1 gray, 3 RGB) values per pixel, rows from the top. Calls are served
@@ -77,20 +77,22 @@ export class JpipSource {
 
     // Fetches with the same options as frame(), and does not decode it:
     // a later frame() with those options
-    // costs no request. Gives cached(index) as it is then. Served in turn
+    // costs no request. Returns its display status, as cached(index, options).
+    // Served in turn
     // with the calls of frame(): to fetch a movie ahead, wait for each
     // frame before asking for the next, so that a frame to show waits for
     // one of them at most.
     async fetch(index, options = {}) {
-        const { cached, received } = await this.#call("fetch", index, options);
+        const { status, received } = await this.#call("fetch", index, options);
         this.received = received;
-        return cached;
+        return status;
     }
 
-    // The least `reduce` cached at full quality: 0 when the whole frame is
-    // cached, null when no level is cached at full quality.
-    cached(index) {
-        return this.#call("cached", index);
+    // Display status for the options, without fetching or decoding. `ready`
+    // says the requested quality is cached; `complete` says full quality is.
+    // Null until the frame's header is present.
+    cached(index, options = {}) {
+        return this.#call("cached", index, options);
     }
 
     // The XML that describes a frame (for a FITS image, its header), or

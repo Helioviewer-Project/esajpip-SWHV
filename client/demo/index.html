@@ -124,7 +124,7 @@ async function fetchAhead() {
             next = (frame + next) % from.frames;
             const now = await from.fetch(next, { reduce });
             if (source === from) {
-                cached[next] = now;
+                cached[next] = Math.min(cached[next], now.reduce);
                 mark();
             }
         }
