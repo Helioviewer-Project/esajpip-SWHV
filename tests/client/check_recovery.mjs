@@ -1,5 +1,5 @@
 // Live recovery checks. Starts its own short-timeout server; never touches
-// an existing server: node check_recovery.mjs wasm server-binary image-directory image
+// an existing server: node check_recovery.mjs wasm server-binary image-directory image [other-image]
 import assert from "node:assert/strict";
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
@@ -10,10 +10,13 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { JpipChannel } from "../../client/js/jpip_channel.mjs";
+import { JpipSource } from "../../client/js/jpip_source.mjs";
+import { Worker } from "./worker.mjs";
 
-const [wasmPath, binary, directory, image] = process.argv.slice(2);
-if (!image) throw new Error("usage: check_recovery.mjs wasm server-binary image-directory image");
+const [wasmPath, binary, directory, image, otherImage = image] = process.argv.slice(2);
+if (!image) throw new Error("usage: check_recovery.mjs wasm server-binary image-directory image [other-image]");
 const wasm = await readFile(wasmPath);
+globalThis.Worker = Worker;
 const temporary = await mkdtemp(join(tmpdir(), "esajpip-recovery-"));
 const reservation = createServer();
 await new Promise(resolve => reservation.listen(0, "127.0.0.1", resolve));
@@ -207,6 +210,123 @@ try {
     assert.equal(cnews().length, 0, "close reopened a channel");
     globalThis.fetch = trackedFetch;
     console.log("Bounded failure, terminal errors and close checks passed");
+
+    // Observe real worker HTTP requests through a local forwarding server.
+    // Fetch substitution on the main thread does not affect a worker's fetch.
+    const workerRequests = [];
+    const workerCids = [];
+    const moduleRequests = new Map();
+    let heldRestore = null;
+    const workerHost = createHttpServer(async (request, response) => {
+        const url = new URL(request.url, server);
+        if (url.pathname.endsWith(".wasm")) {
+            const count = (moduleRequests.get(url.pathname) ?? 0) + 1;
+            moduleRequests.set(url.pathname, count);
+            if (count === 1 && url.pathname === "/unavailable.wasm") {
+                response.writeHead(503);
+                response.end("temporary download failure");
+            } else {
+                response.end(count === 1 && url.pathname === "/invalid.wasm" ? new Uint8Array([0]) : wasm);
+            }
+            return;
+        }
+        workerRequests.push(url);
+        try {
+            const upstream = await realFetch(server + request.url);
+            const cid = /(?:^|,)cid=([^,]+)/.exec(upstream.headers.get("JPIP-cnew") ?? "");
+            if (cid) workerCids.push(cid[1]);
+            const body = new Uint8Array(await upstream.arrayBuffer());
+            if (heldRestore && url.searchParams.has("cnew") && url.searchParams.has("model")) {
+                heldRestore.entered();
+                await heldRestore.release;
+            }
+            response.writeHead(upstream.status, Object.fromEntries(upstream.headers));
+            response.end(body);
+        } catch (error) {
+            response.writeHead(500);
+            response.end(String(error));
+        }
+    });
+    await new Promise(resolve => workerHost.listen(0, "127.0.0.1", resolve));
+    const workerServer = `http://127.0.0.1:${workerHost.address().port}`;
+    const workerSources = [];
+    async function openWorker(name = image, module = "client.wasm") {
+        const source = await JpipSource.open({ wasm: `${workerServer}/${module}`, server: workerServer, image: name });
+        workerSources.push(source);
+        return source;
+    }
+    try {
+        // Failed promises are removed, successful compilation is still shared
+        // by concurrent opens. Exercise HTTP and compilation failures separately.
+        for (const [module, error] of [["unavailable.wasm", /503/], ["invalid.wasm", WebAssembly.CompileError]]) {
+            await assert.rejects(openWorker(image, module), error);
+            const opened = await Promise.all([openWorker(image, module), openWorker(image, module)]);
+            assert.equal(moduleRequests.get(`/${module}`), 2, "module failure poisoned retry or compiled twice");
+            await Promise.all(opened.map(source => source.close()));
+        }
+        const otherReference = await JpipChannel.open(wasm, server, otherImage);
+        sources.push(otherReference);
+        const otherExpected = await otherReference.frame(0, { fit: [2048, 2048] });
+        for (const event of ["expiry", "restart"]) {
+            const [first, second] = await Promise.all([openWorker(), openWorker(otherImage)]);
+            const previews = await Promise.all([
+                first.frame(0, { fit: [1024, 1024], layers: 1 }),
+                second.frame(0, { fit: [2048, 2048], layers: 1 }),
+            ]);
+            const xml = await Promise.all([first.xml(0), second.xml(0)]);
+            if (event === "expiry") await delay(2100);
+            else { await stop(); await start(); }
+            workerRequests.length = 0;
+            workerCids.length = 0;
+            assert.deepEqual((await first.frame(0, { fit: [1024, 1024], layers: 1 })).pixels, previews[0].pixels);
+            assert.deepEqual((await second.frame(0, { fit: [2048, 2048], layers: 1 })).pixels, previews[1].pixels);
+            assert.equal(workerRequests.length, 0, "worker preview lost its cache");
+            const refined = await Promise.all([
+                first.frame(0, { fit: [2048, 2048] }), second.frame(0, { fit: [2048, 2048] }),
+            ]);
+            assert.deepEqual(refined[0].pixels, expected.pixels);
+            assert.deepEqual(refined[1].pixels, otherExpected.pixels);
+            const opened = workerRequests.filter(url => url.searchParams.has("cnew"));
+            assert.equal(opened.length, 2, "worker sources did not recover independently");
+            assert.equal(new Set(workerCids).size, 2, "worker sources shared a channel identity");
+            assert.ok(workerRequests.filter(url => url.searchParams.has("model") &&
+                url.searchParams.has("cid")).every(url => workerCids.includes(url.searchParams.get("cid"))));
+            assert.deepEqual(await Promise.all([first.xml(0), second.xml(0)]), xml);
+            await first.close();
+            const count = workerRequests.length;
+            assert.deepEqual((await second.frame(0, { fit: [2048, 2048] })).pixels, otherExpected.pixels);
+            assert.equal(workerRequests.length, count, "closing one movie affected another");
+            await second.close();
+        }
+
+        const closing = await openWorker();
+        await closing.frame(0, { fit: [2048, 2048], layers: 1 });
+        await stop();
+        await start();
+        let release, entered;
+        const waiting = new Promise(resolve => { entered = resolve; });
+        heldRestore = { entered, release: new Promise(resolve => { release = resolve; }), resume: () => release() };
+        workerRequests.length = 0;
+        const rejected = assert.rejects(closing.frame(0, { fit: [2048, 2048] }), /channel is closed/);
+        await waiting;
+        const closed = closing.close();
+        // This reply proves the preceding close message reached the worker,
+        // while its queued close is still waiting for the interrupted operation.
+        await closing.cached(0, { fit: [2048, 2048], layers: 1 });
+        release();
+        await rejected;
+        await closed;
+        heldRestore = null;
+        assert.equal(workerRequests.filter(url => url.searchParams.has("cnew")).length, 1);
+        assert.equal(workerRequests.filter(url => !url.searchParams.has("model") &&
+            !url.searchParams.has("cclose")).length, 1, "worker resumed data delivery after close");
+        console.log("Worker: module retry, independent movies, expiry, restart and close during recovery passed");
+    } finally {
+        heldRestore?.resume();
+        for (const source of workerSources) await source.close().catch(() => {});
+        workerHost.closeAllConnections();
+        await new Promise(resolve => workerHost.close(resolve));
+    }
 
     // A reverse proxy can give a short file a long public URL, without relying
     // on filesystem path limits. Both original and channel paths need batching

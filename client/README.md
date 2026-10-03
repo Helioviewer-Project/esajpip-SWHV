@@ -41,13 +41,18 @@ On the page:
 
 - The image opens at its lowest resolution. There is a button for each
   resolution, up to `Full size`.
+- `Preview (1 layer)` requests one quality layer at the selected resolution.
+  Switch to `Full quality` to fetch the remaining layers and redraw. The
+  status line reports the quality actually cached, which may already be higher
+  than the selection. The opening response has full quality at the lowest
+  resolution.
 - For a movie, the slider chooses the frame and Play steps through the frames,
   at most 10 a second. While a frame is on its way, only the last slider
   position is kept.
-- The strip under the slider shows the cache: dark for frames cached at the
-  resolution shown, pale for frames cached only at a lower one.
-- "Fetch ahead" fetches the other frames at the resolution shown, one at a
-  time, starting after the current frame.
+- The strip under the slider shows the cache: dark for frames ready at the
+  selected resolution and quality, pale for frames with some cached data.
+- "Fetch ahead" fetches the other frames at the selected resolution and quality,
+  one at a time, starting after the current frame.
 - "XML metadata" shows the XML of the current frame. The status line shows the
   bytes received so far.
 
@@ -195,6 +200,14 @@ if (lut !== null && lut.channels === 3)
 - Indices are supported for a frame of one unsigned component of at most 8
   bits. Any other frame with a color table fails to decode.
 
+The display API does not interpret `colr`, ICC profiles or channel definitions,
+and does not convert color spaces such as sYCC to RGB. Three decoded components
+are returned in their existing order and displayed as RGB. Use grayscale,
+RGB, or supported palette images whose samples already have that meaning.
+The server can accept files outside this display subset. The native
+`hv_reconstruct` API preserves the codestream's sample precision and components;
+a host using another decoder must handle the file's color interpretation itself.
+
 ### XML
 
 ```js
@@ -302,6 +315,10 @@ A call that fails rejects its promise with an `Error` whose message says why.
 | Recovery fails, another HTTP error occurs, or JPP is malformed | The call rejects. Later calls needing a request reject with the same error; cache hits still succeed | Close the source and open the image again |
 | "the server did not send frame N whole" | The call rejects; the source is unaffected. A response ended without the data asked for, which this server does not do | |
 | A call after `close()` | Rejects with "the source is closed" | |
+
+If loading or compiling the WASM module fails, a later `JpipSource.open` with
+the same module URL tries again. A successfully compiled module is shared by
+sources on the page.
 
 An idle channel expires after `connections.timeout` (60 seconds by default).
 The next request for uncached data restores it automatically. A server restart
@@ -552,7 +569,8 @@ shortest complete example.
   is no background keepalive or retry loop while a server remains unavailable.
 - **This server's files.** The client reads what esajpip sends for the files
   it accepts ([`../JPIP_PROFILE.md`](../JPIP_PROFILE.md)): one tile, no
-  component subsampling. It is not a general JPIP client.
+  component subsampling. The [display API](#what-the-pixels-are) has narrower
+  precision, component and color support. It is not a general JPIP client.
 - **Lossy images.** Pixels from the WebAssembly module and from a native build
   can differ by 1, as the two round the floating-point wavelet differently.
 
@@ -630,13 +648,17 @@ short idle timeout:
 
 ```sh
 node tests/client/check_recovery.mjs build/client/web/esajpip_client.wasm \
-  build/esajpip /path/to/images movie.jpx
+  build/esajpip /path/to/images movie.jpx other-movie.jpx
 ```
 
 It checks idle expiry, server restart, interrupted response bodies, retained
 preview pixels and metadata, refinement against an uninterrupted transfer,
 request-line limits, bounded failures, terminal errors, and close during a
-pending request. A large preview also exercises several cache-model batches.
+pending request. Through `JpipSource` and its worker it also checks failed
+module-load retries, concurrent independent movies, expiry, restart and close
+during recovery. The second image is optional; omit it to open two independent
+sources for the same image. Use images with several resolution levels and
+quality layers. A large preview also exercises several cache-model batches.
 
 ## How it works
 

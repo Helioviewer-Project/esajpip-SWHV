@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { Worker as NodeWorker } from "node:worker_threads";
+import { Worker } from "./worker.mjs";
 import { JpipChannel } from "../../client/js/jpip_channel.mjs";
 import { JpipSource } from "../../client/js/jpip_source.mjs";
 
@@ -31,21 +31,7 @@ function report(channel, frame) {
 }
 
 // Only the browser's worker transport is adapted; jpip_worker.mjs runs unchanged.
-globalThis.Worker = class {
-    constructor(url) {
-        this.worker = new NodeWorker(`
-            const { parentPort, workerData } = require("node:worker_threads");
-            globalThis.self = { postMessage: (data, moved) => parentPort.postMessage(data, moved) };
-            import(workerData).then(() => {
-                parentPort.on("message", data => self.onmessage({ data }));
-            });
-        `, { eval: true, workerData: String(url) });
-        this.worker.on("message", data => this.onmessage?.({ data }));
-        this.worker.on("error", error => this.onerror?.(error));
-    }
-    postMessage(data) { this.worker.postMessage(data); }
-    terminate() { this.worker.terminate(); }
-};
+globalThis.Worker = Worker;
 
 const host = createServer((request, response) => response.end(wasm));
 await new Promise(resolve => host.listen(0, "127.0.0.1", resolve));

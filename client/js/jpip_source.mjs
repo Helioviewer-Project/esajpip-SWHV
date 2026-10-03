@@ -21,6 +21,9 @@ function compiled(wasm) {
             if (!response.ok)
                 throw new Error(`${response.status} ${url}`);
             return WebAssembly.compile(await response.arrayBuffer());
+        }).catch(error => {
+            modules.delete(url);
+            throw error;
         }));
     return modules.get(url);
 }

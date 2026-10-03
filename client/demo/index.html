@@ -22,6 +22,12 @@
         <button>Open</button>
     </form>
     <p id="sizes"></p>
+    <p id="quality-controls" hidden>
+        <label>Quality <select id="quality">
+            <option value="1">Preview (1 layer)</option>
+            <option value="" selected>Full quality</option>
+        </select></label>
+    </p>
     <p id="frames" hidden>
         <button id="play" type="button">Play</button>
         <label for="frame">Frame</label>
@@ -47,6 +53,8 @@ import { JpipSource } from "./jpip_source.mjs";
 const controls = document.getElementById("controls");
 const form = document.getElementById("open");
 const sizes = document.getElementById("sizes");
+const qualityControls = document.getElementById("quality-controls");
+const quality = document.getElementById("quality");
 const frames = document.getElementById("frames");
 const slider = document.getElementById("frame");
 const play = document.getElementById("play");
@@ -57,11 +65,10 @@ const status = document.getElementById("status");
 const xml = document.getElementById("xml");
 const canvas = document.getElementById("canvas");
 let source = null;
-let target = null;      // { reduce, frame } as last asked for
+let target = null;      // { reduce, layers, frame } as last asked for
 let shown = null;       // the target on the canvas
 let updating = false;
-let cached = [];        // frame -> the least `reduce` it is cached at, Infinity
-                        // for none of it
+let cached = [];        // frame -> display status, without decoded pixels
 let fetching = false;
 let playing = 0;        // the run of the play loop under way, 0 when paused
 let runs = 0;
@@ -89,18 +96,26 @@ function draw(frame, text, palette) {
     canvas.getContext("2d").putImageData(new ImageData(rgba, width, height), 0, 0);
     position.textContent = `${frame.index + 1} of ${source.frames}`;
     status.textContent = `${width}x${height} of ${frame.fullWidth}x${frame.fullHeight}, ` +
+        `${frame.layers}/${frame.totalLayers} layers, ` +
         `${source.received.toLocaleString("en")} bytes received`;
     xml.textContent = text ?? "(none)";
 }
 
-// The strip under the slider: dark where a frame is cached at the `reduce`
-// asked for, pale where only at a greater one.
+function ready(frame, { reduce, layers }) {
+    if (frame == null) return false;
+    const resolutions = frame.resolutions - Math.min(reduce, frame.resolutions - 1);
+    const count = Math.min(layers ?? frame.totalLayers, frame.totalLayers);
+    return frame.quality.slice(0, resolutions).every(value => value >= count);
+}
+
+// Dark where the selected resolution and quality are cached, pale where
+// some data is cached, gray where no frame header has arrived.
 function mark() {
     strip.width = source.frames;
     const context = strip.getContext("2d");
     for (let frame = 0; frame < source.frames; frame++) {
-        context.fillStyle = cached[frame] === Infinity ? "#ddd"
-            : cached[frame] <= target.reduce ? "#283" : "#ad9";
+        context.fillStyle = cached[frame] == null ? "#ddd"
+            : ready(cached[frame], target) ? "#283" : "#ad9";
         context.fillRect(frame, 0, 1, 1);
     }
 }
@@ -115,16 +130,16 @@ async function fetchAhead() {
     const from = source;
     try {
         while (source === from && ahead.checked) {
-            const { frame, reduce } = target;
+            const { frame, reduce, layers } = target;
             let next = 1;
-            while (next < from.frames && cached[(frame + next) % from.frames] <= reduce)
+            while (next < from.frames && ready(cached[(frame + next) % from.frames], target))
                 next++;
             if (next === from.frames)
                 break;
             next = (frame + next) % from.frames;
-            const now = await from.fetch(next, { reduce });
+            const now = await from.fetch(next, layers === undefined ? { reduce } : { reduce, layers });
             if (source === from) {
-                cached[next] = Math.min(cached[next], now.reduce);
+                cached[next] = now;
                 mark();
             }
         }
@@ -148,11 +163,14 @@ async function show(change) {
     try {
         while (shown !== target) {
             const next = target;
+            const options = next.layers === undefined ? { reduce: next.reduce }
+                                                     : { reduce: next.reduce, layers: next.layers };
             const [frame, text, palette] = await Promise.all(
-                [source.frame(next.frame, { reduce: next.reduce }), source.xml(next.frame),
+                [source.frame(next.frame, options), source.xml(next.frame),
                  source.palette(next.frame)]);
             draw(frame, text, palette);
-            cached[next.frame] = Math.min(cached[next.frame], frame.reduce);
+            const { pixels, ...record } = frame;
+            cached[next.frame] = record;
             mark();
             shown = next;
         }
@@ -189,6 +207,7 @@ async function open() {
     controls.disabled = true;
     try {
         sizes.replaceChildren();
+        qualityControls.hidden = true;
         frames.hidden = true;
         const old = source;
         source = null;
@@ -199,10 +218,12 @@ async function open() {
         });
         const [first, text, palette] = await Promise.all(
             [source.frame(0, { reduce: Infinity }), source.xml(0), source.palette(0)]);
-        target = shown = { reduce: first.reduce, frame: 0 };
+        target = shown = { reduce: first.reduce, frame: 0,
+                           layers: quality.value === "" ? undefined : Number(quality.value) };
         draw(first, text, palette);
-        cached = new Array(source.frames).fill(Infinity);
-        cached[0] = first.reduce;
+        cached = new Array(source.frames).fill(null);
+        const { pixels, ...record } = first;
+        cached[0] = record;
         mark();
         for (let reduce = first.resolutions - 1; reduce >= 0; reduce--) {
             const button = document.createElement("button");
@@ -211,6 +232,7 @@ async function open() {
             sizes.append(button);
         }
         frames.hidden = source.frames < 2;
+        qualityControls.hidden = false;
         slider.max = source.frames - 1;
         slider.value = 0;
         fetchAhead();
@@ -230,6 +252,9 @@ form.addEventListener("submit", event => {
 slider.addEventListener("input", () => show({ frame: Number(slider.value) }));
 play.addEventListener("click", () => playing ? pause() : start());
 ahead.addEventListener("change", fetchAhead);
+quality.addEventListener("change", () => show({
+    layers: quality.value === "" ? undefined : Number(quality.value),
+}));
 if (form.image.value !== "")
     open();
 </script>
