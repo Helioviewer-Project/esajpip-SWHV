@@ -1,7 +1,7 @@
-// source.mjs: an image or a movie of an esajpip server, for a page: its
+// jpip_source.mjs: an image or a movie of an esajpip server, for a page: its
 // frames as 8-bit pixels and each frame's XML. The work is done by a JPIP
-// channel (jpip.mjs) in a Web Worker of its own (worker.mjs), so a page may
-// have several sources open, and none holds it up.
+// channel (jpip_channel.mjs) in a Web Worker of its own (jpip_worker.mjs),
+// so a page may have several sources open, and none holds it up.
 //
 //   const source = await JpipSource.open({ wasm, server, image });
 //   const frame = await source.frame(3);        // source.frames of them
@@ -38,7 +38,8 @@ export class JpipSource {
     static async open({ wasm, server, image }) {
         const source = new JpipSource();
         const module = await compiled(wasm);
-        source.#worker = new Worker(new URL("./worker.mjs", import.meta.url), { type: "module" });
+        source.#worker = new Worker(new URL("./jpip_worker.mjs", import.meta.url),
+                                    { type: "module" });
         source.#worker.onmessage = ({ data: { id, result, error } }) => {
             const { resolve, reject } = source.#waiting.get(id);
             source.#waiting.delete(id);

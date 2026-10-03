@@ -28,6 +28,7 @@ extern "C" {
 #endif
 
 /* One delivered data-bin. A bin grows by reallocation as later layers arrive. */
+struct hv_frame;
 typedef struct {
     int      used;         /* this slot of the table holds a bin */
     int      bin_class;
@@ -37,6 +38,7 @@ typedef struct {
     size_t   length;
     size_t   capacity;
     int      complete;
+    struct hv_frame *frame; /* Prepared information for a main-header bin. */
 } hv_bin;
 
 typedef struct {

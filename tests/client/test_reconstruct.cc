@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "hv_cache.h"
+#include "hv_frame.h"
 #include "hv_image.h"
 #include "hv_jpp.h"
 #include "hv_metadata.h"
@@ -199,6 +200,16 @@ static void verify(const std::string &path, bool jpx, bool standard, bool decode
         hv_cache cache;
         hv_cache_begin(&cache);
         check(status(cache, stream, name).resolutions == 0, name + ": an empty store has a codestream");
+        jpip::ResponseRequest header_request = whole(stream, p, 1);
+        header_request.layers = 0;
+        deliver(server, image, sources, header_request, &cache, name);
+        hv_status header_status = status(cache, stream, name);
+        check(header_status.width == static_cast<uint32_t>(p.size.x) &&
+              header_status.height == static_cast<uint32_t>(p.size.y) &&
+              header_status.resolutions == p.num_levels + 1 && header_status.complete == 0,
+              name + ": header-only response has wrong geometry or contains precinct data");
+        const hv_frame *prepared = hv_cache_find(&cache, HV_BIN_MAIN_HEADER, stream, 0)->frame;
+        check(prepared != NULL, name + ": frame information was not prepared");
         for (int resolutions = 1; resolutions <= p.num_levels + 1; ++resolutions) {
             int reason = deliver(server, image, sources, whole(stream, p, resolutions), &cache, name);
             check(reason == HV_EOR_WINDOW_DONE || reason == HV_EOR_IMAGE_DONE,
@@ -210,6 +221,8 @@ static void verify(const std::string &path, bool jpx, bool standard, bool decode
                   name + ": codestream " + std::to_string(stream) + " is not complete at " +
                   std::to_string(resolutions) + " resolutions");
             Bytes out = reconstruct(cache, stream, name);
+            check(hv_cache_find(&cache, HV_BIN_MAIN_HEADER, stream, 0)->frame == prepared,
+                  name + ": frame information was rebuilt after receiving more data");
             check(out == expected(image, sources, stream, resolutions, name),
                   name + ": codestream " + std::to_string(stream) + " differs with " +
                   std::to_string(resolutions) + " resolutions");
@@ -721,6 +734,8 @@ int main() {
         check(hv_reconstruct_status(&other, 0, &none, error, sizeof error) == -1 &&
               std::string(error) == "main header: more than 2,147,483,647 packets" && none.complete == 0,
               "huge image status: " + std::string(error));
+        check(hv_cache_find(&other, HV_BIN_MAIN_HEADER, 0, 0)->frame == NULL,
+              "failed preparation was cached");
         hv_cache_release(&other);
         hv_cache_release(&cache);
     }

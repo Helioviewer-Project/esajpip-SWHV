@@ -1,7 +1,8 @@
-// worker.mjs: a JPIP channel (jpip.mjs) in a Web Worker, for source.mjs, so
-// that fetching and decoding do not hold up the page. The page posts
-// { id, call, args } and gets { id, result } or { id, error } back.
-import { JpipChannel } from "./jpip.mjs";
+// jpip_worker.mjs: a JPIP channel (jpip_channel.mjs) in a Web Worker, for
+// jpip_source.mjs, so that fetching and decoding do not hold up the page.
+// The page posts { id, call, args } and gets { id, result } or { id, error }
+// back.
+import { JpipChannel } from "./jpip_channel.mjs";
 
 let channel = null;
 

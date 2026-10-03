@@ -1,5 +1,6 @@
 /* hv_cache.c: see hv_cache.h. */
 #include "hv_cache.h"
+#include "hv_frame.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -170,7 +171,10 @@ const char *hv_cache_error(const hv_cache *cache) {
 
 void hv_cache_release(hv_cache *cache) {
     size_t index;
-    for (index = 0; index < cache->capacity; index++) free(cache->bins[index].data);
+    for (index = 0; index < cache->capacity; index++) {
+        hv_frame_free(cache->bins[index].frame);
+        free(cache->bins[index].data);
+    }
     free(cache->bins);
     cache->bins = NULL;
     cache->count = 0;

@@ -29,7 +29,8 @@ extern "C" {
 /* The size of codestream `codestream` of `cache` as a JPEG 2000 codestream,
  * which is written to out when capacity holds it (so out NULL and capacity
  * 0 ask for the size). 0, with a message in error, if it cannot be
- * written. */
+ * written. Frame information is prepared once and retained in the cache.
+ * Receiving, reconstruction and status calls must be serialized. */
 size_t hv_reconstruct(const hv_cache *cache, uint64_t codestream, uint8_t *out,
                       size_t capacity, char *error, size_t error_size);
 

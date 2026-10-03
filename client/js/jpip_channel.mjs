@@ -1,9 +1,9 @@
-// jpip.mjs: one JPIP channel of an esajpip server: an image or a movie, a
-// frame at a time, as 8-bit pixels, and each frame's XML and color table.
-// A frame can be fetched ahead of being shown. This file does the
+// jpip_channel.mjs: one JPIP channel of an esajpip server: an image or a
+// movie, a frame at a time, as 8-bit pixels, and each frame's XML and color
+// table. A frame can be fetched ahead of being shown. This file does the
 // HTTP exchange; the WebAssembly client (../hv_wasm.c) keeps the data-bins,
 // writes the codestream back and decodes it. It runs in a browser, in a Web
-// Worker (worker.mjs, for source.mjs) and in Node.js.
+// Worker (jpip_worker.mjs, for jpip_source.mjs) and in Node.js.
 
 // The module is built against a WASI libc, which wants a few system calls
 // at start-up and for its standard streams. It has no files and no
@@ -263,17 +263,14 @@ export class JpipChannel {
             complete === 0 || resolutions - complete > clamp(reduce, resolutions);
         let status = this.#status(index);
         if (lacks(status)) {
-            // Until a frame's header has arrived its size is not known: the
-            // first frame's stands in, as the frames of a movie are mostly
-            // alike. If that brought too little, the frame's own size is
-            // asked for next.
-            const known = status.resolutions > 0;
-            await this.#request(view(index, known ? status : this.#status(0), reduce));
-            status = this.#status(index);
-            if (!known && status.resolutions > 0 && lacks(status)) {
-                await this.#request(view(index, status, reduce));
+            if (status.resolutions === 0) {
+                await this.#request({ stream: index, layers: 0 });
                 status = this.#status(index);
             }
+            if (status.resolutions === 0)
+                throw new Error(`the server did not send frame ${index}'s header`);
+            await this.#request(view(index, status, reduce));
+            status = this.#status(index);
             if (lacks(status))
                 throw new Error(`the server did not send frame ${index} whole`);
         }

@@ -1,4 +1,4 @@
-/* hv_wasm.c: the WebAssembly module's entry points, for js/jpip.mjs.
+/* hv_wasm.c: the WebAssembly module's entry points, for js/jpip_channel.mjs.
  *
  * One module instance is one JPIP channel: its data-bins and the image last
  * decoded. The host does the HTTP exchange and passes each response body
