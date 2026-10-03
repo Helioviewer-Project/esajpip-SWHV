@@ -3,7 +3,7 @@ add_executable(replay replay.c ${ESAJPIP_FUZZ_SOURCES} ${ESAJPIP_JPIP_FUZZ_SOURC
 esajpip_configure_target(replay)
 target_include_directories(replay PRIVATE ${ESAJPIP_FUZZ_INCLUDES})
 target_compile_definitions(replay PRIVATE ESAJPIP_FUZZ_REPLAY)
-target_link_libraries(replay PRIVATE jpip esajpip_client)
+target_link_libraries(replay PRIVATE jpip esajpip_client_wasm)
 esajpip_client_response_fixtures(replay)
 add_dependencies(replay client_fuzz_corpus)
 

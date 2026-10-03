@@ -55,6 +55,12 @@ function(esajpip_configure_target target)
     endif()
 endfunction()
 
+# The WASM toolchain builds only the client module.
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
+    add_subdirectory(client)
+    return()
+endif()
+
 set(ESAJPIP_IMAGE_DIRECTORY "images" CACHE STRING
     "Image directory written to server.ini")
 set(ESAJPIP_LOG_DIRECTORY "" CACHE STRING

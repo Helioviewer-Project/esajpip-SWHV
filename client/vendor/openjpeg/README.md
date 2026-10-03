@@ -14,7 +14,8 @@ OpenJPEG version a system packages.
 - `LICENSE` is from the upstream root. OpenJPEG is distributed under the
   2-clause BSD license.
 
-Only `client/` uses it, through the `esajpip_openjpeg` CMake target.
+The `esajpip_client_wasm` target compiles it for WebAssembly or native decoding
+tests. The core `esajpip_client` target does not depend on it.
 `opj_clock.c` is not compiled: the library does not call it, and it does not
 build for WebAssembly.
 

@@ -2,8 +2,8 @@
  *
  * One module instance is one source: its data-bins and the image last
  * decoded. The host does the HTTP exchange and passes each response body
- * in; this file is compiled for WebAssembly only. Sizes and addresses are
- * 32 bits there, so a host passes them as numbers. */
+ * in. Native decoding tests also compile these entry points. In WebAssembly,
+ * sizes and addresses are 32 bits, so a host passes them as numbers. */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,11 @@
 #include "hv_client.h"
 #include "hv_image.h"
 
+#ifdef __wasm__
 #define EXPORT(name) __attribute__((export_name(#name))) name
+#else
+#define EXPORT(name) name
+#endif
 
 static hv_client *client;
 static hv_image image;

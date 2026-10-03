@@ -18,22 +18,22 @@ WebAssembly, with the HTTP exchange and a Web Worker around it.
 
 ## Quick start
 
-With the project configured in `build`, the server running on its default
-port, and a `movie.jpx` in its image directory
+With the server running on its default port and a `movie.jpx` in its image directory
 ([`../README.md`](../README.md)):
 
 ```sh
-cmake --build build --target esajpip_client_wasm
-python3 -m http.server -d build/client/web 8000
+cmake -S . -B build-wasm -DCMAKE_TOOLCHAIN_FILE=client/wasm-toolchain.cmake
+cmake --build build-wasm --target esajpip_client_wasm
+python3 -m http.server -d build-wasm/client/web 8000
 ```
 
 Then open
 <http://localhost:8000/?server=http://localhost:8900&image=movie.jpx>.
 
-The first command needs [zig](https://ziglang.org/) (`brew install zig`): its
+The WASM configuration needs [zig](https://ziglang.org/) (`brew install zig`): its
 C compiler builds the WebAssembly module, and carries the C library OpenJPEG
-needs. Without zig the target does not exist; the rest of the project builds
-as usual. `build/client/web/` receives everything a page needs:
+needs. Native builds use the usual project configuration.
+`build-wasm/client/web/` receives everything a page needs:
 `esajpip_client.wasm`, `jpip_source.mjs`, `jpip_worker.mjs`,
 `jpip_channel.mjs`, and the demonstration page as `index.html`.
 
@@ -388,7 +388,9 @@ return their result directly, not a promise.
 `esajpip_client` is a static library; its headers are in `client/`. Inside
 this build, `target_link_libraries(app PRIVATE esajpip_client)` is enough. The
 library does no I/O: the program sends the requests and passes each response
-body to the library.
+body to the library. It reconstructs codestreams for the host decoder and
+does not depend on OpenJPEG. Native decoding tests link `esajpip_client_wasm`,
+which compiles the extended source list also used by the WASM module.
 
 ### Source API
 
@@ -544,7 +546,7 @@ GET /<path>?cid=<cid>&cclose=<cid>
 | `hv_metadata_palette` | `hv_metadata.h` | A frame's color table, copied out |
 | `hv_reconstruct_status` | `hv_reconstruct.h` | A frame's size, components and resolution levels, and how many levels are cached |
 | `hv_reconstruct` | `hv_reconstruct.h` | A frame as a JPEG 2000 codestream |
-| `hv_image_decode` | `hv_image.h` | A codestream decoded to pixels |
+| `hv_image_decode` | `hv_image.h` | OpenJPEG decoding in `esajpip_client_wasm` |
 
 The low-level APIs remain available for programs that need direct message or
 data-bin access. Each header documents its calls' results. Calls that take `error` and
